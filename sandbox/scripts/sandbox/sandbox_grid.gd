@@ -1,0 +1,361 @@
+extends Node2D
+class_name SandboxGrid
+
+# Grid config
+@export var grid_scale: int = 8
+var grid_width: int
+var grid_height: int
+
+# Simulation Data
+var cells: PackedInt32Array
+var tags_array: PackedInt32Array
+var color_buffer: PackedByteArray 
+var charge_array: PackedByteArray # New: Track electric pulses (0 = none, 5 = full, counts down)
+
+# Material data mapping
+var material_colors_raw = PackedColorArray() 
+var material_tags_raw = PackedInt32Array() 
+var selected_material: int = 1
+
+# Display
+@onready var texture_rect: TextureRect = $Display
+var img: Image
+
+func _ready():
+	# Calculate grid size based on viewport - Deducting 150px for UI bar at the bottom
+	var actual_viewport_height = get_viewport_rect().size.y - 150
+	var viewport_size = Vector2(get_viewport_rect().size.x, actual_viewport_height)
+	
+	grid_width = floor(viewport_size.x / grid_scale)
+	grid_height = floor(viewport_size.y / grid_scale)
+	
+	# Init arrays
+	cells.resize(grid_width * grid_height)
+	tags_array.resize(grid_width * grid_height)
+	color_buffer.resize(grid_width * grid_height * 4)
+	charge_array.resize(grid_width * grid_height)
+	
+	material_colors_raw.resize(15) 
+	material_tags_raw.resize(15)
+	
+	# Setup materials
+	_register_material(0, Color(0, 0, 0, 0), SandboxMaterial.Tags.NONE)
+	_register_material(1, Color.KHAKI, SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_NORMAL)
+	_register_material(2, Color.SKY_BLUE, SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.CONDUCTOR)
+	_register_material(3, Color.ORANGE_RED, SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
+	# Oil (Normal gravity + Flammable)
+	_register_material(4, Color.DARK_SLATE_GRAY, SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_NORMAL)
+	
+	# TNT (Static + Explosive + Electric Activated)
+	_register_material(5, Color.RED, SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC)
+	
+	# Earth (Slow gravity)
+	_register_material(6, Color.SADDLE_BROWN, SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW)
+	
+	# Primed TNT (Flashes white, soon to BOOM)
+	_register_material(7, Color.WHITE, SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
+	
+	# Metal (Solid + Conductor)
+	_register_material(8, Color.LIGHT_GRAY, SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.GRAV_STATIC)
+	
+	# Electricity (Energy!)
+	_register_material(9, Color.YELLOW, SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
+	
+	# Gravel (Gray stones)
+	_register_material(10, Color.SLATE_GRAY, SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL)
+	
+	# Lava (Slow Liquid + Hot)
+	_register_material(11, Color.ORANGE_RED, SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_SLOW)
+	
+	# Obsidian (Hard Rock)
+	_register_material(12, Color(0.1, 0.05, 0.2), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
+	
+	# Fill with empty
+	cells.fill(0)
+	charge_array.fill(0)
+	
+	# Texture setup
+	img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8)
+	texture_rect.texture = ImageTexture.create_from_image(img)
+	texture_rect.size = viewport_size
+	
+	# Tool selection from UI
+	var controls = get_parent().get_node("UI/Controls")
+	controls.get_node("SandBtn").pressed.connect(func(): selected_material = 1)
+	controls.get_node("WaterBtn").pressed.connect(func(): selected_material = 2)
+	controls.get_node("OilBtn").pressed.connect(func(): selected_material = 4)
+	controls.get_node("FireBtn").pressed.connect(func(): selected_material = 3)
+	
+	# New buttons
+	_add_button("TNT", 5)
+	_add_button("Earth", 6)
+	_add_button("Metal", 8)
+	_add_button("Elec", 9)
+	_add_button("Gravel", 10)
+	_add_button("Lava", 11)
+
+func _add_button(text, mat_id):
+	var btn = Button.new()
+	btn.text = text
+	btn.pressed.connect(func(): selected_material = mat_id)
+	get_parent().get_node("UI/Controls").add_child(btn)
+
+func _register_material(id, color, tags):
+	material_colors_raw[id] = color
+	material_tags_raw[id] = tags
+
+func _process(delta):
+	# Handle input
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		var m_pos = get_local_mouse_position()
+		var gx = int(m_pos.x / grid_scale)
+		var gy = int(m_pos.y / grid_scale)
+		_draw_circle(gx, gy, 3, selected_material)
+
+	# Simulation
+	_step_simulation()
+	
+	# Render
+	_update_texture()
+
+func _draw_circle(cx, cy, radius, mat_id):
+	for y in range(-radius, radius):
+		for x in range(-radius, radius):
+			if x*x + y*y <= radius*radius:
+				_set_cell(cx + x, cy + y, mat_id)
+
+func _set_cell(x, y, mat_id):
+	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
+		var idx = y * grid_width + x
+		cells[idx] = mat_id
+		tags_array[idx] = material_tags_raw[mat_id]
+		# Reset charge if material changes manually
+		charge_array[idx] = 0
+
+func _get_cell(x, y):
+	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
+		return cells[y * grid_width + x]
+	return -1
+
+func _step_simulation():
+	# Pass 1: Electricity Pulse Processing
+	_process_electricity()
+	
+	# Pass 2: RISING and SPECIAL particles (Top-to-Bottom)
+	for y in range(grid_height):
+		var sweep = range(grid_width)
+		if Engine.get_frames_drawn() % 2 == 0: sweep = range(grid_width - 1, -1, -1)
+		for x in sweep:
+			var idx = y * grid_width + x
+			var mat_id = cells[idx]
+			if mat_id == 0: continue
+			
+			var tags = tags_array[idx]
+			
+			if mat_id == 7: # Primed TNT
+				if randf() < 0.05: _explode(x, y, 10)
+				continue
+
+			if (tags & SandboxMaterial.Tags.GRAV_UP):
+				_move_particle(x, y, mat_id, tags, -1)
+				_process_interactions(x, y, idx, mat_id, tags)
+
+	# Pass 3: FALLING/STATIC particles (Bottom-to-Top)
+	for y in range(grid_height - 1, -1, -1):
+		var sweep = range(grid_width)
+		if Engine.get_frames_drawn() % 2 == 0: sweep = range(grid_width - 1, -1, -1)
+		for x in sweep:
+			var idx = y * grid_width + x
+			var mat_id = cells[idx]
+			if mat_id <= 0 or mat_id == 7: continue 
+			
+			var tags = tags_array[idx]
+			if (tags & SandboxMaterial.Tags.GRAV_UP): continue
+			
+			if (tags & SandboxMaterial.Tags.GRAV_STATIC):
+				pass 
+			elif (tags & SandboxMaterial.Tags.GRAV_SLOW):
+				if Engine.get_frames_drawn() % 3 == 0:
+					_move_particle(x, y, mat_id, tags, 1)
+			else:
+				_move_particle(x, y, mat_id, tags, 1)
+			
+			_process_interactions(x, y, idx, mat_id, tags)
+
+func _process_electricity():
+	# Sequential processing to prevent infinite loops
+	for i in range(cells.size()):
+		var charge = charge_array[i]
+		if charge == 0: continue
+		
+		# Only spread when charge is at its peak (100)
+		if charge == 100:
+			var x = i % grid_width
+			var y = i / grid_width
+			for ny in range(y - 1, y + 2):
+				for nx in range(x - 1, x + 2):
+					if nx == x and ny == y: continue
+					if nx >= 0 and nx < grid_width and ny >= 0 and ny < grid_height:
+						var n_idx = ny * grid_width + nx
+						var n_tags = tags_array[n_idx]
+						# Only spread to conductors that are currently at 0 (IDLE)
+						if (n_tags & SandboxMaterial.Tags.CONDUCTOR) and charge_array[n_idx] == 0:
+							charge_array[n_idx] = 101 # Set to 'newly charged'
+		
+		# Countdown charge
+		charge_array[i] -= 1
+		# 101 drops to 100 to spread in the NEXT frame
+		if charge_array[i] > 100: charge_array[i] = 100
+
+
+
+func _move_particle(x, y, mat_id, tags, v_dir):
+	var next_y = y + v_dir
+	if next_y < 0 or next_y >= grid_height: return
+	
+	# Try directly moving
+	if _get_cell(x, next_y) == 0:
+		_swap_cells(x, y, x, next_y)
+		return
+	
+	# Try diagonals (only for powder and liquids)
+	if (tags & (SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.LIQUID)):
+		var side = 1 if randf() > 0.5 else -1
+		if _get_cell(x + side, next_y) == 0:
+			_swap_cells(x, y, x + side, next_y)
+		elif _get_cell(x - side, next_y) == 0:
+			_swap_cells(x, y, x - side, next_y)
+		elif (tags & SandboxMaterial.Tags.LIQUID):
+			if _get_cell(x + side, y) == 0:
+				_swap_cells(x, y, x + side, y)
+			elif _get_cell(x - side, y) == 0:
+				_swap_cells(x, y, x - side, y)
+
+func _swap_cells(x1, y1, x2, y2):
+	var idx1 = y1 * grid_width + x1
+	var idx2 = y2 * grid_width + x2
+	var m1 = cells[idx1]
+	var m2 = cells[idx2]
+	var c1 = charge_array[idx1]
+	var c2 = charge_array[idx2]
+	
+	cells[idx1] = m2
+	tags_array[idx1] = material_tags_raw[m2]
+	charge_array[idx1] = c2
+	
+	cells[idx2] = m1
+	tags_array[idx2] = material_tags_raw[m1]
+	charge_array[idx2] = c1
+
+func _process_interactions(x, y, idx, mat_id, tags):
+	# Fire/Heat interaction
+	if (tags & SandboxMaterial.Tags.INCENDIARY):
+		if randf() < 0.1: _set_cell(x, y, 0)
+		_check_neighbors_for_reaction(x, y, true)
+
+	# ELECTRIC SEEDING: Only the Electricity MATERIAL creates new pulses in Metal
+	if (tags & SandboxMaterial.Tags.ELECTRICITY):
+		if randf() < 0.7: _set_cell(x, y, 0) # Vanish VERY fast
+		_check_neighbors_for_reaction(x, y, false)
+	
+	# PULSE TRIGGER: Conductors with charge trigger TNT, but don't seed other metals here
+	var charge = charge_array[idx]
+	if charge == 100:
+		_trigger_electric_devices(x, y)
+
+func _trigger_electric_devices(x, y):
+	for ny in range(y - 1, y + 2):
+		for nx in range(x - 1, x + 2):
+			if nx == x and ny == y: continue
+			var n_id = _get_cell(nx, ny)
+			if n_id > 0:
+				var n_tags = material_tags_raw[n_id]
+				if (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
+					_set_cell(nx, ny, 7) # Prime TNT
+
+
+func _check_neighbors_for_reaction(x, y, is_heat):
+	var my_id = _get_cell(x, y)
+	
+	for ny in range(y - 1, y + 2):
+		for nx in range(x - 1, x + 2):
+			if nx == x and ny == y: continue
+			var n_id = _get_cell(nx, ny)
+			if n_id > 0:
+				var n_idx = ny * grid_width + nx
+				var n_tags = material_tags_raw[n_id]
+				
+				# Lava + Water -> Obsidian
+				if (my_id == 11 and n_id == 2) or (my_id == 2 and n_id == 11):
+					_set_cell(x, y, 12) # Turn self to obsidian
+					_set_cell(nx, ny, 12) # Turn neighbor to obsidian
+					return # Stop other reactions for this frame
+
+				if is_heat:
+					if (n_tags & SandboxMaterial.Tags.FLAMMABLE):
+						_set_cell(nx, ny, 3) # Spread fire
+					elif (n_tags & SandboxMaterial.Tags.EXPLOSIVE):
+						_set_cell(nx, ny, 7) # Prime TNT
+				else:
+					# ONLY Electricity material can start a new pulse in a conductor
+					if (n_tags & SandboxMaterial.Tags.CONDUCTOR):
+						if charge_array[n_idx] == 0:
+							charge_array[n_idx] = 101 # Start pulse
+					elif (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
+						_set_cell(nx, ny, 7) # Prime TNT via spark
+
+func _explode(x, y, radius):
+	_set_cell(x, y, 0)
+	
+	for ry in range(-radius, radius):
+		for rx in range(-radius, radius):
+			var dist_sq = rx*rx + ry*ry
+			if dist_sq <= radius*radius:
+				var tx = x + rx
+				var ty = y + ry
+				
+				var t_id = _get_cell(tx, ty)
+				if t_id <= 0: continue
+				
+				var t_idx = ty * grid_width + tx
+				var t_tags = tags_array[t_idx]
+				
+				# Chain reaction: PRIME nearby explosives
+				if (t_tags & SandboxMaterial.Tags.EXPLOSIVE):
+					_set_cell(tx, ty, 7) # Prime it
+					continue
+
+				# Faster destruction check
+				if dist_sq < (radius * 0.4) ** 2:
+					_set_cell(tx, ty, 0) 
+				else:
+					# Displacement with random spread to avoid tight loops
+					if randf() < 0.3:
+						_push_particle(tx, ty, rx, ry)
+
+func _push_particle(x, y, dx, dy):
+	var nx = x + sign(dx) * 2
+	var ny = y + sign(dy) * 2
+	if _get_cell(nx, ny) == 0:
+		_swap_cells(x, y, nx, ny)
+
+func _update_texture():
+	# HIGH PERFORMANCE RENDERING: Using color buffer and set_data
+	for i in range(cells.size()):
+		var c = material_colors_raw[cells[i]]
+		var charge = charge_array[i]
+		
+		# MIX COLOR IF CHARGED (Glowing effect)
+		if charge > 80:
+			var pulse_color = Color.YELLOW
+			# Sharp, short pulse (Brightest between 100 and 80)
+			c = c.lerp(pulse_color, clamp(float(charge - 80) / 20.0, 0.0, 1.0))
+		
+		var base = i * 4
+		color_buffer[base] = int(c.r * 255)
+		color_buffer[base + 1] = int(c.g * 255)
+		color_buffer[base + 2] = int(c.b * 255)
+		color_buffer[base + 3] = int(c.a * 255)
+	
+	img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, color_buffer)
+	texture_rect.texture.update(img)
