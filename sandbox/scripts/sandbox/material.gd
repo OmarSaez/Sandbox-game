@@ -24,7 +24,12 @@ enum Tags {
 	
 	# Interactions
 	ACID = 1 << 14,
-	ANTI_ACID = 1 << 15
+	ANTI_ACID = 1 << 15,
+	
+	# Burn Products
+	BURN_SMOKE = 1 << 16,
+	BURN_COAL = 1 << 17,
+	BURN_NONE = 1 << 18
 }
 
 @export var name: String = "Material"

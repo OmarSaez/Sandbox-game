@@ -16,6 +16,7 @@ var charge_array: PackedByteArray # New: Track electric pulses (0 = none, 5 = fu
 var material_colors_raw = PackedColorArray() 
 var material_tags_raw = PackedInt32Array() 
 var selected_material: int = 1
+var current_weather: int = 0 # 0=Off, 1=Light, 2=Med, 3=Storm
 
 # Display
 @onready var texture_rect: TextureRect = $Display
@@ -35,16 +36,16 @@ func _ready():
 	color_buffer.resize(grid_width * grid_height * 4)
 	charge_array.resize(grid_width * grid_height)
 	
-	material_colors_raw.resize(15) 
-	material_tags_raw.resize(15)
+	material_colors_raw.resize(20) 
+	material_tags_raw.resize(20)
 	
 	# Setup materials
 	_register_material(0, Color(0, 0, 0, 0), SandboxMaterial.Tags.NONE)
 	_register_material(1, Color.KHAKI, SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_NORMAL)
 	_register_material(2, Color.SKY_BLUE, SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.CONDUCTOR)
 	_register_material(3, Color.ORANGE_RED, SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
-	# Oil (Normal gravity + Flammable)
-	_register_material(4, Color.DARK_SLATE_GRAY, SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_NORMAL)
+	# Petroleum (Dark Purple + Flammable)
+	_register_material(4, Color("#2F0E4F"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.BURN_SMOKE)
 	
 	# TNT (Static + Explosive + Electric Activated)
 	_register_material(5, Color.RED, SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC)
@@ -73,6 +74,18 @@ func _ready():
 	# Acid (Neon Green + Melts things)
 	_register_material(13, Color("#39FF14"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.GRAV_NORMAL)
 	
+	# Coal (Brazas - Dark Brown/Black)
+	_register_material(14, Color("#1A1110"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_SMOKE | SandboxMaterial.Tags.INCENDIARY)
+	
+	# Smoke (Light Gray Gas)
+	_register_material(15, Color(0.7, 0.7, 0.7, 0.5), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP | SandboxMaterial.Tags.BURN_NONE)
+	
+	# Wood (Strong Brown)
+	_register_material(16, Color("#5D3A1A"), SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.SOLID)
+	
+	# Cloud (Whity Gray Gas)
+	_register_material(17, Color(0.9, 0.9, 0.9, 0.8), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP)
+	
 	# Fill with empty
 	cells.fill(0)
 	charge_array.fill(0)
@@ -86,7 +99,7 @@ func _ready():
 	var controls = get_parent().get_node("UI/Controls")
 	controls.get_node("SandBtn").pressed.connect(func(): selected_material = 1)
 	controls.get_node("WaterBtn").pressed.connect(func(): selected_material = 2)
-	controls.get_node("OilBtn").pressed.connect(func(): selected_material = 4)
+	controls.get_node("OilBtn").visible = false # Remplazado por Petróleo
 	controls.get_node("FireBtn").pressed.connect(func(): selected_material = 3)
 	
 	# New buttons
@@ -98,6 +111,37 @@ func _ready():
 	_add_button("Lava", 11)
 	_add_button("Obisid", 12)
 	_add_button("Acid", 13)
+	_add_button("Wood", 16)
+	_add_button("Petro", 4)
+	
+	# DISASTER MENU
+	_setup_disaster_ui()
+
+func _setup_disaster_ui():
+	var ui_root = get_parent().get_node("UI")
+	var main_controls = ui_root.get_node("Controls")
+	
+	# Create a disaster toggle button
+	var disaster_btn = Button.new()
+	disaster_btn.text = "🌪️ Desastres"
+	main_controls.add_child(disaster_btn)
+	
+	# Submenu container
+	var sub_menu = HBoxContainer.new()
+	sub_menu.visible = false
+	ui_root.add_child(sub_menu)
+	sub_menu.position = Vector2(0, get_viewport_rect().size.y - 300) # Above main UI
+	
+	disaster_btn.pressed.connect(func(): sub_menu.visible = !sub_menu.visible)
+	
+	# Add weather options
+	var options = ["Off", "Lluvia Ligera", "Moderada", "Tormenta ⚡"]
+	for i in range(options.size()):
+		var btn = Button.new()
+		btn.text = options[i]
+		var level = i
+		btn.pressed.connect(func(): current_weather = level)
+		sub_menu.add_child(btn)
 
 func _add_button(text, mat_id):
 	var btn = Button.new()
@@ -120,8 +164,42 @@ func _process(delta):
 	# Simulation
 	_step_simulation()
 	
+	# Weather system
+	_process_weather()
+	
 	# Render
 	_update_texture()
+
+func _process_weather():
+	if current_weather == 0: return
+	
+	# Always spawn some clouds at the top if weather is active
+	for i in range(5):
+		_set_cell(randi() % grid_width, 1, 17)
+	
+	# Spawn rain based on intensity
+	var rain_chance = 0.05 if current_weather == 1 else (0.2 if current_weather == 2 else 0.5)
+	if randf() < rain_chance:
+		# Spawn multiple droplets based on level
+		for i in range(current_weather * 2):
+			_set_cell(randi() % grid_width, 5 + randi() % 5, 2) # Spawn Water
+			
+	# Lightning in Storm (Level 3)
+	if current_weather == 3 and randf() < 0.01: # Rare but impactful
+		_strike_lightning()
+
+func _strike_lightning():
+	var lx = randi() % grid_width
+	# Trace a bolt from top to first solid/liquid or bottom
+	for ly in range(0, grid_height):
+		var target_id = _get_cell(lx, ly)
+		# Ignite everything in the bolt path
+		_set_cell(lx, ly, 9) # Deploy Electricity!
+		# If we hit something non-empty, stop bolt and create small explosion
+		# NEW: Ignore rain (2) so it hits the ground
+		if target_id > 0 and target_id != 17 and target_id != 15 and target_id != 2:
+			_explode(lx, ly, 5) # Small localized explosion
+			break
 
 func _draw_circle(cx, cy, radius, mat_id):
 	for y in range(-radius, radius):
@@ -224,14 +302,14 @@ func _move_particle(x, y, mat_id, tags, v_dir):
 		_swap_cells(x, y, x, next_y)
 		return
 	
-	# Try diagonals (only for powder and liquids)
-	if (tags & (SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.LIQUID)):
+	# Try diagonals (only for powder, liquids and gases)
+	if (tags & (SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GAS)):
 		var side = 1 if randf() > 0.5 else -1
 		if _get_cell(x + side, next_y) == 0:
 			_swap_cells(x, y, x + side, next_y)
 		elif _get_cell(x - side, next_y) == 0:
 			_swap_cells(x, y, x - side, next_y)
-		elif (tags & SandboxMaterial.Tags.LIQUID):
+		elif (tags & (SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GAS)):
 			if _get_cell(x + side, y) == 0:
 				_swap_cells(x, y, x + side, y)
 			elif _get_cell(x - side, y) == 0:
@@ -256,9 +334,21 @@ func _swap_cells(x1, y1, x2, y2):
 func _process_interactions(x, y, idx, mat_id, tags):
 	# Fire/Heat interaction
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
-		# ONLY Fire (ID 3) vanishes over time. Lava (ID 11) is persistent.
+		# Fuego regular (Mat 3) desaparece rápido
 		if mat_id == 3:
 			if randf() < 0.1: _set_cell(x, y, 0)
+		# Lava (Mat 11) es persistente (no burnout aquí)
+		# Brasas (Mat 14) duran mucho (20-30 seg) y emiten chispas
+		elif mat_id == 14:
+			if randf() < 0.0006: # Burnout lento
+				_set_cell(x, y, 0)
+				if _get_cell(x, y - 1) == 0: _set_cell(x, y - 1, 15) # Deja humo
+			# Emisión de chispas de fuego
+			if randf() < 0.005:
+				var nx = x + randi_range(-1, 1)
+				var ny = y - 1
+				if _get_cell(nx, ny) == 0: _set_cell(nx, ny, 3)
+		
 		_check_neighbors_for_reaction(x, y, true)
 
 	# ELECTRIC SEEDING: Only the Electricity MATERIAL creates new pulses in Metal
@@ -274,6 +364,11 @@ func _process_interactions(x, y, idx, mat_id, tags):
 	# PASS 4: Acid interaction (Melting things!)
 	if (tags & SandboxMaterial.Tags.ACID):
 		_check_neighbors_for_reaction(x, y, false)
+	
+	# PASS 5: Universal Dissipation (Smoke, etc)
+	if mat_id == 15: # Smoke
+		if randf() < 0.001:
+			_set_cell(x, y, 0)
 
 func _trigger_electric_devices(x, y):
 	for ny in range(y - 1, y + 2):
@@ -316,7 +411,21 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 
 				if is_heat:
 					if (n_tags & SandboxMaterial.Tags.FLAMMABLE):
-						_set_cell(nx, ny, 3) # Spread fire
+						# Catch fire based on producer type
+						if randf() < 0.05: # Slow burning/transformation
+							if (n_tags & SandboxMaterial.Tags.BURN_COAL):
+								_set_cell(nx, ny, 14) # Become Coal
+							elif (n_tags & SandboxMaterial.Tags.BURN_SMOKE):
+								# Release smoke above if possible
+								if _get_cell(nx, ny - 1) == 0:
+									_set_cell(nx, ny - 1, 15)
+								# If it's Petroleum/Coal, eventually it disappears (turns to fire/nothing)
+								if randf() < 0.2: _set_cell(nx, ny, 3) # Turn to Fire briefly
+								else: _set_cell(nx, ny, 0)
+							elif (n_tags & SandboxMaterial.Tags.BURN_NONE):
+								_set_cell(nx, ny, 0)
+							else:
+								_set_cell(nx, ny, 3) # Default fire behavior
 					elif (n_tags & SandboxMaterial.Tags.EXPLOSIVE):
 						_set_cell(nx, ny, 7) # Prime TNT
 				else:
