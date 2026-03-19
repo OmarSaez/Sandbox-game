@@ -93,8 +93,8 @@ func _ready():
 	# Lava (Slow Liquid + Hot)
 	_register_material(11, Color.ORANGE, SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_SLOW)
 	
-	# Obsidian (Hard Rock + Anti-Acid)
-	_register_material(12, Color(0.1, 0.05, 0.2), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_ACID)
+	# Obsidian (Hard Rock + Anti-Acid + Anti-Explosive)
+	_register_material(12, Color(0.1, 0.05, 0.2), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
 	
 	# Acid (Neon Green + Melts things)
 	_register_material(13, Color("#39FF14"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.GRAV_NORMAL)
@@ -110,9 +110,9 @@ func _ready():
 	
 	# Cloud (Whity Gray Gas)
 	_register_material(17, Color(0.9, 0.9, 0.9, 0.8), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP)
-	
-	# Fuegos Artificiales (Rosa brillante)
-	_register_material(18, Color(1.0, 0.4, 0.7), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)
+
+	# Fuegos Artificiales (Rosa brillante) + Anti-Explosivo para que no se muevan al encenderse la bateria
+	_register_material(18, Color(1.0, 0.4, 0.7), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
 	
 	# Fill with empty
 	cells.fill(0)
@@ -755,6 +755,10 @@ func _explode(x, y, radius):
 					_set_cell(tx, ty, 7) # Prime it
 					continue
 
+				# ANTI-EXPLOSIVE CHECK: Skip physical movement/deletion
+				if (t_tags & SandboxMaterial.Tags.ANTI_EXPLOSIVE):
+					continue
+				
 				# Faster destruction check
 				if dist_sq < (radius * 0.4) ** 2:
 					_set_cell(tx, ty, 0) 
@@ -831,9 +835,18 @@ func _update_active_fireworks(delta):
 		var fw = active_fireworks[i]
 		fw.y -= 125.0 * delta # Half speed (125 instead of 250)
 		
-		# Sutil trail (Smoke)
-		if randf() < 0.3:
-			_set_cell(int(fw.x), int(fw.y + 1), 15) # Only smoke
+		# Sutil trail (Visual Sparks instead of physical Smoke)
+		if randf() < 0.6:
+			var trail_colors = [Color.GRAY, Color.YELLOW, Color.WHITE, Color.GOLD]
+			var spark = {
+				"x": float(fw.x) + randf_range(-1.2, 1.2),
+				"y": float(fw.y + 1),
+				"vx": randf_range(-10, 10),
+				"vy": randf_range(20, 50), # Falling slightly
+				"color": trail_colors[randi() % trail_colors.size()],
+				"life": randf_range(0.2, 0.6) # Very short life for the trail
+			}
+			visual_sparks.append(spark)
 			
 		# Check if reached altitude or safe boundary
 		if fw.y <= fw.target_y or fw.y < 15:

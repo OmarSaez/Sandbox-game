@@ -29,7 +29,8 @@ enum Tags {
 	# Burn Products
 	BURN_SMOKE = 1 << 16,
 	BURN_COAL = 1 << 17,
-	BURN_NONE = 1 << 18
+	BURN_NONE = 1 << 18,
+	ANTI_EXPLOSIVE = 1 << 19
 }
 
 @export var name: String = "Material"
