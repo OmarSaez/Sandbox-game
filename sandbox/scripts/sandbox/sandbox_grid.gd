@@ -18,6 +18,7 @@ var material_tags_raw = PackedInt32Array()
 var selected_material: int = 1
 var current_weather: int = 0 
 var is_mouse_over_ui: bool = false
+var brush_radius: int = 0 # 0 means 1 pixel
 
 # Earthquake settings
 var earthquake_intensity: int = 0 # 0=Off, 1=Light, 2=Med, 3=Intense
@@ -146,7 +147,56 @@ func _ready():
 	_register_material(19, Color(1, 0.8, 0.9), SandboxMaterial.Tags.GRAV_STATIC) # Firework Fuse (Removed Incendiary to avoid domino effect)
 	
 	# DISASTER MENU
+	_setup_ui()
+
+
+func _setup_ui():
 	_setup_disaster_ui()
+	_setup_tools_ui()
+
+func _setup_tools_ui():
+	var ui_root = get_parent().get_node("UI")
+	var main_controls = ui_root.get_node("Controls")
+	
+	# Create a TOOLS toggle button
+	var tools_btn = Button.new()
+	tools_btn.text = "🛠️ Herramientas"
+	main_controls.add_child(tools_btn)
+	
+	# Submenu container
+	var tool_menu = HBoxContainer.new()
+	tool_menu.visible = false
+	ui_root.add_child(tool_menu)
+	tool_menu.position = Vector2(0, get_viewport_rect().size.y - 350) # Stacked
+	
+	tools_btn.pressed.connect(func(): tool_menu.visible = !tool_menu.visible)
+	
+	var v_box = VBoxContainer.new()
+	tool_menu.add_child(v_box)
+	
+	# Block signals
+	tool_menu.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	tool_menu.mouse_exited.connect(func(): is_mouse_over_ui = false)
+	
+	# Helper (localized)
+	var create_tool_row = func(label_text: String, options: Array, callback: Callable):
+		var h_box = HBoxContainer.new()
+		var lbl = Label.new()
+		lbl.text = label_text + ": "
+		lbl.custom_minimum_size = Vector2(100, 0)
+		h_box.add_child(lbl)
+		for i in range(options.size()):
+			var btn = Button.new()
+			btn.text = options[i]
+			var level = i
+			btn.pressed.connect(func(): callback.call(level))
+			h_box.add_child(btn)
+		v_box.add_child(h_box)
+
+	# BRUSH SIZE ROW - Levels: 1, 3, 5, 10, 15, 25
+	var brush_sizes = [0, 1, 2, 5, 7, 12] # Radius mapping
+	var brush_labels = ["1px", "3px", "5px", "10px", "15px", "25px"]
+	create_tool_row.call("🖌️ Pincel", brush_labels, func(l): brush_radius = brush_sizes[l])
 
 func _setup_disaster_ui():
 	var ui_root = get_parent().get_node("UI")
@@ -235,7 +285,7 @@ func _process(delta):
 		var m_pos = get_local_mouse_position()
 		var gx = int(m_pos.x / grid_scale)
 		var gy = int(m_pos.y / grid_scale)
-		_draw_circle(gx, gy, 3, selected_material)
+		_draw_circle(gx, gy, brush_radius, selected_material)
 
 	# Simulation
 	_step_simulation()
@@ -466,8 +516,8 @@ func _strike_lightning():
 			break
 
 func _draw_circle(cx, cy, radius, mat_id):
-	for y in range(-radius, radius):
-		for x in range(-radius, radius):
+	for y in range(-radius, radius + 1):
+		for x in range(-radius, radius + 1):
 			if x*x + y*y <= radius*radius:
 				_set_cell(cx + x, cy + y, mat_id)
 
