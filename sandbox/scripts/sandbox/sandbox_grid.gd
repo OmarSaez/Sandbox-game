@@ -18,6 +18,10 @@ var material_tags_raw = PackedInt32Array()
 var selected_material: int = 1
 var current_weather: int = 0 # 0=Off, 1=Light, 2=Med, 3=Storm
 
+# Earthquake settings
+var earthquake_intensity: int = 0 # 0=Off, 1=Light, 2=Med, 3=Intense
+var earthquake_timer: float = 0.0
+
 # Display
 @onready var texture_rect: TextureRect = $Display
 var img: Image
@@ -142,6 +146,22 @@ func _setup_disaster_ui():
 		var level = i
 		btn.pressed.connect(func(): current_weather = level)
 		sub_menu.add_child(btn)
+		
+	var lbl = Label.new()
+	lbl.text = " | "
+	sub_menu.add_child(lbl)
+	
+	# Add earthquake options
+	var eq_options = ["Sismo Off", "Sismo Ligero", "Moderado", "TERREMOTO!"]
+	for i in range(eq_options.size()):
+		var btn = Button.new()
+		btn.text = eq_options[i]
+		var level = i
+		btn.pressed.connect(func(): 
+			earthquake_intensity = level
+			if level > 0: earthquake_timer = 10.0 # 10 seconds duration
+		)
+		sub_menu.add_child(btn)
 
 func _add_button(text, mat_id):
 	var btn = Button.new()
@@ -167,8 +187,44 @@ func _process(delta):
 	# Weather system
 	_process_weather()
 	
+	# Earthquake processing
+	_process_earthquake(delta)
+	
 	# Render
 	_update_texture()
+
+func _process_earthquake(delta):
+	if earthquake_timer <= 0:
+		if texture_rect.position != Vector2.ZERO:
+			texture_rect.position = Vector2.ZERO
+		return
+	
+	earthquake_timer -= delta
+	
+	# 1. Screen Shake (Visual)
+	var shake_force = earthquake_intensity * 5.0
+	texture_rect.position = Vector2(randf_range(-shake_force, shake_force), randf_range(-shake_force, shake_force))
+	
+	# 2. Physics Shake (Actual material movement)
+	# Increased iterations for MASSIVE destruction
+	for i in range(3000 * earthquake_intensity):
+		var rx = randi() % grid_width
+		var ry = randi() % grid_height
+		var idx = ry * grid_width + rx
+		var tid = cells[idx]
+		
+		# In a earthquake, even static things can juggle a bit, but mostly powders/liquids
+		var nx = rx + randi_range(-earthquake_intensity, earthquake_intensity)
+		var ny = ry + randi_range(-earthquake_intensity, earthquake_intensity)
+		
+		if nx >= 0 and nx < grid_width and ny >= 0 and ny < grid_height:
+			# MIXING: Do not check for empty. Swap everything to cause liquefaction.
+			# Only limit swapping for very stable solids? No, let's keep it chaotic.
+			_swap_cells(rx, ry, nx, ny)
+	
+	# Automatic stop after timer
+	if earthquake_timer <= 0:
+		earthquake_intensity = 0
 
 func _process_weather():
 	if current_weather == 0: return
