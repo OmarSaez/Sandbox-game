@@ -65,7 +65,7 @@ func _ready():
 	_register_material(10, Color.SLATE_GRAY, SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL)
 	
 	# Lava (Slow Liquid + Hot)
-	_register_material(11, Color.ORANGE_RED, SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_SLOW)
+	_register_material(11, Color.ORANGE, SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_SLOW)
 	
 	# Obsidian (Hard Rock)
 	_register_material(12, Color(0.1, 0.05, 0.2), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
@@ -175,7 +175,8 @@ func _step_simulation():
 			if (tags & SandboxMaterial.Tags.GRAV_STATIC):
 				pass 
 			elif (tags & SandboxMaterial.Tags.GRAV_SLOW):
-				if Engine.get_frames_drawn() % 3 == 0:
+				# Random probability (Stochastic) makes it slow BUT smooth/organic
+				if randf() < 0.3:
 					_move_particle(x, y, mat_id, tags, 1)
 			else:
 				_move_particle(x, y, mat_id, tags, 1)
@@ -250,7 +251,9 @@ func _swap_cells(x1, y1, x2, y2):
 func _process_interactions(x, y, idx, mat_id, tags):
 	# Fire/Heat interaction
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
-		if randf() < 0.1: _set_cell(x, y, 0)
+		# ONLY Fire (ID 3) vanishes over time. Lava (ID 11) is persistent.
+		if mat_id == 3:
+			if randf() < 0.1: _set_cell(x, y, 0)
 		_check_neighbors_for_reaction(x, y, true)
 
 	# ELECTRIC SEEDING: Only the Electricity MATERIAL creates new pulses in Metal
