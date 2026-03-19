@@ -19,7 +19,7 @@ var selected_material: int = 1
 var current_weather: int = 0 
 # UI State
 var is_mouse_over_ui: bool = false
-var brush_radius: int = 0 
+var brush_radius: int = 2 
 var current_language: String = "es" # "es" or "en"
 var ui_elements = {} # To track nodes for re-labeling
 var tools_panel: PanelContainer
@@ -204,6 +204,9 @@ func _ready():
 
 	_register_material(19, Color(1, 0.8, 0.9), SandboxMaterial.Tags.GRAV_STATIC) # Firework Fuse
 
+func _setup_materials_within_grid():
+	if material_grid.get_child_count() > 0: return # Already setup physically?
+	
 	# Setup all material buttons (Unified)
 	_add_button("sand", 1)
 	_add_button("water", 2)
@@ -232,62 +235,61 @@ func _setup_main_ui_containers():
 	var ui_root = get_parent().get_node("UI")
 	var main_controls = ui_root.get_node("Controls")
 	
-	# CLEANUP: Remove EVERYTHING old (editor buttons like Sand, Water, etc.)
-	for child in main_controls.get_children():
-		child.queue_free()
+	# We no longer clear the controls! 
+	# We expect 'MaterialGrid' and 'ActionButtons' to be physical nodes in the scene.
 	
-	# ROOT UI BAR - Attached to UI root for TOTAL screen width
-	var root_hbox = HBoxContainer.new()
-	ui_root.add_child(root_hbox)
-	root_hbox.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	root_hbox.offset_top = -180 
-	root_hbox.offset_left = 10 
-	root_hbox.offset_right = -10 
-	root_hbox.add_theme_constant_override("separation", 15)
+	# Reference existing nodes or create them if missing (Safety)
+	if main_controls.has_node("MaterialGrid"):
+		material_grid = main_controls.get_node("MaterialGrid")
+	else:
+		material_grid = HFlowContainer.new()
+		material_grid.name = "MaterialGrid"
+		main_controls.add_child(material_grid)
 	
-	# Materials container (Flow) - Intelligently fills the row!
-	material_grid = HFlowContainer.new()
-	material_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	material_grid.add_theme_constant_override("h_separation", 10)
-	material_grid.add_theme_constant_override("v_separation", 10)
-	root_hbox.add_child(material_grid)
-	
-	# Action buttons (Stacked)
-	action_vbox = VBoxContainer.new()
-	action_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	action_vbox.add_theme_constant_override("separation", 10)
-	root_hbox.add_child(action_vbox)
+	if main_controls.has_node("ActionButtons"):
+		action_vbox = main_controls.get_node("ActionButtons")
+		action_vbox.mouse_entered.connect(func(): is_mouse_over_ui = true)
+		action_vbox.mouse_exited.connect(func(): is_mouse_over_ui = false)
+	else:
+		action_vbox = VBoxContainer.new()
+		action_vbox.name = "ActionButtons"
+		action_vbox.mouse_entered.connect(func(): is_mouse_over_ui = true)
+		action_vbox.mouse_exited.connect(func(): is_mouse_over_ui = false)
+		main_controls.add_child(action_vbox)
+
+	if material_grid:
+		material_grid.mouse_entered.connect(func(): is_mouse_over_ui = true)
+		material_grid.mouse_exited.connect(func(): is_mouse_over_ui = false)
+
+	# Setup buttons within the material grid if they don't exist
+	_setup_materials_within_grid()
 
 
 func _setup_tools_ui():
 	var ui_root = get_parent().get_node("UI")
-	
 	var tools_btn = Button.new()
+	tools_btn.name = "ToolsBtn"
+	tools_btn.custom_minimum_size = Vector2(150, 60)
 	tools_btn.text = tr[current_language]["tools"]
-	tools_btn.custom_minimum_size = Vector2(150, 60) # Bigger for mobile
 	ui_elements["tools_btn"] = tools_btn
-	action_vbox.add_child(tools_btn) # Add to stacked VBox
+	action_vbox.add_child(tools_btn)
 	
-	tools_panel = PanelContainer.new()
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.15, 0.15, 0.15, 0.95)
-	style.set_corner_radius_all(10)
-	tools_panel.add_theme_stylebox_override("panel", style)
-	tools_panel.visible = false
-	ui_root.add_child(tools_panel)
+	tools_panel = ui_root.get_node("ToolsPanel")
+	tools_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	# CENTERED ABOVE MATERIAL GRID
-	var screen_size = get_viewport_rect().size
-	tools_panel.position = Vector2(screen_size.x/2 - 200, screen_size.y - 380)
+	# SETUP INTERNAL BOX IF NOT PRESENT
+	var v_box: VBoxContainer
+	if tools_panel.get_child_count() == 0:
+		v_box = VBoxContainer.new()
+		v_box.add_theme_constant_override("separation", 15)
+		tools_panel.add_child(v_box)
+	else:
+		v_box = tools_panel.get_child(0)
 	
 	tools_btn.pressed.connect(func(): 
 		disaster_panel.visible = false
 		tools_panel.visible = !tools_panel.visible
 	)
-	
-	var v_box = VBoxContainer.new()
-	v_box.add_theme_constant_override("separation", 15)
-	tools_panel.add_child(v_box)
 	
 	tools_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	tools_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
@@ -323,34 +325,29 @@ func _setup_tools_ui():
 	create_row.call("brush", brush_labels, func(l): brush_radius = brush_sizes[l])
 
 func _setup_disaster_ui():
-	var ui_root = get_parent().get_node("UI")
-	
 	var disaster_btn = Button.new()
+	disaster_btn.name = "DisasterBtn"
+	disaster_btn.custom_minimum_size = Vector2(150, 60)
 	disaster_btn.text = tr[current_language]["disasters"]
-	disaster_btn.custom_minimum_size = Vector2(150, 60) # Bigger for mobile
 	ui_elements["disaster_btn"] = disaster_btn
-	action_vbox.add_child(disaster_btn) # Add to stacked VBox
+	action_vbox.add_child(disaster_btn)
 	
-	disaster_panel = PanelContainer.new()
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.1, 0.1, 0.12, 0.95)
-	style.set_corner_radius_all(10)
-	disaster_panel.add_theme_stylebox_override("panel", style)
-	disaster_panel.visible = false
-	ui_root.add_child(disaster_panel)
+	var ui_root = get_parent().get_node("UI")
+	disaster_panel = ui_root.get_node("DisasterPanel")
+	disaster_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	# CENTERED ABOVE MATERIAL GRID (Same Height)
-	var screen_size = get_viewport_rect().size
-	disaster_panel.position = Vector2(screen_size.x/2 - 200, screen_size.y - 380)
+	var v_box: VBoxContainer
+	if disaster_panel.get_child_count() == 0:
+		v_box = VBoxContainer.new()
+		v_box.add_theme_constant_override("separation", 15)
+		disaster_panel.add_child(v_box)
+	else:
+		v_box = disaster_panel.get_child(0)
 	
 	disaster_btn.pressed.connect(func(): 
 		tools_panel.visible = false
 		disaster_panel.visible = !disaster_panel.visible
 	)
-	
-	var v_box = VBoxContainer.new()
-	v_box.add_theme_constant_override("separation", 15)
-	disaster_panel.add_child(v_box)
 	
 	disaster_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	disaster_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
@@ -448,13 +445,30 @@ func _add_button(key: String, mat_id: int):
 	main_vbox.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	main_vbox.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
+func _is_any_ui_blocking() -> bool:
+	if is_mouse_over_ui: return true # Original mouse_entered check
+	
+	# Fallback: Absolute Rect Check (For safety when clicking fast)
+	var m_pos = texture_rect.get_global_mouse_position()
+	
+	if tools_panel and tools_panel.visible and tools_panel.get_global_rect().has_point(m_pos):
+		return true
+	if disaster_panel and disaster_panel.visible and disaster_panel.get_global_rect().has_point(m_pos):
+		return true
+	if material_grid and material_grid.get_global_rect().has_point(m_pos):
+		return true
+	if action_vbox and action_vbox.get_global_rect().has_point(m_pos):
+		return true
+		
+	return false
+
 func _register_material(id, color, tags):
 	material_colors_raw[id] = color
 	material_tags_raw[id] = tags
 
 func _process(delta):
-	# Handle input
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not is_mouse_over_ui:
+	# Handle input with robust UI blocking
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not _is_any_ui_blocking():
 		var m_pos = get_local_mouse_position()
 		var gx = int(m_pos.x / grid_scale)
 		var gy = int(m_pos.y / grid_scale)
