@@ -16,7 +16,8 @@ var charge_array: PackedByteArray # New: Track electric pulses (0 = none, 5 = fu
 var material_colors_raw = PackedColorArray() 
 var material_tags_raw = PackedInt32Array() 
 var selected_material: int = 1
-var current_weather: int = 0 # 0=Off, 1=Light, 2=Med, 3=Storm
+var current_weather: int = 0 
+var is_mouse_over_ui: bool = false
 
 # Earthquake settings
 var earthquake_intensity: int = 0 # 0=Off, 1=Light, 2=Med, 3=Intense
@@ -28,6 +29,12 @@ var tornado_timer: float = 0.0
 var tornado_x: float = 0.0
 var tornado_target_x: float = 0.0
 var tornado_ground_y: float = 0.0
+
+# Tsunami settings
+var tsunami_intensity: int = 0 # 0=Off, 1=Light, 2=Med, 3=Mega
+var tsunami_timer: float = 0.0
+var tsunami_wave_x: float = 0.0
+var surface_cache = PackedInt32Array()
 
 # Display
 @onready var texture_rect: TextureRect = $Display
@@ -43,8 +50,11 @@ func _ready():
 	
 	# Init arrays
 	cells.resize(grid_width * grid_height)
-	tags_array.resize(grid_width * grid_height)
+	img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8)
 	color_buffer.resize(grid_width * grid_height * 4)
+	surface_cache.resize(grid_width)
+	
+	tags_array.resize(grid_width * grid_height)
 	charge_array.resize(grid_width * grid_height)
 	
 	material_colors_raw.resize(20) 
@@ -145,55 +155,65 @@ func _setup_disaster_ui():
 	
 	disaster_btn.pressed.connect(func(): sub_menu.visible = !sub_menu.visible)
 	
-	# Add weather options
-	var options = ["Off", "Lluvia Ligera", "Moderada", "Tormenta ⚡"]
-	for i in range(options.size()):
-		var btn = Button.new()
-		btn.text = options[i]
-		var level = i
-		btn.pressed.connect(func(): current_weather = level)
-		sub_menu.add_child(btn)
-		
-	var lbl = Label.new()
-	lbl.text = " | "
-	sub_menu.add_child(lbl)
+	# SETUP VERTICAL MENU
+	var v_box = VBoxContainer.new()
+	sub_menu.add_child(v_box)
 	
-	# Add earthquake options
-	var eq_options = ["Sismo Off", "Sismo Ligero", "Moderado", "TERREMOTO!"]
-	for i in range(eq_options.size()):
-		var btn = Button.new()
-		btn.text = eq_options[i]
-		var level = i
-		btn.pressed.connect(func(): 
-			earthquake_intensity = level
-			if level > 0: earthquake_timer = randf_range(5.0, 7.0) # 5 to 7 seconds duration
-		)
-		sub_menu.add_child(btn)
-		
-	var lbl2 = Label.new()
-	lbl2.text = " | "
-	sub_menu.add_child(lbl2)
+	# Connect signals to block painting
+	sub_menu.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	sub_menu.mouse_exited.connect(func(): is_mouse_over_ui = false)
 	
-	# Add Tornado options
-	var t_options = ["Torn. Off", "F1", "F3", "F5 🔥"]
-	for i in range(t_options.size()):
-		var btn = Button.new()
-		btn.text = t_options[i]
-		var level = i
-		btn.pressed.connect(func(): 
-			tornado_intensity = level
-			if level > 0: 
-				tornado_timer = 15.0 # 15 seconds duration
-				tornado_x = randf() * grid_width
-				tornado_target_x = randf() * grid_width
-		)
-		sub_menu.add_child(btn)
+	# Helper function to create rows
+	var create_row = func(label_text: String, options: Array, callback: Callable):
+		var h_box = HBoxContainer.new()
+		var lbl = Label.new()
+		lbl.text = label_text + ": "
+		lbl.custom_minimum_size = Vector2(100, 0)
+		h_box.add_child(lbl)
+		for i in range(options.size()):
+			var btn = Button.new()
+			btn.text = options[i]
+			var level = i
+			btn.pressed.connect(func(): callback.call(level))
+			h_box.add_child(btn)
+		v_box.add_child(h_box)
+	
+	# Weather Row
+	create_row.call("⛈️ Clima", ["Off", "Ligero", "Medio", "Tormenta"], func(l): current_weather = l)
+	
+	# Earthquake Row
+	create_row.call("🫨 Sismo", ["Off", "Ligero", "Medio", "¡BRUTAL!"], func(l): 
+		earthquake_intensity = l
+		if l > 0: earthquake_timer = randf_range(5.0, 7.0)
+	)
+	
+	# Tornado Row
+	create_row.call("🌪️ Tornado", ["Off", "F1", "F3", "F5 🔥"], func(l):
+		tornado_intensity = l
+		if l > 0: 
+			tornado_timer = 15.0
+			tornado_x = randf() * grid_width
+			tornado_target_x = randf() * grid_width
+	)
+	
+	# Tsunami Row
+	create_row.call("🌊 Tsunami", ["Off", "Marejada", "Maremoto", "MEGA"], func(l):
+		tsunami_intensity = l
+		if l > 0:
+			tsunami_timer = 15.0
+			tsunami_wave_x = 0.0
+	)
 
 func _add_button(text, mat_id):
 	var btn = Button.new()
 	btn.text = text
 	btn.pressed.connect(func(): selected_material = mat_id)
-	get_parent().get_node("UI/Controls").add_child(btn)
+	var controls = get_parent().get_node("UI/Controls")
+	controls.add_child(btn)
+	
+	# Block painting when hovering material buttons too
+	btn.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	btn.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
 func _register_material(id, color, tags):
 	material_colors_raw[id] = color
@@ -201,7 +221,7 @@ func _register_material(id, color, tags):
 
 func _process(delta):
 	# Handle input
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not is_mouse_over_ui:
 		var m_pos = get_local_mouse_position()
 		var gx = int(m_pos.x / grid_scale)
 		var gy = int(m_pos.y / grid_scale)
@@ -219,8 +239,73 @@ func _process(delta):
 	# Tornado processing
 	_process_tornado(delta)
 	
+	# Tsunami processing
+	_process_tsunami(delta)
+	
 	# Render
 	_update_texture()
+
+func _process_tsunami(delta):
+	if tsunami_timer <= 0:
+		tsunami_intensity = 0
+		return
+	
+	tsunami_timer -= delta
+	
+	# Move the wave front from Left to Right (Gaussian Center)
+	tsunami_wave_x += (grid_width / 5.0) * delta * 5.0
+	if tsunami_wave_x > grid_width + 150:
+		tsunami_intensity = 0 # STOP AFTER ONE PASS
+		return
+	
+	# Wave Configuration Constants (HALF POWER)
+	var radius = 25 + (20 * tsunami_intensity)
+	var max_wave_height = 4 + (3 * tsunami_intensity) # MEGA = ~13 pixels total
+	var sigma_sq = pow(radius / 2.5, 2)
+	
+	# Determine SEA LEVEL (Reference height outside the wave)
+	var ref_x = int(tsunami_wave_x - radius - 10)
+	var sea_level = grid_height - 10 # Default to bottom if no water
+	if ref_x >= 0 and ref_x < grid_width:
+		for gy in range(5, grid_height - 5):
+			var idx = gy * grid_width + ref_x
+			if cells[idx] > 0 and (material_tags_raw[cells[idx]] & SandboxMaterial.Tags.LIQUID):
+				sea_level = gy
+				break
+	
+	for ox in range(-radius, radius):
+		var rx = int(tsunami_wave_x + ox)
+		if rx < 0 or rx >= grid_width: continue
+		
+		# Gaussian Height target
+		var dist_sq = float(ox * ox)
+		var gauss_h = int(max_wave_height * exp(-dist_sq / (2.0 * sigma_sq)))
+		if gauss_h <= 1: continue
+		
+		# Find surface and material
+		var y_top = -1
+		var mid = 0
+		for gy in range(5, grid_height - 5):
+			var idx = gy * grid_width + rx
+			if cells[idx] > 0 and (material_tags_raw[cells[idx]] & SandboxMaterial.Tags.LIQUID):
+				y_top = gy
+				mid = cells[idx]
+				break
+		
+		if y_top == -1: continue
+		surface_cache[rx] = y_top
+		
+		# SOLID PIXEL SPAWNING (Smooth, no tremor)
+		for i in range(gauss_h):
+			var target_y = y_top - i
+			var source_y = y_top + i + 1
+			
+			if target_y > 5 and source_y < grid_height:
+				# Purely mathematical shift, no randf()
+				if _get_cell(rx, target_y) == 0:
+					_set_cell(rx, target_y, mid)
+					if (material_tags_raw[_get_cell(rx, source_y)] & SandboxMaterial.Tags.LIQUID):
+						_set_cell(rx, source_y, 0)
 
 func _process_tornado(delta):
 	if tornado_timer <= 0:
@@ -653,7 +738,7 @@ func _update_texture():
 				var cur_rad = (5 + tornado_intensity) + (40.0 * tornado_intensity * rel_y)
 				if abs(ix - tornado_x) < cur_rad:
 					c = Color(0.4, 0.4, 0.4, 0.4) 
-
+		
 		# MIX COLOR IF CHARGED (Glowing effect)
 		if charge > 80:
 			var pulse_color = Color.YELLOW
