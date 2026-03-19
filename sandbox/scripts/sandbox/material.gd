@@ -21,6 +21,10 @@ enum Tags {
 	GRAV_SLOW = 1 << 11,
 	GRAV_UP = 1 << 12,
 	GRAV_STATIC = 1 << 13,
+	
+	# Interactions
+	ACID = 1 << 14,
+	ANTI_ACID = 1 << 15
 }
 
 @export var name: String = "Material"

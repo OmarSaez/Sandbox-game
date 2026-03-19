@@ -67,8 +67,11 @@ func _ready():
 	# Lava (Slow Liquid + Hot)
 	_register_material(11, Color.ORANGE, SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_SLOW)
 	
-	# Obsidian (Hard Rock)
-	_register_material(12, Color(0.1, 0.05, 0.2), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
+	# Obsidian (Hard Rock + Anti-Acid)
+	_register_material(12, Color(0.1, 0.05, 0.2), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_ACID)
+	
+	# Acid (Neon Green + Melts things)
+	_register_material(13, Color("#39FF14"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.GRAV_NORMAL)
 	
 	# Fill with empty
 	cells.fill(0)
@@ -93,6 +96,8 @@ func _ready():
 	_add_button("Elec", 9)
 	_add_button("Gravel", 10)
 	_add_button("Lava", 11)
+	_add_button("Obisid", 12)
+	_add_button("Acid", 13)
 
 func _add_button(text, mat_id):
 	var btn = Button.new()
@@ -261,10 +266,14 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		if randf() < 0.7: _set_cell(x, y, 0) # Vanish VERY fast
 		_check_neighbors_for_reaction(x, y, false)
 	
-	# PULSE TRIGGER: Conductors with charge trigger TNT, but don't seed other metals here
+	# PASS 3: Conductor Pulse (Triggering TNT/Devices)
 	var charge = charge_array[idx]
 	if charge == 100:
 		_trigger_electric_devices(x, y)
+	
+	# PASS 4: Acid interaction (Melting things!)
+	if (tags & SandboxMaterial.Tags.ACID):
+		_check_neighbors_for_reaction(x, y, false)
 
 func _trigger_electric_devices(x, y):
 	for ny in range(y - 1, y + 2):
@@ -290,9 +299,20 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 				
 				# Lava + Water -> Obsidian
 				if (my_id == 11 and n_id == 2) or (my_id == 2 and n_id == 11):
-					_set_cell(x, y, 12) # Turn self to obsidian
-					_set_cell(nx, ny, 12) # Turn neighbor to obsidian
-					return # Stop other reactions for this frame
+					_set_cell(x, y, 12)
+					_set_cell(nx, ny, 12)
+					return
+
+				# ACID LOGIC
+				var my_tags = tags_array[y * grid_width + x]
+				if (my_tags & SandboxMaterial.Tags.ACID):
+					# If neighbor is NOT empty and NOT acid and NOT anti-acid
+					if n_id > 0 and n_id != 13 and !(n_tags & SandboxMaterial.Tags.ANTI_ACID):
+						if randf() < 0.6: # Faster melting speed (from 0.2 to 0.6)
+							_set_cell(nx, ny, 0) # Dissolve neighbor
+							# Optional: Acid might also be consumed (very slowly)
+							if randf() < 0.05: _set_cell(x, y, 0)
+							return
 
 				if is_heat:
 					if (n_tags & SandboxMaterial.Tags.FLAMMABLE):
