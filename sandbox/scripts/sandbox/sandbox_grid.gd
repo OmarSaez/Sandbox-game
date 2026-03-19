@@ -17,41 +17,115 @@ var material_colors_raw = PackedColorArray()
 var material_tags_raw = PackedInt32Array() 
 var selected_material: int = 1
 var current_weather: int = 0 
+# UI State
 var is_mouse_over_ui: bool = false
-var brush_radius: int = 0 # 0 means 1 pixel
+var brush_radius: int = 0 
+var current_language: String = "es" # "es" or "en"
+var ui_elements = {} # To track nodes for re-labeling
+var tools_panel: PanelContainer
+var disaster_panel: PanelContainer
+
+var tr = {
+	"es": {
+		"disasters": "🌪️ Desastres",
+		"tools": "🛠️ Herramientas",
+		"lang": "🌐 Idioma",
+		"brush": "🖌️ Pincel",
+		"weather": "⛈️ Clima",
+		"quake": "🫨 Sismo",
+		"tornado": "🌪️ Tornado",
+		"tsunami": "🌊 Tsunami",
+		"off": "Off",
+		"light": "Ligero",
+		"med": "Medio",
+		"storm": "Tormenta",
+		"brutal": "¡BRUTAL!",
+		"heavy": "Fuerte",
+		# Materials
+		"sand": "Arena",
+		"water": "Agua",
+		"fire": "Fuego",
+		"tnt": "TNT",
+		"earth": "Tierra",
+		"metal": "Metal",
+		"elec": "Elect.",
+		"gravel": "Grava",
+		"lava": "Lava",
+		"obisid": "Obsidiana",
+		"acid": "Ácido",
+		"wood": "Madera",
+		"petro": "Petróleo",
+		"fireworks": "Cohetes"
+	},
+	"en": {
+		"disasters": "🌪️ Disasters",
+		"tools": "🛠️ Tools",
+		"lang": "🌐 Language",
+		"brush": "🖌️ Brush",
+		"weather": "⛈️ Weather",
+		"quake": "🫨 Quake",
+		"tornado": "🌪️ Tornado",
+		"tsunami": "🌊 Tsunami",
+		"off": "Off",
+		"light": "Light",
+		"med": "Medium",
+		"storm": "Storm",
+		"brutal": "BRUTAL!",
+		"heavy": "Heavy",
+		# Materials
+		"sand": "Sand",
+		"water": "Water",
+		"fire": "Fire",
+		"tnt": "TNT",
+		"earth": "Earth",
+		"metal": "Metal",
+		"elec": "Elec",
+		"gravel": "Gravel",
+		"lava": "Lava",
+		"obisid": "Obsidian",
+		"acid": "Acid",
+		"wood": "Wood",
+		"petro": "Oil",
+		"fireworks": "Fireworks"
+	}
+}
 
 # Earthquake settings
-var earthquake_intensity: int = 0 # 0=Off, 1=Light, 2=Med, 3=Intense
+var earthquake_intensity: int = 0
 var earthquake_timer: float = 0.0
 
 # Tornado settings
-var tornado_intensity: int = 0 # 0=Off, 1=F1, 2=F3, 3=F5
+var tornado_intensity: int = 0
 var tornado_timer: float = 0.0
 var tornado_x: float = 0.0
 var tornado_target_x: float = 0.0
 var tornado_ground_y: float = 0.0
 
 # Tsunami settings
-var tsunami_intensity: int = 0 # 0=Off, 1=Light, 2=Med, 3=Mega
+var tsunami_intensity: int = 0
 var tsunami_timer: float = 0.0
 var tsunami_wave_x: float = 0.0
 var surface_cache = PackedInt32Array()
 
 # Fireworks tracking
-var active_fireworks = [] # Array of dictionaries: {x, y, target_y, color}
-var visual_sparks = []    # Array of particle dicts: {x, y, vx, vy, color, life}
+var active_fireworks = [] 
+var visual_sparks = []
 
 # Display
 @onready var texture_rect: TextureRect = $Display
 var img: Image
 
 func _ready():
-	# Calculate grid size based on viewport - Deducting 150px for UI bar at the bottom
-	var actual_viewport_height = get_viewport_rect().size.y - 150
+	# Calculate grid size based on viewport - Deducting 180px for the new Unified UI bar
+	var actual_viewport_height = get_viewport_rect().size.y - 180
 	var viewport_size = Vector2(get_viewport_rect().size.x, actual_viewport_height)
 	
 	grid_width = floor(viewport_size.x / grid_scale)
 	grid_height = floor(viewport_size.y / grid_scale)
+	
+	# Update Display node size to match the grid exactly
+	$Display.custom_minimum_size = Vector2(grid_width * grid_scale, grid_height * grid_scale)
+	$Display.size = $Display.custom_minimum_size
 	
 	# Init arrays
 	cells.resize(grid_width * grid_height)
@@ -123,157 +197,256 @@ func _ready():
 	img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8)
 	texture_rect.texture = ImageTexture.create_from_image(img)
 	texture_rect.size = viewport_size
-	
-	# Tool selection from UI
-	var controls = get_parent().get_node("UI/Controls")
-	controls.get_node("SandBtn").pressed.connect(func(): selected_material = 1)
-	controls.get_node("WaterBtn").pressed.connect(func(): selected_material = 2)
-	controls.get_node("OilBtn").visible = false # Remplazado por Petróleo
-	controls.get_node("FireBtn").pressed.connect(func(): selected_material = 3)
-	
-	# New buttons
-	_add_button("TNT", 5)
-	_add_button("Earth", 6)
-	_add_button("Metal", 8)
-	_add_button("Elec", 9)
-	_add_button("Gravel", 10)
-	_add_button("Lava", 11)
-	_add_button("Obisid", 12)
-	_add_button("Acid", 13)
-	_add_button("Wood", 16)
-	_add_button("Petro", 4)
-	_add_button("Fuegos Art.", 18)
 
-	_register_material(19, Color(1, 0.8, 0.9), SandboxMaterial.Tags.GRAV_STATIC) # Firework Fuse (Removed Incendiary to avoid domino effect)
-	
-	# DISASTER MENU
+	# DISASTER MENU - Now with stacked UI (Must be FIRST to create containers)
+	_setup_main_ui_containers()
 	_setup_ui()
+
+	_register_material(19, Color(1, 0.8, 0.9), SandboxMaterial.Tags.GRAV_STATIC) # Firework Fuse
+
+	# Setup all material buttons (Unified)
+	_add_button("sand", 1)
+	_add_button("water", 2)
+	_add_button("fire", 3)
+	_add_button("tnt", 5)
+	_add_button("earth", 6)
+	_add_button("metal", 8)
+	_add_button("elec", 9)
+	_add_button("gravel", 10)
+	_add_button("lava", 11)
+	_add_button("obisid", 12)
+	_add_button("acid", 13)
+	_add_button("wood", 16)
+	_add_button("petro", 4)
+	_add_button("fireworks", 18)
 
 
 func _setup_ui():
-	_setup_disaster_ui()
-	_setup_tools_ui()
+	_setup_tools_ui() # Tools on top
+	_setup_disaster_ui() # Disasters below
+
+var material_grid: HFlowContainer
+var action_vbox: VBoxContainer
+
+func _setup_main_ui_containers():
+	var ui_root = get_parent().get_node("UI")
+	var main_controls = ui_root.get_node("Controls")
+	
+	# CLEANUP: Remove EVERYTHING old (editor buttons like Sand, Water, etc.)
+	for child in main_controls.get_children():
+		child.queue_free()
+	
+	# ROOT UI BAR - Attached to UI root for TOTAL screen width
+	var root_hbox = HBoxContainer.new()
+	ui_root.add_child(root_hbox)
+	root_hbox.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	root_hbox.offset_top = -180 
+	root_hbox.offset_left = 10 
+	root_hbox.offset_right = -10 
+	root_hbox.add_theme_constant_override("separation", 15)
+	
+	# Materials container (Flow) - Intelligently fills the row!
+	material_grid = HFlowContainer.new()
+	material_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	material_grid.add_theme_constant_override("h_separation", 10)
+	material_grid.add_theme_constant_override("v_separation", 10)
+	root_hbox.add_child(material_grid)
+	
+	# Action buttons (Stacked)
+	action_vbox = VBoxContainer.new()
+	action_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	action_vbox.add_theme_constant_override("separation", 10)
+	root_hbox.add_child(action_vbox)
+
 
 func _setup_tools_ui():
 	var ui_root = get_parent().get_node("UI")
-	var main_controls = ui_root.get_node("Controls")
 	
-	# Create a TOOLS toggle button
 	var tools_btn = Button.new()
-	tools_btn.text = "🛠️ Herramientas"
-	main_controls.add_child(tools_btn)
+	tools_btn.text = tr[current_language]["tools"]
+	tools_btn.custom_minimum_size = Vector2(150, 60) # Bigger for mobile
+	ui_elements["tools_btn"] = tools_btn
+	action_vbox.add_child(tools_btn) # Add to stacked VBox
 	
-	# Submenu container
-	var tool_menu = HBoxContainer.new()
-	tool_menu.visible = false
-	ui_root.add_child(tool_menu)
-	tool_menu.position = Vector2(0, get_viewport_rect().size.y - 350) # Stacked
+	tools_panel = PanelContainer.new()
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.15, 0.15, 0.15, 0.95)
+	style.set_corner_radius_all(10)
+	tools_panel.add_theme_stylebox_override("panel", style)
+	tools_panel.visible = false
+	ui_root.add_child(tools_panel)
 	
-	tools_btn.pressed.connect(func(): tool_menu.visible = !tool_menu.visible)
+	# CENTERED ABOVE MATERIAL GRID
+	var screen_size = get_viewport_rect().size
+	tools_panel.position = Vector2(screen_size.x/2 - 200, screen_size.y - 380)
+	
+	tools_btn.pressed.connect(func(): 
+		disaster_panel.visible = false
+		tools_panel.visible = !tools_panel.visible
+	)
 	
 	var v_box = VBoxContainer.new()
-	tool_menu.add_child(v_box)
+	v_box.add_theme_constant_override("separation", 15)
+	tools_panel.add_child(v_box)
 	
-	# Block signals
-	tool_menu.mouse_entered.connect(func(): is_mouse_over_ui = true)
-	tool_menu.mouse_exited.connect(func(): is_mouse_over_ui = false)
+	tools_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	tools_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 	
-	# Helper (localized)
-	var create_tool_row = func(label_text: String, options: Array, callback: Callable):
+	var create_row = func(label_key: String, options: Array, callback: Callable):
 		var h_box = HBoxContainer.new()
+		h_box.add_theme_constant_override("separation", 10)
 		var lbl = Label.new()
-		lbl.text = label_text + ": "
-		lbl.custom_minimum_size = Vector2(100, 0)
+		lbl.text = tr[current_language][label_key] + ": "
+		lbl.custom_minimum_size = Vector2(120, 0)
+		ui_elements[label_key + "_lbl"] = lbl
 		h_box.add_child(lbl)
 		for i in range(options.size()):
 			var btn = Button.new()
 			btn.text = options[i]
+			btn.custom_minimum_size = Vector2(80, 45)
 			var level = i
 			btn.pressed.connect(func(): callback.call(level))
 			h_box.add_child(btn)
+			ui_elements[label_key + "_btn_" + str(i)] = btn # Store to refresh (if static text)
 		v_box.add_child(h_box)
 
-	# BRUSH SIZE ROW - Levels: 1, 3, 5, 10, 15, 25
-	var brush_sizes = [0, 1, 2, 5, 7, 12] # Radius mapping
+	# Language Row (First Tool)
+	var lang_options = ["Español", "English"]
+	create_row.call("lang", lang_options, func(l):
+		current_language = "en" if l == 1 else "es"
+		_refresh_ui_text()
+	)
+
+	# BRUSH SIZE ROW
+	var brush_sizes = [0, 1, 2, 5, 7, 12]
 	var brush_labels = ["1px", "3px", "5px", "10px", "15px", "25px"]
-	create_tool_row.call("🖌️ Pincel", brush_labels, func(l): brush_radius = brush_sizes[l])
+	create_row.call("brush", brush_labels, func(l): brush_radius = brush_sizes[l])
 
 func _setup_disaster_ui():
 	var ui_root = get_parent().get_node("UI")
-	var main_controls = ui_root.get_node("Controls")
 	
-	# Create a disaster toggle button
 	var disaster_btn = Button.new()
-	disaster_btn.text = "🌪️ Desastres"
-	main_controls.add_child(disaster_btn)
+	disaster_btn.text = tr[current_language]["disasters"]
+	disaster_btn.custom_minimum_size = Vector2(150, 60) # Bigger for mobile
+	ui_elements["disaster_btn"] = disaster_btn
+	action_vbox.add_child(disaster_btn) # Add to stacked VBox
 	
-	# Submenu container
-	var sub_menu = HBoxContainer.new()
-	sub_menu.visible = false
-	ui_root.add_child(sub_menu)
-	sub_menu.position = Vector2(0, get_viewport_rect().size.y - 300) # Above main UI
+	disaster_panel = PanelContainer.new()
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.1, 0.1, 0.12, 0.95)
+	style.set_corner_radius_all(10)
+	disaster_panel.add_theme_stylebox_override("panel", style)
+	disaster_panel.visible = false
+	ui_root.add_child(disaster_panel)
 	
-	disaster_btn.pressed.connect(func(): sub_menu.visible = !sub_menu.visible)
+	# CENTERED ABOVE MATERIAL GRID (Same Height)
+	var screen_size = get_viewport_rect().size
+	disaster_panel.position = Vector2(screen_size.x/2 - 200, screen_size.y - 380)
 	
-	# SETUP VERTICAL MENU
+	disaster_btn.pressed.connect(func(): 
+		tools_panel.visible = false
+		disaster_panel.visible = !disaster_panel.visible
+	)
+	
 	var v_box = VBoxContainer.new()
-	sub_menu.add_child(v_box)
+	v_box.add_theme_constant_override("separation", 15)
+	disaster_panel.add_child(v_box)
 	
-	# Connect signals to block painting
-	sub_menu.mouse_entered.connect(func(): is_mouse_over_ui = true)
-	sub_menu.mouse_exited.connect(func(): is_mouse_over_ui = false)
+	disaster_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	disaster_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 	
-	# Helper function to create rows
-	var create_row = func(label_text: String, options: Array, callback: Callable):
+	var create_row = func(label_key: String, options_keys: Array, callback: Callable):
 		var h_box = HBoxContainer.new()
+		h_box.add_theme_constant_override("separation", 10)
 		var lbl = Label.new()
-		lbl.text = label_text + ": "
-		lbl.custom_minimum_size = Vector2(100, 0)
+		lbl.text = tr[current_language][label_key] + ": "
+		lbl.custom_minimum_size = Vector2(120, 0)
+		ui_elements[label_key + "_lbl"] = lbl
 		h_box.add_child(lbl)
-		for i in range(options.size()):
+		for i in range(options_keys.size()):
+			var osk = options_keys[i]
 			var btn = Button.new()
-			btn.text = options[i]
-			var level = i
-			btn.pressed.connect(func(): callback.call(level))
+			btn.text = tr[current_language][osk]
+			btn.custom_minimum_size = Vector2(80, 45)
+			btn.pressed.connect(func(): callback.call(i))
 			h_box.add_child(btn)
+			ui_elements[label_key + "_btn_" + str(i)] = [btn, osk] # Store button and key for translation
 		v_box.add_child(h_box)
-	
-	# Weather Row
-	create_row.call("⛈️ Clima", ["Off", "Ligero", "Medio", "Tormenta"], func(l): current_weather = l)
-	
-	# Earthquake Row
-	create_row.call("🫨 Sismo", ["Off", "Ligero", "Medio", "¡BRUTAL!"], func(l): 
+
+	create_row.call("weather", ["off", "light", "med", "storm"], func(l): current_weather = l)
+	create_row.call("quake", ["off", "light", "med", "brutal"], func(l): 
 		earthquake_intensity = l
 		if l > 0: earthquake_timer = randf_range(5.0, 7.0)
 	)
-	
-	# Tornado Row
-	create_row.call("🌪️ Tornado", ["Off", "F1", "F3", "F5 🔥"], func(l):
+	create_row.call("tornado", ["off", "light", "med", "heavy"], func(l):
 		tornado_intensity = l
-		if l > 0: 
-			tornado_timer = 15.0
-			tornado_x = randf() * grid_width
-			tornado_target_x = randf() * grid_width
+		if l > 0: tornado_timer = 15.0; tornado_x = randf()*grid_width; tornado_target_x = randf()*grid_width
 	)
-	
-	# Tsunami Row
-	create_row.call("🌊 Tsunami", ["Off", "Marejada", "Maremoto", "MEGA"], func(l):
+	create_row.call("tsunami", ["off", "light", "med", "storm"], func(l):
 		tsunami_intensity = l
-		if l > 0:
-			tsunami_timer = 15.0
-			tsunami_wave_x = 0.0
+		if l > 0: tsunami_timer = 15.0; tsunami_wave_x = 0.0
 	)
 
-func _add_button(text, mat_id):
-	var btn = Button.new()
-	btn.text = text
-	btn.pressed.connect(func(): selected_material = mat_id)
-	var controls = get_parent().get_node("UI/Controls")
-	controls.add_child(btn)
+func _refresh_ui_text():
+	for key in ui_elements:
+		var node_data = ui_elements[key]
+		
+		# Handle direct button nodes (Tools/Disasters)
+		if key == "tools_btn": node_data.text = tr[current_language]["tools"]
+		elif key == "disaster_btn": node_data.text = tr[current_language]["disasters"]
+		
+		# Handle Labels (Main labels for rows and material names)
+		elif node_data is Label:
+			if key.ends_with("_mat_lbl"):
+				var pure_key = key.replace("_mat_lbl", "")
+				if tr[current_language].has(pure_key):
+					node_data.text = tr[current_language][pure_key]
+			elif key.ends_with("_lbl"):
+				var pure_key = key.replace("_lbl", "")
+				if tr[current_language].has(pure_key):
+					node_data.text = tr[current_language][pure_key] + ": "
+		
+		# Handle Intensity Buttons (Stored as Array [Btn, Key])
+		elif node_data is Array:
+			var btn = node_data[0]
+			var osk = node_data[1]
+			btn.text = tr[current_language][osk]
+
+func _add_button(key: String, mat_id: int):
+	var main_vbox = VBoxContainer.new()
+	main_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	main_vbox.custom_minimum_size = Vector2(75, 70) # UNIFORM SIZE FOR ALL
 	
-	# Block painting when hovering material buttons too
-	btn.mouse_entered.connect(func(): is_mouse_over_ui = true)
-	btn.mouse_exited.connect(func(): is_mouse_over_ui = false)
+	# Icon (ColorRect) - Now clickable!
+	var icon = ColorRect.new()
+	icon.color = material_colors_raw[mat_id]
+	icon.custom_minimum_size = Vector2(40, 40)
+	icon.mouse_filter = Control.MOUSE_FILTER_PASS 
+	
+	# Connect icon click to selection
+	icon.gui_input.connect(func(event):
+		if event is InputEventMouseButton and event.pressed:
+			selected_material = mat_id
+	)
+	
+	main_vbox.add_child(icon)
+	
+	var btn = Label.new()
+	btn.text = tr[current_language][key]
+	btn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	# ALSO CLICKABLE LABEL
+	btn.gui_input.connect(func(event):
+		if event is InputEventMouseButton and event.pressed:
+			selected_material = mat_id
+	)
+	ui_elements[key + "_mat_lbl"] = btn
+	main_vbox.add_child(btn)
+	
+	material_grid.add_child(main_vbox) 
+	
+	main_vbox.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	main_vbox.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
 func _register_material(id, color, tags):
 	material_colors_raw[id] = color
