@@ -36,6 +36,10 @@ var tsunami_timer: float = 0.0
 var tsunami_wave_x: float = 0.0
 var surface_cache = PackedInt32Array()
 
+# Fireworks tracking
+var active_fireworks = [] # Array of dictionaries: {x, y, target_y, color}
+var visual_sparks = []    # Array of particle dicts: {x, y, vx, vy, color, life}
+
 # Display
 @onready var texture_rect: TextureRect = $Display
 var img: Image
@@ -107,6 +111,9 @@ func _ready():
 	# Cloud (Whity Gray Gas)
 	_register_material(17, Color(0.9, 0.9, 0.9, 0.8), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP)
 	
+	# Fuegos Artificiales (Rosa brillante)
+	_register_material(18, Color(1.0, 0.4, 0.7), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)
+	
 	# Fill with empty
 	cells.fill(0)
 	charge_array.fill(0)
@@ -134,6 +141,9 @@ func _ready():
 	_add_button("Acid", 13)
 	_add_button("Wood", 16)
 	_add_button("Petro", 4)
+	_add_button("Fuegos Art.", 18)
+
+	_register_material(19, Color(1, 0.8, 0.9), SandboxMaterial.Tags.GRAV_STATIC) # Firework Fuse (Removed Incendiary to avoid domino effect)
 	
 	# DISASTER MENU
 	_setup_disaster_ui()
@@ -241,6 +251,10 @@ func _process(delta):
 	
 	# Tsunami processing
 	_process_tsunami(delta)
+	
+	# Fireworks updates
+	_update_active_fireworks(delta)
+	_update_visual_sparks(delta)
 	
 	# Render
 	_update_texture()
@@ -582,28 +596,52 @@ func _swap_cells(x1, y1, x2, y2):
 	charge_array[idx2] = c1
 
 func _process_interactions(x, y, idx, mat_id, tags):
-	# Fire/Heat interaction
+	# FIRE AND HEAT REACTIONS
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
-		# Fuego regular (Mat 3) desaparece rápido
+		# Incendiary materials (Fire 3, Lava 11) extinguish or burn out
 		if mat_id == 3:
 			if randf() < 0.1: _set_cell(x, y, 0)
-		# Lava (Mat 11) es persistente (no burnout aquí)
-		# Brasas (Mat 14) duran mucho (20-30 seg) y emiten chispas
-		elif mat_id == 14:
-			if randf() < 0.0006: # Burnout lento
+		elif mat_id == 14: # Coal burnout
+			if randf() < 0.0006:
 				_set_cell(x, y, 0)
-				if _get_cell(x, y - 1) == 0: _set_cell(x, y - 1, 15) # Deja humo
-			# Emisión de chispas de fuego
-			if randf() < 0.005:
-				var nx = x + randi_range(-1, 1)
-				var ny = y - 1
-				if _get_cell(nx, ny) == 0: _set_cell(nx, ny, 3)
+				if _get_cell(x, y - 1) == 0: _set_cell(x, y - 1, 15)
+			if randf() < 0.005 and _get_cell(x, y-1) == 0:
+				_set_cell(x, y - 1, 3)
 		
+		# Spreading fire to neighbors
 		_check_neighbors_for_reaction(x, y, true)
 
-	# ELECTRIC SEEDING: Only the Electricity MATERIAL creates new pulses in Metal
+	# FLAMMABLE / REACTIVE MATERIALS (Independent of being incendiary themselves)
+	
+	# Wood (16) or Coal (14) or Fireworks (18) or Petro (4) ignition
+	if (tags & SandboxMaterial.Tags.FLAMMABLE) or (tags & SandboxMaterial.Tags.EXPLOSIVE):
+		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY) or charge_array[idx] > 50:
+			if mat_id == 16 or mat_id == 14 or mat_id == 4: # Wood/Coal/Petro catches fire
+				if randf() < 0.1: _set_cell(x, y, 3)
+			elif mat_id == 18: # Fireworks start fuse
+				_set_cell(x, y, 19)
+				charge_array[idx] = randi_range(20, 70)
+	
+	# FUSE LOGIC (Standalone)
+	if mat_id == 19: # Firework Fuse
+		charge_array[idx] -= 1
+		# Visual flash (Pink/White)
+		if Engine.get_frames_drawn() % 4 == 0:
+			_set_cell(x, y, 18)
+		elif Engine.get_frames_drawn() % 4 == 2:
+			_set_cell(x, y, 19)
+		
+		if charge_array[idx] <= 0:
+			_launch_firework(x, y)
+
+	elif mat_id == 7: # Primed TNT
+		charge_array[idx] -= 1
+		if charge_array[idx] <= 0:
+			_explode(x, y, 12)
+
+	# ELECTRIC SEEDING (Active pulses)
 	if (tags & SandboxMaterial.Tags.ELECTRICITY):
-		if randf() < 0.7: _set_cell(x, y, 0) # Vanish VERY fast
+		if randf() < 0.7: _set_cell(x, y, 0)
 		_check_neighbors_for_reaction(x, y, false)
 	
 	# PASS 3: Conductor Pulse (Triggering TNT/Devices)
@@ -619,6 +657,16 @@ func _process_interactions(x, y, idx, mat_id, tags):
 	if mat_id == 15: # Smoke
 		if randf() < 0.001:
 			_set_cell(x, y, 0)
+
+func _has_tag_neighbor(x, y, tag):
+	for ny in range(y - 1, y + 2):
+		for nx in range(x - 1, x + 2):
+			if nx == x and ny == y: continue
+			var nid = _get_cell(nx, ny)
+			if nid > 0:
+				if (material_tags_raw[nid] & tag):
+					return true
+	return false
 
 func _trigger_electric_devices(x, y):
 	for ny in range(y - 1, y + 2):
@@ -752,4 +800,82 @@ func _update_texture():
 		color_buffer[base + 3] = int(c.a * 255)
 	
 	img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, color_buffer)
+	
+	# DRAW VISUAL SPARKS (Ghost Fireworks - Over the grid)
+	for spark in visual_sparks:
+		var sx = int(spark.x)
+		var sy = int(spark.y)
+		if sx >= 0 and sx < grid_width and sy >= 0 and sy < grid_height:
+			# Dim color based on life
+			var s_color = spark.color
+			s_color.a = spark.life
+			img.set_pixel(sx, sy, s_color)
+	
 	texture_rect.texture.update(img)
+
+func _launch_firework(x, y):
+	_set_cell(x, y, 0) # Clear the station
+	# Neon Palette for launch selection
+	var neon_colors = [Color("#00FFFF"), Color("#FF00FF"), Color("#00FF00"), Color("#FFFF00"), Color("#FFFFFF")]
+	var fw = {
+		"x": float(x),
+		"y": float(y),
+		"target_y": max(15, y - randf_range(60, 250)), # Absolute ceiling margin
+		"color": neon_colors[randi() % neon_colors.size()] # Lock color at launch!
+	}
+	active_fireworks.append(fw)
+
+func _update_active_fireworks(delta):
+	var to_remove = []
+	for i in range(active_fireworks.size()):
+		var fw = active_fireworks[i]
+		fw.y -= 125.0 * delta # Half speed (125 instead of 250)
+		
+		# Sutil trail (Smoke)
+		if randf() < 0.3:
+			_set_cell(int(fw.x), int(fw.y + 1), 15) # Only smoke
+			
+		# Check if reached altitude or safe boundary
+		if fw.y <= fw.target_y or fw.y < 15:
+			_explode_firework(int(fw.x), int(fw.y), fw.color) # Use the locked color!
+			to_remove.append(i)
+	
+	to_remove.reverse()
+	for i in to_remove:
+		active_fireworks.remove_at(i)
+
+func _update_visual_sparks(delta):
+	var to_remove = []
+	for i in range(visual_sparks.size()):
+		var s = visual_sparks[i]
+		s.x += s.vx * delta
+		s.y += s.vy * delta
+		s.vy += 30.0 * delta # Visual gravity
+		s.life -= 1.3 * delta # Slightly faster decay
+		
+		# Snap off if too dim to avoid 'noise'
+		if s.life <= 0.2:
+			to_remove.append(i)
+	
+	to_remove.reverse()
+	for i in to_remove:
+		visual_sparks.remove_at(i)
+
+func _explode_firework(ex, ey, p_color):
+	# Randomized explosion scale (Reduced max to 1/3 of previous)
+	var size_mult = randf_range(0.4, 0.9) 
+	var spark_count = int(100 * size_mult)  # High density!
+	
+	# Create GHOST particles (Visual only) 
+	for i in range(spark_count):
+		var ang = randf() * TAU
+		var force = randf_range(20, 60) * size_mult # Slower, compact expansion
+		var spark = {
+			"x": float(ex),
+			"y": float(ey),
+			"vx": cos(ang) * force,
+			"vy": sin(ang) * force,
+			"color": p_color, 
+			"life": randf_range(1.0, 1.8) # Snappier life
+		}
+		visual_sparks.append(spark)
