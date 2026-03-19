@@ -22,6 +22,13 @@ var current_weather: int = 0 # 0=Off, 1=Light, 2=Med, 3=Storm
 var earthquake_intensity: int = 0 # 0=Off, 1=Light, 2=Med, 3=Intense
 var earthquake_timer: float = 0.0
 
+# Tornado settings
+var tornado_intensity: int = 0 # 0=Off, 1=F1, 2=F3, 3=F5
+var tornado_timer: float = 0.0
+var tornado_x: float = 0.0
+var tornado_target_x: float = 0.0
+var tornado_ground_y: float = 0.0
+
 # Display
 @onready var texture_rect: TextureRect = $Display
 var img: Image
@@ -159,7 +166,26 @@ func _setup_disaster_ui():
 		var level = i
 		btn.pressed.connect(func(): 
 			earthquake_intensity = level
-			if level > 0: earthquake_timer = 10.0 # 10 seconds duration
+			if level > 0: earthquake_timer = randf_range(5.0, 7.0) # 5 to 7 seconds duration
+		)
+		sub_menu.add_child(btn)
+		
+	var lbl2 = Label.new()
+	lbl2.text = " | "
+	sub_menu.add_child(lbl2)
+	
+	# Add Tornado options
+	var t_options = ["Torn. Off", "F1", "F3", "F5 🔥"]
+	for i in range(t_options.size()):
+		var btn = Button.new()
+		btn.text = t_options[i]
+		var level = i
+		btn.pressed.connect(func(): 
+			tornado_intensity = level
+			if level > 0: 
+				tornado_timer = 15.0 # 15 seconds duration
+				tornado_x = randf() * grid_width
+				tornado_target_x = randf() * grid_width
 		)
 		sub_menu.add_child(btn)
 
@@ -190,8 +216,91 @@ func _process(delta):
 	# Earthquake processing
 	_process_earthquake(delta)
 	
+	# Tornado processing
+	_process_tornado(delta)
+	
 	# Render
 	_update_texture()
+
+func _process_tornado(delta):
+	if tornado_timer <= 0:
+		tornado_intensity = 0
+		return
+	
+	tornado_timer -= delta
+	
+	# 1. Autonomous Movement
+	if abs(tornado_x - tornado_target_x) < 5:
+		tornado_target_x = randf() * grid_width
+	
+	tornado_x = lerp(tornado_x, tornado_target_x, delta * 0.5)
+	
+	# 1.5 Ground Tracking (Find the surface)
+	var tx = int(tornado_x)
+	var detected_y = grid_height - 1 # Default bottom
+	for gy in range(2, grid_height - 4):
+		# Look for a VERY DENSE surface (at least 4 pixels deep)
+		var c1 = _get_cell(tx, gy)
+		if c1 > 0 and c1 != 17 and c1 != 15:
+			# Check 3 more pixels below to confirm it's ground
+			if _get_cell(tx, gy + 1) > 0 and _get_cell(tx, gy + 2) > 0 and _get_cell(tx, gy + 3) > 0:
+				detected_y = gy
+				break
+	
+	# Smoothly interpolate height to avoid jittering when debris passes
+	tornado_ground_y = lerp(tornado_ground_y, float(detected_y), 0.1)
+	
+	# 2. Conical Vortex Physics & Clouds
+	# Spawn clouds at the top of the funnel
+	if randf() < 0.2:
+		_set_cell(int(tornado_x + randf_range(-40, 40)), 2, 17)
+		_set_cell(int(tornado_x + randf_range(-20, 20)), 1, 17)
+	
+	var points_to_process = 3000 * tornado_intensity
+	
+	for i in range(points_to_process):
+		# Sample randomly in the grid (biased towards tornado column)
+		var ry = randi() % grid_height
+		
+		# Variable Radius relative to current GROUND level
+		var rel_y = 1.0 - (float(ry) / tornado_ground_y) if tornado_ground_y > 0 else 1.0
+		# Funnel only above ground, but with a small chaotic bit below
+		var current_radius = 0.0
+		if ry <= tornado_ground_y:
+			current_radius = (4 + tornado_intensity) + (40.0 * tornado_intensity * rel_y)
+		else:
+			# Dig slightly into the ground (radius narrows downward)
+			current_radius = max(0, (4 + tornado_intensity) - (ry - tornado_ground_y))
+		
+		var rx = int(tornado_x + randf_range(-current_radius, current_radius))
+		
+		if rx < 0 or rx >= grid_width or ry < 0 or ry >= grid_height: continue
+		
+		var tid = _get_cell(rx, ry)
+		if tid == 0 or tid == 17: continue 
+		
+		# Vortex Forces
+		var dist_x = tornado_x - rx
+		var pull_strength = 1.0 - (abs(dist_x) / (current_radius + 1))
+		
+		var dx = sign(dist_x)
+		# Pull up above ground, swirl/chaos below ground
+		var dy = -2 if tornado_intensity < 3 else -4 
+		if ry > tornado_ground_y: dy = 1 if randf() < 0.5 else -1 # Chaos/digging
+		
+		# Swirl/Orbital effect
+		if randf() < 0.4: dx = -dx 
+		
+		# Apply force with probability
+		if randf() < pull_strength:
+			var nx = rx + dx
+			var ny = ry + dy
+			if nx >= 0 and nx < grid_width and ny >= 0 and ny < grid_height:
+				# Suction can lift anything into air
+				if _get_cell(nx, ny) == 0:
+					_swap_cells(rx, ry, nx, ny)
+				elif randf() < 0.2: # Can also mix with other particles inside funnel
+					_swap_cells(rx, ry, nx, ny)
 
 func _process_earthquake(delta):
 	if earthquake_timer <= 0:
@@ -530,9 +639,21 @@ func _push_particle(x, y, dx, dy):
 func _update_texture():
 	# HIGH PERFORMANCE RENDERING: Using color buffer and set_data
 	for i in range(cells.size()):
-		var c = material_colors_raw[cells[i]]
+		var mat_id = cells[i]
+		var c = material_colors_raw[mat_id]
 		var charge = charge_array[i]
 		
+		# VISUAL TORNADO FUNNEL (Background ghost effect)
+		if tornado_intensity > 0 and mat_id == 0:
+			var ix = i % grid_width
+			var iy = i / grid_width
+			# Only draw funnel ABOVE ground
+			if iy <= tornado_ground_y:
+				var rel_y = 1.0 - (float(iy) / tornado_ground_y) if tornado_ground_y > 0 else 1.0
+				var cur_rad = (5 + tornado_intensity) + (40.0 * tornado_intensity * rel_y)
+				if abs(ix - tornado_x) < cur_rad:
+					c = Color(0.4, 0.4, 0.4, 0.4) 
+
 		# MIX COLOR IF CHARGED (Glowing effect)
 		if charge > 80:
 			var pulse_color = Color.YELLOW
