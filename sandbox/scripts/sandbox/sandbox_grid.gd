@@ -201,8 +201,15 @@ func _ready():
 	# DISASTER MENU - Now with stacked UI (Must be FIRST to create containers)
 	_setup_main_ui_containers()
 	_setup_ui()
-
+	
+	# FORCE START HIDDEN
+	tools_panel.visible = false
+	disaster_panel.visible = false
+	
 	_register_material(19, Color(1, 0.8, 0.9), SandboxMaterial.Tags.GRAV_STATIC) # Firework Fuse
+
+	# INITIAL HIGHLIGHT
+	_update_highlights()
 
 func _setup_materials_within_grid():
 	if material_grid.get_child_count() > 0: return # Already setup physically?
@@ -317,12 +324,16 @@ func _setup_tools_ui():
 	create_row.call("lang", lang_options, func(l):
 		current_language = "en" if l == 1 else "es"
 		_refresh_ui_text()
+		_update_highlights()
 	)
 
 	# BRUSH SIZE ROW
 	var brush_sizes = [0, 1, 2, 5, 7, 12]
 	var brush_labels = ["1px", "3px", "5px", "10px", "15px", "25px"]
-	create_row.call("brush", brush_labels, func(l): brush_radius = brush_sizes[l])
+	create_row.call("brush", brush_labels, func(l): 
+		brush_radius = brush_sizes[l]
+		_update_highlights()
+	)
 
 func _setup_disaster_ui():
 	var disaster_btn = Button.new()
@@ -370,18 +381,24 @@ func _setup_disaster_ui():
 			ui_elements[label_key + "_btn_" + str(i)] = [btn, osk] # Store button and key for translation
 		v_box.add_child(h_box)
 
-	create_row.call("weather", ["off", "light", "med", "storm"], func(l): current_weather = l)
+	create_row.call("weather", ["off", "light", "med", "storm"], func(l): 
+		current_weather = l
+		_update_highlights()
+	)
 	create_row.call("quake", ["off", "light", "med", "brutal"], func(l): 
 		earthquake_intensity = l
 		if l > 0: earthquake_timer = randf_range(5.0, 7.0)
+		_update_highlights()
 	)
 	create_row.call("tornado", ["off", "light", "med", "heavy"], func(l):
 		tornado_intensity = l
 		if l > 0: tornado_timer = 15.0; tornado_x = randf()*grid_width; tornado_target_x = randf()*grid_width
+		_update_highlights()
 	)
 	create_row.call("tsunami", ["off", "light", "med", "storm"], func(l):
 		tsunami_intensity = l
 		if l > 0: tsunami_timer = 15.0; tsunami_wave_x = 0.0
+		_update_highlights()
 	)
 
 func _refresh_ui_text():
@@ -414,7 +431,14 @@ func _add_button(key: String, mat_id: int):
 	main_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	main_vbox.custom_minimum_size = Vector2(75, 70) # UNIFORM SIZE FOR ALL
 	
-	# Icon (ColorRect) - Now clickable!
+	# Icon Wrapper (for border)
+	var icon_panel = PanelContainer.new()
+	var icon_style = StyleBoxFlat.new()
+	icon_style.bg_color = Color(0,0,0,0) # Transparent background
+	icon_panel.add_theme_stylebox_override("panel", icon_style)
+	icon_panel.custom_minimum_size = Vector2(50, 50) # 40 + 5 + 5 for border
+	
+	# Icon (ColorRect)
 	var icon = ColorRect.new()
 	icon.color = material_colors_raw[mat_id]
 	icon.custom_minimum_size = Vector2(40, 40)
@@ -424,9 +448,14 @@ func _add_button(key: String, mat_id: int):
 	icon.gui_input.connect(func(event):
 		if event is InputEventMouseButton and event.pressed:
 			selected_material = mat_id
+			_update_highlights()
 	)
+	icon.set_meta("mat_id", mat_id)
 	
-	main_vbox.add_child(icon)
+	icon_panel.add_child(icon)
+	main_vbox.add_child(icon_panel)
+	
+	ui_elements[key + "_icon_pnl"] = icon_panel # Store panel for border
 	
 	var btn = Label.new()
 	btn.text = tr[current_language][key]
@@ -436,6 +465,7 @@ func _add_button(key: String, mat_id: int):
 	btn.gui_input.connect(func(event):
 		if event is InputEventMouseButton and event.pressed:
 			selected_material = mat_id
+			_update_highlights()
 	)
 	ui_elements[key + "_mat_lbl"] = btn
 	main_vbox.add_child(btn)
@@ -444,6 +474,69 @@ func _add_button(key: String, mat_id: int):
 	
 	main_vbox.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	main_vbox.mouse_exited.connect(func(): is_mouse_over_ui = false)
+
+func _update_highlights():
+	# Update Material Selection (Icons & Labels)
+	for child in material_grid.get_children():
+		var icon_pnl = child.get_child(0)
+		var label = child.get_child(1)
+		var mat_id = icon_pnl.get_child(0).get_meta("mat_id")
+		
+		var style = icon_pnl.get_theme_stylebox("panel").duplicate()
+		if mat_id == selected_material:
+			# HIGHLIGHT: Bright border + Yellow text
+			style.border_width_left = 5
+			style.border_width_top = 5
+			style.border_width_right = 5
+			style.border_width_bottom = 5
+			style.border_color = Color.WHITE
+			icon_pnl.add_theme_stylebox_override("panel", style)
+			label.add_theme_color_override("font_color", Color.YELLOW)
+		else:
+			# DEFAULT: No border + White text
+			style.border_width_left = 0
+			style.border_width_top = 0
+			style.border_width_right = 0
+			style.border_width_bottom = 0
+			icon_pnl.add_theme_stylebox_override("panel", style)
+			label.remove_theme_color_override("font_color")
+
+	# 2. Update Tool/Disaster Highlights (Buttons)
+	for key in ui_elements:
+		var node_data = ui_elements[key]
+		if key.contains("_btn_"):
+			var btn = node_data
+			if node_data is Array: btn = node_data[0]
+			
+			if btn is Button:
+				# Check if this button is the active one
+				var is_active = false
+				if key.begins_with("brush_btn_"):
+					var idx = int(key.split("_")[-1])
+					var brush_sizes = [0, 1, 2, 5, 7, 12]
+					if brush_sizes[idx] == brush_radius: is_active = true
+				elif key.begins_with("lang_btn_"):
+					var idx = int(key.split("_")[-1])
+					if (idx == 1 and current_language == "en") or (idx == 0 and current_language == "es"): is_active = true
+				elif key.begins_with("weather_btn_"):
+					if int(key.split("_")[-1]) == current_weather: is_active = true
+				elif key.begins_with("quake_btn_"):
+					if int(key.split("_")[-1]) == earthquake_intensity: is_active = true
+				elif key.begins_with("tornado_btn_"):
+					if int(key.split("_")[-1]) == tornado_intensity: is_active = true
+				elif key.begins_with("tsunami_btn_"):
+					if int(key.split("_")[-1]) == tsunami_intensity: is_active = true
+				
+				if is_active:
+					btn.add_theme_color_override("font_color", Color.YELLOW)
+					var highlight_style = StyleBoxFlat.new()
+					highlight_style.bg_color = Color(0.3, 0.3, 0.4)
+					highlight_style.border_width_bottom = 3
+					highlight_style.border_color = Color.SKY_BLUE
+					btn.add_theme_stylebox_override("normal", highlight_style)
+				else:
+					btn.remove_theme_color_override("font_color")
+					btn.remove_theme_stylebox_override("normal")
 
 func _is_any_ui_blocking() -> bool:
 	if is_mouse_over_ui: return true # Original mouse_entered check
