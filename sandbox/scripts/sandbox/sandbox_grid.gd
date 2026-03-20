@@ -1055,15 +1055,14 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		# 1. SEED LOGIC (mat_id 20)
 		if mat_id == 20: 
 			var is_on_fertile = _has_tag_neighbor(x, y, SandboxMaterial.Tags.FERTILE)
-			# Oval moisture check (15x10)
-			var is_wet = _get_cell(x, y+1) == 22 or _get_cell(x, y+1) == 23 or _has_tag_within_oval(x, y, SandboxMaterial.Tags.LIQUID, 15, 10) or current_weather > 0
+			var is_wet = _get_cell(x, y+1) == 22 or _get_cell(x, y+1) == 23 or _has_id_within_oval(x, y, 2, 15, 10) or current_weather > 0
 			if is_on_fertile and is_wet:
 				_set_cell(x, y, 21) # Transform to Grass
 		
 		# 2. PLANT GROWTH (mat_id 21 - Grass)
 		elif mat_id == 21:
-			# STRICT: Must detect liquid to grow
-			if _has_tag_within_oval(x, y, SandboxMaterial.Tags.LIQUID, 20, 10) or current_weather > 0:
+			# STRICT: Must detect water to grow
+			if _has_id_within_oval(x, y, 2, 20, 10) or current_weather > 0:
 				if randf() < 0.3:
 					var gx = x + randi_range(-2, 2)
 					var gy = y + randi_range(-2, 1)
@@ -1076,12 +1075,12 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		# 3. MOISTURE ABSORPTION (ID 1 -> 22, ID 6 -> 23)
 		elif mat_id == 1 or mat_id == 6:
 			# Spread moisture more horizontally
-			if current_weather > 0 or _has_tag_within_oval(x, y, SandboxMaterial.Tags.LIQUID, 20, 10):
+			if current_weather > 0 or _has_id_within_oval(x, y, 2, 20, 10):
 				_set_cell(x, y, 22 if mat_id == 1 else 23) # Transition to wet
 		
 		# 4. SPONTANEOUS GROWTH ON WET SOIL
 		elif mat_id == 22 or mat_id == 23:
-			var has_water = _has_tag_within_oval(x, y, SandboxMaterial.Tags.LIQUID, 15, 10) or current_weather > 0
+			var has_water = _has_id_within_oval(x, y, 2, 15, 10) or current_weather > 0
 			if has_water:
 				# ROOT LOGIC: Soil only turns to Grass if connected AND NOT crowded (< 3 neighbours)
 				if randf() < 0.05 and _has_tag_neighbor(x, y, SandboxMaterial.Tags.PLANT):
@@ -1158,6 +1157,15 @@ func _has_tag_within_oval(x, y, tag, rx, ry):
 			if (float(ox*ox)/(rx*rx) + float(oy*oy)/(ry*ry)) <= 1.0:
 				var nid = _get_cell(x + ox, y + oy)
 				if nid > 0 and (material_tags_raw[nid] & tag):
+					return true
+	return false
+
+func _has_id_within_oval(x, y, target_id, rx, ry):
+	# Deterministic sweep with step for performance in oval
+	for oy in range(-ry, ry + 1, 3): 
+		for ox in range(-rx, rx + 1, 3):
+			if (float(ox*ox)/(rx*rx) + float(oy*oy)/(ry*ry)) <= 1.0:
+				if _get_cell(x + ox, y + oy) == target_id:
 					return true
 	return false
 
