@@ -1138,20 +1138,25 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		# Launch projectile every 20-25 frames
 		if charge_array[idx] % 25 == 0:
 			var tx = x + randi_range(-1, 1)
-			if _get_cell(tx, y-1) == 0 or _get_cell(tx, y-1) == 15:
+			var n_id = _get_cell(tx, y-1)
+			# Launch if NOT a core solid (Metal, Cement, Earth, or another Volcan)
+			if n_id != 13 and n_id != 26 and n_id != 5 and n_id != 27:
+				_explode(x, y-1, 2) # PUSH the plug out of the way!
 				_set_cell(tx, y-1, 28)
 				charge_array[(y-1) * grid_width + tx] = randi_range(30, 60) # Projectile fuel
 		
 		# Smoking Base + LAVA PUDDLES (Triple effect)
-		if randf() < 0.2:
-			if _get_cell(x, y-1) == 0: _set_cell(x, y-1, 15)
+		if randf() < 0.3: # Reduced from 0.6
+			var sx = x + randi_range(-2, 2)
+			if _get_cell(sx, y-1) == 0: _set_cell(sx, y-1, 15)
+		
 		if randf() < 0.15: # Leak real lava at base
 			var lx = x + randi_range(-2, 2)
 			if _get_cell(lx, y-1) == 0: _set_cell(lx, y-1, 11)
 			
 		if charge_array[idx] <= 0:
-			_draw_circle(x, y, 4, 11) # Burnout cluster
-			_explode(x, y, 6)
+			_draw_circle(x, y, 5, 11) # Burnout cluster (Slightly bigger)
+			_explode(x, y, 10) # Bigger final burnout
 
 	elif mat_id == 28: # Ascending projectile
 		# FASTER MOVEMENT: Move up 3px per frame manually
@@ -1160,8 +1165,18 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		for i in range(3):
 			# Detonate if energy spent
 			if current_fuel <= 0:
-				_draw_circle(x, y, 6, 11) # Finale: MASSIVE cluster of LAVA (Radius 6)
-				_explode(x, y, 10) # Huge Final burst
+				_draw_circle(x, y, 6, 11) # Finale: MASSIVE cluster of LAVA
+				_draw_circle(x, y, 5, 15) # Reduced cloud of SMOKE (from 10 to 5)
+				_explode(x, y, 12) # Huge Final burst
+				
+				# Finale FIREWORKS: 50+ Bright Sparks
+				for j in range(50):
+					visual_sparks.append({
+						"x": float(x), "y": float(y),
+						"vx": randf_range(-120, 120), "vy": randf_range(-150, 50),
+						"color": [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(),
+						"life": randf_range(0.4, 0.8)
+					})
 				return
 			
 			var next_y = y - 1
@@ -1176,8 +1191,9 @@ func _process_interactions(x, y, idx, mat_id, tags):
 				# 1. First, move the projectile to the new spot
 				_swap_cells(x, y, x, next_y)
 				
-				# 2. Leave trail of ELECTRICITY (9) and FIRE (3) in the OLD spot
-				var trail_id = 9 if randf() < 0.6 else 3
+				# 2. Leave trail of ELECTRICITY (9), FIRE (3) and SMOKE (15)
+				# Reduced smoke probability: (15 if rand < 0.2 instead of 0.4)
+				var trail_id = 15 if randf() < 0.2 else (9 if randf() < 0.5 else 3)
 				_set_cell(x, y, trail_id)
 				
 				# 2.5 MASSIVE MAGMA LEAK: Triple lava per move step
@@ -1193,15 +1209,15 @@ func _process_interactions(x, y, idx, mat_id, tags):
 				current_fuel -= 1
 				charge_array[idx] = current_fuel
 				
-				# 4. GHOST SPARKS (Always on top of the grid)
-				if randf() < 0.5:
+				# 4. GHOST SPARKS (High-Density Electric Aura)
+				for j in range(12): # Increased density (12 sparks per sub-step!)
 					visual_sparks.append({
-						"x": float(x) + randf_range(-4, 4),
-						"y": float(y + 2),
-						"vx": randf_range(-40, 40),
-						"vy": randi_range(30, 70),
-						"color": Color.YELLOW if randf() < 0.8 else Color.CYAN,
-						"life": randf_range(0.3, 0.6)
+						"x": float(x) + randf_range(-6, 6),
+						"y": float(y) + randf_range(0, 10),
+						"vx": randf_range(-60, 60),
+						"vy": randi_range(40, 100),
+						"color": [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(),
+						"life": randf_range(0.2, 0.5)
 					})
 			else:
 				# Blockage by real solids (Metal, Concrete, Earth)? Stop/Detonate
