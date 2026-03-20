@@ -1187,8 +1187,8 @@ func _process_electricity():
 						if nx >= 0 and nx < grid_width and ny >= 0 and ny < grid_height:
 							var n_idx = ny * grid_width + nx
 							var n_tags = tags_array[n_idx]
-							# Only spread to conductors that are currently at 0 (IDLE)
-							if (n_tags & SandboxMaterial.Tags.CONDUCTOR) and charge_array[n_idx] == 0:
+							# Spread to both CONDUCTORS and ACTIVATED objects (like TNT/Fireworks)
+							if (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)) and charge_array[n_idx] == 0:
 								charge_array[n_idx] = 101 # Set to 'newly charged'
 		
 		# Countdown charge (ONLY for conductors to avoid draining other logic like Vines)
@@ -1262,9 +1262,15 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY) or charge_array[idx] > 50:
 			if mat_id == 16 or mat_id == 14 or mat_id == 4: # Wood/Coal/Petro catches fire
 				if randf() < 0.1: _set_cell(x, y, 3)
-			elif mat_id == 18: # Fireworks start fuse
-				_set_cell(x, y, 19)
-				charge_array[idx] = randi_range(20, 70)
+			
+			# GENERIC ELECTRIC ACTIVATED TRIGGER
+			elif (tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
+				if (tags & SandboxMaterial.Tags.EXPLOSIVE):
+					_set_cell(x, y, 7) # PRIME TNT/EXPLOSIVE
+					charge_array[idx] = randi_range(30, 60)
+				elif mat_id == 18: # Special Fireworks Fuse logic
+					_set_cell(x, y, 19)
+					charge_array[idx] = randi_range(20, 70)
 	
 	# FUSE LOGIC (Standalone)
 	if mat_id == 19: # Firework Fuse
@@ -1286,6 +1292,24 @@ func _process_interactions(x, y, idx, mat_id, tags):
 	# ELECTRIC SEEDING (Active pulses)
 	if (tags & SandboxMaterial.Tags.ELECTRICITY):
 		if randf() < 0.7: _set_cell(x, y, 0)
+
+	# --- CORROSION (ACID) ---
+	if (tags & SandboxMaterial.Tags.ACID):
+		if randf() < 0.4: # Reaction Speed
+			for ny in range(y - 1, y + 2):
+				for nx in range(x - 1, x + 2):
+					if nx == x and ny == y: continue
+					var nid = _get_cell(nx, ny)
+					if nid > 0:
+						var n_tags = material_tags_raw[nid]
+						if not (n_tags & SandboxMaterial.Tags.ANTI_ACID):
+							_set_cell(nx, ny, 0) # DISSOLVE
+							# Chance to create bit of SMOKE (15)
+							if (n_tags & SandboxMaterial.Tags.SOLID) and randf() < 0.1:
+								_set_cell(nx, ny, 15) 
+							# Acid is slightly consumed when eating solids
+							if (n_tags & SandboxMaterial.Tags.SOLID) and randf() < 0.1:
+								_set_cell(x, y, 0)
 
 	# --- BIOLOGICAL INTERACTIONS (PLANTS & SEEDS) ---
 	# OPTIMIZATION: Only process 5% of biological pixels per frame to save FPS
