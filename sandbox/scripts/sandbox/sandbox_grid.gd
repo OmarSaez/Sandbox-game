@@ -221,8 +221,8 @@ func _ready():
 	_register_material(23, Color("#8B4513").darkened(0.2), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.FERTILE | SandboxMaterial.Tags.BURN_COAL)
 	
 	# --- NEW VINE (Stem) ---
-	# Forest Green (Darker)
-	_register_material(24, Color("#3E5E2A"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_SMOKE)
+	# Forest Green (Darker) - Now leaves coal when burned
+	_register_material(24, Color("#3E5E2A"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL)
 
 	# UI SETUP (Must happen AFTER materials are registered)
 	_setup_main_ui_containers()
@@ -811,21 +811,19 @@ func _process_weather():
 	if current_weather == 3 and randf() < 0.01: # Rare but impactful
 		_strike_lightning()
 		
-	# Spontaneous Grass growth during rain or near water
-	# Increased sampling for better responsiveness
+	# Spontaneous Grass growth during rain or near water (SURFACE ONLY)
 	if randf() < 0.2: # Check in 20% of frames
 		for i in range(100): # 100 random samples per check
 			var rx = randi() % grid_width
 			var ry = randi() % (grid_height - 10) + 5
 			var tid = _get_cell(rx, ry)
 			if tid == 6 or tid == 1: # EARTH or SAND (FERTILE)
-				if _get_cell(rx, ry-1) == 0: # Space above
-					# Check for moisture
-					if current_weather > 0 or _has_tag_within_radius(rx, ry, SandboxMaterial.Tags.LIQUID, 25):
-						if randf() < 0.1: # Final probability to make it organic
+				if _get_cell(rx, ry-1) == 0: # Space above (Surface check)
+					# Check for moisture (OVAL 20x10)
+					if current_weather > 0 or _has_tag_within_oval(rx, ry, SandboxMaterial.Tags.LIQUID, 20, 10):
+						if randf() < 0.1: # Organic chance
 							_set_cell(rx, ry-1, 21) # GROW GRASS
-							# Optional: limit growth rate per frame
-							if i > 5: break # Don't fill everything in 1 frame
+							if i > 5: break
 
 func _strike_lightning():
 	var lx = randi() % grid_width
@@ -1027,47 +1025,55 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		# 1. SEED LOGIC (mat_id 20)
 		if mat_id == 20: 
 			var is_on_fertile = _has_tag_neighbor(x, y, SandboxMaterial.Tags.FERTILE)
-			var is_wet = _get_cell(x, y+1) == 22 or _get_cell(x, y+1) == 23 or _has_tag_within_radius(x, y, SandboxMaterial.Tags.LIQUID, 10) or current_weather > 0
+			# Oval moisture check (15x10)
+			var is_wet = _get_cell(x, y+1) == 22 or _get_cell(x, y+1) == 23 or _has_tag_within_oval(x, y, SandboxMaterial.Tags.LIQUID, 15, 10) or current_weather > 0
 			if is_on_fertile and is_wet:
-				_set_cell(x, y, 21) # Transform to Grass (Faster Sprouts because only 5% check)
+				_set_cell(x, y, 21) # Transform to Grass
 		
 		# 2. PLANT GROWTH (mat_id 21 - Grass)
 		elif mat_id == 21:
-			if _has_tag_within_radius(x, y, SandboxMaterial.Tags.LIQUID, 20) or current_weather > 0:
-				if randf() < 0.2: # Growth speed
+			# STRICT: Must detect liquid to grow
+			if _has_tag_within_oval(x, y, SandboxMaterial.Tags.LIQUID, 20, 10) or current_weather > 0:
+				if randf() < 0.3:
 					var gx = x + randi_range(-2, 2)
 					var gy = y + randi_range(-2, 1)
 					var tid = _get_cell(gx, gy)
-					# BALANCE: Only grow if NOT crowded (less than 4 grass neighbors)
+					# BALANCE: Spaced out growth (< 4 neighbors)
 					if (tid == 0 or tid == 2) and _has_tag_neighbor(gx, gy, SandboxMaterial.Tags.FERTILE):
 						if _count_neighbor_id(gx, gy, 21) < 4:
 							_set_cell(gx, gy, 21)
 	
 		# 3. MOISTURE ABSORPTION (ID 1 -> 22, ID 6 -> 23)
 		elif mat_id == 1 or mat_id == 6:
-			if current_weather > 0 or _has_tag_within_radius(x, y, SandboxMaterial.Tags.LIQUID, 10):
+			# Spread moisture more horizontally
+			if current_weather > 0 or _has_tag_within_oval(x, y, SandboxMaterial.Tags.LIQUID, 20, 10):
 				_set_cell(x, y, 22 if mat_id == 1 else 23) # Transition to wet
 		
 		# 4. SPONTANEOUS GROWTH ON WET SOIL
 		elif mat_id == 22 or mat_id == 23:
-			# Soil itself can turn to Grass or VINE
-			if randf() < 0.005 and _count_neighbor_id(x, y, 21) < 1:
-				_set_cell(x, y, 21) # Transmute to Grass
-			
-			# Spontaneous VINE sprout (Vertical growth)
-			if randf() < 0.05: # Increased sprout chance
-				if _get_cell(x, y-1) == 0 and _count_neighbor_id_radius(x, y, 24, 4) < 1:
-					_set_cell(x, y-1, 24)
-					charge_array[idx - grid_width] = randi_range(10, 30) # Height Gene
+			var has_water = _has_tag_within_oval(x, y, SandboxMaterial.Tags.LIQUID, 15, 10) or current_weather > 0
+			if has_water:
+				# ROOT LOGIC: Soil only turns to Grass if connected AND NOT crowded (< 3 neighbours)
+				if randf() < 0.05 and _has_tag_neighbor(x, y, SandboxMaterial.Tags.PLANT):
+					if _count_neighbor_id(x, y, 21) < 3:
+						_set_cell(x, y, 21) # Transmute to Grass
+				
+				# Spontaneous VINE sprout (More frequent, Shorter 4-8px)
+				if randf() < 0.15:
+					if _get_cell(x, y-1) == 0 and _count_neighbor_id_radius(x, y, 24, 5) < 1:
+						_set_cell(x, y-1, 24)
+						charge_array[idx - grid_width] = randi_range(4, 8)
 
-			# Or grow upward into space/water (Grass)
-			if randf() < 0.05:
-				var tid = _get_cell(x, y-1)
-				if (tid == 0 or tid == 2) and _count_neighbor_id(x, y-1, 21) < 3:
-					_set_cell(x, y-1, 21)
-			# Dry out
-			if current_weather == 0 and not _has_tag_within_radius(x, y, SandboxMaterial.Tags.LIQUID, 12):
-				if randf() < 0.02: _set_cell(x, y, 1 if mat_id == 22 else 6)
+				# Or grow upward into space/water (Grass) if connected and not crowded
+				if randf() < 0.1:
+					var tid = _get_cell(x, y-1)
+					if (tid == 0 or tid == 2) and _has_tag_neighbor(x, y, SandboxMaterial.Tags.PLANT):
+						if _count_neighbor_id(x, y-1, 21) < 3:
+							_set_cell(x, y-1, 21)
+			else:
+				# Dry out
+				if current_weather == 0:
+					if randf() < 0.1: _set_cell(x, y, 1 if mat_id == 22 else 6)
 
 		# 5. VINE GROWTH (mat_id 24) - Vertical upward growth
 		elif mat_id == 24:
@@ -1076,7 +1082,7 @@ func _process_interactions(x, y, idx, mat_id, tags):
 				var tid_up = _get_cell(x, y-1)
 				if (tid_up == 0 or tid_up == 2):
 					_set_cell(x, y-1, 24)
-					charge_array[idx - grid_width] = h_left - 1 # Pass height gene
+					charge_array[idx - grid_width] = h_left - 1 # Pass height gene (4-8)
 					charge_array[idx] = 0 # Vine is now "mature"
 	
 	# PASS 3: Conductor Pulse (Triggering TNT/Devices)
@@ -1105,13 +1111,15 @@ func _has_tag_neighbor(x, y, tag):
 					return true
 	return false
 
-func _has_tag_within_radius(x, y, tag, radius):
-	# Optimized sweep for performance
-	for oy in range(-radius, radius + 1, 5): 
-		for ox in range(-radius, radius + 1, 5):
-			var nid = _get_cell(x + ox, y + oy)
-			if nid > 0 and (material_tags_raw[nid] & tag):
-				return true
+func _has_tag_within_oval(x, y, tag, rx, ry):
+	# Deterministic sweep with step for performance in oval
+	for oy in range(-ry, ry + 1, 3): 
+		for ox in range(-rx, rx + 1, 3):
+			# Oval check: (x^2/rx^2) + (y^2/ry^2) <= 1
+			if (float(ox*ox)/(rx*rx) + float(oy*oy)/(ry*ry)) <= 1.0:
+				var nid = _get_cell(x + ox, y + oy)
+				if nid > 0 and (material_tags_raw[nid] & tag):
+					return true
 	return false
 
 func _consume_neighbor_tag(x, y, tag):
@@ -1184,21 +1192,18 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 
 				if is_heat:
 					if (n_tags & SandboxMaterial.Tags.FLAMMABLE):
-						# Catch fire based on producer type
-						if randf() < 0.05: # Slow burning/transformation
+						# Catch fire / Transmute based on producer type
+						if randf() < 0.25: # Faster burning/transformation
 							if (n_tags & SandboxMaterial.Tags.BURN_COAL):
 								_set_cell(nx, ny, 14) # Become Coal
 							elif (n_tags & SandboxMaterial.Tags.BURN_SMOKE):
 								# Release smoke above if possible
 								if _get_cell(nx, ny - 1) == 0:
 									_set_cell(nx, ny - 1, 15)
-								# If it's Petroleum/Coal, eventually it disappears (turns to fire/nothing)
-								if randf() < 0.2: _set_cell(nx, ny, 3) # Turn to Fire briefly
+								if randf() < 0.2: _set_cell(nx, ny, 3) # Turn to Fire
 								else: _set_cell(nx, ny, 0)
-							elif (n_tags & SandboxMaterial.Tags.BURN_NONE):
-								_set_cell(nx, ny, 0)
 							else:
-								_set_cell(nx, ny, 3) # Default fire behavior
+								_set_cell(nx, ny, 3) # Spread Fire!
 					elif (n_tags & SandboxMaterial.Tags.EXPLOSIVE):
 						_set_cell(nx, ny, 7) # Prime TNT
 				else:
