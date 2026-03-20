@@ -186,7 +186,7 @@ func _ready():
 	#Water
 	_register_material(2, Color("80D0FF"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.CONDUCTOR)
 	#Fire
-	_register_material(3, Color("FF9A26"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(3, Color("FCD123"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
 	# Petroleum (Dark Purple + Flammable)
 	_register_material(4, Color("560075"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.BURN_SMOKE)
 	
@@ -209,7 +209,7 @@ func _ready():
 	_register_material(10, Color("999288"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL)
 	
 	# Lava (Slow Liquid + Hot)
-	_register_material(11, Color("FFB636"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_SLOW)
+	_register_material(11, Color("FF8200"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_SLOW)
 	
 	# Obsidian (Hard Rock + Anti-Acid + Anti-Explosive)
 	_register_material(12, Color("1E023B"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
@@ -463,8 +463,8 @@ func _setup_main_ui_containers():
 	# 5. CONSTRUCT ALL SUB-UI
 	_setup_tools_ui()
 	_setup_disaster_ui()
-	_setup_npc_ui()
-	_setup_npc_panel_node() # Ensure NPC panel node exists
+	_setup_npc_panel_node() # 1. Ensure node exists FIRST
+	_setup_npc_ui()         # 2. Then fill it with buttons
 	
 	_setup_materials_within_grid()
 	_update_highlights() # Restore selection marks
@@ -1544,8 +1544,13 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			_set_cell(x, y, 26) # Harden to Solid Cement
 
 func _setup_npc_panel_node():
-	if npc_panel: return
+	# If it exists but was lost during a UI refresh, we need to ensure it's in the tree
 	var ui_root = get_parent().get_node("UI")
+	if is_instance_valid(npc_panel):
+		if npc_panel.get_parent() == null:
+			ui_root.add_child(npc_panel)
+		return
+		
 	npc_panel = PanelContainer.new()
 	npc_panel.name = "NPCPanel"
 	ui_root.add_child(npc_panel)
@@ -1642,7 +1647,9 @@ func _place_npc(x, y):
 	var new_npc = {
 		"pos": Vector2i(start_x, start_y),
 		"team": selected_team,
-		"dir": 1 if randf() > 0.5 else -1
+		"dir": 1 if randf() > 0.5 else -1,
+		"hp": 100.0,
+		"attack_cooldown": 0.0
 	}
 	active_npcs.append(new_npc)
 	
@@ -1681,26 +1688,49 @@ func _process_npcs(delta):
 	if npc_update_timer < 0.05: return # ~20 FPS for NPCs
 	npc_update_timer = 0.0
 	
-	for npc in active_npcs:
+	var dead_indices = []
+	
+	for i in range(active_npcs.size()):
+		var npc = active_npcs[i]
+		
+		# 0. Damage from Environment (Acid, Lava, etc)
+		if _check_npc_environment_damage(npc):
+			if npc.hp <= 0:
+				_draw_npc_pixels(npc, 0) # Clear pixels
+				dead_indices.append(i)
+				continue
+		
 		# 1. Erase current
 		_draw_npc_pixels(npc, 0)
 		
 		var np = npc.pos
+		if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
 		
-		# 2. GRAVITY
+		# 2. AI: DETECT ENEMIES
+		var target = _find_closest_enemy(npc, 120.0) # 120px radar
+		if target:
+			var dist_x = target.pos.x - np.x
+			npc.dir = 1 if dist_x > 0 else -1
+			
+			# Attack range check (Approx 5-6px)
+			if abs(dist_x) < 6 and abs(target.pos.y - np.y) < 6:
+				if npc.attack_cooldown <= 0:
+					_attack_npc(npc, target)
+					npc.attack_cooldown = 0.6 # Attack every 0.6s
+		
+		# 3. PHYSICS & MOVEMENT
+		# GRAVITY
 		if _can_npc_fit(np.x, np.y + 1):
 			np.y += 1
 		else:
-			# 3. MOVEMENT & CLIMBING
-			if randf() < 0.02: npc.dir = -npc.dir # Random flip
+			# 4. WALK & CLIMB
+			if not target: # Random roam if no target
+				if randf() < 0.02: npc.dir = -npc.dir
 			
 			var tx = np.x + npc.dir
 			var found_move = false
-			
-			# Check hills from -8 to 2 (descend slightly too)
 			for h in range(2, -9, -1):
 				if _can_npc_fit(tx, np.y + h):
-					# Require ground below the new position
 					if not _can_npc_fit(tx, np.y + h + 1):
 						np.x = tx
 						np.y += h
@@ -1708,11 +1738,77 @@ func _process_npcs(delta):
 						break
 			
 			if not found_move:
-				npc.dir = -npc.dir # Turn around if hit a wall > 8px
+				npc.dir = -npc.dir 
 		
 		npc.pos = np
-		# 4. Redraw
+		# 5. Redraw
 		_draw_npc_pixels(npc)
+		
+		# Check if dead after combat
+		if npc.hp <= 0:
+			_draw_npc_pixels(npc, 0) # Clear
+			dead_indices.append(i)
+
+	# Remove dead NPCs
+	dead_indices.sort()
+	dead_indices.reverse()
+	for idx in dead_indices:
+		active_npcs.remove_at(idx)
+
+func _find_closest_enemy(me, radar_range):
+	var closest = null
+	var min_dist = radar_range
+	for other in active_npcs:
+		if other.team != me.team:
+			var d = me.pos.distance_to(other.pos)
+			if d < min_dist:
+				min_dist = d
+				closest = other
+	return closest
+
+func _attack_npc(attacker, victim):
+	victim.hp -= 15.0 # Damage
+	
+	# Visual Sparks (Attack effects)
+	var colors = [Color.WHITE, Color.YELLOW, Color.CRIMSON]
+	for i in range(8):
+		visual_sparks.append({
+			"x": float(victim.pos.x) + randf_range(0, 2),
+			"y": float(victim.pos.y) + randf_range(0, 5),
+			"vx": randf_range(-60, 60),
+			"vy": randf_range(-100, -20),
+			"color": colors.pick_random(),
+			"life": randf_range(0.3, 0.6)
+		})
+	
+	# Small Jump animation for attacker
+	if _can_npc_fit(attacker.pos.x, attacker.pos.y - 2):
+		attacker.pos.y -= 2
+
+func _check_npc_environment_damage(npc) -> bool:
+	var took_damage = false
+	# Check key damage points (Head, Body center, Feet)
+	var check_points = [
+		npc.pos, # Head
+		npc.pos + Vector2i(1, 2), # Chest
+		npc.pos + Vector2i(0, 4)  # Feet
+	]
+	
+	for p in check_points:
+		var tid = _get_cell(p.x, p.y)
+		var t_tags = material_tags_raw[tid]
+		
+		# Acid (13), Lava (11), Fire (3)
+		if (t_tags & (SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.INCENDIARY)):
+			npc.hp -= 2.0 # Continuous damage
+			took_damage = true
+			if randf() < 0.1: # Smoke sparks
+				visual_sparks.append({
+					"x": float(p.x), "y": float(p.y),
+					"vx": randf_range(-20, 20), "vy": randf_range(-30, -10),
+					"color": Color.WEB_GRAY, "life": 0.4
+				})
+	return took_damage
 
 func _can_npc_fit(gx, gy) -> bool:
 	# Bounding check
