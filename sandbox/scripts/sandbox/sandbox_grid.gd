@@ -214,8 +214,8 @@ func _ready():
 	# Obsidian (Hard Rock + Anti-Acid + Anti-Explosive)
 	_register_material(12, Color("1E023B"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
 	
-	# Acid (Neon Green + Melts things)
-	_register_material(13, Color("#39FF14"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.GRAV_NORMAL)
+	# Acid (Neon Green + Melts things + Conductive + SELF-IMMUNE)
+	_register_material(13, Color("#39FF14"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ANTI_ACID)
 	
 	# Coal (Brazas - Dark Brown/Black)
 	_register_material(14, Color("#1A1110"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_SMOKE | SandboxMaterial.Tags.INCENDIARY)
@@ -1289,9 +1289,10 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		if charge_array[idx] <= 0:
 			_explode(x, y, 12)
 
-	# ELECTRIC SEEDING (Active pulses)
+	# ELECTRIC SEEDING (Only decay temporary sparks, not persistent liquids/solids like Acid/Metal)
 	if (tags & SandboxMaterial.Tags.ELECTRICITY):
-		if randf() < 0.7: _set_cell(x, y, 0)
+		if not (tags & (SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.SOLID)):
+			if randf() < 0.7: _set_cell(x, y, 0)
 
 	# --- CORROSION (ACID) ---
 	if (tags & SandboxMaterial.Tags.ACID):
@@ -1303,13 +1304,18 @@ func _process_interactions(x, y, idx, mat_id, tags):
 					if nid > 0:
 						var n_tags = material_tags_raw[nid]
 						if not (n_tags & SandboxMaterial.Tags.ANTI_ACID):
-							_set_cell(nx, ny, 0) # DISSOLVE
-							# Chance to create bit of SMOKE (15)
-							if (n_tags & SandboxMaterial.Tags.SOLID) and randf() < 0.1:
-								_set_cell(nx, ny, 15) 
-							# Acid is slightly consumed when eating solids
+							# CORROSION: Destroy material and spark ELECTRICITY
+							_set_cell(nx, ny, 9) 
+							
+							# Acid has 30% chance to evaporate upon reaction
+							if randf() < 0.3:
+								_set_cell(x, y, 0)
+								return # Evaporated into gas/nothing
+							
+							# If eating a SOLID, it's harder work (10% extra consumption)
 							if (n_tags & SandboxMaterial.Tags.SOLID) and randf() < 0.1:
 								_set_cell(x, y, 0)
+								return
 
 	# --- BIOLOGICAL INTERACTIONS (PLANTS & SEEDS) ---
 	# OPTIMIZATION: Only process 5% of biological pixels per frame to save FPS
@@ -1873,8 +1879,9 @@ func _update_texture():
 				if abs(ix - tornado_x) < cur_rad:
 					c = Color(0.4, 0.4, 0.4, 0.4) 
 		
-		# MIX COLOR IF CHARGED (Glowing effect - ONLY for conductors/electricity)
-		if charge > 80 and (material_tags_raw[mat_id] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY)):
+		# MIX COLOR IF CHARGED (Glowing effect - ONLY for conductors/electricity material)
+		# EXCLUDE Acid (13) from yellow glow so it stays Green
+		if charge > 80 and mat_id != 13 and (material_tags_raw[mat_id] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY)):
 			var pulse_color = Color.YELLOW
 			# Sharp, short pulse (Brightest between 100 and 80)
 			c = c.lerp(pulse_color, clamp(float(charge - 80) / 20.0, 0.0, 1.0))
