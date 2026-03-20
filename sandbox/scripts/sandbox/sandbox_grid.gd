@@ -414,8 +414,11 @@ func _setup_main_ui_containers():
 		material_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	# ALWAYS Refresh Scroll Height for the current scale
-	material_scroll.custom_minimum_size = Vector2(0, 130 * s)
-	material_scroll.offset_top = -130 * s
+	# NEW: Cap the height so it doesn't cover too much sandbox at big scales
+	var h = clamp(130 * s, 110, 145)
+	
+	material_scroll.custom_minimum_size = Vector2(0, h)
+	material_scroll.offset_top = -h
 	material_scroll.anchor_top = 1.0
 	material_scroll.anchor_bottom = 1.0
 	material_scroll.offset_bottom = 0
@@ -437,11 +440,11 @@ func _setup_main_ui_containers():
 		for child in action_vbox.get_children():
 			if is_instance_valid(child): child.free()
 			
-		# PIN Survivor to HUD Floor
+		# PIN Survivor to HUD Floor with FIXED LIMIT
 		action_vbox.anchor_bottom = 1.0
 		action_vbox.anchor_top = 1.0
 		action_vbox.offset_bottom = 0
-		action_vbox.offset_top = -130 * s
+		action_vbox.offset_top = -h
 		action_vbox.add_theme_constant_override("separation", 3 * s) # Compact
 		action_vbox.alignment = BoxContainer.ALIGNMENT_END # PUSH TO BOTTOM
 	
