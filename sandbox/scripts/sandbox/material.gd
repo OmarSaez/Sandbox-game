@@ -30,7 +30,12 @@ enum Tags {
 	BURN_SMOKE = 1 << 16,
 	BURN_COAL = 1 << 17,
 	BURN_NONE = 1 << 18,
-	ANTI_EXPLOSIVE = 1 << 19
+	ANTI_EXPLOSIVE = 1 << 19,
+	
+	# Plant life
+	PLANT = 1 << 20,
+	SEED = 1 << 21,
+	FERTILE = 1 << 22
 }
 
 @export var name: String = "Material"

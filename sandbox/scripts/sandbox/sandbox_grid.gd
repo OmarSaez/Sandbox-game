@@ -55,7 +55,9 @@ var tr = {
 		"acid": "Ácido",
 		"wood": "Madera",
 		"petro": "Petróleo",
-		"fireworks": "Cohetes"
+		"fireworks": "Cohetes",
+		"seed": "Semilla",
+		"grass": "Pasto"
 	},
 	"en": {
 		"disasters": "🌪️ Disasters",
@@ -86,7 +88,9 @@ var tr = {
 		"acid": "Acid",
 		"wood": "Wood",
 		"petro": "Oil",
-		"fireworks": "Fireworks"
+		"fireworks": "Fireworks",
+		"seed": "Seed",
+		"grass": "Grass"
 	}
 }
 
@@ -136,8 +140,8 @@ func _ready():
 	tags_array.resize(grid_width * grid_height)
 	charge_array.resize(grid_width * grid_height)
 	
-	material_colors_raw.resize(20) 
-	material_tags_raw.resize(20)
+	material_colors_raw.resize(50) 
+	material_tags_raw.resize(50)
 	
 	# Setup materials
 	_register_material(0, Color(0, 0, 0, 0), SandboxMaterial.Tags.NONE)
@@ -198,7 +202,23 @@ func _ready():
 	texture_rect.texture = ImageTexture.create_from_image(img)
 	texture_rect.size = viewport_size
 
-	# DISASTER MENU - Now with stacked UI (Must be FIRST to create containers)
+	# --- NEW PLANT LIFE ---
+	# Seed (Light Green)
+	_register_material(20, Color("#A2D149"), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.SEED | SandboxMaterial.Tags.FLAMMABLE)
+	# Grass (Bright Green)
+	_register_material(21, Color("#4CAF50"), SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL)
+	
+	# Mark existing materials as FERTILE
+	material_tags_raw[1] |= SandboxMaterial.Tags.FERTILE
+	material_tags_raw[6] |= SandboxMaterial.Tags.FERTILE
+	
+	# --- WET STATES (For Debug & Realism) ---
+	# Wet Sand (Darker Yellow)
+	_register_material(22, Color("#C2B280").darkened(0.2), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.FERTILE)
+	# Wet Earth (Darker Brown)
+	_register_material(23, Color("#8B4513").darkened(0.2), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.FERTILE | SandboxMaterial.Tags.BURN_COAL)
+
+	# UI SETUP (Must happen AFTER materials are registered)
 	_setup_main_ui_containers()
 	_setup_ui()
 	
@@ -229,6 +249,8 @@ func _setup_materials_within_grid():
 	_add_button("wood", 16)
 	_add_button("petro", 4)
 	_add_button("fireworks", 18)
+	_add_button("seed", 20)
+	_add_button("grass", 21)
 
 
 func _setup_ui():
@@ -781,6 +803,22 @@ func _process_weather():
 	# Lightning in Storm (Level 3)
 	if current_weather == 3 and randf() < 0.01: # Rare but impactful
 		_strike_lightning()
+		
+	# Spontaneous Grass growth during rain or near water
+	# Increased sampling for better responsiveness
+	if randf() < 0.2: # Check in 20% of frames
+		for i in range(100): # 100 random samples per check
+			var rx = randi() % grid_width
+			var ry = randi() % (grid_height - 10) + 5
+			var tid = _get_cell(rx, ry)
+			if tid == 6 or tid == 1: # EARTH or SAND (FERTILE)
+				if _get_cell(rx, ry-1) == 0: # Space above
+					# Check for moisture
+					if current_weather > 0 or _has_tag_within_radius(rx, ry, SandboxMaterial.Tags.LIQUID, 25):
+						if randf() < 0.1: # Final probability to make it organic
+							_set_cell(rx, ry-1, 21) # GROW GRASS
+							# Optional: limit growth rate per frame
+							if i > 5: break # Don't fill everything in 1 frame
 
 func _strike_lightning():
 	var lx = randi() % grid_width
@@ -972,7 +1010,48 @@ func _process_interactions(x, y, idx, mat_id, tags):
 	# ELECTRIC SEEDING (Active pulses)
 	if (tags & SandboxMaterial.Tags.ELECTRICITY):
 		if randf() < 0.7: _set_cell(x, y, 0)
-		_check_neighbors_for_reaction(x, y, false)
+
+	# --- BIOLOGICAL INTERACTIONS (PLANTS & SEEDS) ---
+	# OPTIMIZATION: Only process 5% of biological pixels per frame to save FPS
+	if randf() < 0.05:
+		# 1. SEED LOGIC (mat_id 20)
+		if mat_id == 20: 
+			var is_on_fertile = _has_tag_neighbor(x, y, SandboxMaterial.Tags.FERTILE)
+			var is_wet = _get_cell(x, y+1) == 22 or _get_cell(x, y+1) == 23 or _has_tag_within_radius(x, y, SandboxMaterial.Tags.LIQUID, 10) or current_weather > 0
+			if is_on_fertile and is_wet:
+				_set_cell(x, y, 21) # Transform to Grass (Faster Sprouts because only 5% check)
+		
+		# 2. PLANT GROWTH (mat_id 21 - Grass)
+		elif mat_id == 21:
+			if _has_tag_within_radius(x, y, SandboxMaterial.Tags.LIQUID, 20) or current_weather > 0:
+				if randf() < 0.2: # Growth speed
+					var gx = x + randi_range(-2, 2)
+					var gy = y + randi_range(-2, 1)
+					var tid = _get_cell(gx, gy)
+					# BALANCE: Only grow if NOT crowded (less than 4 grass neighbors)
+					if (tid == 0 or tid == 2) and _has_tag_neighbor(gx, gy, SandboxMaterial.Tags.FERTILE):
+						if _count_neighbor_id(gx, gy, 21) < 4:
+							_set_cell(gx, gy, 21)
+	
+		# 3. MOISTURE ABSORPTION (ID 1 -> 22, ID 6 -> 23)
+		elif mat_id == 1 or mat_id == 6:
+			if current_weather > 0 or _has_tag_within_radius(x, y, SandboxMaterial.Tags.LIQUID, 10):
+				_set_cell(x, y, 22 if mat_id == 1 else 23) # Transition to wet
+		
+		# 4. SPONTANEOUS GROWTH ON WET SOIL
+		elif mat_id == 22 or mat_id == 23:
+			# Soil itself can turn to Grass (creating underwater algae/moss)
+			# BALANCE: Only if very sparse (< 1 neighbor)
+			if randf() < 0.005 and _count_neighbor_id(x, y, 21) < 1:
+				_set_cell(x, y, 21) # Transmute!
+			# Or grow upward into space/water
+			if randf() < 0.05:
+				var tid = _get_cell(x, y-1)
+				if (tid == 0 or tid == 2) and _count_neighbor_id(x, y-1, 21) < 3:
+					_set_cell(x, y-1, 21)
+			# Dry out
+			if current_weather == 0 and not _has_tag_within_radius(x, y, SandboxMaterial.Tags.LIQUID, 12):
+				if randf() < 0.02: _set_cell(x, y, 1 if mat_id == 22 else 6)
 	
 	# PASS 3: Conductor Pulse (Triggering TNT/Devices)
 	var charge = charge_array[idx]
@@ -988,6 +1067,8 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		if randf() < 0.001:
 			_set_cell(x, y, 0)
 
+	return false
+
 func _has_tag_neighbor(x, y, tag):
 	for ny in range(y - 1, y + 2):
 		for nx in range(x - 1, x + 2):
@@ -997,6 +1078,35 @@ func _has_tag_neighbor(x, y, tag):
 				if (material_tags_raw[nid] & tag):
 					return true
 	return false
+
+func _has_tag_within_radius(x, y, tag, radius):
+	# Optimized sweep for performance
+	for oy in range(-radius, radius + 1, 5): 
+		for ox in range(-radius, radius + 1, 5):
+			var nid = _get_cell(x + ox, y + oy)
+			if nid > 0 and (material_tags_raw[nid] & tag):
+				return true
+	return false
+
+func _consume_neighbor_tag(x, y, tag):
+	for ny in range(y - 1, y + 2):
+		for nx in range(x - 1, x + 2):
+			if nx == x and ny == y: continue
+			var nid = _get_cell(nx, ny)
+			if nid > 0:
+				if (material_tags_raw[nid] & tag):
+					_set_cell(nx, ny, 0) # EAT IT
+					return true
+	return false
+
+func _count_neighbor_id(x, y, id):
+	var count = 0
+	for ny in range(y - 1, y + 2):
+		for nx in range(x - 1, x + 2):
+			if nx == x and ny == y: continue
+			if _get_cell(nx, ny) == id:
+				count += 1
+	return count
 
 func _trigger_electric_devices(x, y):
 	for ny in range(y - 1, y + 2):
