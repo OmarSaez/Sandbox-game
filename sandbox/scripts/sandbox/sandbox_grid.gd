@@ -58,7 +58,9 @@ var tr = {
 		"fireworks": "Cohetes",
 		"seed": "Semilla",
 		"grass": "Pasto",
-		"vine": "Liana"
+		"vine": "Liana",
+		"cem_fresh": "Cem. Fresco",
+		"cement": "Cemento"
 	},
 	"en": {
 		"disasters": "🌪️ Disasters",
@@ -92,7 +94,9 @@ var tr = {
 		"fireworks": "Fireworks",
 		"seed": "Seed",
 		"grass": "Grass",
-		"vine": "Vine"
+		"vine": "Vine",
+		"cem_fresh": "Fresh Cement",
+		"cement": "Cement"
 	}
 }
 
@@ -224,6 +228,12 @@ func _ready():
 	# Forest Green (Darker) - Now leaves coal when burned
 	_register_material(24, Color("#3E5E2A"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL)
 
+	# --- NEW CONSTRUCTION MATERIALS ---
+	# Fresh Cement (Light Beige Liquid)
+	_register_material(25, Color("#E5D3B3"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL)
+	# Cement (Solid Beige)
+	_register_material(26, Color("#C2B280"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
+
 	# UI SETUP (Must happen AFTER materials are registered)
 	_setup_main_ui_containers()
 	_setup_ui()
@@ -258,6 +268,8 @@ func _setup_materials_within_grid():
 	_add_button("seed", 20)
 	_add_button("grass", 21)
 	_add_button("vine", 24)
+	_add_button("cem_fresh", 25)
+	_add_button("cement", 26)
 
 
 func _setup_ui():
@@ -849,8 +861,11 @@ func _set_cell(x, y, mat_id):
 		var idx = y * grid_width + x
 		cells[idx] = mat_id
 		tags_array[idx] = material_tags_raw[mat_id]
-		# Reset charge if material changes manually
-		charge_array[idx] = 0
+		# Reset charge - but IF IT IS ELECTRICITY, give it initial charge to spark!
+		if (material_tags_raw[mat_id] & SandboxMaterial.Tags.ELECTRICITY):
+			charge_array[idx] = 101
+		else:
+			charge_array[idx] = 0
 
 func _get_cell(x, y):
 	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
@@ -909,19 +924,21 @@ func _process_electricity():
 		var charge = charge_array[i]
 		if charge == 0: continue
 		
-		# Only spread when charge is at its peak (100)
+		# Only spread when charge is at its peak (100) AND emitter is a conductor
 		if charge == 100:
-			var x = i % grid_width
-			var y = i / grid_width
-			for ny in range(y - 1, y + 2):
-				for nx in range(x - 1, x + 2):
-					if nx == x and ny == y: continue
-					if nx >= 0 and nx < grid_width and ny >= 0 and ny < grid_height:
-						var n_idx = ny * grid_width + nx
-						var n_tags = tags_array[n_idx]
-						# Only spread to conductors that are currently at 0 (IDLE)
-						if (n_tags & SandboxMaterial.Tags.CONDUCTOR) and charge_array[n_idx] == 0:
-							charge_array[n_idx] = 101 # Set to 'newly charged'
+			var my_tags = material_tags_raw[cells[i]]
+			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
+				var x = i % grid_width
+				var y = i / grid_width
+				for ny in range(y - 1, y + 2):
+					for nx in range(x - 1, x + 2):
+						if nx == x and ny == y: continue
+						if nx >= 0 and nx < grid_width and ny >= 0 and ny < grid_height:
+							var n_idx = ny * grid_width + nx
+							var n_tags = tags_array[n_idx]
+							# Only spread to conductors that are currently at 0 (IDLE)
+							if (n_tags & SandboxMaterial.Tags.CONDUCTOR) and charge_array[n_idx] == 0:
+								charge_array[n_idx] = 101 # Set to 'newly charged'
 		
 		# Countdown charge (ONLY for conductors to avoid draining other logic like Vines)
 		if (material_tags_raw[cells[i]] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
@@ -1084,6 +1101,15 @@ func _process_interactions(x, y, idx, mat_id, tags):
 					_set_cell(x, y-1, 24)
 					charge_array[idx - grid_width] = h_left - 1 # Pass height gene (4-8)
 					charge_array[idx] = 0 # Vine is now "mature"
+	
+	# 6. FRESH CEMENT HARDENING (mat_id 25) - Processed every frame for accuracy
+	if mat_id == 25:
+		if charge_array[idx] == 0:
+			charge_array[idx] = randi_range(60, 120) # 1-2 seconds at 60fps
+		
+		charge_array[idx] -= 1
+		if charge_array[idx] <= 1:
+			_set_cell(x, y, 26) # Harden to Solid Cement
 	
 	# PASS 3: Conductor Pulse (Triggering TNT/Devices)
 	var charge = charge_array[idx]
@@ -1271,8 +1297,8 @@ func _update_texture():
 				if abs(ix - tornado_x) < cur_rad:
 					c = Color(0.4, 0.4, 0.4, 0.4) 
 		
-		# MIX COLOR IF CHARGED (Glowing effect)
-		if charge > 80:
+		# MIX COLOR IF CHARGED (Glowing effect - ONLY for conductors/electricity)
+		if charge > 80 and (material_tags_raw[mat_id] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY)):
 			var pulse_color = Color.YELLOW
 			# Sharp, short pulse (Brightest between 100 and 80)
 			c = c.lerp(pulse_color, clamp(float(charge - 80) / 20.0, 0.0, 1.0))
