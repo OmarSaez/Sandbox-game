@@ -21,7 +21,7 @@ var current_weather: int = 0
 var is_mouse_over_ui: bool = false
 var brush_radius: int = 2 
 var current_language: String = "es" # "es" or "en"
-var ui_scale_level: int = 0 # 0=1.0x, 1=1.2x, 2=1.5x, 3=2.0x
+var ui_scale_level: int = 1 # Start at 1.2x by default
 func _get_ui_scale() -> float:
 	var scales = [1.0, 1.2, 1.5, 2.0]
 	return scales[ui_scale_level]
@@ -292,6 +292,15 @@ func _setup_materials_within_grid():
 	_add_button("cem_fresh", 25)
 	_add_button("cement", 26)
 	_add_button("volcan", 27)
+	
+	# FIND the scroll vbox to add the final spacer
+	var s = _get_ui_scale()
+	var scroll_vbox = material_grid.get_parent()
+	if scroll_vbox and scroll_vbox.name == "ScrollVBox":
+		var spacer = Control.new()
+		spacer.name = "FinalSpacer"
+		spacer.custom_minimum_size = Vector2(0, 100 * s) # GENEROUS PADDING
+		scroll_vbox.add_child(spacer)
 
 
 func _setup_ui():
@@ -318,8 +327,14 @@ func _setup_main_ui_containers():
 	if not material_grid: return
 		
 	# 3. FIND OR WRAP in Scroll
-	var parent_scroll = material_grid.get_parent() as ScrollContainer
-	if not parent_scroll:
+	var existing_scroll = main_controls.find_child("MaterialScroll", true, false)
+	var scroll_vbox: VBoxContainer
+	
+	if existing_scroll:
+		material_scroll = existing_scroll
+		scroll_vbox = material_scroll.find_child("ScrollVBox", true, false)
+	else:
+		# FIRST TIME WRAPPING
 		var parent = material_grid.get_parent()
 		var idx = material_grid.get_index()
 		
@@ -335,6 +350,11 @@ func _setup_main_ui_containers():
 		material_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 		material_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		
+		# NEW: Use a VBox inside scroll to force vertical padding
+		scroll_vbox = VBoxContainer.new()
+		scroll_vbox.name = "ScrollVBox"
+		scroll_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		
 		# APPLY CLONED LAYOUT
 		material_scroll.anchor_left = orig_anchors[0]
 		material_scroll.anchor_top = orig_anchors[1]
@@ -347,13 +367,12 @@ func _setup_main_ui_containers():
 
 		parent.add_child(material_scroll)
 		parent.move_child(material_scroll, idx)
-		material_scroll.add_child(material_grid)
+		material_scroll.add_child(scroll_vbox)
+		scroll_vbox.add_child(material_grid)
 		
 		material_grid.mouse_entered.connect(func(): is_mouse_over_ui = true)
 		material_grid.mouse_exited.connect(func(): is_mouse_over_ui = false)
 		material_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	else:
-		material_scroll = parent_scroll
 
 	# ALWAYS Refresh Scroll Height for the current scale
 	material_scroll.custom_minimum_size = Vector2(0, 180 * s)
@@ -632,12 +651,12 @@ func _add_button(key: String, mat_id: int):
 	
 	material_grid.add_child(main_vbox) 
 	
-	main_vbox.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	main_vbox.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
 func _update_highlights():
 	# Update Material Selection (Icons & Labels)
 	for child in material_grid.get_children():
+		if not child is VBoxContainer: continue # Skip the spacer!
 		var icon_pnl = child.get_child(0)
 		var label = child.get_child(1)
 		var mat_id = icon_pnl.get_child(0).get_meta("mat_id")
