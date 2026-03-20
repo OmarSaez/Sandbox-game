@@ -407,6 +407,21 @@ func _setup_tools_ui():
 	tools_panel = ui_root.get_node("ToolsPanel")
 	tools_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
+	# COMPACT DYNAMIC POSITIONING
+	tools_panel.anchor_left = 0.5
+	tools_panel.anchor_right = 0.5
+	tools_panel.anchor_top = 1.0
+	tools_panel.anchor_bottom = 1.0
+	
+	var panel_width = 450 * s
+	var panel_height = 220 * s
+	var bottom_gap = 185 * s # Slightly more than the bar height for a small gap
+	
+	tools_panel.offset_left = -panel_width / 2
+	tools_panel.offset_right = panel_width / 2
+	tools_panel.offset_bottom = -bottom_gap
+	tools_panel.offset_top = -bottom_gap - panel_height
+	
 	# SETUP INTERNAL BOX IF NOT PRESENT
 	var v_box: VBoxContainer
 	for child in tools_panel.get_children(): 
@@ -414,6 +429,10 @@ func _setup_tools_ui():
 	
 	v_box = VBoxContainer.new()
 	v_box.add_theme_constant_override("separation", 15 * s)
+	v_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	v_box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	v_box.add_theme_constant_override("margin_bottom", 10 * s)
+	v_box.add_theme_constant_override("margin_top", 10 * s)
 	tools_panel.add_child(v_box)
 	
 	tools_btn.pressed.connect(func(): 
@@ -495,12 +514,31 @@ func _setup_disaster_ui():
 	disaster_panel = ui_root.get_node("DisasterPanel")
 	disaster_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
+	# COMPACT DYNAMIC POSITIONING
+	disaster_panel.anchor_left = 0.5
+	disaster_panel.anchor_right = 0.5
+	disaster_panel.anchor_top = 1.0
+	disaster_panel.anchor_bottom = 1.0
+	
+	var d_width = 300 * s
+	var d_height = 120 * s
+	var d_bottom_gap = 185 * s
+	
+	disaster_panel.offset_left = -d_width / 2
+	disaster_panel.offset_right = d_width / 2
+	disaster_panel.offset_bottom = -d_bottom_gap
+	disaster_panel.offset_top = -d_bottom_gap - d_height
+	
 	var v_box: VBoxContainer
 	for child in disaster_panel.get_children(): 
 		if is_instance_valid(child): child.free() # CLEAR OLD PANEL IMMEDIATELY
 	
 	v_box = VBoxContainer.new()
 	v_box.add_theme_constant_override("separation", 15 * s)
+	v_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	v_box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	v_box.add_theme_constant_override("margin_bottom", 10 * s)
+	v_box.add_theme_constant_override("margin_top", 10 * s)
 	disaster_panel.add_child(v_box)
 	
 	disaster_btn.pressed.connect(func(): 
