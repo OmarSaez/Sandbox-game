@@ -295,7 +295,6 @@ func _ready():
 
 	# UI SETUP (Must happen AFTER materials are registered)
 	_setup_main_ui_containers()
-	_setup_ui()
 	
 	# FORCE START HIDDEN
 	tools_panel.visible = false
@@ -415,20 +414,46 @@ func _setup_main_ui_containers():
 		material_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	# ALWAYS Refresh Scroll Height for the current scale
-	material_scroll.custom_minimum_size = Vector2(0, 180 * s)
+	material_scroll.custom_minimum_size = Vector2(0, 130 * s)
+	material_scroll.offset_top = -130 * s
+	material_scroll.anchor_top = 1.0
+	material_scroll.anchor_bottom = 1.0
+	material_scroll.offset_bottom = 0
 
-	# 4. FIND ActionButtons
-	if not action_vbox:
-		action_vbox = main_controls.find_child("ActionButtons", true, false)
+	# 4. ROBUST CLONE DETECTION: Find and cleanup ALL ActionButtons nodes (including renamed ones)
+	var found_action_boxes = []
+	for child in main_controls.get_children():
+		if child.name.begins_with("ActionButtons"):
+			found_action_boxes.append(child)
 	
-	# CLEAN ONLY CHILDREN FOR REFRESH (Using immediate free to avoid async naming bugs)
+	if found_action_boxes.size() > 0:
+		action_vbox = found_action_boxes[0] # Keep the first one
+		
+		# Terminate all OTHER clones found
+		for i in range(1, found_action_boxes.size()):
+			found_action_boxes[i].free()
+			
+		# Clean the survivor COMPLETELY before rebuild
+		for child in action_vbox.get_children():
+			if is_instance_valid(child): child.free()
+			
+		# PIN Survivor to HUD Floor
+		action_vbox.anchor_bottom = 1.0
+		action_vbox.anchor_top = 1.0
+		action_vbox.offset_bottom = 0
+		action_vbox.offset_top = -130 * s
+		action_vbox.add_theme_constant_override("separation", 3 * s) # Compact
+		action_vbox.alignment = BoxContainer.ALIGNMENT_END # PUSH TO BOTTOM
+	
+	# CLEAN MATERIAL GRID
 	if material_grid:
 		for child in material_grid.get_children(): 
 			if is_instance_valid(child): child.free()
-	if action_vbox:
-		for child in action_vbox.get_children(): 
-			if is_instance_valid(child): child.free()
-	
+
+	# 5. CONSTRUCT ALL SUB-UI
+	_setup_tools_ui()
+	_setup_disaster_ui()
+	_setup_npc_ui()
 	_setup_npc_panel_node() # Ensure NPC panel node exists
 	
 	_setup_materials_within_grid()
@@ -440,8 +465,8 @@ func _setup_tools_ui():
 	var ui_root = get_parent().get_node("UI")
 	var tools_btn = Button.new()
 	tools_btn.name = "ToolsBtn"
-	tools_btn.custom_minimum_size = Vector2(150 * s, 60 * s)
-	tools_btn.add_theme_font_size_override("font_size", 16 * s)
+	tools_btn.custom_minimum_size = Vector2(160 * s, 38 * s) # Slim height
+	tools_btn.add_theme_font_size_override("font_size", 14 * s) # Compact font
 	tools_btn.text = tr[current_language]["tools"]
 	ui_elements["tools_btn"] = tools_btn
 	action_vbox.add_child(tools_btn)
@@ -525,10 +550,8 @@ func _setup_tools_ui():
 	var scale_labels = [tr[current_language]["size"] + " 1.0", tr[current_language]["size"] + " 1.2", tr[current_language]["size"] + " 1.5", tr[current_language]["size"] + " 2.0"]
 	create_row.call("ui_size", scale_labels, func(l): 
 		ui_scale_level = l
-		_setup_main_ui_containers() # REBUILD EVERYTHING WITH NEW SCALE
-		_setup_tools_ui() # REBUILD TOOLS TOO
-		_setup_disaster_ui() # REBUILD DISASTERS TOO
-		tools_panel.visible = true # Keep open
+		_setup_main_ui_containers() # Handle complete HUD refresh automatically
+		tools_panel.visible = true # Keep open after scale change
 	)
 	
 	# DIRECT RESET BUTTON (Bottom of Tools)
@@ -546,8 +569,8 @@ func _setup_disaster_ui():
 	var s = _get_ui_scale()
 	var disaster_btn = Button.new()
 	disaster_btn.name = "DisasterBtn"
-	disaster_btn.custom_minimum_size = Vector2(150 * s, 60 * s)
-	disaster_btn.add_theme_font_size_override("font_size", 16 * s)
+	disaster_btn.custom_minimum_size = Vector2(160 * s, 38 * s) # Slim height
+	disaster_btn.add_theme_font_size_override("font_size", 14 * s) # Compact font
 	disaster_btn.text = tr[current_language]["disasters"]
 	ui_elements["disaster_btn"] = disaster_btn
 	action_vbox.add_child(disaster_btn)
@@ -639,20 +662,20 @@ func _refresh_ui_text():
 		# Handle direct button nodes (Tools/Disasters)
 		if key == "tools_btn": 
 			node_data.text = tr[current_language]["tools"]
-			node_data.custom_minimum_size = Vector2(150 * s, 60 * s)
-			node_data.add_theme_font_size_override("font_size", 16 * s)
+			node_data.custom_minimum_size = Vector2(160 * s, 38 * s)
+			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "disaster_btn": 
 			node_data.text = tr[current_language]["disasters"]
-			node_data.custom_minimum_size = Vector2(150 * s, 60 * s)
-			node_data.add_theme_font_size_override("font_size", 16 * s)
+			node_data.custom_minimum_size = Vector2(160 * s, 38 * s)
+			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "npc_btn": 
 			node_data.text = tr[current_language]["npc"]
-			node_data.custom_minimum_size = Vector2(150 * s, 60 * s)
-			node_data.add_theme_font_size_override("font_size", 16 * s)
+			node_data.custom_minimum_size = Vector2(160 * s, 38 * s)
+			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "reset_btn": 
 			node_data.text = tr[current_language]["reset"]
-			node_data.custom_minimum_size = Vector2(0, 50 * s)
-			node_data.add_theme_font_size_override("font_size", 16 * s)
+			node_data.custom_minimum_size = Vector2(0, 38 * s)
+			node_data.add_theme_font_size_override("font_size", 14 * s)
 		
 		# Handle Labels (Main labels for rows and material names)
 		elif node_data is Label:
@@ -1541,8 +1564,8 @@ func _setup_npc_ui():
 	var s = _get_ui_scale()
 	var npc_btn = Button.new()
 	npc_btn.name = "NPCBtn"
-	npc_btn.custom_minimum_size = Vector2(150 * s, 60 * s)
-	npc_btn.add_theme_font_size_override("font_size", 16 * s)
+	npc_btn.custom_minimum_size = Vector2(160 * s, 38 * s) # Slim height
+	npc_btn.add_theme_font_size_override("font_size", 14 * s) # Compact font
 	npc_btn.text = tr[current_language]["npc"]
 	ui_elements["npc_btn"] = npc_btn
 	action_vbox.add_child(npc_btn)
