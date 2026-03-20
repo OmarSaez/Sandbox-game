@@ -57,7 +57,8 @@ var tr = {
 		"petro": "Petróleo",
 		"fireworks": "Cohetes",
 		"seed": "Semilla",
-		"grass": "Pasto"
+		"grass": "Pasto",
+		"vine": "Liana"
 	},
 	"en": {
 		"disasters": "🌪️ Disasters",
@@ -90,7 +91,8 @@ var tr = {
 		"petro": "Oil",
 		"fireworks": "Fireworks",
 		"seed": "Seed",
-		"grass": "Grass"
+		"grass": "Grass",
+		"vine": "Vine"
 	}
 }
 
@@ -217,6 +219,10 @@ func _ready():
 	_register_material(22, Color("#C2B280").darkened(0.2), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.FERTILE)
 	# Wet Earth (Darker Brown)
 	_register_material(23, Color("#8B4513").darkened(0.2), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.FERTILE | SandboxMaterial.Tags.BURN_COAL)
+	
+	# --- NEW VINE (Stem) ---
+	# Forest Green (Darker)
+	_register_material(24, Color("#3E5E2A"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_SMOKE)
 
 	# UI SETUP (Must happen AFTER materials are registered)
 	_setup_main_ui_containers()
@@ -251,6 +257,7 @@ func _setup_materials_within_grid():
 	_add_button("fireworks", 18)
 	_add_button("seed", 20)
 	_add_button("grass", 21)
+	_add_button("vine", 24)
 
 
 func _setup_ui():
@@ -918,10 +925,13 @@ func _process_electricity():
 						if (n_tags & SandboxMaterial.Tags.CONDUCTOR) and charge_array[n_idx] == 0:
 							charge_array[n_idx] = 101 # Set to 'newly charged'
 		
-		# Countdown charge
-		charge_array[i] -= 1
-		# 101 drops to 100 to spread in the NEXT frame
-		if charge_array[i] > 100: charge_array[i] = 100
+		# Countdown charge (ONLY for conductors to avoid draining other logic like Vines)
+		if (material_tags_raw[cells[i]] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
+			charge_array[i] -= 1
+			# 101 drops to 100 to spread in the NEXT frame
+			if charge_array[i] > 100: charge_array[i] = 100
+		elif cells[i] == 19 or cells[i] == 7: # Fuse/Primed logic needs cooldown too
+			charge_array[i] -= 1
 
 
 
@@ -1040,11 +1050,17 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		
 		# 4. SPONTANEOUS GROWTH ON WET SOIL
 		elif mat_id == 22 or mat_id == 23:
-			# Soil itself can turn to Grass (creating underwater algae/moss)
-			# BALANCE: Only if very sparse (< 1 neighbor)
+			# Soil itself can turn to Grass or VINE
 			if randf() < 0.005 and _count_neighbor_id(x, y, 21) < 1:
-				_set_cell(x, y, 21) # Transmute!
-			# Or grow upward into space/water
+				_set_cell(x, y, 21) # Transmute to Grass
+			
+			# Spontaneous VINE sprout (Vertical growth)
+			if randf() < 0.05: # Increased sprout chance
+				if _get_cell(x, y-1) == 0 and _count_neighbor_id_radius(x, y, 24, 4) < 1:
+					_set_cell(x, y-1, 24)
+					charge_array[idx - grid_width] = randi_range(10, 30) # Height Gene
+
+			# Or grow upward into space/water (Grass)
 			if randf() < 0.05:
 				var tid = _get_cell(x, y-1)
 				if (tid == 0 or tid == 2) and _count_neighbor_id(x, y-1, 21) < 3:
@@ -1052,6 +1068,16 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			# Dry out
 			if current_weather == 0 and not _has_tag_within_radius(x, y, SandboxMaterial.Tags.LIQUID, 12):
 				if randf() < 0.02: _set_cell(x, y, 1 if mat_id == 22 else 6)
+
+		# 5. VINE GROWTH (mat_id 24) - Vertical upward growth
+		elif mat_id == 24:
+			var h_left = charge_array[idx]
+			if h_left > 0 and randf() < 0.3: # Faster growth speed
+				var tid_up = _get_cell(x, y-1)
+				if (tid_up == 0 or tid_up == 2):
+					_set_cell(x, y-1, 24)
+					charge_array[idx - grid_width] = h_left - 1 # Pass height gene
+					charge_array[idx] = 0 # Vine is now "mature"
 	
 	# PASS 3: Conductor Pulse (Triggering TNT/Devices)
 	var charge = charge_array[idx]
@@ -1103,6 +1129,15 @@ func _count_neighbor_id(x, y, id):
 	var count = 0
 	for ny in range(y - 1, y + 2):
 		for nx in range(x - 1, x + 2):
+			if nx == x and ny == y: continue
+			if _get_cell(nx, ny) == id:
+				count += 1
+	return count
+
+func _count_neighbor_id_radius(x, y, id, radius):
+	var count = 0
+	for ny in range(y - radius, y + radius + 1):
+		for nx in range(x - radius, x + radius + 1):
 			if nx == x and ny == y: continue
 			if _get_cell(nx, ny) == id:
 				count += 1
