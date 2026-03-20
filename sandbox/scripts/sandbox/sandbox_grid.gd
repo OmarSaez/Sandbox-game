@@ -60,7 +60,8 @@ var tr = {
 		"grass": "Pasto",
 		"vine": "Liana",
 		"cem_fresh": "Cem. Fresco",
-		"cement": "Cemento"
+		"cement": "Cemento",
+		"reset": "Limpiar Todo"
 	},
 	"en": {
 		"disasters": "🌪️ Disasters",
@@ -96,7 +97,8 @@ var tr = {
 		"grass": "Grass",
 		"vine": "Vine",
 		"cem_fresh": "Fresh Cement",
-		"cement": "Cement"
+		"cement": "Cement",
+		"reset": "Clear All"
 	}
 }
 
@@ -375,6 +377,16 @@ func _setup_tools_ui():
 		brush_radius = brush_sizes[l]
 		_update_highlights()
 	)
+	
+	# DIRECT RESET BUTTON (Bottom of Tools)
+	var reset_btn = Button.new()
+	reset_btn.text = tr[current_language]["reset"]
+	reset_btn.custom_minimum_size = Vector2(0, 50)
+	reset_btn.pressed.connect(func():
+		_clear_all()
+	)
+	ui_elements["reset_btn"] = reset_btn
+	v_box.add_child(reset_btn)
 
 func _setup_disaster_ui():
 	var disaster_btn = Button.new()
@@ -449,6 +461,7 @@ func _refresh_ui_text():
 		# Handle direct button nodes (Tools/Disasters)
 		if key == "tools_btn": node_data.text = tr[current_language]["tools"]
 		elif key == "disaster_btn": node_data.text = tr[current_language]["disasters"]
+		elif key == "reset_btn": node_data.text = tr[current_language]["reset"]
 		
 		# Handle Labels (Main labels for rows and material names)
 		elif node_data is Label:
@@ -1398,3 +1411,10 @@ func _explode_firework(ex, ey, p_color):
 			"life": randf_range(1.0, 1.8) # Snappier life
 		}
 		visual_sparks.append(spark)
+func _clear_all():
+	cells.fill(0)
+	charge_array.fill(0)
+	tags_array.fill(0)
+	surface_cache.fill(0)
+	_update_texture()
+	_update_highlights()
