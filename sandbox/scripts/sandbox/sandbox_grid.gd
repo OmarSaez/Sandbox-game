@@ -61,6 +61,7 @@ var tr = {
 		"vine": "Liana",
 		"cem_fresh": "Cem. Fresco",
 		"cement": "Cemento",
+		"volcan": "Volcán",
 		"reset": "Limpiar Todo"
 	},
 	"en": {
@@ -98,6 +99,7 @@ var tr = {
 		"vine": "Vine",
 		"cem_fresh": "Fresh Cement",
 		"cement": "Cement",
+		"volcan": "Volcano",
 		"reset": "Clear All"
 	}
 }
@@ -235,6 +237,14 @@ func _ready():
 	_register_material(25, Color("#E5D3B3"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL)
 	# Cement (Solid Beige)
 	_register_material(26, Color("#C2B280"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
+	
+	# --- VOLCANO SYSTEM ---
+	# 27: Volcan (Block) - Neon Orange + Anti-Explosive
+	_register_material(27, Color("#FF5F1F"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
+	# 28: Eruption (Projectile) - Bright Yellow/Orange - Handled manually
+	_register_material(28, Color("#FFFF00"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_UP | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
+	# 29: Active Base (Launcher) - Glowing Orange-Red
+	_register_material(29, Color("#FF4500"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
 
 	# UI SETUP (Must happen AFTER materials are registered)
 	_setup_main_ui_containers()
@@ -272,6 +282,7 @@ func _setup_materials_within_grid():
 	_add_button("vine", 24)
 	_add_button("cem_fresh", 25)
 	_add_button("cement", 26)
+	_add_button("volcan", 27)
 
 
 func _setup_ui():
@@ -905,7 +916,8 @@ func _step_simulation():
 				continue
 
 			if (tags & SandboxMaterial.Tags.GRAV_UP):
-				_move_particle(x, y, mat_id, tags, -1)
+				if mat_id != 28: # Volcan 28 handles its own triple-speed movement
+					_move_particle(x, y, mat_id, tags, -1)
 				_process_interactions(x, y, idx, mat_id, tags)
 
 	# Pass 3: FALLING/STATIC particles (Bottom-to-Top)
@@ -1113,8 +1125,103 @@ func _process_interactions(x, y, idx, mat_id, tags):
 					_set_cell(x, y-1, 24)
 					charge_array[idx - grid_width] = h_left - 1 # Pass height gene (4-8)
 					charge_array[idx] = 0 # Vine is now "mature"
+		
+	# 6. VOLCANO LOGIC (mat_id 27, 28, 29)
+	if mat_id == 27: # Static block
+		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY) or charge_array[idx] > 50:
+			_set_cell(x, y, 29) # Transform to ACTIVE BASE
+			# Life duration for 3-5 shots (Approx 80-120 frames)
+			charge_array[idx] = randi_range(80, 120)
 	
-	# 6. FRESH CEMENT HARDENING (mat_id 25) - Processed every frame for accuracy
+	elif mat_id == 29: # Erupting Base
+		charge_array[idx] -= 1
+		# Launch projectile every 20-25 frames
+		if charge_array[idx] % 25 == 0:
+			var tx = x + randi_range(-1, 1)
+			if _get_cell(tx, y-1) == 0 or _get_cell(tx, y-1) == 15:
+				_set_cell(tx, y-1, 28)
+				charge_array[(y-1) * grid_width + tx] = randi_range(30, 60) # Projectile fuel
+		
+		# Smoking Base + LAVA PUDDLES (Triple effect)
+		if randf() < 0.2:
+			if _get_cell(x, y-1) == 0: _set_cell(x, y-1, 15)
+		if randf() < 0.15: # Leak real lava at base
+			var lx = x + randi_range(-2, 2)
+			if _get_cell(lx, y-1) == 0: _set_cell(lx, y-1, 11)
+			
+		if charge_array[idx] <= 0:
+			_draw_circle(x, y, 4, 11) # Burnout cluster
+			_explode(x, y, 6)
+
+	elif mat_id == 28: # Ascending projectile
+		# FASTER MOVEMENT: Move up 3px per frame manually
+		var current_fuel = charge_array[idx]
+		
+		for i in range(3):
+			# Detonate if energy spent
+			if current_fuel <= 0:
+				_draw_circle(x, y, 6, 11) # Finale: MASSIVE cluster of LAVA (Radius 6)
+				_explode(x, y, 10) # Huge Final burst
+				return
+			
+			var next_y = y - 1
+			if next_y < 5: # Ceiling safety
+				_set_cell(x, y, 11)
+				_explode(x, y, 6)
+				return
+			
+			var next_id = _get_cell(x, next_y)
+			# Attempt move: Allow passing through Empty, Fire, Elec, Lava, and Smoke
+			if next_id == 0 or next_id == 3 or next_id == 9 or next_id == 11 or next_id == 15:
+				# 1. First, move the projectile to the new spot
+				_swap_cells(x, y, x, next_y)
+				
+				# 2. Leave trail of ELECTRICITY (9) and FIRE (3) in the OLD spot
+				var trail_id = 9 if randf() < 0.6 else 3
+				_set_cell(x, y, trail_id)
+				
+				# 2.5 MASSIVE MAGMA LEAK: Triple lava per move step
+				for j in range(3):
+					var lx = x + randi_range(-2, 2)
+					var ly = y + randi_range(-1, 1)
+					if _get_cell(lx, ly) == 0 or _get_cell(lx, ly) == 15:
+						_set_cell(lx, ly, 11)
+				
+				# 3. Update current state to the new position
+				y = next_y
+				idx = y * grid_width + x
+				current_fuel -= 1
+				charge_array[idx] = current_fuel
+				
+				# 4. GHOST SPARKS (Always on top of the grid)
+				if randf() < 0.5:
+					visual_sparks.append({
+						"x": float(x) + randf_range(-4, 4),
+						"y": float(y + 2),
+						"vx": randf_range(-40, 40),
+						"vy": randi_range(30, 70),
+						"color": Color.YELLOW if randf() < 0.8 else Color.CYAN,
+						"life": randf_range(0.3, 0.6)
+					})
+			else:
+				# Blockage by real solids (Metal, Concrete, Earth)? Stop/Detonate
+				current_fuel = 0 # Force detonation
+				break
+
+		# Additional Visual Sparks (Cyber-Electric aesthetics)
+		if randf() < 0.8:
+			var e_colors = [Color.YELLOW, Color.CYAN, Color.WHITE, Color("#FFFF33")]
+			for i in range(4):
+				visual_sparks.append({
+					"x": float(x) + randf_range(-3, 3),
+					"y": float(y + 1),
+					"vx": randf_range(-50, 50),
+					"vy": randf_range(20, 80),
+					"color": e_colors[randi() % e_colors.size()],
+					"life": randf_range(0.1, 0.4)
+				})
+	
+	# 7. FRESH CEMENT HARDENING (mat_id 25) - Processed every frame for accuracy
 	if mat_id == 25:
 		if charge_array[idx] == 0:
 			charge_array[idx] = randi_range(60, 120) # 1-2 seconds at 60fps
@@ -1252,14 +1359,22 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 							else:
 								_set_cell(nx, ny, 3) # Spread Fire!
 					elif (n_tags & SandboxMaterial.Tags.EXPLOSIVE):
-						_set_cell(nx, ny, 7) # Prime TNT
+						if n_id == 27: # Volcan persistent ignition
+							_set_cell(nx, ny, 29)
+							charge_array[nx + ny * grid_width] = randi_range(80, 120)
+						else:
+							_set_cell(nx, ny, 7) # Prime TNT
 				else:
 					# ONLY Electricity material can start a new pulse in a conductor
 					if (n_tags & SandboxMaterial.Tags.CONDUCTOR):
 						if charge_array[n_idx] == 0:
 							charge_array[n_idx] = 101 # Start pulse
 					elif (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
-						_set_cell(nx, ny, 7) # Prime TNT via spark
+						if n_id == 27: # Volcan activates as persistent launcher
+							_set_cell(nx, ny, 29)
+							charge_array[n_idx] = randi_range(80, 120)
+						else:
+							_set_cell(nx, ny, 7) # Prime TNT
 
 func _explode(x, y, radius):
 	_set_cell(x, y, 0)
@@ -1277,9 +1392,14 @@ func _explode(x, y, radius):
 				var t_idx = ty * grid_width + tx
 				var t_tags = tags_array[t_idx]
 				
-				# Chain reaction: PRIME nearby explosives
+				# Chain reaction: TRIGGER nearby launchers
 				if (t_tags & SandboxMaterial.Tags.EXPLOSIVE):
-					_set_cell(tx, ty, 7) # Prime it
+					if t_id == 27: # Volcan launcher chain
+						_set_cell(tx, ty, 29)
+						# Give it ENERGY to launch multiple shots
+						charge_array[tx + ty * grid_width] = randi_range(80, 120)
+					else:
+						_set_cell(tx, ty, 7) # Prime TNT
 					continue
 
 				# ANTI-EXPLOSIVE CHECK: Skip physical movement/deletion
