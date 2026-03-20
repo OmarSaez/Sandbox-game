@@ -21,6 +21,11 @@ var current_weather: int = 0
 var is_mouse_over_ui: bool = false
 var brush_radius: int = 2 
 var current_language: String = "es" # "es" or "en"
+var ui_scale_level: int = 0 # 0=1.0x, 1=1.2x, 2=1.5x, 3=2.0x
+func _get_ui_scale() -> float:
+	var scales = [1.0, 1.2, 1.5, 2.0]
+	return scales[ui_scale_level]
+
 var ui_elements = {} # To track nodes for re-labeling
 var tools_panel: PanelContainer
 var disaster_panel: PanelContainer
@@ -62,6 +67,8 @@ var tr = {
 		"cem_fresh": "Cem. Fresco",
 		"cement": "Cemento",
 		"volcan": "Volcán",
+		"ui_size": "Tamaño UI",
+		"size": "Escala",
 		"reset": "Limpiar Todo"
 	},
 	"en": {
@@ -97,9 +104,11 @@ var tr = {
 		"seed": "Seed",
 		"grass": "Grass",
 		"vine": "Vine",
-		"cem_fresh": "Fresh Cement",
+		"cem_fresh": "Fresh Cem.",
 		"cement": "Cement",
 		"volcan": "Volcano",
+		"ui_size": "UI Size",
+		"size": "Scale",
 		"reset": "Clear All"
 	}
 }
@@ -292,45 +301,78 @@ func _setup_ui():
 var material_grid: HFlowContainer
 var action_vbox: VBoxContainer
 
+var material_scroll: ScrollContainer
+
 func _setup_main_ui_containers():
+	var s = _get_ui_scale()
 	var ui_root = get_parent().get_node("UI")
 	var main_controls = ui_root.get_node("Controls")
 	
-	# We no longer clear the controls! 
-	# We expect 'MaterialGrid' and 'ActionButtons' to be physical nodes in the scene.
-	
-	# Reference existing nodes or create them if missing (Safety)
-	if main_controls.has_node("MaterialGrid"):
+	# 1. FIND AND WRAP MaterialGrid
+	if not material_grid:
 		material_grid = main_controls.get_node("MaterialGrid")
+		
+	# Wrap in scroll if not already wrapped
+	if not material_grid.get_parent() is ScrollContainer:
+		var parent = material_grid.get_parent()
+		var idx = material_grid.get_index()
+		
+		# CLONE original layout from MaterialGrid
+		var orig_anchors = [material_grid.anchor_left, material_grid.anchor_top, material_grid.anchor_right, material_grid.anchor_bottom]
+		var orig_offsets = [material_grid.offset_left, material_grid.offset_top, material_grid.offset_right, material_grid.offset_bottom]
+		
+		parent.remove_child(material_grid)
+		
+		material_scroll = ScrollContainer.new()
+		material_scroll.name = "MaterialScroll"
+		material_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		material_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		material_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		
+		# APPLY CLONED LAYOUT TO SCROLL
+		material_scroll.anchor_left = orig_anchors[0]
+		material_scroll.anchor_top = orig_anchors[1]
+		material_scroll.anchor_right = orig_anchors[2]
+		material_scroll.anchor_bottom = orig_anchors[3]
+		material_scroll.offset_left = orig_offsets[0]
+		material_scroll.offset_top = orig_offsets[1]
+		material_scroll.offset_right = orig_offsets[2]
+		material_scroll.offset_bottom = orig_offsets[3]
+
+		parent.add_child(material_scroll)
+		parent.move_child(material_scroll, idx)
+		material_scroll.add_child(material_grid)
+		
+		material_grid.mouse_entered.connect(func(): is_mouse_over_ui = true)
+		material_grid.mouse_exited.connect(func(): is_mouse_over_ui = false)
+		
+		# FORCE GRID TO FILL SCROLL WIDTH
+		material_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	else:
-		material_grid = HFlowContainer.new()
-		material_grid.name = "MaterialGrid"
-		main_controls.add_child(material_grid)
-	
-	if main_controls.has_node("ActionButtons"):
+		material_scroll = material_grid.get_parent()
+		# Keep height dynamic with scale but respect horizontal span
+		material_scroll.custom_minimum_size = Vector2(0, 180 * s)
+
+	# 2. FIND ActionButtons (Stay as they are in scene)
+	if not action_vbox:
 		action_vbox = main_controls.get_node("ActionButtons")
 		action_vbox.mouse_entered.connect(func(): is_mouse_over_ui = true)
 		action_vbox.mouse_exited.connect(func(): is_mouse_over_ui = false)
-	else:
-		action_vbox = VBoxContainer.new()
-		action_vbox.name = "ActionButtons"
-		action_vbox.mouse_entered.connect(func(): is_mouse_over_ui = true)
-		action_vbox.mouse_exited.connect(func(): is_mouse_over_ui = false)
-		main_controls.add_child(action_vbox)
-
-	if material_grid:
-		material_grid.mouse_entered.connect(func(): is_mouse_over_ui = true)
-		material_grid.mouse_exited.connect(func(): is_mouse_over_ui = false)
-
-	# Setup buttons within the material grid if they don't exist
+	
+	# CLEAN ONLY CHILDREN FOR REFRESH
+	for child in material_grid.get_children(): child.queue_free()
+	for child in action_vbox.get_children(): child.queue_free()
+	
 	_setup_materials_within_grid()
 
 
 func _setup_tools_ui():
+	var s = _get_ui_scale()
 	var ui_root = get_parent().get_node("UI")
 	var tools_btn = Button.new()
 	tools_btn.name = "ToolsBtn"
-	tools_btn.custom_minimum_size = Vector2(150, 60)
+	tools_btn.custom_minimum_size = Vector2(150 * s, 60 * s)
+	tools_btn.add_theme_font_size_override("font_size", 16 * s)
 	tools_btn.text = tr[current_language]["tools"]
 	ui_elements["tools_btn"] = tools_btn
 	action_vbox.add_child(tools_btn)
@@ -340,12 +382,11 @@ func _setup_tools_ui():
 	
 	# SETUP INTERNAL BOX IF NOT PRESENT
 	var v_box: VBoxContainer
-	if tools_panel.get_child_count() == 0:
-		v_box = VBoxContainer.new()
-		v_box.add_theme_constant_override("separation", 15)
-		tools_panel.add_child(v_box)
-	else:
-		v_box = tools_panel.get_child(0)
+	for child in tools_panel.get_children(): child.queue_free() # CLEAR OLD PANEL
+	
+	v_box = VBoxContainer.new()
+	v_box.add_theme_constant_override("separation", 15 * s)
+	tools_panel.add_child(v_box)
 	
 	tools_btn.pressed.connect(func(): 
 		disaster_panel.visible = false
@@ -357,20 +398,22 @@ func _setup_tools_ui():
 	
 	var create_row = func(label_key: String, options: Array, callback: Callable):
 		var h_box = HBoxContainer.new()
-		h_box.add_theme_constant_override("separation", 10)
+		h_box.add_theme_constant_override("separation", 10 * s)
 		var lbl = Label.new()
 		lbl.text = tr[current_language][label_key] + ": "
-		lbl.custom_minimum_size = Vector2(120, 0)
+		lbl.custom_minimum_size = Vector2(120 * s, 0)
+		lbl.add_theme_font_size_override("font_size", 14 * s)
 		ui_elements[label_key + "_lbl"] = lbl
 		h_box.add_child(lbl)
 		for i in range(options.size()):
 			var btn = Button.new()
 			btn.text = options[i]
-			btn.custom_minimum_size = Vector2(80, 45)
+			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
+			btn.add_theme_font_size_override("font_size", 14 * s)
 			var level = i
 			btn.pressed.connect(func(): callback.call(level))
 			h_box.add_child(btn)
-			ui_elements[label_key + "_btn_" + str(i)] = btn # Store to refresh (if static text)
+			ui_elements[label_key + "_btn_" + str(i)] = btn 
 		v_box.add_child(h_box)
 
 	# Language Row (First Tool)
@@ -383,16 +426,27 @@ func _setup_tools_ui():
 
 	# BRUSH SIZE ROW
 	var brush_sizes = [0, 1, 2, 5, 7, 12]
-	var brush_labels = ["1px", "3px", "5px", "10px", "15px", "25px"]
+	var brush_labels = ["1", "3", "5", "10", "15", "25"]
 	create_row.call("brush", brush_labels, func(l): 
 		brush_radius = brush_sizes[l]
 		_update_highlights()
 	)
 	
+	# UI SCALE ROW
+	var scale_labels = [tr[current_language]["size"] + " 1.0", tr[current_language]["size"] + " 1.2", tr[current_language]["size"] + " 1.5", tr[current_language]["size"] + " 2.0"]
+	create_row.call("ui_size", scale_labels, func(l): 
+		ui_scale_level = l
+		_setup_main_ui_containers() # REBUILD EVERYTHING WITH NEW SCALE
+		_setup_tools_ui() # REBUILD TOOLS TOO
+		_setup_disaster_ui() # REBUILD DISASTERS TOO
+		tools_panel.visible = true # Keep open
+	)
+	
 	# DIRECT RESET BUTTON (Bottom of Tools)
 	var reset_btn = Button.new()
 	reset_btn.text = tr[current_language]["reset"]
-	reset_btn.custom_minimum_size = Vector2(0, 50)
+	reset_btn.custom_minimum_size = Vector2(0, 50 * s) # SCALED
+	reset_btn.add_theme_font_size_override("font_size", 16 * s) # SCALED
 	reset_btn.pressed.connect(func():
 		_clear_all()
 	)
@@ -400,9 +454,11 @@ func _setup_tools_ui():
 	v_box.add_child(reset_btn)
 
 func _setup_disaster_ui():
+	var s = _get_ui_scale()
 	var disaster_btn = Button.new()
 	disaster_btn.name = "DisasterBtn"
-	disaster_btn.custom_minimum_size = Vector2(150, 60)
+	disaster_btn.custom_minimum_size = Vector2(150 * s, 60 * s)
+	disaster_btn.add_theme_font_size_override("font_size", 16 * s)
 	disaster_btn.text = tr[current_language]["disasters"]
 	ui_elements["disaster_btn"] = disaster_btn
 	action_vbox.add_child(disaster_btn)
@@ -412,12 +468,11 @@ func _setup_disaster_ui():
 	disaster_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
 	var v_box: VBoxContainer
-	if disaster_panel.get_child_count() == 0:
-		v_box = VBoxContainer.new()
-		v_box.add_theme_constant_override("separation", 15)
-		disaster_panel.add_child(v_box)
-	else:
-		v_box = disaster_panel.get_child(0)
+	for child in disaster_panel.get_children(): child.queue_free() # CLEAR OLD PANEL
+	
+	v_box = VBoxContainer.new()
+	v_box.add_theme_constant_override("separation", 15 * s)
+	disaster_panel.add_child(v_box)
 	
 	disaster_btn.pressed.connect(func(): 
 		tools_panel.visible = false
@@ -429,17 +484,19 @@ func _setup_disaster_ui():
 	
 	var create_row = func(label_key: String, options_keys: Array, callback: Callable):
 		var h_box = HBoxContainer.new()
-		h_box.add_theme_constant_override("separation", 10)
+		h_box.add_theme_constant_override("separation", 10 * s)
 		var lbl = Label.new()
 		lbl.text = tr[current_language][label_key] + ": "
-		lbl.custom_minimum_size = Vector2(120, 0)
+		lbl.custom_minimum_size = Vector2(120 * s, 0)
+		lbl.add_theme_font_size_override("font_size", 14 * s)
 		ui_elements[label_key + "_lbl"] = lbl
 		h_box.add_child(lbl)
 		for i in range(options_keys.size()):
 			var osk = options_keys[i]
 			var btn = Button.new()
 			btn.text = tr[current_language][osk]
-			btn.custom_minimum_size = Vector2(80, 45)
+			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
+			btn.add_theme_font_size_override("font_size", 14 * s)
 			btn.pressed.connect(func(): callback.call(i))
 			h_box.add_child(btn)
 			ui_elements[label_key + "_btn_" + str(i)] = [btn, osk] # Store button and key for translation
@@ -466,13 +523,23 @@ func _setup_disaster_ui():
 	)
 
 func _refresh_ui_text():
+	var s = _get_ui_scale()
 	for key in ui_elements:
 		var node_data = ui_elements[key]
 		
 		# Handle direct button nodes (Tools/Disasters)
-		if key == "tools_btn": node_data.text = tr[current_language]["tools"]
-		elif key == "disaster_btn": node_data.text = tr[current_language]["disasters"]
-		elif key == "reset_btn": node_data.text = tr[current_language]["reset"]
+		if key == "tools_btn": 
+			node_data.text = tr[current_language]["tools"]
+			node_data.custom_minimum_size = Vector2(150 * s, 60 * s)
+			node_data.add_theme_font_size_override("font_size", 16 * s)
+		elif key == "disaster_btn": 
+			node_data.text = tr[current_language]["disasters"]
+			node_data.custom_minimum_size = Vector2(150 * s, 60 * s)
+			node_data.add_theme_font_size_override("font_size", 16 * s)
+		elif key == "reset_btn": 
+			node_data.text = tr[current_language]["reset"]
+			node_data.custom_minimum_size = Vector2(0, 50 * s)
+			node_data.add_theme_font_size_override("font_size", 16 * s)
 		
 		# Handle Labels (Main labels for rows and material names)
 		elif node_data is Label:
@@ -480,33 +547,50 @@ func _refresh_ui_text():
 				var pure_key = key.replace("_mat_lbl", "")
 				if tr[current_language].has(pure_key):
 					node_data.text = tr[current_language][pure_key]
+					node_data.add_theme_font_size_override("font_size", 12 * s) # Scale material label font
 			elif key.ends_with("_lbl"):
 				var pure_key = key.replace("_lbl", "")
 				if tr[current_language].has(pure_key):
 					node_data.text = tr[current_language][pure_key] + ": "
+					node_data.custom_minimum_size = Vector2(120 * s, 0)
+					node_data.add_theme_font_size_override("font_size", 14 * s)
 		
 		# Handle Intensity Buttons (Stored as Array [Btn, Key])
 		elif node_data is Array:
 			var btn = node_data[0]
 			var osk = node_data[1]
 			btn.text = tr[current_language][osk]
+			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
+			btn.add_theme_font_size_override("font_size", 14 * s)
+		# Handle other buttons in rows (lang, brush, ui_size)
+		elif node_data is Button:
+			if key.begins_with("lang_btn_") or key.begins_with("brush_btn_"):
+				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
+				node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key.begins_with("ui_size_btn_"):
+				var idx = int(key.split("_")[-1])
+				var scale_labels = [tr[current_language]["size"] + " 1.0", tr[current_language]["size"] + " 1.2", tr[current_language]["size"] + " 1.5", tr[current_language]["size"] + " 2.0"]
+				node_data.text = scale_labels[idx]
+				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
+				node_data.add_theme_font_size_override("font_size", 14 * s)
 
 func _add_button(key: String, mat_id: int):
+	var s = _get_ui_scale()
 	var main_vbox = VBoxContainer.new()
 	main_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	main_vbox.custom_minimum_size = Vector2(75, 70) # UNIFORM SIZE FOR ALL
+	main_vbox.custom_minimum_size = Vector2(75 * s, 70 * s) # UNIFORM SIZE FOR ALL
 	
 	# Icon Wrapper (for border)
 	var icon_panel = PanelContainer.new()
 	var icon_style = StyleBoxFlat.new()
 	icon_style.bg_color = Color(0,0,0,0) # Transparent background
 	icon_panel.add_theme_stylebox_override("panel", icon_style)
-	icon_panel.custom_minimum_size = Vector2(50, 50) # 40 + 5 + 5 for border
+	icon_panel.custom_minimum_size = Vector2(50 * s, 50 * s) # 40 + 5 + 5 for border
 	
 	# Icon (ColorRect)
 	var icon = ColorRect.new()
 	icon.color = material_colors_raw[mat_id]
-	icon.custom_minimum_size = Vector2(40, 40)
+	icon.custom_minimum_size = Vector2(40 * s, 40 * s)
 	icon.mouse_filter = Control.MOUSE_FILTER_PASS 
 	
 	# Connect icon click to selection
@@ -526,6 +610,7 @@ func _add_button(key: String, mat_id: int):
 	btn.text = tr[current_language][key]
 	btn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	btn.add_theme_font_size_override("font_size", 12 * s) # Scaled font size
 	# ALSO CLICKABLE LABEL
 	btn.gui_input.connect(func(event):
 		if event is InputEventMouseButton and event.pressed:
@@ -583,6 +668,9 @@ func _update_highlights():
 				elif key.begins_with("lang_btn_"):
 					var idx = int(key.split("_")[-1])
 					if (idx == 1 and current_language == "en") or (idx == 0 and current_language == "es"): is_active = true
+				elif key.begins_with("ui_size_btn_"):
+					var idx = int(key.split("_")[-1])
+					if idx == ui_scale_level: is_active = true
 				elif key.begins_with("weather_btn_"):
 					if int(key.split("_")[-1]) == current_weather: is_active = true
 				elif key.begins_with("quake_btn_"):
