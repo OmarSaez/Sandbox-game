@@ -607,7 +607,7 @@ func _add_button(key: String, mat_id: int):
 	var s = _get_ui_scale()
 	var main_vbox = VBoxContainer.new()
 	main_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	main_vbox.custom_minimum_size = Vector2(75 * s, 70 * s) # UNIFORM SIZE FOR ALL
+	main_vbox.custom_minimum_size = Vector2(85 * s, 70 * s) # SLIGHTLY WIDER FOR BIGGER FONT
 	
 	# Icon Wrapper (for border)
 	var icon_panel = PanelContainer.new()
@@ -639,7 +639,7 @@ func _add_button(key: String, mat_id: int):
 	btn.text = tr[current_language][key]
 	btn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	btn.mouse_filter = Control.MOUSE_FILTER_PASS
-	btn.add_theme_font_size_override("font_size", 12 * s) # Scaled font size
+	btn.add_theme_font_size_override("font_size", 14 * s) # Match other menu labels
 	# ALSO CLICKABLE LABEL
 	btn.gui_input.connect(func(event):
 		if event is InputEventMouseButton and event.pressed:
