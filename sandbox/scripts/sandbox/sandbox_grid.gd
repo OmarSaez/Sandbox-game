@@ -221,7 +221,7 @@ func _ready():
 	_register_material(14, Color("#1A1110"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_SMOKE | SandboxMaterial.Tags.INCENDIARY)
 	
 	# Smoke (Light Gray Gas)
-	_register_material(15, Color("F0F0F0"), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP | SandboxMaterial.Tags.BURN_NONE)
+	_register_material(15, Color("454545ff"), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP | SandboxMaterial.Tags.BURN_NONE)
 	
 	# Wood (Strong Brown)
 	_register_material(16, Color("66380C"), SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.SOLID)
@@ -699,28 +699,30 @@ func _add_button(key: String, mat_id: int):
 	main_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	main_vbox.custom_minimum_size = Vector2(85 * s, 70 * s) # SLIGHTLY WIDER FOR BIGGER FONT
 	
-	# Icon Wrapper (for border)
+	# Icon Wrapper (The material icon itself)
 	var icon_panel = PanelContainer.new()
 	var icon_style = StyleBoxFlat.new()
-	icon_style.bg_color = Color(0,0,0,0) # Transparent background
+	icon_style.bg_color = material_colors_raw[mat_id] # Use material color as background
+	
+	# Rounding
+	var radius = int(8 * s)
+	icon_style.corner_radius_top_left = radius
+	icon_style.corner_radius_top_right = radius
+	icon_style.corner_radius_bottom_left = radius
+	icon_style.corner_radius_bottom_right = radius
+	
 	icon_panel.add_theme_stylebox_override("panel", icon_style)
-	icon_panel.custom_minimum_size = Vector2(50 * s, 50 * s) # 40 + 5 + 5 for border
+	icon_panel.custom_minimum_size = Vector2(50 * s, 50 * s)
+	icon_panel.mouse_filter = Control.MOUSE_FILTER_STOP # Capture input for rounding
 	
-	# Icon (ColorRect)
-	var icon = ColorRect.new()
-	icon.color = material_colors_raw[mat_id]
-	icon.custom_minimum_size = Vector2(40 * s, 40 * s)
-	icon.mouse_filter = Control.MOUSE_FILTER_PASS 
-	
-	# Connect icon click to selection
-	icon.gui_input.connect(func(event):
+	# Connect click directly to panel
+	icon_panel.gui_input.connect(func(event):
 		if event is InputEventMouseButton and event.pressed:
 			selected_material = mat_id
 			_update_highlights()
 	)
-	icon.set_meta("mat_id", mat_id)
+	icon_panel.set_meta("mat_id", mat_id)
 	
-	icon_panel.add_child(icon)
 	main_vbox.add_child(icon_panel)
 	
 	ui_elements[key + "_icon_pnl"] = icon_panel # Store panel for border
@@ -749,25 +751,31 @@ func _update_highlights():
 		if not child is VBoxContainer: continue # Skip the spacer!
 		var icon_pnl = child.get_child(0)
 		var label = child.get_child(1)
-		var mat_id = icon_pnl.get_child(0).get_meta("mat_id")
-		
-		var style = icon_pnl.get_theme_stylebox("panel").duplicate()
+		var highlight_style = icon_pnl.get_theme_stylebox("panel").duplicate()
+		var mat_id = icon_pnl.get_meta("mat_id")
 		if mat_id == selected_material:
-			# HIGHLIGHT: Bright border + Yellow text
-			style.border_width_left = 5
-			style.border_width_top = 5
-			style.border_width_right = 5
-			style.border_width_bottom = 5
-			style.border_color = Color.WHITE
-			icon_pnl.add_theme_stylebox_override("panel", style)
+			# HIGHLIGHT: Bright white border + Yellow text
+			highlight_style.border_width_left = 4
+			highlight_style.border_width_top = 4
+			highlight_style.border_width_right = 4
+			highlight_style.border_width_bottom = 4
+			highlight_style.border_color = Color.WHITE
+			# Keep rounding in highlight
+			var radius = int(8 * _get_ui_scale())
+			highlight_style.corner_radius_top_left = radius
+			highlight_style.corner_radius_top_right = radius
+			highlight_style.corner_radius_bottom_left = radius
+			highlight_style.corner_radius_bottom_right = radius
+			
+			icon_pnl.add_theme_stylebox_override("panel", highlight_style)
 			label.add_theme_color_override("font_color", Color.YELLOW)
 		else:
 			# DEFAULT: No border + White text
-			style.border_width_left = 0
-			style.border_width_top = 0
-			style.border_width_right = 0
-			style.border_width_bottom = 0
-			icon_pnl.add_theme_stylebox_override("panel", style)
+			highlight_style.border_width_left = 0
+			highlight_style.border_width_top = 0
+			highlight_style.border_width_right = 0
+			highlight_style.border_width_bottom = 0
+			icon_pnl.add_theme_stylebox_override("panel", highlight_style)
 			label.remove_theme_color_override("font_color")
 
 	# 2. Update Tool/Disaster Highlights (Buttons)
