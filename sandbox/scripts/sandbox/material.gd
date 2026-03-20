@@ -35,7 +35,10 @@ enum Tags {
 	# Plant life
 	PLANT = 1 << 20,
 	SEED = 1 << 21,
-	FERTILE = 1 << 22
+	FERTILE = 1 << 22,
+	
+	# NPC system
+	NPC = 1 << 23
 }
 
 @export var name: String = "Material"

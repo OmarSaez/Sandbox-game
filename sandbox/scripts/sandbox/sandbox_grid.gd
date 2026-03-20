@@ -29,6 +29,11 @@ func _get_ui_scale() -> float:
 var ui_elements = {} # To track nodes for re-labeling
 var tools_panel: PanelContainer
 var disaster_panel: PanelContainer
+var npc_panel: PanelContainer
+var selected_team: int = 0 
+var mouse_was_pressed: bool = false
+var active_npcs = [] # Array of dicts: { "pos": Vector2i, "team": int, "dir": int }
+var npc_update_timer: float = 0.0
 
 var tr = {
 	"es": {
@@ -69,7 +74,13 @@ var tr = {
 		"volcan": "Volcán",
 		"ui_size": "Tamaño UI",
 		"size": "Escala",
-		"reset": "Limpiar Todo"
+		"reset": "Limpiar Todo",
+		"npc": "👥 NPCs",
+		"warrior": "⚔️ Guerrero",
+		"team_red": "🔴 Rojo",
+		"team_blue": "🔵 Azul",
+		"team_yellow": "🟡 Amarillo",
+		"team_green": "🟢 Verde"
 	},
 	"en": {
 		"disasters": "🌪️ Disasters",
@@ -109,7 +120,13 @@ var tr = {
 		"volcan": "Volcano",
 		"ui_size": "UI Size",
 		"size": "Scale",
-		"reset": "Clear All"
+		"reset": "Clear All",
+		"npc": "👥 NPCs",
+		"warrior": "⚔️ Warrior",
+		"team_red": "🔴 Red",
+		"team_blue": "🔵 Blue",
+		"team_yellow": "🟡 Yellow",
+		"team_green": "🟢 Green"
 	}
 }
 
@@ -164,8 +181,11 @@ func _ready():
 	
 	# Setup materials
 	_register_material(0, Color(0, 0, 0, 0), SandboxMaterial.Tags.NONE)
+	#Sand
 	_register_material(1, Color.KHAKI, SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_NORMAL)
+	#Water
 	_register_material(2, Color.SKY_BLUE, SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.CONDUCTOR)
+	#Fire
 	_register_material(3, Color.ORANGE_RED, SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
 	# Petroleum (Dark Purple + Flammable)
 	_register_material(4, Color("#2F0E4F"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.BURN_SMOKE)
@@ -255,6 +275,24 @@ func _ready():
 	# 29: Active Base (Launcher) - Glowing Orange-Red
 	_register_material(29, Color("#FF4500"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
 
+	# --- NPC SYSTEM ---
+	# 30: Warrior (Dummy/Master)
+	_register_material(30, Color.SLATE_GRAY, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 31: NPC Part Gray
+	_register_material(31, Color.GRAY, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 32: NPC Part Dark Gray
+	_register_material(32, Color(0.2, 0.2, 0.2), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 33: NPC Part Skin
+	_register_material(33, Color("#FFDBAC"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 34: Team Red
+	_register_material(34, Color.RED, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 35: Team Blue
+	_register_material(35, Color.BLUE, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 36: Team Yellow
+	_register_material(36, Color.YELLOW, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 37: Team Green
+	_register_material(37, Color.GREEN, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+
 	# UI SETUP (Must happen AFTER materials are registered)
 	_setup_main_ui_containers()
 	_setup_ui()
@@ -262,6 +300,7 @@ func _ready():
 	# FORCE START HIDDEN
 	tools_panel.visible = false
 	disaster_panel.visible = false
+	if npc_panel: npc_panel.visible = false
 	
 	_register_material(19, Color(1, 0.8, 0.9), SandboxMaterial.Tags.GRAV_STATIC) # Firework Fuse
 
@@ -305,6 +344,7 @@ func _setup_materials_within_grid():
 
 func _setup_ui():
 	_setup_tools_ui() # Tools on top
+	_setup_npc_ui() # NPCs in the middle
 	_setup_disaster_ui() # Disasters below
 
 var material_grid: HFlowContainer
@@ -388,6 +428,8 @@ func _setup_main_ui_containers():
 	if action_vbox:
 		for child in action_vbox.get_children(): 
 			if is_instance_valid(child): child.free()
+	
+	_setup_npc_panel_node() # Ensure NPC panel node exists
 	
 	_setup_materials_within_grid()
 	_update_highlights() # Restore selection marks
@@ -603,6 +645,10 @@ func _refresh_ui_text():
 			node_data.text = tr[current_language]["disasters"]
 			node_data.custom_minimum_size = Vector2(150 * s, 60 * s)
 			node_data.add_theme_font_size_override("font_size", 16 * s)
+		elif key == "npc_btn": 
+			node_data.text = tr[current_language]["npc"]
+			node_data.custom_minimum_size = Vector2(150 * s, 60 * s)
+			node_data.add_theme_font_size_override("font_size", 16 * s)
 		elif key == "reset_btn": 
 			node_data.text = tr[current_language]["reset"]
 			node_data.custom_minimum_size = Vector2(0, 50 * s)
@@ -640,6 +686,12 @@ func _refresh_ui_text():
 				node_data.text = scale_labels[idx]
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key.begins_with("team_btn_"):
+				var idx = int(key.split("_")[-1])
+				var team_keys = ["team_red", "team_blue", "team_yellow", "team_green"]
+				node_data.text = tr[current_language][team_keys[idx]]
+				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
+				node_data.add_theme_font_size_override("font_size", 12 * s)
 
 func _add_button(key: String, mat_id: int):
 	var s = _get_ui_scale()
@@ -746,6 +798,11 @@ func _update_highlights():
 					if int(key.split("_")[-1]) == tornado_intensity: is_active = true
 				elif key.begins_with("tsunami_btn_"):
 					if int(key.split("_")[-1]) == tsunami_intensity: is_active = true
+				elif key == "warrior_btn":
+					if selected_material == 30: is_active = true
+				elif key.begins_with("team_btn_"):
+					var idx = int(key.split("_")[-1])
+					if idx == selected_team: is_active = true
 				
 				if is_active:
 					btn.add_theme_color_override("font_color", Color.YELLOW)
@@ -768,6 +825,8 @@ func _is_any_ui_blocking() -> bool:
 		return true
 	if disaster_panel and disaster_panel.visible and disaster_panel.get_global_rect().has_point(m_pos):
 		return true
+	if npc_panel and npc_panel.visible and npc_panel.get_global_rect().has_point(m_pos):
+		return true
 	if material_grid and material_grid.get_global_rect().has_point(m_pos):
 		return true
 	if action_vbox and action_vbox.get_global_rect().has_point(m_pos):
@@ -785,10 +844,22 @@ func _process(delta):
 		var m_pos = get_local_mouse_position()
 		var gx = int(m_pos.x / grid_scale)
 		var gy = int(m_pos.y / grid_scale)
-		_draw_circle(gx, gy, brush_radius, selected_material)
+		
+		# NPC Special placement: only place on initial click
+		if (material_tags_raw[selected_material] & SandboxMaterial.Tags.NPC):
+			if not mouse_was_pressed:
+				_place_npc(gx, gy)
+		else:
+			_draw_circle(gx, gy, brush_radius, selected_material)
+		mouse_was_pressed = true
+	else:
+		mouse_was_pressed = false
 
 	# Simulation
 	_step_simulation()
+	
+	# NPC AI & Physics
+	_process_npcs(delta)
 	
 	# Weather system
 	_process_weather()
@@ -1400,22 +1471,191 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		charge_array[idx] -= 1
 		if charge_array[idx] <= 1:
 			_set_cell(x, y, 26) # Harden to Solid Cement
-	
-	# PASS 3: Conductor Pulse (Triggering TNT/Devices)
-	var charge = charge_array[idx]
-	if charge == 100:
-		_trigger_electric_devices(x, y)
-	
-	# PASS 4: Acid interaction (Melting things!)
-	if (tags & SandboxMaterial.Tags.ACID):
-		_check_neighbors_for_reaction(x, y, false)
-	
-	# PASS 5: Universal Dissipation (Smoke, etc)
-	if mat_id == 15: # Smoke
-		if randf() < 0.001:
-			_set_cell(x, y, 0)
 
-	return false
+func _setup_npc_panel_node():
+	if npc_panel: return
+	var ui_root = get_parent().get_node("UI")
+	npc_panel = PanelContainer.new()
+	npc_panel.name = "NPCPanel"
+	ui_root.add_child(npc_panel)
+	
+	# Compact dynamic positioning (Middle menu)
+	var s = _get_ui_scale()
+	npc_panel.anchor_left = 0.5
+	npc_panel.anchor_right = 0.5
+	npc_panel.anchor_top = 1.0
+	npc_panel.anchor_bottom = 1.0
+	
+	var p_width = 400 * s
+	var p_height = 130 * s
+	var bottom_gap = 185 * s
+	
+	npc_panel.offset_left = -p_width / 2
+	npc_panel.offset_right = p_width / 2
+	npc_panel.offset_bottom = -bottom_gap
+	npc_panel.offset_top = -bottom_gap - p_height
+	npc_panel.visible = false
+	
+	npc_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	npc_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
+
+func _setup_npc_ui():
+	var s = _get_ui_scale()
+	var npc_btn = Button.new()
+	npc_btn.name = "NPCBtn"
+	npc_btn.custom_minimum_size = Vector2(150 * s, 60 * s)
+	npc_btn.add_theme_font_size_override("font_size", 16 * s)
+	npc_btn.text = tr[current_language]["npc"]
+	ui_elements["npc_btn"] = npc_btn
+	action_vbox.add_child(npc_btn)
+	
+	npc_btn.pressed.connect(func():
+		tools_panel.visible = false
+		disaster_panel.visible = false
+		npc_panel.visible = !npc_panel.visible
+	)
+	
+	# Clear and Fill
+	if is_instance_valid(npc_panel):
+		for child in npc_panel.get_children(): child.free()
+		
+		var v_box = VBoxContainer.new()
+		v_box.add_theme_constant_override("separation", 10 * s)
+		v_box.alignment = BoxContainer.ALIGNMENT_CENTER
+		npc_panel.add_child(v_box)
+		
+		# Title (NPCs)
+		var npc_row = HBoxContainer.new()
+		npc_row.add_theme_constant_override("separation", 10 * s)
+		var npc_lbl = Label.new()
+		npc_lbl.text = tr[current_language]["npc"] + ": "
+		npc_lbl.custom_minimum_size = Vector2(100 * s, 0)
+		npc_lbl.add_theme_font_size_override("font_size", 14 * s)
+		npc_row.add_child(npc_lbl)
+		
+		var warrior_btn = Button.new()
+		warrior_btn.text = tr[current_language]["warrior"]
+		warrior_btn.custom_minimum_size = Vector2(120 * s, 45 * s)
+		warrior_btn.add_theme_font_size_override("font_size", 14 * s)
+		warrior_btn.pressed.connect(func():
+			selected_material = 30 # Master Warrior Material
+			_update_highlights()
+		)
+		ui_elements["warrior_btn"] = warrior_btn
+		npc_row.add_child(warrior_btn)
+		v_box.add_child(npc_row)
+		
+		# Teams Row
+		var team_row = HBoxContainer.new()
+		team_row.add_theme_constant_override("separation", 5 * s)
+		var team_keys = ["team_red", "team_blue", "team_yellow", "team_green"]
+		for i in range(4):
+			var t_btn = Button.new()
+			t_btn.text = tr[current_language][team_keys[i]]
+			t_btn.custom_minimum_size = Vector2(80 * s, 45 * s)
+			t_btn.add_theme_font_size_override("font_size", 12 * s)
+			var tidx = i
+			t_btn.pressed.connect(func():
+				selected_team = tidx
+				_update_highlights()
+			)
+			ui_elements["team_btn_" + str(i)] = t_btn
+			team_row.add_child(t_btn)
+		v_box.add_child(team_row)
+
+func _place_npc(x, y):
+	var start_x = x - 1
+	var start_y = y - 4
+	
+	# Register in entity list
+	var new_npc = {
+		"pos": Vector2i(start_x, start_y),
+		"team": selected_team,
+		"dir": 1 if randf() > 0.5 else -1
+	}
+	active_npcs.append(new_npc)
+	
+	# Initial draw
+	_draw_npc_pixels(new_npc)
+
+func _draw_npc_pixels(npc, override_mat = -1):
+	var sx = npc.pos.x
+	var sy = npc.pos.y
+	var team_mat = 34 + npc.team
+	
+	var m_head = 31 if override_mat == -1 else override_mat
+	var m_skin = 33 if override_mat == -1 else override_mat
+	var m_body = 32 if override_mat == -1 else override_mat
+	var m_legs = 31 if override_mat == -1 else override_mat
+	var m_team = team_mat if override_mat == -1 else override_mat
+	
+	# HEAD
+	_set_cell(sx, sy, m_head)
+	_set_cell(sx+1, sy, m_skin)
+	_set_cell(sx, sy+1, m_head)
+	_set_cell(sx+1, sy+1, m_head)
+	
+	# BODY
+	_set_cell(sx, sy+2, m_body)
+	_set_cell(sx+1, sy+2, m_team)
+	_set_cell(sx, sy+3, m_team)
+	_set_cell(sx+1, sy+3, m_body)
+	
+	# LEGS
+	_set_cell(sx, sy+4, m_legs)
+	_set_cell(sx+1, sy+4, m_legs)
+
+func _process_npcs(delta):
+	npc_update_timer += delta
+	if npc_update_timer < 0.05: return # ~20 FPS for NPCs
+	npc_update_timer = 0.0
+	
+	for npc in active_npcs:
+		# 1. Erase current
+		_draw_npc_pixels(npc, 0)
+		
+		var np = npc.pos
+		
+		# 2. GRAVITY
+		if _can_npc_fit(np.x, np.y + 1):
+			np.y += 1
+		else:
+			# 3. MOVEMENT & CLIMBING
+			if randf() < 0.02: npc.dir = -npc.dir # Random flip
+			
+			var tx = np.x + npc.dir
+			var found_move = false
+			
+			# Check hills from -8 to 2 (descend slightly too)
+			for h in range(2, -9, -1):
+				if _can_npc_fit(tx, np.y + h):
+					# Require ground below the new position
+					if not _can_npc_fit(tx, np.y + h + 1):
+						np.x = tx
+						np.y += h
+						found_move = true
+						break
+			
+			if not found_move:
+				npc.dir = -npc.dir # Turn around if hit a wall > 8px
+		
+		npc.pos = np
+		# 4. Redraw
+		_draw_npc_pixels(npc)
+
+func _can_npc_fit(gx, gy) -> bool:
+	# Bounding check
+	if gx < 0 or gx + 1 >= grid_width or gy < 0 or gy + 4 >= grid_height:
+		return false
+	
+	# 2x5 area check
+	for oy in range(5):
+		for ox in range(2):
+			var tid = _get_cell(gx + ox, gy + oy)
+			# Pass through Empty(0), Smoke(15), Fire(3), Gas(17)
+			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
+				return false
+	return true
 
 func _has_tag_neighbor(x, y, tag):
 	for ny in range(y - 1, y + 2):
@@ -1710,10 +1950,12 @@ func _explode_firework(ex, ey, p_color):
 			"life": randf_range(1.0, 1.8) # Snappier life
 		}
 		visual_sparks.append(spark)
+
 func _clear_all():
 	cells.fill(0)
 	charge_array.fill(0)
 	tags_array.fill(0)
 	surface_cache.fill(0)
+	active_npcs.clear()
 	_update_texture()
 	_update_highlights()
