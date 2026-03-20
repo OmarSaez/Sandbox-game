@@ -32,7 +32,8 @@ var disaster_panel: PanelContainer
 var npc_panel: PanelContainer
 var selected_team: int = 0 
 var mouse_was_pressed: bool = false
-var active_npcs = [] # Array of dicts: { "pos": Vector2i, "team": int, "dir": int }
+var active_npcs = [] # Array of dicts: { "pos": Vector2i, "team": int, "dir": int, "type": string, "hp": float, etc }
+var active_projectiles = [] # { pos: Vector2, vel: Vector2, team: int, type: string }
 var npc_update_timer: float = 0.0
 
 var tr = {
@@ -77,6 +78,7 @@ var tr = {
 		"reset": "Limpiar Todo",
 		"npc": "👥 NPCs",
 		"warrior": "⚔️ Guerrero",
+		"archer": "🏹 Arquero",
 		"team_red": "🔴 Rojo",
 		"team_blue": "🔵 Azul",
 		"team_yellow": "🟡 Amarillo",
@@ -123,6 +125,7 @@ var tr = {
 		"reset": "Clear All",
 		"npc": "👥 NPCs",
 		"warrior": "⚔️ Warrior",
+		"archer": "🏹 Archer",
 		"team_red": "🔴 Red",
 		"team_blue": "🔵 Blue",
 		"team_yellow": "🟡 Yellow",
@@ -292,6 +295,14 @@ func _ready():
 	_register_material(36, Color.YELLOW, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 	# 37: Team Green
 	_register_material(37, Color.GREEN, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	
+	# --- ARCHER SYSTEM ---
+	# 40: Archer Master
+	_register_material(40, Color("#228B22"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 41: Archer Cloth
+	_register_material(41, Color("#8B4513"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 42: Arrow Pixel
+	_register_material(42, Color("#D2B48C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
 
 	# UI SETUP (Must happen AFTER materials are registered)
 	_setup_main_ui_containers()
@@ -514,6 +525,7 @@ func _setup_tools_ui():
 	
 	tools_btn.pressed.connect(func(): 
 		disaster_panel.visible = false
+		if is_instance_valid(npc_panel): npc_panel.visible = false
 		tools_panel.visible = !tools_panel.visible
 	)
 	
@@ -618,6 +630,7 @@ func _setup_disaster_ui():
 	
 	disaster_btn.pressed.connect(func(): 
 		tools_panel.visible = false
+		if is_instance_valid(npc_panel): npc_panel.visible = false
 		disaster_panel.visible = !disaster_panel.visible
 	)
 	
@@ -811,10 +824,10 @@ func _update_highlights():
 			icon_pnl.add_theme_stylebox_override("panel", highlight_style)
 			label.remove_theme_color_override("font_color")
 
-	# 2. Update Tool/Disaster Highlights (Buttons)
+	# 2. Update Tool/Disaster/NPC Highlights (Buttons)
 	for key in ui_elements:
 		var node_data = ui_elements[key]
-		if key.contains("_btn_"):
+		if key.contains("_btn"):
 			var btn = node_data
 			if node_data is Array: btn = node_data[0]
 			
@@ -841,6 +854,8 @@ func _update_highlights():
 					if int(key.split("_")[-1]) == tsunami_intensity: is_active = true
 				elif key == "warrior_btn":
 					if selected_material == 30: is_active = true
+				elif key == "archer_btn":
+					if selected_material == 40: is_active = true
 				elif key.begins_with("team_btn_"):
 					var idx = int(key.split("_")[-1])
 					if idx == selected_team: is_active = true
@@ -901,6 +916,9 @@ func _process(delta):
 	
 	# NPC AI & Physics
 	_process_npcs(delta)
+	
+	# Projectiles (Arrows)
+	_process_projectiles(delta)
 	
 	# Weather system
 	_process_weather()
@@ -1619,6 +1637,17 @@ func _setup_npc_ui():
 		)
 		ui_elements["warrior_btn"] = warrior_btn
 		npc_row.add_child(warrior_btn)
+		var archer_btn = Button.new()
+		archer_btn.text = tr[current_language]["archer"]
+		archer_btn.custom_minimum_size = Vector2(120 * s, 45 * s)
+		archer_btn.add_theme_font_size_override("font_size", 14 * s)
+		archer_btn.pressed.connect(func():
+			selected_material = 40 # Archer Material
+			_update_highlights()
+		)
+		ui_elements["archer_btn"] = archer_btn
+		npc_row.add_child(archer_btn)
+		
 		v_box.add_child(npc_row)
 		
 		# Teams Row
@@ -1643,13 +1672,18 @@ func _place_npc(x, y):
 	var start_x = x - 1
 	var start_y = y - 4
 	
+	var n_type = "warrior"
+	if selected_material == 40 or selected_material == 41: n_type = "archer"
+	
 	# Register in entity list
 	var new_npc = {
 		"pos": Vector2i(start_x, start_y),
 		"team": selected_team,
 		"dir": 1 if randf() > 0.5 else -1,
+		"type": n_type,
 		"hp": 100.0,
-		"attack_cooldown": 0.0
+		"attack_cooldown": 0.0,
+		"hit_flash": 0
 	}
 	active_npcs.append(new_npc)
 	
@@ -1661,11 +1695,18 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	var sy = npc.pos.y
 	var team_mat = 34 + npc.team
 	
-	var m_head = 31 if override_mat == -1 else override_mat
+	var is_archer = npc.type == "archer"
+	var is_flashing = npc.hit_flash > 0
+	
+	var m_head = (41 if is_archer else 31) if override_mat == -1 else override_mat
 	var m_skin = 33 if override_mat == -1 else override_mat
-	var m_body = 32 if override_mat == -1 else override_mat
+	var m_body = (40 if is_archer else 32) if override_mat == -1 else override_mat
 	var m_legs = 31 if override_mat == -1 else override_mat
 	var m_team = team_mat if override_mat == -1 else override_mat
+	
+	# Override for hit flash (White color)
+	if is_flashing and override_mat == -1:
+		m_head = 7; m_skin = 7; m_body = 7; m_legs = 7; m_team = 7
 	
 	# HEAD
 	_set_cell(sx, sy, m_head)
@@ -1685,18 +1726,19 @@ func _draw_npc_pixels(npc, override_mat = -1):
 
 func _process_npcs(delta):
 	npc_update_timer += delta
-	if npc_update_timer < 0.05: return # ~20 FPS for NPCs
+	if npc_update_timer < 0.05: return 
 	npc_update_timer = 0.0
 	
 	var dead_indices = []
 	
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
+		if npc.hit_flash > 0: npc.hit_flash -= 1
 		
-		# 0. Damage from Environment (Acid, Lava, etc)
+		# 0. Damage from Environment
 		if _check_npc_environment_damage(npc):
 			if npc.hp <= 0:
-				_draw_npc_pixels(npc, 0) # Clear pixels
+				_draw_npc_pixels(npc, 0)
 				dead_indices.append(i)
 				continue
 		
@@ -1707,53 +1749,132 @@ func _process_npcs(delta):
 		if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
 		
 		# 2. AI: DETECT ENEMIES
-		var target = _find_closest_enemy(npc, 120.0) # 120px radar
+		var target = _find_closest_enemy(npc, 180.0) # Larger range for archers
+		var is_attacking = false
+		
 		if target:
 			var dist_x = target.pos.x - np.x
-			npc.dir = 1 if dist_x > 0 else -1
+			var dx_abs = abs(dist_x)
+			var dy_abs = abs(target.pos.y - np.y)
 			
-			# Attack range check (Approx 5-6px)
-			if abs(dist_x) < 6 and abs(target.pos.y - np.y) < 6:
-				if npc.attack_cooldown <= 0:
-					_attack_npc(npc, target)
-					npc.attack_cooldown = 0.6 # Attack every 0.6s
+			if npc.type == "warrior":
+				npc.dir = 1 if dist_x > 0 else -1
+				if dx_abs < 6 and dy_abs < 6:
+					is_attacking = true
+					if npc.attack_cooldown <= 0:
+						_attack_npc(npc, target)
+						npc.attack_cooldown = 0.6
+				if dx_abs < 4: npc.dir = 0
+			else: # ARCHER AI
+				if dx_abs > 120: # Approach
+					npc.dir = 1 if dist_x > 0 else -1
+				elif dx_abs < 50: # Too close, retreat
+					npc.dir = -1 if dist_x > 0 else 1
+					is_attacking = true # SHOOT WHILE RUNNING
+					if npc.attack_cooldown <= 0:
+						_shoot_arrow(npc, target)
+						npc.attack_cooldown = 1.5 # Slower reload when stressed
+				else: # Perfect range
+					npc.dir = 0
+					is_attacking = true
+					if npc.attack_cooldown <= 0:
+						_shoot_arrow(npc, target)
+						npc.attack_cooldown = 1.1
 		
 		# 3. PHYSICS & MOVEMENT
-		# GRAVITY
 		if _can_npc_fit(np.x, np.y + 1):
 			np.y += 1
 		else:
-			# 4. WALK & CLIMB
-			if not target: # Random roam if no target
-				if randf() < 0.02: npc.dir = -npc.dir
-			
-			var tx = np.x + npc.dir
-			var found_move = false
-			for h in range(2, -9, -1):
-				if _can_npc_fit(tx, np.y + h):
-					if not _can_npc_fit(tx, np.y + h + 1):
-						np.x = tx
-						np.y += h
-						found_move = true
-						break
-			
-			if not found_move:
-				npc.dir = -npc.dir 
+			if not target and randf() < 0.02: npc.dir = 1 if randf() > 0.5 else -1
+			if npc.dir != 0:
+				var tx = np.x + npc.dir
+				var found_move = false
+				var scan_range = range(2, -9, -1) if not is_attacking else range(1, -2, -1)
+				for h in scan_range:
+					if _can_npc_fit(tx, np.y + h):
+						if not _can_npc_fit(tx, np.y + h + 1):
+							np.x = tx; np.y += h
+							found_move = true; break
+				if not found_move and not is_attacking: npc.dir = -npc.dir 
 		
 		npc.pos = np
-		# 5. Redraw
 		_draw_npc_pixels(npc)
-		
-		# Check if dead after combat
 		if npc.hp <= 0:
-			_draw_npc_pixels(npc, 0) # Clear
+			_draw_npc_pixels(npc, 0)
 			dead_indices.append(i)
 
-	# Remove dead NPCs
-	dead_indices.sort()
-	dead_indices.reverse()
-	for idx in dead_indices:
-		active_npcs.remove_at(idx)
+	dead_indices.sort(); dead_indices.reverse()
+	for idx in dead_indices: active_npcs.remove_at(idx)
+
+func _shoot_arrow(npc, target):
+	var dx = float(target.pos.x - npc.pos.x)
+	var dy = float(target.pos.y - npc.pos.y)
+	var dir = 1 if dx > 0 else -1
+	
+	# TRAJECTORY MATH (Parabolic compensation)
+	var vx = dir * 220.0 # Horizontal speed
+	var t = abs(dx) / 220.0 # Time to travel distance
+	if t < 0.05: t = 0.05 # Prevent division by zero
+	
+	var arrow_gravity = 200.0
+	# Formula: dy = vy * t + 0.5 * g * t^2 -> vy = (dy / t) - (0.5 * g * t)
+	var vy = (dy / t) - (0.5 * arrow_gravity * t)
+	
+	# Safety cap for vy
+	vy = clamp(vy, -160.0, 40.0) 
+	
+	active_projectiles.append({
+		"pos": Vector2(npc.pos.x + dir*2, npc.pos.y + 1),
+		"vel": Vector2(vx, vy),
+		"team": npc.team,
+		"type": "arrow",
+		"life": 2.5
+	})
+
+func _process_projectiles(delta):
+	var to_remove = []
+	for i in range(active_projectiles.size()):
+		var p = active_projectiles[i]
+		# Erase old (from grid)
+		_set_cell(int(p.pos.x), int(p.pos.y), 0)
+		
+		p.pos += p.vel * delta
+		p.vel.y += 200.0 * delta # Gravity for arrow
+		p.life -= delta
+		
+		var gx = int(p.pos.x)
+		var gy = int(p.pos.y)
+		
+		# 1. World Bounds
+		if gx < 0 or gx >= grid_width or gy < 0 or gy >= grid_height or p.life <= 0:
+			to_remove.append(i); continue
+			
+		# 2. NPC Collision
+		var hit_npc = null
+		for other in active_npcs:
+			if other.team != p.team:
+				# 2x5 simple bbox
+				if gx >= other.pos.x and gx <= other.pos.x + 1 and gy >= other.pos.y and gy <= other.pos.y + 4:
+					hit_npc = other; break
+		
+		if hit_npc:
+			hit_npc.hp -= 40.0 # High damage (3 arrows = kill)
+			hit_npc.hit_flash = 4 # Flash white for 4 frames
+			# Visual sparks on impact
+			for j in range(5):
+				visual_sparks.append({"x":float(gx),"y":float(gy),"vx":randf_range(-40,40),"vy":randf_range(-40,0),"color":Color.WHITE,"life":0.3})
+			to_remove.append(i); continue
+			
+		# 3. Grid Collision (Solids)
+		var tid = _get_cell(gx, gy)
+		if tid != 0 and tid != 15 and tid != 3 and tid != 17:
+			to_remove.append(i); continue # Stuck in ground
+			
+		# Draw new
+		_set_cell(gx, gy, 42)
+	
+	to_remove.reverse()
+	for idx in to_remove: active_projectiles.remove_at(idx)
 
 func _find_closest_enemy(me, radar_range):
 	var closest = null
@@ -1781,9 +1902,24 @@ func _attack_npc(attacker, victim):
 			"life": randf_range(0.3, 0.6)
 		})
 	
-	# Small Jump animation for attacker
-	if _can_npc_fit(attacker.pos.x, attacker.pos.y - 2):
-		attacker.pos.y -= 2
+	# Small Jump animation for attacker (Reduced to 1px to avoid climbing over enemy)
+	if _can_npc_fit(attacker.pos.x, attacker.pos.y - 1):
+		attacker.pos.y -= 1
+		
+	# KNOCKBACK (35% chance to push victim 6-12px back)
+	if randf() < 0.35:
+		var push_dir = 1 if attacker.pos.x < victim.pos.x else -1
+		var dist = randi_range(6, 12)
+		# Find furthest possible push spot (Check 6, 5, 4...)
+		for d in range(dist, 0, -1):
+			var new_x = victim.pos.x + push_dir * d
+			var new_y = victim.pos.y - 2 # Lift 2px up!
+			if _can_npc_fit(new_x, new_y):
+				_draw_npc_pixels(victim, 0) # Clear OLD
+				victim.pos.x = new_x
+				victim.pos.y = new_y
+				_draw_npc_pixels(victim)   # Redraw NEW
+				break
 
 func _check_npc_environment_damage(npc) -> bool:
 	var took_damage = false
@@ -2125,5 +2261,6 @@ func _clear_all():
 	tags_array.fill(0)
 	surface_cache.fill(0)
 	active_npcs.clear()
+	active_projectiles.clear()
 	_update_texture()
 	_update_highlights()
