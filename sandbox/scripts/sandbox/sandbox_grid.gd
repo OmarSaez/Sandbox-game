@@ -414,14 +414,21 @@ func _setup_main_ui_containers():
 		material_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	# ALWAYS Refresh Scroll Height for the current scale
-	# NEW: Cap the height so it doesn't cover too much sandbox at big scales
-	var h = clamp(130 * s, 110, 145)
+	# NEW: ULTRA-COMPACT height (38px * 3 = 114px approx)
+	var h = min(115 * s, 140)
 	
 	material_scroll.custom_minimum_size = Vector2(0, h)
 	material_scroll.offset_top = -h
 	material_scroll.anchor_top = 1.0
 	material_scroll.anchor_bottom = 1.0
 	material_scroll.offset_bottom = 0
+
+	# PUSH GAME VIEW (TextureRect) UP by h + 1px gap (Minimal distance)
+	if texture_rect:
+		texture_rect.anchor_top = 0
+		texture_rect.anchor_bottom = 1.0
+		texture_rect.offset_bottom = -h - 1 
+		texture_rect.offset_top = 0
 
 	# 4. ROBUST CLONE DETECTION: Find and cleanup ALL ActionButtons nodes (including renamed ones)
 	var found_action_boxes = []
@@ -485,7 +492,7 @@ func _setup_tools_ui():
 	
 	var panel_width = 450 * s
 	var panel_height = 220 * s
-	var bottom_gap = 185 * s # Slightly more than the bar height for a small gap
+	var bottom_gap = (min(115 * s, 140)) + (5 * s) # Dynamic GAP above HUD floor
 	
 	tools_panel.offset_left = -panel_width / 2
 	tools_panel.offset_right = panel_width / 2
@@ -541,20 +548,20 @@ func _setup_tools_ui():
 		_update_highlights()
 	)
 
-	# BRUSH SIZE ROW
-	var brush_sizes = [0, 1, 2, 5, 7, 12]
-	var brush_labels = ["1", "3", "5", "10", "15", "25"]
-	create_row.call("brush", brush_labels, func(l): 
-		brush_radius = brush_sizes[l]
-		_update_highlights()
-	)
-	
-	# UI SCALE ROW
+	# UI SCALE ROW (Now 2nd)
 	var scale_labels = [tr[current_language]["size"] + " 1.0", tr[current_language]["size"] + " 1.2", tr[current_language]["size"] + " 1.5", tr[current_language]["size"] + " 2.0"]
 	create_row.call("ui_size", scale_labels, func(l): 
 		ui_scale_level = l
 		_setup_main_ui_containers() # Handle complete HUD refresh automatically
 		tools_panel.visible = true # Keep open after scale change
+	)
+
+	# BRUSH SIZE ROW (Now 3rd)
+	var brush_sizes = [0, 1, 2, 5, 7, 12]
+	var brush_labels = ["1", "3", "5", "10", "15", "25"]
+	create_row.call("brush", brush_labels, func(l): 
+		brush_radius = brush_sizes[l]
+		_update_highlights()
 	)
 	
 	# DIRECT RESET BUTTON (Bottom of Tools)
@@ -590,7 +597,7 @@ func _setup_disaster_ui():
 	
 	var d_width = 300 * s
 	var d_height = 120 * s
-	var d_bottom_gap = 185 * s
+	var d_bottom_gap = (min(115 * s, 140)) + (5 * s)
 	
 	disaster_panel.offset_left = -d_width / 2
 	disaster_panel.offset_right = d_width / 2
@@ -1552,7 +1559,7 @@ func _setup_npc_panel_node():
 	
 	var p_width = 400 * s
 	var p_height = 130 * s
-	var bottom_gap = 185 * s
+	var bottom_gap = (min(115 * s, 140)) + (5 * s)
 	
 	npc_panel.offset_left = -p_width / 2
 	npc_panel.offset_right = p_width / 2
