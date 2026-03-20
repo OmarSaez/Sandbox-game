@@ -308,16 +308,22 @@ func _setup_main_ui_containers():
 	var ui_root = get_parent().get_node("UI")
 	var main_controls = ui_root.get_node("Controls")
 	
-	# 1. FIND AND WRAP MaterialGrid
+	# 1. CLEAN UP ui_elements (Crucial to prevent stale node bug)
+	ui_elements.clear()
+	
+	# 2. FIND MaterialGrid (Wherever it is)
 	if not material_grid:
-		material_grid = main_controls.get_node("MaterialGrid")
+		material_grid = main_controls.find_child("MaterialGrid", true, false)
+	
+	if not material_grid: return
 		
-	# Wrap in scroll if not already wrapped
-	if not material_grid.get_parent() is ScrollContainer:
+	# 3. FIND OR WRAP in Scroll
+	var parent_scroll = material_grid.get_parent() as ScrollContainer
+	if not parent_scroll:
 		var parent = material_grid.get_parent()
 		var idx = material_grid.get_index()
 		
-		# CLONE original layout from MaterialGrid
+		# CLONE original layout
 		var orig_anchors = [material_grid.anchor_left, material_grid.anchor_top, material_grid.anchor_right, material_grid.anchor_bottom]
 		var orig_offsets = [material_grid.offset_left, material_grid.offset_top, material_grid.offset_right, material_grid.offset_bottom]
 		
@@ -329,7 +335,7 @@ func _setup_main_ui_containers():
 		material_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 		material_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		
-		# APPLY CLONED LAYOUT TO SCROLL
+		# APPLY CLONED LAYOUT
 		material_scroll.anchor_left = orig_anchors[0]
 		material_scroll.anchor_top = orig_anchors[1]
 		material_scroll.anchor_right = orig_anchors[2]
@@ -345,25 +351,27 @@ func _setup_main_ui_containers():
 		
 		material_grid.mouse_entered.connect(func(): is_mouse_over_ui = true)
 		material_grid.mouse_exited.connect(func(): is_mouse_over_ui = false)
-		
-		# FORCE GRID TO FILL SCROLL WIDTH
 		material_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	else:
-		material_scroll = material_grid.get_parent()
-		# Keep height dynamic with scale but respect horizontal span
-		material_scroll.custom_minimum_size = Vector2(0, 180 * s)
+		material_scroll = parent_scroll
 
-	# 2. FIND ActionButtons (Stay as they are in scene)
+	# ALWAYS Refresh Scroll Height for the current scale
+	material_scroll.custom_minimum_size = Vector2(0, 180 * s)
+
+	# 4. FIND ActionButtons
 	if not action_vbox:
-		action_vbox = main_controls.get_node("ActionButtons")
-		action_vbox.mouse_entered.connect(func(): is_mouse_over_ui = true)
-		action_vbox.mouse_exited.connect(func(): is_mouse_over_ui = false)
+		action_vbox = main_controls.find_child("ActionButtons", true, false)
 	
-	# CLEAN ONLY CHILDREN FOR REFRESH
-	for child in material_grid.get_children(): child.queue_free()
-	for child in action_vbox.get_children(): child.queue_free()
+	# CLEAN ONLY CHILDREN FOR REFRESH (Using immediate free to avoid async naming bugs)
+	if material_grid:
+		for child in material_grid.get_children(): 
+			if is_instance_valid(child): child.free()
+	if action_vbox:
+		for child in action_vbox.get_children(): 
+			if is_instance_valid(child): child.free()
 	
 	_setup_materials_within_grid()
+	_update_highlights() # Restore selection marks
 
 
 func _setup_tools_ui():
@@ -382,7 +390,8 @@ func _setup_tools_ui():
 	
 	# SETUP INTERNAL BOX IF NOT PRESENT
 	var v_box: VBoxContainer
-	for child in tools_panel.get_children(): child.queue_free() # CLEAR OLD PANEL
+	for child in tools_panel.get_children(): 
+		if is_instance_valid(child): child.free() # CLEAR OLD PANEL IMMEDIATELY
 	
 	v_box = VBoxContainer.new()
 	v_box.add_theme_constant_override("separation", 15 * s)
@@ -468,7 +477,8 @@ func _setup_disaster_ui():
 	disaster_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
 	var v_box: VBoxContainer
-	for child in disaster_panel.get_children(): child.queue_free() # CLEAR OLD PANEL
+	for child in disaster_panel.get_children(): 
+		if is_instance_valid(child): child.free() # CLEAR OLD PANEL IMMEDIATELY
 	
 	v_box = VBoxContainer.new()
 	v_box.add_theme_constant_override("separation", 15 * s)
