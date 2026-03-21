@@ -194,8 +194,9 @@ func _ready():
 	chunks_x = ceil(float(grid_width) / CHUNK_SIZE)
 	chunks_y = ceil(float(grid_height) / CHUNK_SIZE)
 	chunks_active.resize(chunks_x * chunks_y)
+	chunks_active.fill(10) # Start awake for 10 frames
 	next_chunks_active.resize(chunks_x * chunks_y)
-	next_chunks_active.fill(1) # Start awake
+	next_chunks_active.fill(10)
 	
 	tags_array.resize(grid_width * grid_height)
 	charge_array.resize(grid_width * grid_height)
@@ -1232,14 +1233,15 @@ func _activate_chunk(gx, gy):
 	var cx = int(gx / CHUNK_SIZE)
 	var cy = int(gy / CHUNK_SIZE)
 	if cx >= 0 and cx < chunks_x and cy >= 0 and cy < chunks_y:
-		next_chunks_active[cy * chunks_x + cx] = 1
-		# Wake neighbors to ensure particles can transition between chunks
+		var c_idx = cy * chunks_x + cx
+		next_chunks_active[c_idx] = 10 # Stay awake for 10 frames
+		# Wake neighbors
 		for oy in range(-1, 2):
 			for ox in range(-1, 2):
 				var ncx = cx + ox
 				var ncy = cy + oy
 				if ncx >= 0 and ncx < chunks_x and ncy >= 0 and ncy < chunks_y:
-					next_chunks_active[ncy * chunks_x + ncx] = 1
+					next_chunks_active[ncy * chunks_x + ncx] = 10
 
 func _get_cell(x, y):
 	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
@@ -1247,11 +1249,13 @@ func _get_cell(x, y):
 	return -1
 
 func _step_simulation():
-	# Pass simulation activity from previous frame
+	# Update active chunk countdowns
 	chunks_active = next_chunks_active.duplicate()
-	next_chunks_active.fill(0)
+	for i in range(next_chunks_active.size()):
+		if next_chunks_active[i] > 0:
+			next_chunks_active[i] -= 1
 	
-	# Pass 1: Electricity Pulse Processing (GLOBAL for reliability)
+	# Pass 1: Electricity Pulse Processing (GLOBAL)
 	_process_electricity()
 	
 	# Pass 2: RISING and SPECIAL particles (Top-to-Bottom by Active Chunks)
@@ -1281,7 +1285,6 @@ func _step_simulation():
 						continue
 
 					if (tags & SandboxMaterial.Tags.GRAV_UP):
-						_activate_chunk(x, y) # Keep chunk active for rising gas
 						if mat_id != 28: # Volcan
 							_move_particle(x, y, mat_id, tags, -1)
 						_process_interactions(x, y, idx, mat_id, tags)
@@ -1309,20 +1312,14 @@ func _step_simulation():
 					if (tags & SandboxMaterial.Tags.GRAV_UP): continue
 					
 					if (tags & SandboxMaterial.Tags.GRAV_STATIC):
-						# Still need interactions for static things like fire extension
+						_process_interactions(x, y, idx, mat_id, tags)
+					elif (tags & SandboxMaterial.Tags.GRAV_SLOW):
+						if randf() < 0.3:
+							_move_particle(x, y, mat_id, tags, 1)
 						_process_interactions(x, y, idx, mat_id, tags)
 					else:
-						# IMPORTANT: Falling/Moving materials must keep the chunk awake
-						# even if they don't move THIS frame (to allow future random rolls)
-						_activate_chunk(x, y)
-						
-						if (tags & SandboxMaterial.Tags.GRAV_SLOW):
-							if randf() < 0.3:
-								_move_particle(x, y, mat_id, tags, 1)
-							_process_interactions(x, y, idx, mat_id, tags)
-						else:
-							_move_particle(x, y, mat_id, tags, 1)
-							_process_interactions(x, y, idx, mat_id, tags)
+						_move_particle(x, y, mat_id, tags, 1)
+						_process_interactions(x, y, idx, mat_id, tags)
 
 func _process_electricity():
 	# Sequential processing (Original Logic) but with Chunk-Wakeup
