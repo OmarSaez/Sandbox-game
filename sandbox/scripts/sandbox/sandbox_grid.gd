@@ -1770,17 +1770,15 @@ func _process_npcs(delta):
 				dead_indices.append(i)
 				continue
 		
-		# 1. Erase current
-		_draw_npc_pixels(npc, 0)
-		
+		# 1. Store old position for redraw optimization
+		var old_pos = npc.pos
 		var np = npc.pos
-		if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
 		
 		# 2. AI: TARGET SELECTION & BEHAVIOR
+		if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
 		var target = _find_closest_enemy(npc, 180.0)
 		var is_attacking = false
 		
-		# Combat logic for Warriors and Archers
 		if target and npc.type != "miner":
 			var dist_x = target.pos.x - np.x
 			var dx_abs = abs(dist_x)
@@ -1809,27 +1807,16 @@ func _process_npcs(delta):
 						_shoot_arrow(npc, target)
 						npc.attack_cooldown = 1.1
 		
-		# 3. MINER AI (Always active)
+		# 3. MINER AI
 		if npc.type == "miner":
 			npc.dig_timer += 0.05
 			if npc.dig_timer >= 0.15:
 				npc.dig_timer = 0.0
-				
-				# Floor Check: Only work if standing on something
-				var is_on_ground = !_can_npc_fit(np.x, np.y + 1)
-				
-				if is_on_ground:
-					# State Management: Ramp vs Gallery
+				if !_can_npc_fit(np.x, np.y + 1): # Grounded
 					npc.state_steps -= 1
-					
-					# Detect if we have a roof (Underground)
-					var mat_above = _get_cell(np.x, np.y - 4)
-					var is_underground = (mat_above != 0)
-					
-					# Force ramp if we are on the surface
+					var is_underground = _get_cell(np.x, np.y - 4) != 0
 					if not is_underground and npc.mine_state == "gallery":
-						npc.mine_state = "ramp"
-						npc.state_steps = 25
+						npc.mine_state = "ramp"; npc.state_steps = 25
 						
 					if npc.state_steps <= 0:
 						if npc.mine_state == "ramp":
@@ -1840,38 +1827,43 @@ func _process_npcs(delta):
 							npc.state_steps = randi_range(15, 25)
 					
 					var dig_down = (npc.mine_state == "ramp")
-					
-					# Perform Digging & Tube Construction
 					_miner_dig(npc, dig_down)
 					
-					# Update movement coordinates (np) with boundary protection
 					var next_x = np.x + npc.dir
 					var next_y = np.y + (1 if dig_down else 0)
 					
 					if next_x < 5 or next_x > grid_width - 5 or next_y >= grid_height - 10:
-						npc.dir = -npc.dir # Turn around at edges
+						npc.dir = -npc.dir
+					elif _can_npc_fit(next_x, next_y):
+						np.x = next_x ; np.y = next_y
+					elif !dig_down and _can_npc_fit(next_x, np.y - 1):
+						np.x = next_x ; np.y -= 1 # Step up
 					else:
-						np.x = next_x
-						np.y = next_y
+						npc.dir = -npc.dir
 		
 		# 4. PHYSICS & MOVEMENT (Gravity)
 		if _can_npc_fit(np.x, np.y + 1):
 			np.y += 1
-		elif npc.type != "miner": # Warriors/Archers climbing logic
+		elif npc.type != "miner": # Warriors/Archers climbing
 			if not target and randf() < 0.02: npc.dir = 1 if randf() > 0.5 else -1
 			if npc.dir != 0:
 				var tx = np.x + npc.dir
-				var found_move = false
-				var scan_range = range(2, -9, -1) if not is_attacking else range(1, -2, -1)
-				for h in scan_range:
-					if _can_npc_fit(tx, np.y + h):
-						if not _can_npc_fit(tx, np.y + h + 1):
-							np.x = tx; np.y += h
-							found_move = true; break
-				if not found_move and not is_attacking: npc.dir = -npc.dir 
+				if _can_npc_fit(tx, np.y):
+					np.x = tx
+				elif _can_npc_fit(tx, np.y - 1): # Simple 1px climb
+					np.x = tx; np.y -= 1
+				elif !is_attacking:
+					npc.dir = -npc.dir 
 		
-		npc.pos = np
-		_draw_npc_pixels(npc)
+		# 5. RENDER OPTIMIZATION: Only redraw if moved or state changed
+		if np != old_pos or npc.hit_flash > 0:
+			# npc.pos is still the old position (old_pos)
+			_draw_npc_pixels(npc, 0) 
+			npc.pos = np
+			_draw_npc_pixels(npc)
+		else:
+			npc.pos = np # Keep in sync
+			
 		if npc.hp <= 0:
 			_draw_npc_pixels(npc, 0)
 			dead_indices.append(i)
