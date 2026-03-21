@@ -2123,7 +2123,8 @@ func _place_npc(x, y):
 		"dig_timer": 0.0,
 		"spawn_y": start_y,
 		"mine_state": "ramp",
-		"state_steps": 25
+		"state_steps": 25,
+		"fall_depth": 0 # Track for acrobat flips
 	}
 	active_npcs.append(new_npc)
 	
@@ -2229,9 +2230,14 @@ func _process_npcs(delta):
 		
 		# 2. AI: TARGET SELECTION & BEHAVIOR
 		if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
-		var target = _find_closest_enemy(npc, 180.0)
+		var target = _find_closest_enemy(npc, 250.0) # Larger radar (250px)
 		var is_attacking = false
 		
+		# DEFAULT PATROL (If no target, keep moving to explore)
+		if !target and npc.type != "miner":
+			if Engine.get_frames_drawn() % 120 == 0: npc.dir = 1 if randf() > 0.5 else -1
+			if npc.dir == 0: npc.dir = 1
+			
 		if target and npc.type != "miner":
 			var dist_x = target.pos.x - np.x
 			var dx_abs = abs(dist_x)
@@ -2274,7 +2280,12 @@ func _process_npcs(delta):
 		
 		# 3. MINER AI
 		if npc.type == "miner":
-			npc.dig_timer += 0.05
+			var dig_speed = 0.05
+			if npc.hit_flash > 0: 
+				dig_speed = 0.15 # PANIC DIGGING (3x Speed)
+				if npc.hit_flash == 5: npc.dir = -npc.dir # Escape manure!
+				
+			npc.dig_timer += dig_speed
 			if npc.dig_timer >= 0.15:
 				npc.dig_timer = 0.0
 				if !_can_npc_fit(np.x, np.y + 1): # Grounded
@@ -2314,19 +2325,46 @@ func _process_npcs(delta):
 		# 4. PHYSICS & MOVEMENT (Gravity)
 		if _can_npc_fit(np.x, np.y + 1):
 			np.y += 1 # Standard Gravity
+			npc.fall_depth += 1
 		elif npc.type != "miner": # Warriors/Archers climbing logic
+			# BOUNCE EXPLORATION: Flip direction if landed from height
+			if npc.fall_depth >= 3:
+				npc.dir = -npc.dir
+			npc.fall_depth = 0
+			
 			if npc.dir != 0:
-				var tx = np.x + npc.dir
+				var tx = np.x + (npc.dir * 2) # FORWARD LUNGE CHECK (2px)
 				var moved = false
-				# 8px VERTICAL RAYCAST (Smart Climbing)
+				
+				# TACTICAL JUMP: If target is above, always try to jump/catch ledges
+				var target_above = target and target.pos.y < np.y - 12
+				
+				# 10px VERTICAL RAYCAST (Smart Climbing)
 				# Scan upwards to see if it can step up or climb
-				for dy in range(0, -9, -1):
+				for dy in range(0, -11, -1):
 					if _can_npc_fit(tx, np.y + dy):
-						np.x = tx; np.y += dy
-						moved = true; break
+						# If target is above, only move if we are actually GOING UP
+						if !target_above or dy < 0:
+							np.x = tx; np.y += dy
+							moved = true; break
+				
+				# IF TARGET IS ABOVE and we are NOT moving yet, try harder to jump
+				if !moved and target_above:
+					# Try a straight upward leap scan
+					for dy in range(-1, -11, -1):
+						if _can_npc_fit(np.x, np.y + dy):
+							np.y += dy; moved = true; break
+				
+				# GAP JUMP & LUNGE: If simple climb fails, try jumping over gaps
+				if not moved:
+					var std_tx = np.x + npc.dir # Fallback to 1px step
+					if _can_npc_fit(std_tx, np.y): # Horizontal Gap Jump
+						np.x = std_tx; moved = true
+					elif _can_npc_fit(std_tx, np.y - 4): # Lunge onto ramp
+						np.x = std_tx; np.y -= 4; moved = true
 				
 				# WALL REBOUND: If blocked by something > 8px
-				if not moved:
+				if not moved and !target_above: # Only rebound if not actively trying to jump up
 					if !is_attacking: npc.dir = -npc.dir
 		
 		# 5. FINAL RENDER: Redraw at the new position
@@ -2395,9 +2433,9 @@ func _shoot_arrow(npc, target):
 	var dy = float(target.pos.y - npc.pos.y)
 	var dir = 1 if dx > 0 else -1
 	
-	# TRAJECTORY MATH (Parabolic compensation)
-	var vx = dir * 220.0 # Horizontal speed
-	var t = abs(dx) / 220.0 # Time to travel distance
+	# TRAJECTORY MATH (Slowed down to 130px for visibility & precision)
+	var vx = dir * 130.0 # Horizontal speed (Reduced from 220)
+	var t = abs(dx) / 130.0 # Time to travel distance
 	if t < 0.05: t = 0.05 # Prevent division by zero
 	
 	var arrow_gravity = 200.0
@@ -2550,6 +2588,26 @@ func _check_npc_environment_damage(npc) -> bool:
 					visual_sparks.append({"x":float(p.x),"y":float(p.y),"vx":randf_range(-10,10),"vy":randf_range(-60,-30),"color":Color.WEB_GRAY,"life":1.5})
 
 
+	# SUFFOCATION CHECK: Must touch Air (0), Smoke (15), or Cloud (17) AT THE BOUNDARY
+	var air_found = false
+	for oy in range(-1, 6): # 1px ring around 2x5
+		for ox in range(-1, 3):
+			# Skip the internal body area (0,0 to 1,4) because it's cleared to AIR during processing
+			if oy >= 0 and oy <= 4 and ox >= 0 and ox <= 1: continue
+			
+			var tx = npc.pos.x + ox
+			var ty = npc.pos.y + oy
+			if tx < 0 or tx >= grid_width or ty < 0 or ty >= dynamic_grid_height: continue
+			var nid = cells[ty * grid_width + tx]
+			if nid == 0 or nid == 15 or nid == 17:
+				air_found = true; break
+		if air_found: break
+	
+	if !air_found:
+		npc.hp -= 3.0 # Ahogo (Suffocation)
+		npc.hit_flash = 4 # Blinking red for struggle visibility
+		took_damage = true
+		
 	return took_damage
 
 func _can_npc_fit(gx, gy) -> bool:
