@@ -610,7 +610,7 @@ func _setup_tools_ui():
 	tools_panel.anchor_top = 1.0
 	tools_panel.anchor_bottom = 1.0
 	
-	var panel_width = 450 * s
+	var panel_width = 550 * s
 	var panel_height = 220 * s
 	var bottom_gap = (min(115 * s, 140)) + (5 * s) # Dynamic GAP above HUD floor
 	
@@ -727,7 +727,7 @@ func _setup_disaster_ui():
 	disaster_panel.anchor_top = 1.0
 	disaster_panel.anchor_bottom = 1.0
 	
-	var d_width = 450 * s
+	var d_width = 480 * s
 	var d_height = 250 * s
 	var d_bottom_gap = (min(115 * s, 140)) + (5 * s)
 	
@@ -1892,7 +1892,7 @@ func _setup_npc_panel_node():
 	npc_panel.anchor_top = 1.0
 	npc_panel.anchor_bottom = 1.0
 	
-	var p_width = 450 * s
+	var p_width = 480 * s
 	var p_height = 200 * s
 	var bottom_gap = (min(115 * s, 140)) + (5 * s)
 	
