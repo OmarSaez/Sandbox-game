@@ -2142,7 +2142,7 @@ func _draw_npc_pixels(npc, override_mat = -1):
 			for ox in range(-1, 3):
 				var tx = sx + ox
 				var ty = sy + oy
-				if tx < 0 or tx >= grid_width or ty < 0 or ty >= grid_height: continue
+				if tx < 0 or tx >= grid_width or ty < 0 or ty >= dynamic_grid_height: continue
 				var tid = cells[ty * grid_width + tx]
 				if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC):
 					_set_cell(tx, ty, 0)
@@ -2287,7 +2287,7 @@ func _process_npcs(delta):
 					
 					if next_x < 5 or next_x > grid_width - 5:
 						npc.dir = -npc.dir
-					elif next_y >= grid_height - 10:
+					elif next_y >= dynamic_grid_height - 10:
 						if npc.hp > 0: # Only trigger death once to allow animation to finish
 							npc.hp = 0
 							npc.hit_flash = 10 # 0.5s of red before dying
@@ -2344,7 +2344,7 @@ func _miner_dig(npc, dig_down=false):
 				_set_cell(wx, ty_start, 16)
 		
 		# Floor support
-		if ty_end < grid_height:
+		if ty_end < dynamic_grid_height:
 			var tid = _get_cell(wx, ty_end)
 			if tid == 0 or tid == 1 or tid == 6 or tid == 10:
 				_set_cell(wx, ty_end, 16)
@@ -2354,7 +2354,7 @@ func _miner_dig(npc, dig_down=false):
 		for dy in range(ty_start + 1, ty_end):
 			var cx = tx + dx
 			var cy = dy
-			if cx < 0 or cx >= grid_width or cy < 0 or cy >= grid_height: continue
+			if cx < 0 or cx >= grid_width or cy < 0 or cy >= dynamic_grid_height: continue
 			var tid = _get_cell(cx, cy)
 			if tid == 9 or tid == 12: continue
 			_set_cell(cx, cy, 0)
@@ -2399,7 +2399,7 @@ func _process_projectiles(delta):
 		var gy = int(p.pos.y)
 		
 		# 1. World Bounds
-		if gx < 0 or gx >= grid_width or gy < 0 or gy >= grid_height or p.life <= 0:
+		if gx < 0 or gx >= grid_width or gy < 0 or gy >= dynamic_grid_height or p.life <= 0:
 			to_remove.append(i); continue
 			
 		# 2. NPC Collision
@@ -2493,7 +2493,7 @@ func _check_npc_environment_damage(npc) -> bool:
 	]
 	
 	for p in check_points:
-		if p.x < 0 or p.x >= grid_width or p.y < 0 or p.y >= grid_height: continue
+		if p.x < 0 or p.x >= grid_width or p.y < 0 or p.y >= dynamic_grid_height: continue
 		var tid = cells[p.y * grid_width + p.x] # Use raw cells for speed
 		var t_tags = material_tags_raw[tid]
 		
@@ -2523,7 +2523,7 @@ func _check_npc_environment_damage(npc) -> bool:
 
 func _can_npc_fit(gx, gy) -> bool:
 	# Bounding check
-	if gx < 0 or gx + 1 >= grid_width or gy < 0 or gy + 4 >= grid_height:
+	if gx < 0 or gx + 1 >= grid_width or gy < 0 or gy + 4 >= dynamic_grid_height:
 		return false
 	
 	# 2x5 area check
