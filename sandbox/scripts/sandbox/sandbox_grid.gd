@@ -1884,11 +1884,41 @@ func _place_npc(x, y):
 func _draw_npc_pixels(npc, override_mat = -1):
 	var sx = npc.pos.x
 	var sy = npc.pos.y
+	
+	# --- SMART CLEARING ---
+	if override_mat == 0:
+		# Scan a wider area (4x7) to catch any Shake/Topple leftovers
+		# But ONLY clear pixels that are actually part of an NPC
+		for oy in range(-1, 7):
+			for ox in range(-1, 3):
+				var tx = sx + ox
+				var ty = sy + oy
+				if tx < 0 or tx >= grid_width or ty < 0 or ty >= grid_height: continue
+				var tid = cells[ty * grid_width + tx]
+				if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC):
+					_set_cell(tx, ty, 0)
+		return # Finished clearing
+
+	
+	var is_dead = npc.hp <= 0
+	var is_flashing = npc.hit_flash > 0
+	
+	# --- POLISH: SHAKE & TOPPLE EFFECTS ---
+	if is_flashing and not is_dead:
+		# NPCs vibrate when taking damage
+		sx += randi_range(-1, 1)
+		sy += randi_range(-1, 1)
+	elif is_dead:
+		# NPCs "fall over" slightly and sink when dead
+		sy += 2 
+		sx += 1 if (npc.dir > 0) else -1
+		# Flicker effect (Red / Clear)
+		if (npc.hit_flash % 2 == 0): override_mat = 0 # Don't draw on some frames
+	
 	var team_mat = 34 + npc.team
 	
 	var is_archer = npc.type == "archer"
 	var is_miner = npc.type == "miner"
-	var is_flashing = npc.hit_flash > 0
 	
 	var m_head = (41 if is_archer else (50 if is_miner else 31)) if override_mat == -1 else override_mat
 	var m_skin = 33 if override_mat == -1 else override_mat
@@ -1897,13 +1927,14 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	var m_team = team_mat if override_mat == -1 else override_mat
 	var m_helmet = 51 if override_mat == -1 else override_mat
 	
-	# Override for hit flash (White color)
+	# Override for hit flash (More vibrant colors)
 	if is_flashing and override_mat == -1:
 		var f_mat = 7 # Default white flash
-		if npc.hp <= 0: f_mat = 34 # Red for death
+		if is_dead: f_mat = 34 # Red flicker for death
 		elif npc.hit_type == "acid": f_mat = 37 # Green flash
-		elif npc.hit_type == "fire": f_mat = 36 # Yellow/Orange flash
-		elif npc.hit_type == "explosive": f_mat = 7 # White flash (Explosion)
+		elif npc.hit_type == "fire": f_mat = 11 # Orange flash
+		elif npc.hit_type == "explosive": f_mat = 7 # White flash
+		else: f_mat = 34 # Normal hits (Red)
 		m_head = f_mat; m_skin = f_mat; m_body = f_mat; m_legs = f_mat; m_team = f_mat; m_helmet = f_mat
 	
 	# HEAD
@@ -1931,7 +1962,9 @@ func _process_npcs(delta):
 	
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
-		if npc.hit_flash > 0: npc.hit_flash -= 1
+		if npc.hit_flash > 0: 
+			npc.hit_flash -= 1
+			if npc.hit_flash == 0: npc.hit_type = "none" # Clear damage state when flash ends
 		
 		# 0. PRE-PROCESS: Clear pixels so they don't block their own environmental checks
 		_draw_npc_pixels(npc, 0)
@@ -2178,10 +2211,10 @@ func _attack_npc(attacker, victim):
 	if _can_npc_fit(attacker.pos.x, attacker.pos.y - 1):
 		attacker.pos.y -= 1
 		
-	# KNOCKBACK (35% chance to push victim 6-12px back)
+	# KNOCKBACK (35% chance to push victim 3-5px back - Reduced for melee)
 	if randf() < 0.35:
 		var push_dir = 1 if attacker.pos.x < victim.pos.x else -1
-		var dist = randi_range(6, 12)
+		var dist = randi_range(3, 5)
 		# Find furthest possible push spot (Check 6, 5, 4...)
 		for d in range(dist, 0, -1):
 			var new_x = victim.pos.x + push_dir * d
@@ -2212,20 +2245,23 @@ func _check_npc_environment_damage(npc) -> bool:
 		
 		# Detailed Damage Detection with Priority (Acid > Fire)
 		if (t_tags & SandboxMaterial.Tags.ACID):
-			npc.hp -= 3.5 # Acid is very lethal
+			npc.hp -= 3.5 
 			npc.hit_flash = 5
 			npc.hit_type = "acid"
 			took_damage = true
-			if randf() < 0.25: # Green acidic bubbles
-				visual_sparks.append({"x":float(p.x),"y":float(p.y),"vx":randf_range(-15,15),"vy":randf_range(-25,-10),"color":Color("#39FF14"),"life":0.5})
+			if randf() < 0.4: # More Acid Bubbles
+				visual_sparks.append({"x":float(p.x)+randf_range(-2,2),"y":float(p.y),"vx":randf_range(-10,10),"vy":randf_range(-40,-20),"color":Color("#39FF14"),"life":0.6})
 		elif (t_tags & SandboxMaterial.Tags.INCENDIARY):
-			npc.hp -= 1.2 # Fire burns slower
+			npc.hp -= 1.2
 			took_damage = true
-			if npc.hit_type != "acid": # Don't let fire override acid visuals
+			if npc.hit_type != "acid": 
 				npc.hit_flash = 5
 				npc.hit_type = "fire"
-			if randf() < 0.2: # Orange fire sparks
-				visual_sparks.append({"x":float(p.x),"y":float(p.y),"vx":randf_range(-20,20),"vy":randf_range(-30,-15),"color":Color("#FF8200"),"life":0.4})
+			if randf() < 0.3: # Improved Fire Particles (Sparks + Smoke)
+				visual_sparks.append({"x":float(p.x),"y":float(p.y),"vx":randf_range(-15,15),"vy":randf_range(-35,-15),"color":Color("#FF8200"),"life":0.5})
+				if randf() < 0.5: # Occasional smoke plume
+					visual_sparks.append({"x":float(p.x),"y":float(p.y),"vx":randf_range(-5,5),"vy":randf_range(-50,-20),"color":Color.WEB_GRAY,"life":0.8})
+
 	return took_damage
 
 func _can_npc_fit(gx, gy) -> bool:
