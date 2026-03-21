@@ -431,7 +431,7 @@ func _setup_materials_within_grid():
 	if scroll_vbox and scroll_vbox.name == "ScrollVBox":
 		var spacer = Control.new()
 		spacer.name = "FinalSpacer"
-		spacer.custom_minimum_size = Vector2(0, 100 * s) # GENEROUS PADDING
+		spacer.custom_minimum_size = Vector2(0, 15 * s) # TIGHT PADDING (Enough to see labels)
 		scroll_vbox.add_child(spacer)
 
 
