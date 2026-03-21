@@ -2056,8 +2056,10 @@ func _process_npcs(delta):
 					if next_x < 5 or next_x > grid_width - 5:
 						npc.dir = -npc.dir
 					elif next_y >= grid_height - 10:
-						npc.hp = 0
-						npc.hit_flash = 10 # 0.5s of red before dying
+						if npc.hp > 0: # Only trigger death once to allow animation to finish
+							npc.hp = 0
+							npc.hit_flash = 10 # 0.5s of red before dying
+
 					elif _can_npc_fit(next_x, next_y):
 						np.x = next_x ; np.y = next_y
 					elif !dig_down and _can_npc_fit(next_x, np.y - 1):
@@ -2250,8 +2252,12 @@ func _check_npc_environment_damage(npc) -> bool:
 		npc.pos,                  # Head
 		npc.pos + Vector2i(1, 2), # Chest
 		npc.pos + Vector2i(0, 4), # Feet
-		npc.pos + Vector2i(0, 5), # Floor (for Lava/Acid walking)
-		npc.pos + Vector2i(1, 5)  # Floor right
+		npc.pos + Vector2i(0, 5), # Floor (below feet)
+		npc.pos + Vector2i(1, 5), # Floor right
+		npc.pos + Vector2i(-1, 2),# Left Side
+		npc.pos + Vector2i(2, 2), # Right Side
+		npc.pos + Vector2i(-1, 4),# Left Foot Side
+		npc.pos + Vector2i(2, 4)  # Right Foot Side
 	]
 	
 	for p in check_points:
