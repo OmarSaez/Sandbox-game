@@ -12,6 +12,16 @@ var tags_array: PackedInt32Array
 var color_buffer: PackedByteArray 
 var charge_array: PackedByteArray # New: Track electric pulses (0 = none, 5 = full, counts down)
 
+# Simulation Chunking
+const CHUNK_SIZE = 16
+var chunks_active: PackedByteArray 
+var next_chunks_active: PackedByteArray
+var chunks_x: int
+var chunks_y: int
+
+# Pre-calculated visual data
+var material_colors_bytes = PackedByteArray() # RGBA bytes for each material
+
 # Material data mapping
 var material_colors_raw = PackedColorArray() 
 var material_tags_raw = PackedInt32Array() 
@@ -177,6 +187,15 @@ func _ready():
 	img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8)
 	color_buffer.resize(grid_width * grid_height * 4)
 	surface_cache.resize(grid_width)
+	
+	material_colors_bytes.resize(256 * 4)
+	material_colors_bytes.fill(0)
+	
+	chunks_x = ceil(float(grid_width) / CHUNK_SIZE)
+	chunks_y = ceil(float(grid_height) / CHUNK_SIZE)
+	chunks_active.resize(chunks_x * chunks_y)
+	next_chunks_active.resize(chunks_x * chunks_y)
+	next_chunks_active.fill(1) # Start awake
 	
 	tags_array.resize(grid_width * grid_height)
 	charge_array.resize(grid_width * grid_height)
@@ -915,6 +934,13 @@ func _is_any_ui_blocking() -> bool:
 func _register_material(id, color, tags):
 	material_colors_raw[id] = color
 	material_tags_raw[id] = tags
+	
+	# Pre-calculate bytes for the fast loop
+	var base = id * 4
+	material_colors_bytes[base] = int(color.r * 255)
+	material_colors_bytes[base + 1] = int(color.g * 255)
+	material_colors_bytes[base + 2] = int(color.b * 255)
+	material_colors_bytes[base + 3] = int(color.a * 255)
 
 func _process(delta):
 	# Handle input with robust UI blocking
@@ -1192,11 +1218,28 @@ func _set_cell(x, y, mat_id):
 		var idx = y * grid_width + x
 		cells[idx] = mat_id
 		tags_array[idx] = material_tags_raw[mat_id]
+		
+		# Wake up simulation
+		_activate_chunk(x, y)
+		
 		# Reset charge - but IF IT IS ELECTRICITY, give it initial charge to spark!
 		if (material_tags_raw[mat_id] & SandboxMaterial.Tags.ELECTRICITY):
 			charge_array[idx] = 101
 		else:
 			charge_array[idx] = 0
+			
+func _activate_chunk(gx, gy):
+	var cx = int(gx / CHUNK_SIZE)
+	var cy = int(gy / CHUNK_SIZE)
+	if cx >= 0 and cx < chunks_x and cy >= 0 and cy < chunks_y:
+		next_chunks_active[cy * chunks_x + cx] = 1
+		# Wake neighbors to ensure particles can transition between chunks
+		for oy in range(-1, 2):
+			for ox in range(-1, 2):
+				var ncx = cx + ox
+				var ncy = cy + oy
+				if ncx >= 0 and ncx < chunks_x and ncy >= 0 and ncy < chunks_y:
+					next_chunks_active[ncy * chunks_x + ncx] = 1
 
 func _get_cell(x, y):
 	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
@@ -1204,81 +1247,114 @@ func _get_cell(x, y):
 	return -1
 
 func _step_simulation():
-	# Pass 1: Electricity Pulse Processing
+	# Pass simulation activity from previous frame
+	chunks_active = next_chunks_active.duplicate()
+	next_chunks_active.fill(0)
+	
+	# Pass 1: Electricity Pulse Processing (GLOBAL for reliability)
 	_process_electricity()
 	
-	# Pass 2: RISING and SPECIAL particles (Top-to-Bottom)
-	for y in range(grid_height):
-		var sweep = range(grid_width)
-		if Engine.get_frames_drawn() % 2 == 0: sweep = range(grid_width - 1, -1, -1)
-		for x in sweep:
-			var idx = y * grid_width + x
-			var mat_id = cells[idx]
-			if mat_id == 0: continue
+	# Pass 2: RISING and SPECIAL particles (Top-to-Bottom by Active Chunks)
+	for cy in range(chunks_y):
+		for cx in range(chunks_x):
+			var c_idx = cy * chunks_x + cx
+			if chunks_active[c_idx] == 0: continue
 			
-			var tags = tags_array[idx]
+			var x_start = cx * CHUNK_SIZE
+			var y_start = cy * CHUNK_SIZE
+			var x_end = min(x_start + CHUNK_SIZE, grid_width)
+			var y_end = min(y_start + CHUNK_SIZE, grid_height)
 			
-			if mat_id == 7: # Primed TNT
-				if randf() < 0.05: _explode(x, y, 10)
-				continue
+			for y in range(y_start, y_end):
+				var sweep = range(x_start, x_end)
+				if Engine.get_frames_drawn() % 2 == 0: sweep = range(x_end - 1, x_start - 1, -1)
+				for x in sweep:
+					var idx = y * grid_width + x
+					var mat_id = cells[idx]
+					if mat_id == 0: continue
+					
+					var tags = tags_array[idx]
+					
+					if mat_id == 7: # Primed TNT
+						if randf() < 0.05: _explode(x, y, 10)
+						_activate_chunk(x, y) # Keep alive
+						continue
 
-			if (tags & SandboxMaterial.Tags.GRAV_UP):
-				if mat_id != 28: # Volcan 28 handles its own triple-speed movement
-					_move_particle(x, y, mat_id, tags, -1)
-				_process_interactions(x, y, idx, mat_id, tags)
+					if (tags & SandboxMaterial.Tags.GRAV_UP):
+						_activate_chunk(x, y) # Keep chunk active for rising gas
+						if mat_id != 28: # Volcan
+							_move_particle(x, y, mat_id, tags, -1)
+						_process_interactions(x, y, idx, mat_id, tags)
 
-	# Pass 3: FALLING/STATIC particles (Bottom-to-Top)
-	for y in range(grid_height - 1, -1, -1):
-		var sweep = range(grid_width)
-		if Engine.get_frames_drawn() % 2 == 0: sweep = range(grid_width - 1, -1, -1)
-		for x in sweep:
-			var idx = y * grid_width + x
-			var mat_id = cells[idx]
-			if mat_id <= 0 or mat_id == 7: continue 
+	# Pass 3: FALLING/STATIC particles (Bottom-to-Top by Active Chunks)
+	for cy in range(chunks_y - 1, -1, -1):
+		for cx in range(chunks_x):
+			var c_idx = cy * chunks_x + cx
+			if chunks_active[c_idx] == 0: continue
 			
-			var tags = tags_array[idx]
-			if (tags & SandboxMaterial.Tags.GRAV_UP): continue
+			var x_start = cx * CHUNK_SIZE
+			var y_start = cy * CHUNK_SIZE
+			var x_end = min(x_start + CHUNK_SIZE, grid_width)
+			var y_end = min(y_start + CHUNK_SIZE, grid_height)
 			
-			if (tags & SandboxMaterial.Tags.GRAV_STATIC):
-				pass 
-			elif (tags & SandboxMaterial.Tags.GRAV_SLOW):
-				# Random probability (Stochastic) makes it slow BUT smooth/organic
-				if randf() < 0.3:
-					_move_particle(x, y, mat_id, tags, 1)
-			else:
-				_move_particle(x, y, mat_id, tags, 1)
-			
-			_process_interactions(x, y, idx, mat_id, tags)
+			for y in range(y_end - 1, y_start - 1, -1):
+				var sweep = range(x_start, x_end)
+				if Engine.get_frames_drawn() % 2 == 0: sweep = range(x_end - 1, x_start - 1, -1)
+				for x in sweep:
+					var idx = y * grid_width + x
+					var mat_id = cells[idx]
+					if mat_id <= 0 or mat_id == 7: continue 
+					
+					var tags = tags_array[idx]
+					if (tags & SandboxMaterial.Tags.GRAV_UP): continue
+					
+					if (tags & SandboxMaterial.Tags.GRAV_STATIC):
+						# Still need interactions for static things like fire extension
+						_process_interactions(x, y, idx, mat_id, tags)
+					else:
+						# IMPORTANT: Falling/Moving materials must keep the chunk awake
+						# even if they don't move THIS frame (to allow future random rolls)
+						_activate_chunk(x, y)
+						
+						if (tags & SandboxMaterial.Tags.GRAV_SLOW):
+							if randf() < 0.3:
+								_move_particle(x, y, mat_id, tags, 1)
+							_process_interactions(x, y, idx, mat_id, tags)
+						else:
+							_move_particle(x, y, mat_id, tags, 1)
+							_process_interactions(x, y, idx, mat_id, tags)
 
 func _process_electricity():
-	# Sequential processing to prevent infinite loops
+	# Sequential processing (Original Logic) but with Chunk-Wakeup
 	for i in range(cells.size()):
 		var charge = charge_array[i]
 		if charge == 0: continue
 		
-		# Only spread when charge is at its peak (100) AND emitter is a conductor
+		# 1. Spread Logic
 		if charge == 100:
 			var my_tags = material_tags_raw[cells[i]]
 			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
-				var x = i % grid_width
-				var y = i / grid_width
+				var x = i % grid_width; var y = i / grid_width
 				for ny in range(y - 1, y + 2):
 					for nx in range(x - 1, x + 2):
 						if nx == x and ny == y: continue
 						if nx >= 0 and nx < grid_width and ny >= 0 and ny < grid_height:
 							var n_idx = ny * grid_width + nx
 							var n_tags = tags_array[n_idx]
-							# Spread to both CONDUCTORS and ACTIVATED objects (like TNT/Fireworks)
 							if (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)) and charge_array[n_idx] == 0:
-								charge_array[n_idx] = 101 # Set to 'newly charged'
+								charge_array[n_idx] = 101
+								_activate_chunk(nx, ny) # Wake up neighbor for signal
 		
-		# Countdown charge (ONLY for conductors to avoid draining other logic like Vines)
+		# 2. Decay Logic (Keep chunk awake while charging/decharging)
 		if (material_tags_raw[cells[i]] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
 			charge_array[i] -= 1
-			# 101 drops to 100 to spread in the NEXT frame
 			if charge_array[i] > 100: charge_array[i] = 100
-		elif cells[i] == 19 or cells[i] == 7: # Fuse/Primed logic needs cooldown too
+			if charge_array[i] > 0:
+				_activate_chunk(i % grid_width, i / grid_width) # Stay awake until empty
+		elif cells[i] == 19 or cells[i] == 7: # Fuse/TNT logic
 			charge_array[i] -= 1
+			if charge_array[i] > 0:
+				_activate_chunk(i % grid_width, i / grid_width)
 
 
 
@@ -1319,6 +1395,10 @@ func _swap_cells(x1, y1, x2, y2):
 	cells[idx2] = m1
 	tags_array[idx2] = material_tags_raw[m1]
 	charge_array[idx2] = c1
+	
+	# Wake up chunks
+	_activate_chunk(x1, y1)
+	_activate_chunk(x2, y2)
 
 func _process_interactions(x, y, idx, mat_id, tags):
 	# FIRE AND HEAT REACTIONS
@@ -2247,46 +2327,60 @@ func _push_particle(x, y, dx, dy):
 		_swap_cells(x, y, nx, ny)
 
 func _update_texture():
-	# HIGH PERFORMANCE RENDERING: Using color buffer and set_data
-	for i in range(cells.size()):
-		var mat_id = cells[i]
-		var c = material_colors_raw[mat_id]
-		var charge = charge_array[i]
-		
-		# VISUAL TORNADO FUNNEL (Background ghost effect)
-		if tornado_intensity > 0 and mat_id == 0:
-			var ix = i % grid_width
-			var iy = i / grid_width
-			# Only draw funnel ABOVE ground
-			if iy <= tornado_ground_y:
-				var rel_y = 1.0 - (float(iy) / tornado_ground_y) if tornado_ground_y > 0 else 1.0
-				var cur_rad = (5 + tornado_intensity) + (40.0 * tornado_intensity * rel_y)
-				if abs(ix - tornado_x) < cur_rad:
-					c = Color(0.4, 0.4, 0.4, 0.4) 
-		
-		# MIX COLOR IF CHARGED (Glowing effect - ONLY for conductors/electricity material)
-		# EXCLUDE Acid (13) from yellow glow so it stays Green
-		if charge > 80 and mat_id != 13 and (material_tags_raw[mat_id] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY)):
-			var pulse_color = Color.YELLOW
-			# Sharp, short pulse (Brightest between 100 and 80)
-			c = c.lerp(pulse_color, clamp(float(charge - 80) / 20.0, 0.0, 1.0))
-		
-		var base = i * 4
-		color_buffer[base] = int(c.r * 255)
-		color_buffer[base + 1] = int(c.g * 255)
-		color_buffer[base + 2] = int(c.b * 255)
-		color_buffer[base + 3] = int(c.a * 255)
+	# HIGH PERFORMANCE CPU RENDERING: Optimized pixel packing with Chunk-Awareness
+	for cy in range(chunks_y):
+		for cx in range(chunks_x):
+			var c_idx = cy * chunks_x + cx
+			# Skip static chunks for drawing too (their data is already in color_buffer from previous frame)
+			if chunks_active[c_idx] == 0: continue
+			
+			var x_start = cx * CHUNK_SIZE
+			var y_start = cy * CHUNK_SIZE
+			var x_end = min(x_start + CHUNK_SIZE, grid_width)
+			var y_end = min(y_start + CHUNK_SIZE, grid_height)
+			
+			for y in range(y_start, y_end):
+				var row_offset = y * grid_width
+				for x in range(x_start, x_end):
+					var i = row_offset + x
+					var mat_id = cells[i]
+					var charge = charge_array[i]
+					var base = i * 4
+					
+					# Fast lookup for Air
+					if mat_id == 0 and tornado_intensity == 0:
+						color_buffer[base] = 0; color_buffer[base+1] = 0; color_buffer[base+2] = 0; color_buffer[base+3] = 0
+						continue
+						
+					var pal_base = mat_id * 4
+					var r = material_colors_bytes[pal_base]
+					var g = material_colors_bytes[pal_base + 1]
+					var b = material_colors_bytes[pal_base + 2]
+					var a = material_colors_bytes[pal_base + 3]
+					
+					# Special effects drawn only when relevant
+					if tornado_intensity > 0 and mat_id == 0:
+						if y <= tornado_ground_y:
+							var rel_y = 1.0 - (float(y) / tornado_ground_y) if tornado_ground_y > 0 else 1.0
+							var cur_rad = (5 + tornado_intensity * 5.0) + (40.0 * tornado_intensity * rel_y)
+							if abs(x - tornado_x) < cur_rad:
+								r = 102; g = 102; b = 102; a = 102 # Gray 0.4
+					
+					if charge > 80 and mat_id != 13 and (material_tags_raw[mat_id] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY)):
+						var glow_f = clamp(float(charge - 80) / 20.0, 0.0, 1.0)
+						r = int(lerpf(float(r), 255.0, glow_f))
+						g = int(lerpf(float(g), 243.0, glow_f))
+						b = int(lerpf(float(b), 0.0, glow_f))
+					
+					color_buffer[base] = r; color_buffer[base + 1] = g; color_buffer[base + 2] = b; color_buffer[base + 3] = a
 	
 	img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, color_buffer)
 	
-	# DRAW VISUAL SPARKS (Ghost Fireworks - Over the grid)
+	# DRAW VISUAL SPARKS (Ghost Fireworks - Over the grid) using Image directly for precision
 	for spark in visual_sparks:
-		var sx = int(spark.x)
-		var sy = int(spark.y)
+		var sx = int(spark.x); var sy = int(spark.y)
 		if sx >= 0 and sx < grid_width and sy >= 0 and sy < grid_height:
-			# Dim color based on life
-			var s_color = spark.color
-			s_color.a = spark.life
+			var s_color = spark.color; s_color.a = spark.life
 			img.set_pixel(sx, sy, s_color)
 	
 	texture_rect.texture.update(img)
