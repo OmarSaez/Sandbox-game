@@ -1898,7 +1898,9 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	
 	# Override for hit flash (White color)
 	if is_flashing and override_mat == -1:
-		m_head = 7; m_skin = 7; m_body = 7; m_legs = 7; m_team = 7; m_helmet = 7
+		var f_mat = 7 # Default white flash
+		if npc.hp <= 0: f_mat = 34 # Red for death
+		m_head = f_mat; m_skin = f_mat; m_body = f_mat; m_legs = f_mat; m_team = f_mat; m_helmet = f_mat
 	
 	# HEAD
 	_set_cell(sx, sy, m_head if not is_miner else m_helmet)
@@ -1996,8 +1998,11 @@ func _process_npcs(delta):
 					var next_x = np.x + npc.dir
 					var next_y = np.y + (1 if dig_down else 0)
 					
-					if next_x < 5 or next_x > grid_width - 5 or next_y >= grid_height - 10:
+					if next_x < 5 or next_x > grid_width - 5:
 						npc.dir = -npc.dir
+					elif next_y >= grid_height - 10:
+						npc.hp = 0
+						npc.hit_flash = 10 # 0.5s of red before dying
 					elif _can_npc_fit(next_x, next_y):
 						np.x = next_x ; np.y = next_y
 					elif !dig_down and _can_npc_fit(next_x, np.y - 1):
@@ -2028,7 +2033,7 @@ func _process_npcs(delta):
 		else:
 			npc.pos = np # Keep in sync
 			
-		if npc.hp <= 0:
+		if npc.hp <= 0 and npc.hit_flash <= 0:
 			_draw_npc_pixels(npc, 0)
 			dead_indices.append(i)
 
