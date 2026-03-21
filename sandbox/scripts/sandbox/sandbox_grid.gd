@@ -248,7 +248,7 @@ func _ready():
 	_register_material(12, Color("1E023B"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
 	
 	# Acid (Neon Green + Melts things + Conductive + SELF-IMMUNE)
-	_register_material(13, Color("#39FF14"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ANTI_ACID)
+	_register_material(13, Color("#39FF14"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.ANTI_ACID)
 	
 	# Coal (Brazas - Dark Brown/Black)
 	_register_material(14, Color("#1A1110"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_SMOKE | SandboxMaterial.Tags.INCENDIARY)
@@ -1870,6 +1870,7 @@ func _place_npc(x, y):
 		"hp": 100.0,
 		"attack_cooldown": 0.0,
 		"hit_flash": 0,
+		"hit_type": "none",
 		"dig_timer": 0.0,
 		"spawn_y": start_y,
 		"mine_state": "ramp",
@@ -1900,6 +1901,9 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	if is_flashing and override_mat == -1:
 		var f_mat = 7 # Default white flash
 		if npc.hp <= 0: f_mat = 34 # Red for death
+		elif npc.hit_type == "acid": f_mat = 37 # Green flash
+		elif npc.hit_type == "fire": f_mat = 36 # Yellow/Orange flash
+		elif npc.hit_type == "explosive": f_mat = 7 # White flash (Explosion)
 		m_head = f_mat; m_skin = f_mat; m_body = f_mat; m_legs = f_mat; m_team = f_mat; m_helmet = f_mat
 	
 	# HEAD
@@ -1929,15 +1933,16 @@ func _process_npcs(delta):
 		var npc = active_npcs[i]
 		if npc.hit_flash > 0: npc.hit_flash -= 1
 		
-		# 0. Damage from Environment
+		# 0. PRE-PROCESS: Clear pixels so they don't block their own environmental checks
+		_draw_npc_pixels(npc, 0)
+		
+		# 1. Damage from Environment
 		if _check_npc_environment_damage(npc):
 			if npc.hp <= 0:
-				_draw_npc_pixels(npc, 0)
-				dead_indices.append(i)
-				continue
+				# Red death animation handled at bottom
+				pass
 		
-		# 1. Store old position for redraw optimization
-		var old_pos = npc.pos
+		# 2. Store old position and data for AI/Physics
 		var np = npc.pos
 		
 		# 2. AI: TARGET SELECTION & BEHAVIOR
@@ -2024,14 +2029,9 @@ func _process_npcs(delta):
 				elif !is_attacking:
 					npc.dir = -npc.dir 
 		
-		# 5. RENDER OPTIMIZATION: Only redraw if moved or state changed
-		if np != old_pos or npc.hit_flash > 0:
-			# npc.pos is still the old position (old_pos)
-			_draw_npc_pixels(npc, 0) 
-			npc.pos = np
-			_draw_npc_pixels(npc)
-		else:
-			npc.pos = np # Keep in sync
+		# 5. FINAL RENDER: Redraw at the new position
+		npc.pos = np
+		_draw_npc_pixels(npc)
 			
 		if npc.hp <= 0 and npc.hit_flash <= 0:
 			_draw_npc_pixels(npc, 0)
@@ -2128,7 +2128,8 @@ func _process_projectiles(delta):
 		
 		if hit_npc:
 			hit_npc.hp -= 40.0 # High damage (3 arrows = kill)
-			hit_npc.hit_flash = 4 # Flash white for 4 frames
+			hit_npc.hit_flash = 4 # Flash
+			hit_npc.hit_type = "normal"
 			# Visual sparks on impact
 			for j in range(5):
 				visual_sparks.append({"x":float(gx),"y":float(gy),"vx":randf_range(-40,40),"vy":randf_range(-40,0),"color":Color.WHITE,"life":0.3})
@@ -2158,6 +2159,8 @@ func _find_closest_enemy(me, radar_range):
 
 func _attack_npc(attacker, victim):
 	victim.hp -= 15.0 # Damage
+	victim.hit_flash = 5
+	victim.hit_type = "normal"
 	
 	# Visual Sparks (Attack effects)
 	var colors = [Color.WHITE, Color.YELLOW, Color.CRIMSON]
@@ -2192,27 +2195,37 @@ func _attack_npc(attacker, victim):
 
 func _check_npc_environment_damage(npc) -> bool:
 	var took_damage = false
-	# Check key damage points (Head, Body center, Feet)
+	# Check key damage points (Head, Chest, Feet, and Ground Below)
 	var check_points = [
-		npc.pos, # Head
+		npc.pos,                  # Head
 		npc.pos + Vector2i(1, 2), # Chest
-		npc.pos + Vector2i(0, 4)  # Feet
+		npc.pos + Vector2i(0, 4), # Feet
+		npc.pos + Vector2i(0, 5), # Floor (for Lava/Acid walking)
+		npc.pos + Vector2i(1, 5)  # Floor right
 	]
 	
 	for p in check_points:
-		var tid = _get_cell(p.x, p.y)
+		if p.x < 0 or p.x >= grid_width or p.y < 0 or p.y >= grid_height: continue
+		var tid = cells[p.y * grid_width + p.x] # Use raw cells for speed
 		var t_tags = material_tags_raw[tid]
 		
-		# Acid (13), Lava (11), Fire (3)
-		if (t_tags & (SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.INCENDIARY)):
-			npc.hp -= 2.0 # Continuous damage
+		
+		# Detailed Damage Detection with Priority (Acid > Fire)
+		if (t_tags & SandboxMaterial.Tags.ACID):
+			npc.hp -= 3.5 # Acid is very lethal
+			npc.hit_flash = 5
+			npc.hit_type = "acid"
 			took_damage = true
-			if randf() < 0.1: # Smoke sparks
-				visual_sparks.append({
-					"x": float(p.x), "y": float(p.y),
-					"vx": randf_range(-20, 20), "vy": randf_range(-30, -10),
-					"color": Color.WEB_GRAY, "life": 0.4
-				})
+			if randf() < 0.25: # Green acidic bubbles
+				visual_sparks.append({"x":float(p.x),"y":float(p.y),"vx":randf_range(-15,15),"vy":randf_range(-25,-10),"color":Color("#39FF14"),"life":0.5})
+		elif (t_tags & SandboxMaterial.Tags.INCENDIARY):
+			npc.hp -= 1.2 # Fire burns slower
+			took_damage = true
+			if npc.hit_type != "acid": # Don't let fire override acid visuals
+				npc.hit_flash = 5
+				npc.hit_type = "fire"
+			if randf() < 0.2: # Orange fire sparks
+				visual_sparks.append({"x":float(p.x),"y":float(p.y),"vx":randf_range(-20,20),"vy":randf_range(-30,-15),"color":Color("#FF8200"),"life":0.4})
 	return took_damage
 
 func _can_npc_fit(gx, gy) -> bool:
@@ -2371,6 +2384,34 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 
 func _explode(x, y, radius):
 	_set_cell(x, y, 0)
+	
+	# NPC BLAST PHYSICS
+	var center = Vector2i(x, y)
+	for npc in active_npcs:
+		var dist = Vector2(npc.pos).distance_to(Vector2(center))
+		if dist < radius:
+			var ratio = 1.0 - (dist / radius)
+			npc.hp -= ratio * 120.0 # Lethal at center
+			npc.hit_flash = 12
+			npc.hit_type = "explosive"
+			
+			# Knockback (Fly away from center)
+			var blast_dir = (Vector2(npc.pos) - Vector2(center)).normalized()
+			if blast_dir.length() < 0.1: blast_dir = Vector2.UP
+			
+			var push_dist = int(ratio * 25.0)
+			for d in range(push_dist, 0, -1):
+				var nx = npc.pos.x + int(blast_dir.x * d)
+				var ny = npc.pos.y + int(blast_dir.y * d) - 8 # Lift
+				if _can_npc_fit(nx, ny):
+					_draw_npc_pixels(npc, 0)
+					npc.pos.x = nx; npc.pos.y = ny
+					_draw_npc_pixels(npc)
+					break
+			
+			for s in range(5):
+				visual_sparks.append({"x":float(npc.pos.x),"y":float(npc.pos.y),"vx":randf_range(-50,50),"vy":randf_range(-80,0),"color":Color.DARK_GRAY,"life":0.6})
+
 	
 	for ry in range(-radius, radius):
 		for rx in range(-radius, radius):
