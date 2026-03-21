@@ -10,7 +10,11 @@ var grid_height: int
 var cells: PackedInt32Array
 var tags_array: PackedInt32Array
 var color_buffer: PackedByteArray 
-var charge_array: PackedByteArray # New: Track electric pulses (0 = none, 5 = full, counts down)
+var charge_array: PackedByteArray # Track electric pulses (0 = none, 5 = full, counts down)
+
+# GPU Rendering Data (Primary: ID Texture | Secondary: Charge Texture)
+var charge_tex: ImageTexture 
+var charge_img: Image
 
 # Simulation Chunking
 const CHUNK_SIZE = 16
@@ -194,12 +198,16 @@ func _ready():
 	chunks_x = ceil(float(grid_width) / CHUNK_SIZE)
 	chunks_y = ceil(float(grid_height) / CHUNK_SIZE)
 	chunks_active.resize(chunks_x * chunks_y)
-	chunks_active.fill(10) # Start awake for 10 frames
+	chunks_active.fill(60) # 1s settle for absolute visual stability
 	next_chunks_active.resize(chunks_x * chunks_y)
-	next_chunks_active.fill(10)
+	next_chunks_active.fill(60)
 	
 	tags_array.resize(grid_width * grid_height)
 	charge_array.resize(grid_width * grid_height)
+	
+	# GPU Image Buffers
+	img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8) # Main ID Texture
+	charge_img = Image.create(grid_width, grid_height, false, Image.FORMAT_L8) # Charge (Grayscale)
 	
 	material_colors_raw.resize(256) # Pre-size for plenty of materials
 	material_tags_raw.resize(256)
@@ -262,9 +270,12 @@ func _ready():
 	charge_array.fill(0)
 	
 	# Texture setup
-	img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8)
 	texture_rect.texture = ImageTexture.create_from_image(img)
 	texture_rect.size = viewport_size
+	texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE 
+	texture_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	
+	charge_tex = ImageTexture.create_from_image(charge_img)
 
 	# --- NEW PLANT LIFE ---
 	# Seed (Light Green)
@@ -344,6 +355,20 @@ func _ready():
 
 	# INITIAL HIGHLIGHT
 	_update_highlights()
+	
+	# FINAL SHADER & PALETTE SYNC (Critical Fix for Black Elements)
+	var palette_img = Image.create(256, 1, false, Image.FORMAT_RGBA8)
+	palette_img.fill(Color(0,0,0,0))
+	for i in range(256):
+		palette_img.set_pixel(i, 0, material_colors_raw[i])
+	var palette_tex = ImageTexture.create_from_image(palette_img)
+	
+	var shader = load("res://scripts/sandbox/sandbox_render.gdshader")
+	var s_mat = ShaderMaterial.new()
+	s_mat.shader = shader
+	s_mat.set_shader_parameter("palette_tex", palette_tex)
+	s_mat.set_shader_parameter("charge_tex", charge_tex) # Dedicated link
+	texture_rect.material = s_mat
 
 func _setup_materials_within_grid():
 	if material_grid.get_child_count() > 0: return # Already setup physically?
@@ -1234,14 +1259,16 @@ func _activate_chunk(gx, gy):
 	var cy = int(gy / CHUNK_SIZE)
 	if cx >= 0 and cx < chunks_x and cy >= 0 and cy < chunks_y:
 		var c_idx = cy * chunks_x + cx
-		next_chunks_active[c_idx] = 10 # Stay awake for 10 frames
+		# PERFORMANCE OPTIMIZATION: Skip redundant wakeups
+		if next_chunks_active[c_idx] >= 60: return
+		next_chunks_active[c_idx] = 60
 		# Wake neighbors
 		for oy in range(-1, 2):
 			for ox in range(-1, 2):
 				var ncx = cx + ox
 				var ncy = cy + oy
 				if ncx >= 0 and ncx < chunks_x and ncy >= 0 and ncy < chunks_y:
-					next_chunks_active[ncy * chunks_x + ncx] = 10
+					next_chunks_active[ncy * chunks_x + ncx] = 60
 
 func _get_cell(x, y):
 	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
@@ -1300,62 +1327,104 @@ func _step_simulation():
 			var x_end = min(x_start + CHUNK_SIZE, grid_width)
 			var y_end = min(y_start + CHUNK_SIZE, grid_height)
 			
-			for y in range(y_end - 1, y_start - 1, -1):
-				var sweep = range(x_start, x_end)
-				if Engine.get_frames_drawn() % 2 == 0: sweep = range(x_end - 1, x_start - 1, -1)
-				for x in sweep:
+			var y = y_end - 1
+			while y >= y_start:
+				var x_start_row = x_start
+				var x_dir = 1
+				if Engine.get_frames_drawn() % 2 == 0:
+					x_start_row = x_end - 1
+					x_dir = -1
+				
+				var x = x_start_row
+				var count = x_end - x_start
+				while count > 0:
 					var idx = y * grid_width + x
-					var mat_id = cells[idx]
-					if mat_id <= 0 or mat_id == 7: continue 
+					var mid = cells[idx]
 					
-					var tags = tags_array[idx]
-					if (tags & SandboxMaterial.Tags.GRAV_UP): continue
-					
-					if (tags & SandboxMaterial.Tags.GRAV_STATIC):
-						_process_interactions(x, y, idx, mat_id, tags)
-					elif (tags & SandboxMaterial.Tags.GRAV_SLOW):
-						if randf() < 0.3:
-							_move_particle(x, y, mat_id, tags, 1)
-						_process_interactions(x, y, idx, mat_id, tags)
-					else:
-						_move_particle(x, y, mat_id, tags, 1)
-						_process_interactions(x, y, idx, mat_id, tags)
+					# FASTER INLINE FLOW (Avoid most calls)
+					if mid > 0 and mid != 7: # Skip air/primed
+						var tags = tags_array[idx]
+						if not (tags & SandboxMaterial.Tags.GRAV_UP): 
+							if (tags & SandboxMaterial.Tags.GRAV_STATIC): # Stationary but interactive
+								_process_interactions(x, y, idx, mid, tags)
+							else:
+								# GRAVITY INLINED for speed
+								var should_move = true
+								if (tags & SandboxMaterial.Tags.GRAV_SLOW) and randf() > 0.3:
+									should_move = false
+								
+								if should_move:
+									# Basic Move try
+									var ny = y + 1
+									if ny < grid_height:
+										var n_idx = ny * grid_width + x
+										if cells[n_idx] == 0: # Down
+											_swap_cells(x, y, x, ny)
+										elif (tags & SandboxMaterial.Tags.LIQUID):
+											# Liquis flow side-ways too
+											if randf() > 0.5:
+												if x < grid_width - 1 and cells[idx + 1] == 0: _swap_cells(x, y, x + 1, y)
+												elif x > 0 and cells[idx - 1] == 0: _swap_cells(x, y, x - 1, y)
+										elif (tags & SandboxMaterial.Tags.POWDER):
+											# Powders move diagonally
+											var dx = 1 if randf() > 0.5 else -1
+											var nx = x + dx
+											if nx >= 0 and nx < grid_width:
+												var ni = ny * grid_width + nx
+												if cells[ni] == 0: _swap_cells(x, y, nx, ny)
+
+								# Always check interactions (e.g. fire spreading)
+								_process_interactions(x, y, idx, mid, tags)
+					x += x_dir
+					count -= 1
+				y -= 1
 
 func _process_electricity():
-	# Sequential processing (Original Logic) but with Chunk-Wakeup
+	# Sequential processing (Beat Machine Pulse)
 	for i in range(cells.size()):
 		var charge = charge_array[i]
 		if charge == 0: continue
 		
-		# 1. Spread Logic
-		if charge == 100:
-			var my_tags = material_tags_raw[cells[i]]
-			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
-				var x = i % grid_width; var y = i / grid_width
-				for ny in range(y - 1, y + 2):
-					for nx in range(x - 1, x + 2):
-						if nx == x and ny == y: continue
-						if nx >= 0 and nx < grid_width and ny >= 0 and ny < grid_height:
-							var n_idx = ny * grid_width + nx
-							var n_tags = tags_array[n_idx]
-							if (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)) and charge_array[n_idx] == 0:
-								charge_array[n_idx] = 101
-								_activate_chunk(nx, ny) # Wake up neighbor for signal
+		# 1. SYNCHRONIZE NEW PULSE (Fix for propagation death)
+		if charge == 101:
+			charge_array[i] = 100
+			continue
 		
-		# 2. Decay Logic (Keep chunk awake while charging/decharging)
+		# 2. SPREAD LOGIC (Only if full 100)
+		if charge == 100:
+			var x = i % grid_width
+			var y = i / grid_width
+			var mid = cells[i]
+			var my_tags = material_tags_raw[mid]
+			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
+				# Scan neighbors for 0-charge conductors
+				for ny in range(y - 1, y + 2):
+					if ny < 0 or ny >= grid_height: continue
+					for nx in range(x - 1, x + 2):
+						if nx < 0 or nx >= grid_width: continue
+						if nx == x and ny == y: continue
+						var n_idx = ny * grid_width + nx
+						var n_id = cells[n_idx]
+						if n_id <= 0: continue
+						var n_tags = tags_array[n_idx]
+						if (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)) and charge_array[n_idx] == 0:
+							charge_array[n_idx] = 101 # NEW PULSE (Wait 1 frame)
+							_activate_chunk(nx, ny)
+		
+		# 3. DECAY LOGIC (-5 per frame)
 		if (material_tags_raw[cells[i]] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
-			charge_array[i] -= 1
+			charge_array[i] -= 5
 			if charge_array[i] > 100: charge_array[i] = 100
 			if charge_array[i] > 0:
-				_activate_chunk(i % grid_width, i / grid_width) # Stay awake until empty
-		elif cells[i] == 19 or cells[i] == 7: # Fuse/TNT logic
-			charge_array[i] -= 1
+				_activate_chunk(i % grid_width, i / grid_width)
+		elif cells[i] == 7: # TNT logic (Leave 19 for main loop)
+			charge_array[i] -= 5
 			if charge_array[i] > 0:
 				_activate_chunk(i % grid_width, i / grid_width)
 
 
 
-func _move_particle(x, y, mat_id, tags, v_dir):
+func _move_particle(x, y, _mat_id, tags, v_dir):
 	var next_y = y + v_dir
 	if next_y < 0 or next_y >= grid_height: return
 	
@@ -1398,6 +1467,12 @@ func _swap_cells(x1, y1, x2, y2):
 	_activate_chunk(x2, y2)
 
 func _process_interactions(x, y, idx, mat_id, tags):
+	# PULSANT ELECTRICAL SOURCE (Wait for previous pulse to clear)
+	if mat_id == 9:
+		if charge_array[idx] == 0:
+			# Automatically start a new single pulse
+			charge_array[idx] = 101
+		
 	# FIRE AND HEAT REACTIONS
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
 		# Incendiary materials (Fire 3, Lava 11) extinguish or burn out
@@ -1422,13 +1497,13 @@ func _process_interactions(x, y, idx, mat_id, tags):
 				if randf() < 0.1: _set_cell(x, y, 3)
 			
 			# GENERIC ELECTRIC ACTIVATED TRIGGER
+			elif mat_id == 18: # Special Fireworks Fuse logic (PRIORITY)
+				_set_cell(x, y, 19)
+				charge_array[idx] = randi_range(20, 70)
 			elif (tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
 				if (tags & SandboxMaterial.Tags.EXPLOSIVE):
 					_set_cell(x, y, 7) # PRIME TNT/EXPLOSIVE
 					charge_array[idx] = randi_range(30, 60)
-				elif mat_id == 18: # Special Fireworks Fuse logic
-					_set_cell(x, y, 19)
-					charge_array[idx] = randi_range(20, 70)
 	
 	# FUSE LOGIC (Standalone)
 	if mat_id == 19: # Firework Fuse
@@ -2251,7 +2326,10 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 					if (n_tags & SandboxMaterial.Tags.FLAMMABLE):
 						# Catch fire / Transmute based on producer type
 						if randf() < 0.25: # Faster burning/transformation
-							if (n_tags & SandboxMaterial.Tags.BURN_COAL):
+							if n_id == 18:
+								_set_cell(nx, ny, 19) # Ignite Firework
+								charge_array[n_idx] = randi_range(20, 70)
+							elif (n_tags & SandboxMaterial.Tags.BURN_COAL):
 								_set_cell(nx, ny, 14) # Become Coal
 							elif (n_tags & SandboxMaterial.Tags.BURN_SMOKE):
 								# Release smoke above if possible
@@ -2265,6 +2343,9 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 						if n_id == 27: # Volcan persistent ignition
 							_set_cell(nx, ny, 29)
 							charge_array[nx + ny * grid_width] = randi_range(80, 120)
+						elif n_id == 18:
+							_set_cell(nx, ny, 19)
+							charge_array[n_idx] = randi_range(20, 70)
 						else:
 							_set_cell(nx, ny, 7) # Prime TNT
 				else:
@@ -2276,6 +2357,9 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 						if n_id == 27: # Volcan activates as persistent launcher
 							_set_cell(nx, ny, 29)
 							charge_array[n_idx] = randi_range(80, 120)
+						elif n_id == 18: # IGNITE FIREWORK
+							_set_cell(nx, ny, 19)
+							charge_array[n_idx] = randi_range(20, 70)
 						else:
 							_set_cell(nx, ny, 7) # Prime TNT
 
@@ -2324,61 +2408,36 @@ func _push_particle(x, y, dx, dy):
 		_swap_cells(x, y, nx, ny)
 
 func _update_texture():
-	# HIGH PERFORMANCE CPU RENDERING: Optimized pixel packing with Chunk-Awareness
-	for cy in range(chunks_y):
-		for cx in range(chunks_x):
-			var c_idx = cy * chunks_x + cx
-			# Skip static chunks for drawing too (their data is already in color_buffer from previous frame)
-			if chunks_active[c_idx] == 0: continue
-			
-			var x_start = cx * CHUNK_SIZE
-			var y_start = cy * CHUNK_SIZE
-			var x_end = min(x_start + CHUNK_SIZE, grid_width)
-			var y_end = min(y_start + CHUNK_SIZE, grid_height)
-			
-			for y in range(y_start, y_end):
-				var row_offset = y * grid_width
-				for x in range(x_start, x_end):
-					var i = row_offset + x
-					var mat_id = cells[i]
-					var charge = charge_array[i]
-					var base = i * 4
-					
-					# Fast lookup for Air
-					if mat_id == 0 and tornado_intensity == 0:
-						color_buffer[base] = 0; color_buffer[base+1] = 0; color_buffer[base+2] = 0; color_buffer[base+3] = 0
-						continue
-						
-					var pal_base = mat_id * 4
-					var r = material_colors_bytes[pal_base]
-					var g = material_colors_bytes[pal_base + 1]
-					var b = material_colors_bytes[pal_base + 2]
-					var a = material_colors_bytes[pal_base + 3]
-					
-					# Special effects drawn only when relevant
-					if tornado_intensity > 0 and mat_id == 0:
-						if y <= tornado_ground_y:
-							var rel_y = 1.0 - (float(y) / tornado_ground_y) if tornado_ground_y > 0 else 1.0
-							var cur_rad = (5 + tornado_intensity * 5.0) + (40.0 * tornado_intensity * rel_y)
-							if abs(x - tornado_x) < cur_rad:
-								r = 102; g = 102; b = 102; a = 102 # Gray 0.4
-					
-					if charge > 80 and mat_id != 13 and (material_tags_raw[mat_id] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY)):
-						var glow_f = clamp(float(charge - 80) / 20.0, 0.0, 1.0)
-						r = int(lerpf(float(r), 255.0, glow_f))
-						g = int(lerpf(float(g), 243.0, glow_f))
-						b = int(lerpf(float(b), 0.0, glow_f))
-					
-					color_buffer[base] = r; color_buffer[base + 1] = g; color_buffer[base + 2] = b; color_buffer[base + 3] = a
+	# ZERO-COPY GPU RENDER PASS (Peak GDScript Performance)
+	# 1. Update Tornado Parameters
+	var s_mat = texture_rect.material as ShaderMaterial
+	if s_mat:
+		s_mat.set_shader_parameter("tornado_x", float(tornado_x))
+		s_mat.set_shader_parameter("tornado_ground_y", float(tornado_ground_y))
+		s_mat.set_shader_parameter("tornado_intensity", float(tornado_intensity))
+		
+	# 2. BULK DATA TRANSFER (ID Map -> GPU)
+	img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cells.to_byte_array())
 	
-	img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, color_buffer)
-	
-	# DRAW VISUAL SPARKS (Ghost Fireworks - Over the grid) using Image directly for precision
+	# 3. VISUAL OVERLAY (Paint sparks over the physical grid)
 	for spark in visual_sparks:
 		var sx = int(spark.x); var sy = int(spark.y)
 		if sx >= 0 and sx < grid_width and sy >= 0 and sy < grid_height:
-			var s_color = spark.color; s_color.a = spark.life
-			img.set_pixel(sx, sy, s_color)
+			var sc = spark.color; sc.a = spark.life
+			# Marker: Ensure G > 0 to bypass ID lookup and keep actual color
+			sc.g = max(0.01, sc.g)
+			img.set_pixel(sx, sy, sc)
+			
+	for fw in active_fireworks:
+		var fx = int(fw.x); var fy = int(fw.y)
+		if fx >= 0 and fx < grid_width and fy >= 0 and fy < grid_height:
+			var fc = fw.color
+			fc.g = max(0.01, fc.g) # Bypass ID lookup
+			img.set_pixel(fx, fy, fc) # Bright head
+			
+	# Update Charge Texture for Shader effects
+	charge_img.set_data(grid_width, grid_height, false, Image.FORMAT_L8, charge_array)
+	charge_tex.update(charge_img)
 	
 	texture_rect.texture.update(img)
 
