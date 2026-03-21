@@ -262,7 +262,7 @@ func _ready():
 	_register_material(13, Color("#39FF14"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.ANTI_ACID)
 	
 	# Coal (Brazas - Dark Brown/Black)
-	_register_material(14, Color("#1A1110"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_SMOKE | SandboxMaterial.Tags.INCENDIARY)
+	_register_material(14, Color("#1A1110"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.INCENDIARY)
 	
 	# Smoke (Light Gray Gas)
 	_register_material(15, Color("454545ff"), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP | SandboxMaterial.Tags.BURN_NONE)
@@ -1506,11 +1506,11 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		# Incendiary materials (Fire 3, Lava 11) extinguish or burn out
 		if mat_id == 3:
 			if randf() < 0.1: _set_cell(x, y, 0)
-		elif mat_id == 14: # Coal burnout
-			if randf() < 0.0006:
+		elif mat_id == 14: # Coal burnout (Glowing Brazas)
+			if randf() < 0.002: # 6x Faster (About 3-4s per pixel)
 				_set_cell(x, y, 0)
 				if _get_cell(x, y - 1) == 0: _set_cell(x, y - 1, 15)
-			if randf() < 0.005 and _get_cell(x, y-1) == 0:
+			if randf() < 0.1 and _get_cell(x, y-1) == 0: # 20x more fire
 				_set_cell(x, y - 1, 3)
 		
 		# Spreading fire to neighbors
@@ -1521,7 +1521,10 @@ func _process_interactions(x, y, idx, mat_id, tags):
 	# Wood (16) or Coal (14) or Fireworks (18) or Petro (4) ignition
 	if (tags & SandboxMaterial.Tags.FLAMMABLE) or (tags & SandboxMaterial.Tags.EXPLOSIVE):
 		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY) or charge_array[idx] > 50:
-			if mat_id == 16 or mat_id == 14 or mat_id == 4: # Wood/Coal/Petro catches fire
+			if mat_id == 16: # Wood (50/50 Split Brasa vs Consumption)
+				if randf() < 0.5: 
+					_set_cell(x, y, 14 if randf() < 0.5 else 3)
+			elif mat_id == 4: # Petro catches fire
 				if randf() < 0.1: _set_cell(x, y, 3)
 			
 			# GENERIC ELECTRIC ACTIVATED TRIGGER
@@ -1571,11 +1574,27 @@ func _process_interactions(x, y, idx, mat_id, tags):
 
 	# --- CRYOGENICS (ICE ID 70) ---
 	if mat_id == 70:
-		# 1. Melt if near heat (Incendiary)
-		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY):
-			if randf() < 0.2:
-				_set_cell(x, y, 2) # Become Water
-				return
+		# 1. Thermal Shock / Vaporization
+		for ny in range(y - 1, y + 2):
+			if ny < 0 or ny >= grid_height: continue
+			for nx in range(x - 1, x + 2):
+				if nx < 0 or nx >= grid_width: continue
+				if nx == x and ny == y: continue
+				var n_idx = ny * grid_width + nx
+				var n_id = cells[n_idx]
+				
+				if n_id == 11: # LAVA (Extreme Heat)
+					_set_cell(x, y, 17) # Vaporize Ice -> Cloud
+					_set_cell(nx, ny, 12) # Cool Lava -> Obsidian
+					return
+				elif n_id == 3: # FIRE (High Heat)
+					_set_cell(x, y, 2) # Melt Ice -> Water
+					_set_cell(nx, ny, 15) # Extinguish Fire -> Smoke
+					return
+				elif n_id == 15 or n_id == 17: # SMOKE/CLOUD (Warm Air)
+					if randf() < 0.02: # Slow melting
+						_set_cell(x, y, 2) # Melt Ice -> Water
+						return
 		
 		# 2. Freeze adjacent Water (Slow growth)
 		if randf() < 0.05:
@@ -2454,17 +2473,22 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 				if is_heat:
 					if (n_tags & SandboxMaterial.Tags.FLAMMABLE):
 						# Catch fire / Transmute based on producer type
-						if randf() < 0.25: # Faster burning/transformation
+						if n_id == 14: continue # BRASAS: Do not consume already burning coal!
+						
+						if randf() < 0.8: # FAST Carbonization for Wood
 							if n_id == 18:
 								_set_cell(nx, ny, 19) # Ignite Firework
 								charge_array[n_idx] = randi_range(20, 70)
 							elif (n_tags & SandboxMaterial.Tags.BURN_COAL):
-								_set_cell(nx, ny, 14) # Become Coal
+								if randf() < 0.5: # 50% chance to become persistent coal
+									_set_cell(nx, ny, 14)
+								else: # 50% chance to be consumed as fire
+									_set_cell(nx, ny, 3)
 							elif (n_tags & SandboxMaterial.Tags.BURN_SMOKE):
 								# Release smoke above if possible
 								if _get_cell(nx, ny - 1) == 0:
 									_set_cell(nx, ny - 1, 15)
-								if randf() < 0.2: _set_cell(nx, ny, 3) # Turn to Fire
+								if randf() < 0.1: _set_cell(nx, ny, 3) # Turn to Fire (Lower chance)
 								else: _set_cell(nx, ny, 0)
 							else:
 								_set_cell(nx, ny, 3) # Spread Fire!
