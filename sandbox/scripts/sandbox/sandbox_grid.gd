@@ -6,6 +6,15 @@ class_name SandboxGrid
 var grid_width: int
 var grid_height: int
 
+# --- CUSTOM NPC COLORS (Editable in Inspector) ---
+@export_group("NPC Visuals")
+@export var npc_color_acid: Color = Color("#7ae267ff")  # Neon Green
+@export var npc_color_fire: Color = Color("#FF4500")  # Orange-Red
+@export var npc_color_exp: Color = Color("#FFFFFF")   # White
+@export var npc_color_hit: Color = Color("#db2525ff")   # Normal Hit Red
+@export var npc_color_death: Color = Color("#5c0000ff") # Dark Agony Red
+
+
 # Simulation Data
 var cells: PackedInt32Array
 var tags_array: PackedInt32Array
@@ -342,6 +351,14 @@ func _ready():
 	_register_material(50, Color("#555555"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 	# 51: Miner Helmet
 	_register_material(51, Color("#FFD700"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+
+	# --- CUSTOM NPC DAMAGE COLORS (IDs 60-64) ---
+	_register_material(60, npc_color_acid, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(61, npc_color_fire, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(62, npc_color_exp, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(63, npc_color_hit, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(64, npc_color_death, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+
 
 	# UI SETUP (Must happen AFTER materials are registered)
 	_setup_main_ui_containers()
@@ -1929,12 +1946,12 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	
 	# Override for hit flash (More vibrant colors)
 	if is_flashing and override_mat == -1:
-		var f_mat = 7 # Default white flash
-		if is_dead: f_mat = 34 # Red flicker for death
-		elif npc.hit_type == "acid": f_mat = 37 # Green flash
-		elif npc.hit_type == "fire": f_mat = 11 # Orange flash
-		elif npc.hit_type == "explosive": f_mat = 7 # White flash
-		else: f_mat = 34 # Normal hits (Red)
+		var f_mat = 62 # Default to White (Exp slot)
+		if is_dead: f_mat = 64 # Death Color Slot
+		elif npc.hit_type == "acid": f_mat = 60 # Acid Slot
+		elif npc.hit_type == "fire": f_mat = 61 # Fire Slot
+		elif npc.hit_type == "explosive": f_mat = 62 # Exp Slot
+		else: f_mat = 63 # Normal Hit Slot
 		m_head = f_mat; m_skin = f_mat; m_body = f_mat; m_legs = f_mat; m_team = f_mat; m_helmet = f_mat
 	
 	# HEAD
@@ -2257,10 +2274,12 @@ func _check_npc_environment_damage(npc) -> bool:
 			if npc.hit_type != "acid": 
 				npc.hit_flash = 5
 				npc.hit_type = "fire"
-			if randf() < 0.3: # Improved Fire Particles (Sparks + Smoke)
+			if randf() < 0.3: # Improved Fire Particles (Sparks + INTENSE Smoke)
 				visual_sparks.append({"x":float(p.x),"y":float(p.y),"vx":randf_range(-15,15),"vy":randf_range(-35,-15),"color":Color("#FF8200"),"life":0.5})
-				if randf() < 0.5: # Occasional smoke plume
-					visual_sparks.append({"x":float(p.x),"y":float(p.y),"vx":randf_range(-5,5),"vy":randf_range(-50,-20),"color":Color.WEB_GRAY,"life":0.8})
+				# High density smoke
+				if randf() < 0.7: 
+					visual_sparks.append({"x":float(p.x),"y":float(p.y),"vx":randf_range(-10,10),"vy":randf_range(-60,-30),"color":Color.WEB_GRAY,"life":1.5})
+
 
 	return took_damage
 
