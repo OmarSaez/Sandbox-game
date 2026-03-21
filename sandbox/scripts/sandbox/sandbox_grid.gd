@@ -459,11 +459,13 @@ func _setup_main_ui_containers():
 	ui_elements.clear()
 	for child in ui_root.get_children():
 		if child.name.begins_with("ToolsPanel") or child.name.begins_with("DisasterPanel") or child.name.begins_with("NPCPanel"):
-			child.free()
+			child.get_parent().remove_child(child)
+			child.queue_free()
 			
 	for child in main_controls.get_children():
 		if child.name == "ActionScroll" or child.name.begins_with("ActionButtons"):
-			child.free()
+			child.get_parent().remove_child(child)
+			child.queue_free()
 	
 	# 2. FIND MaterialGrid (Wherever it is)
 	if not material_grid:
@@ -571,7 +573,9 @@ func _setup_main_ui_containers():
 	# CLEAN MATERIAL GRID
 	if material_grid:
 		for child in material_grid.get_children(): 
-			if is_instance_valid(child): child.free()
+			if is_instance_valid(child): 
+				child.get_parent().remove_child(child)
+				child.queue_free()
 		material_grid.add_theme_constant_override("h_separation", 10 * s)
 		material_grid.add_theme_constant_override("v_separation", 10 * s)
 
@@ -651,9 +655,9 @@ func _setup_tools_ui():
 	tools_panel.add_child(scroll)
 	
 	tools_btn.pressed.connect(func(): 
-		disaster_panel.visible = false
+		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
-		tools_panel.visible = !tools_panel.visible
+		if is_instance_valid(tools_panel): tools_panel.visible = !tools_panel.visible
 	)
 	
 	tools_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
@@ -697,8 +701,8 @@ func _setup_tools_ui():
 	var scale_labels = [tr[current_language]["size"] + " 1.0", tr[current_language]["size"] + " 1.2", tr[current_language]["size"] + " 1.5", tr[current_language]["size"] + " 2.0"]
 	create_row.call("ui_size", scale_labels, func(l): 
 		ui_scale_level = l
-		_setup_main_ui_containers() # Handle complete HUD refresh automatically
-		tools_panel.visible = true # Keep open after scale change
+		ui_root.set_meta("tools_v", true) # Safe persistence
+		call_deferred("_setup_main_ui_containers") # DEFERRED: Separation from click event
 	)
 
 	# BRUSH SIZE ROW (Now 3rd)
@@ -783,9 +787,9 @@ func _setup_disaster_ui():
 	disaster_panel.add_child(scroll)
 	
 	disaster_btn.pressed.connect(func(): 
-		tools_panel.visible = false
+		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
-		disaster_panel.visible = !disaster_panel.visible
+		if is_instance_valid(disaster_panel): disaster_panel.visible = !disaster_panel.visible
 	)
 	
 	disaster_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
@@ -816,7 +820,6 @@ func _setup_disaster_ui():
 			btn.pressed.connect(func(): callback.call(i))
 			flow.add_child(btn)
 			ui_elements[label_key + "_btn_" + str(i)] = [btn, osk]
-		v_box.add_child(flow)
 
 	create_row.call("weather", ["off", "light", "med", "storm"], func(l): 
 		current_weather = l
@@ -976,6 +979,7 @@ func _add_button(key: String, mat_id: int):
 	
 	# CENTRALIZED INPUT (Whole slot)
 	slot_pnl.gui_input.connect(func(event):
+		if not is_instance_valid(event) or not is_instance_valid(slot_pnl): return
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			selected_material = mat_id
 			_update_highlights()
@@ -992,6 +996,8 @@ func _add_button(key: String, mat_id: int):
 func _update_highlights():
 	# Update Material Selection (Icons & Labels)
 	for slot in material_grid.get_children():
+		if not is_instance_valid(slot): continue
+		
 		var mat_id = slot.get_meta("mat_id", -1)
 		var main_vbox = slot.get_child(0)
 		var stack = main_vbox.get_child(0)
@@ -1026,7 +1032,7 @@ func _update_highlights():
 			var btn = node_data
 			if node_data is Array: btn = node_data[0]
 			
-			if btn is Button:
+			if is_instance_valid(btn) and btn is Button:
 				# Check if this button is the active one
 				var is_active = false
 				if key.begins_with("brush_btn_"):
@@ -1925,11 +1931,7 @@ func _process_interactions(x, y, idx, mat_id, tags):
 func _setup_npc_panel_node():
 	# If it exists but was lost during a UI refresh, we need to ensure it's in the tree
 	var ui_root = get_parent().get_node("UI")
-	if is_instance_valid(npc_panel):
-		if npc_panel.get_parent() == null:
-			ui_root.add_child(npc_panel)
-		return
-		
+	
 	npc_panel = PanelContainer.new()
 	npc_panel.name = "NPCPanel"
 	ui_root.add_child(npc_panel)
@@ -2002,16 +2004,17 @@ func _setup_npc_ui():
 	npc_btn.add_theme_stylebox_override("pressed", btn_style)
 	
 	npc_btn.pressed.connect(func():
-		tools_panel.visible = false
-		disaster_panel.visible = false
-		npc_panel.visible = !npc_panel.visible
+		if is_instance_valid(tools_panel): tools_panel.visible = false
+		if is_instance_valid(disaster_panel): disaster_panel.visible = false
+		if is_instance_valid(npc_panel): npc_panel.visible = !npc_panel.visible
 	)
 	
 	# Clear and Fill
 	if is_instance_valid(npc_panel):
 		var scroll = npc_panel.get_child(0) as ScrollContainer
 		var v_box = scroll.get_child(0) as VBoxContainer
-		for child in v_box.get_children(): child.free()
+		for child in v_box.get_children(): 
+			if is_instance_valid(child): child.queue_free()
 		
 		# NPC Selection (NOW RESPONSIVE)
 		var npc_lbl = Label.new()
