@@ -520,10 +520,15 @@ func _setup_main_ui_containers():
 	var h = min(115 * s, 140)
 	
 	material_scroll.custom_minimum_size = Vector2(0, h)
-	material_scroll.offset_top = -h
 	material_scroll.anchor_top = 1.0
 	material_scroll.anchor_bottom = 1.0
+	material_scroll.anchor_left = 0
+	material_scroll.anchor_right = 1.0
+	
+	material_scroll.offset_top = -h
 	material_scroll.offset_bottom = 0
+	material_scroll.offset_left = 0
+	material_scroll.offset_right = -175 * s # Leave space for ActionButtons
 
 	# PUSH GAME VIEW (TextureRect) UP by h + 1 (Finer Limit)
 	if texture_rect:
@@ -552,8 +557,14 @@ func _setup_main_ui_containers():
 		# PIN Survivor to HUD Floor with FIXED LIMIT
 		action_vbox.anchor_bottom = 1.0
 		action_vbox.anchor_top = 1.0
+		action_vbox.anchor_left = 1.0
+		action_vbox.anchor_right = 1.0
+		
 		action_vbox.offset_bottom = 0
 		action_vbox.offset_top = -h
+		action_vbox.offset_left = -170 * s # Standard button width zone
+		action_vbox.offset_right = 0
+		
 		action_vbox.add_theme_constant_override("separation", 3 * s) # Compact
 		action_vbox.alignment = BoxContainer.ALIGNMENT_END # PUSH TO BOTTOM
 	
@@ -561,6 +572,8 @@ func _setup_main_ui_containers():
 	if material_grid:
 		for child in material_grid.get_children(): 
 			if is_instance_valid(child): child.free()
+		material_grid.add_theme_constant_override("h_separation", 10 * s)
+		material_grid.add_theme_constant_override("v_separation", 10 * s)
 
 	# 5. CONSTRUCT ALL SUB-UI
 	ui_root.set_meta("tools_v", tools_v)
@@ -588,6 +601,17 @@ func _setup_tools_ui():
 	ui_elements["tools_btn"] = tools_btn
 	action_vbox.add_child(tools_btn)
 	
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.2, 0.2, 0.25, 1.0) # SOLID dark blue-grey
+	btn_style.border_width_left = 1; btn_style.border_width_top = 1
+	btn_style.border_width_right = 1; btn_style.border_width_bottom = 1
+	btn_style.border_color = Color(0.4, 0.4, 0.5)
+	btn_style.corner_radius_top_left = 5; btn_style.corner_radius_top_right = 5
+	btn_style.corner_radius_bottom_left = 5; btn_style.corner_radius_bottom_right = 5
+	tools_btn.add_theme_stylebox_override("normal", btn_style)
+	tools_btn.add_theme_stylebox_override("hover", btn_style)
+	tools_btn.add_theme_stylebox_override("pressed", btn_style)
+	
 	# CREATE FRESH PANEL WITH STYLE
 	tools_panel = PanelContainer.new()
 	tools_panel.name = "ToolsPanel"
@@ -610,7 +634,7 @@ func _setup_tools_ui():
 	tools_panel.anchor_top = 1.0
 	tools_panel.anchor_bottom = 1.0
 	
-	var panel_width = 550 * s
+	var panel_width = 530 * s
 	var panel_height = 220 * s
 	var bottom_gap = (min(115 * s, 140)) + (5 * s) # Dynamic GAP above HUD floor
 	
@@ -706,6 +730,17 @@ func _setup_disaster_ui():
 	ui_elements["disaster_btn"] = disaster_btn
 	action_vbox.add_child(disaster_btn)
 	
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.25, 0.2, 0.2, 1.0) # SOLID dark red-grey
+	btn_style.border_width_left = 1; btn_style.border_width_top = 1
+	btn_style.border_width_right = 1; btn_style.border_width_bottom = 1
+	btn_style.border_color = Color(0.5, 0.4, 0.4)
+	btn_style.corner_radius_top_left = 5; btn_style.corner_radius_top_right = 5
+	btn_style.corner_radius_bottom_left = 5; btn_style.corner_radius_bottom_right = 5
+	disaster_btn.add_theme_stylebox_override("normal", btn_style)
+	disaster_btn.add_theme_stylebox_override("hover", btn_style)
+	disaster_btn.add_theme_stylebox_override("pressed", btn_style)
+	
 	# CREATE FRESH PANEL WITH STYLE
 	var ui_root = get_parent().get_node("UI")
 	disaster_panel = PanelContainer.new()
@@ -727,7 +762,7 @@ func _setup_disaster_ui():
 	disaster_panel.anchor_top = 1.0
 	disaster_panel.anchor_bottom = 1.0
 	
-	var d_width = 480 * s
+	var d_width = 530 * s
 	var d_height = 250 * s
 	var d_bottom_gap = (min(115 * s, 140)) + (5 * s)
 	
@@ -879,87 +914,109 @@ func _refresh_ui_text():
 
 func _add_button(key: String, mat_id: int):
 	var s = _get_ui_scale()
+	
+	# The master container for the whole slot (Clickable area)
+	var slot_pnl = PanelContainer.new()
+	var slot_style = StyleBoxEmpty.new() # Invisible but stops mouse
+	slot_pnl.add_theme_stylebox_override("panel", slot_style)
+	slot_pnl.mouse_filter = Control.MOUSE_FILTER_STOP
+	slot_pnl.size_flags_horizontal = Control.SIZE_EXPAND_FILL # LIQUID FILL (JUSTIFY)
+	slot_pnl.custom_minimum_size = Vector2(110 * s, 85 * s) 
+	
 	var main_vbox = VBoxContainer.new()
 	main_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	main_vbox.custom_minimum_size = Vector2(85 * s, 70 * s) # SLIGHTLY WIDER FOR BIGGER FONT
+	main_vbox.add_theme_constant_override("separation", 2 * s) # COMPACT SPACE
+	main_vbox.mouse_filter = Control.MOUSE_FILTER_PASS # Pass to slot_pnl
+	slot_pnl.add_child(main_vbox)
 	
-	# Icon Wrapper (The material icon itself)
+	# The Stack Container (Icon base + Selection overlays)
+	var stack = Control.new()
+	var icon_w = 90 * s
+	var icon_h = 46 * s
+	stack.custom_minimum_size = Vector2(icon_w, icon_h)
+	stack.mouse_filter = Control.MOUSE_FILTER_PASS
+	main_vbox.add_child(stack)
+	
+	# 1. ICON LAYER (Always visible material color)
 	var icon_panel = PanelContainer.new()
 	var icon_style = StyleBoxFlat.new()
-	icon_style.bg_color = material_colors_raw[mat_id] # Use material color as background
-	
-	# Rounding
+	icon_style.bg_color = material_colors_raw[mat_id]
 	var radius = int(8 * s)
 	icon_style.corner_radius_top_left = radius
 	icon_style.corner_radius_top_right = radius
 	icon_style.corner_radius_bottom_left = radius
 	icon_style.corner_radius_bottom_right = radius
-	
 	icon_panel.add_theme_stylebox_override("panel", icon_style)
-	icon_panel.custom_minimum_size = Vector2(50 * s, 50 * s)
-	icon_panel.mouse_filter = Control.MOUSE_FILTER_STOP # Capture input for rounding
+	icon_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	icon_panel.mouse_filter = Control.MOUSE_FILTER_PASS
+	stack.add_child(icon_panel)
 	
-	# Connect click directly to panel
-	icon_panel.gui_input.connect(func(event):
-		if event is InputEventMouseButton and event.pressed:
+	# 2. SELECTION OVERLAY (Only visible when selected)
+	var selection_overlay = PanelContainer.new()
+	var sel_style = StyleBoxFlat.new()
+	sel_style.draw_center = false # TRANSPARENT CENTER (On Top)
+	sel_style.corner_radius_top_left = radius
+	sel_style.corner_radius_top_right = radius
+	sel_style.corner_radius_bottom_left = radius
+	sel_style.corner_radius_bottom_right = radius
+	
+	selection_overlay.add_theme_stylebox_override("panel", sel_style)
+	selection_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	selection_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	selection_overlay.visible = false # Managed by _update_highlights
+	stack.add_child(selection_overlay)
+	
+	var btn_lbl = Label.new()
+	btn_lbl.name = "MatLabel"
+	btn_lbl.text = tr[current_language][key]
+	btn_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	btn_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
+	btn_lbl.add_theme_font_size_override("font_size", 18 * s) # EVEN LARGER TEXT
+	main_vbox.add_child(btn_lbl)
+	
+	# CENTRALIZED INPUT (Whole slot)
+	slot_pnl.gui_input.connect(func(event):
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			selected_material = mat_id
 			_update_highlights()
 	)
-	icon_panel.set_meta("mat_id", mat_id)
+	slot_pnl.set_meta("mat_id", mat_id)
 	
-	main_vbox.add_child(icon_panel)
+	ui_elements[key + "_icon_pnl"] = selection_overlay # Store overlay for highlight
+	ui_elements[key + "_mat_lbl"] = btn_lbl
 	
-	ui_elements[key + "_icon_pnl"] = icon_panel # Store panel for border
-	
-	var btn = Label.new()
-	btn.text = tr[current_language][key]
-	btn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	btn.mouse_filter = Control.MOUSE_FILTER_PASS
-	btn.add_theme_font_size_override("font_size", 14 * s) # Match other menu labels
-	# ALSO CLICKABLE LABEL
-	btn.gui_input.connect(func(event):
-		if event is InputEventMouseButton and event.pressed:
-			selected_material = mat_id
-			_update_highlights()
-	)
-	ui_elements[key + "_mat_lbl"] = btn
-	main_vbox.add_child(btn)
-	
-	material_grid.add_child(main_vbox) 
+	material_grid.add_child(slot_pnl)
 	
 	main_vbox.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
 func _update_highlights():
 	# Update Material Selection (Icons & Labels)
-	for child in material_grid.get_children():
-		if not child is VBoxContainer: continue # Skip the spacer!
-		var icon_pnl = child.get_child(0)
-		var label = child.get_child(1)
-		var highlight_style = icon_pnl.get_theme_stylebox("panel").duplicate()
-		var mat_id = icon_pnl.get_meta("mat_id")
+	for slot in material_grid.get_children():
+		var mat_id = slot.get_meta("mat_id", -1)
+		var main_vbox = slot.get_child(0)
+		var stack = main_vbox.get_child(0)
+		var overlay = stack.get_child(1) # Selection Overlay
+		var label = main_vbox.get_child(1)
+		
 		if mat_id == selected_material:
-			# HIGHLIGHT: Bright white border + Yellow text
-			highlight_style.border_width_left = 4
-			highlight_style.border_width_top = 4
-			highlight_style.border_width_right = 4
-			highlight_style.border_width_bottom = 4
-			highlight_style.border_color = Color.WHITE
-			# Keep rounding in highlight
-			var radius = int(8 * _get_ui_scale())
-			highlight_style.corner_radius_top_left = radius
-			highlight_style.corner_radius_top_right = radius
-			highlight_style.corner_radius_bottom_left = radius
-			highlight_style.corner_radius_bottom_right = radius
+			overlay.visible = true
+			var sel_style = overlay.get_theme_stylebox("panel").duplicate()
 			
-			icon_pnl.add_theme_stylebox_override("panel", highlight_style)
+			# DOUBLE BORDER ON TOP: Black shadow/outer + White inner
+			sel_style.border_width_left = 6
+			sel_style.border_width_top = 6
+			sel_style.border_width_right = 6
+			sel_style.border_width_bottom = 6
+			sel_style.border_color = Color.WHITE
+			
+			# Draw the 6px BLACK border behind the white via shadow (solid sharp)
+			sel_style.shadow_color = Color.BLACK
+			sel_style.shadow_size = 6
+			
+			overlay.add_theme_stylebox_override("panel", sel_style)
 			label.add_theme_color_override("font_color", Color.YELLOW)
 		else:
-			# DEFAULT: No border + White text
-			highlight_style.border_width_left = 0
-			highlight_style.border_width_top = 0
-			highlight_style.border_width_right = 0
-			highlight_style.border_width_bottom = 0
-			icon_pnl.add_theme_stylebox_override("panel", highlight_style)
+			overlay.visible = false
 			label.remove_theme_color_override("font_color")
 
 	# 2. Update Tool/Disaster/NPC Highlights (Buttons)
@@ -1892,7 +1949,7 @@ func _setup_npc_panel_node():
 	npc_panel.anchor_top = 1.0
 	npc_panel.anchor_bottom = 1.0
 	
-	var p_width = 480 * s
+	var p_width = 530 * s
 	var p_height = 200 * s
 	var bottom_gap = (min(115 * s, 140)) + (5 * s)
 	
@@ -1932,6 +1989,17 @@ func _setup_npc_ui():
 	npc_btn.text = tr[current_language]["npc"]
 	ui_elements["npc_btn"] = npc_btn
 	action_vbox.add_child(npc_btn)
+	
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.2, 0.25, 0.2, 1.0) # SOLID dark green-grey
+	btn_style.border_width_left = 1; btn_style.border_width_top = 1
+	btn_style.border_width_right = 1; btn_style.border_width_bottom = 1
+	btn_style.border_color = Color(0.4, 0.5, 0.4)
+	btn_style.corner_radius_top_left = 5; btn_style.corner_radius_top_right = 5
+	btn_style.corner_radius_bottom_left = 5; btn_style.corner_radius_bottom_right = 5
+	npc_btn.add_theme_stylebox_override("normal", btn_style)
+	npc_btn.add_theme_stylebox_override("hover", btn_style)
+	npc_btn.add_theme_stylebox_override("pressed", btn_style)
 	
 	npc_btn.pressed.connect(func():
 		tools_panel.visible = false
