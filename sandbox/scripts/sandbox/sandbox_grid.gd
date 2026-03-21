@@ -1824,7 +1824,7 @@ func _process_npcs(delta):
 					
 					# Detect if we have a roof (Underground)
 					var mat_above = _get_cell(np.x, np.y - 4)
-					var is_underground = (mat_above != 0 and mat_above != 16)
+					var is_underground = (mat_above != 0)
 					
 					# Force ramp if we are on the surface
 					if not is_underground and npc.mine_state == "gallery":
