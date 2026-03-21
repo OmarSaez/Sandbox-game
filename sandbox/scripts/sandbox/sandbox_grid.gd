@@ -2221,7 +2221,8 @@ func _can_npc_fit(gx, gy) -> bool:
 			var tid = _get_cell(gx + ox, gy + oy)
 			# Pass through Empty(0), Smoke(15), Fire(3), Gas(17)
 			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
-				return false
+				if not (material_tags_raw[tid] & SandboxMaterial.Tags.NPC):
+					return false
 	return true
 
 func _has_tag_neighbor(x, y, tag):
