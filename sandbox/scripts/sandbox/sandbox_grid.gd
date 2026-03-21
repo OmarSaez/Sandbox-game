@@ -707,6 +707,18 @@ func _refresh_ui_text():
 			node_data.text = tr[current_language]["reset"]
 			node_data.custom_minimum_size = Vector2(0, 38 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
+		elif key == "warrior_btn":
+			node_data.text = tr[current_language]["warrior"]
+			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
+			node_data.add_theme_font_size_override("font_size", 14 * s)
+		elif key == "archer_btn":
+			node_data.text = tr[current_language]["archer"]
+			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
+			node_data.add_theme_font_size_override("font_size", 14 * s)
+		elif key == "miner_btn":
+			node_data.text = tr[current_language]["miner"]
+			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
+			node_data.add_theme_font_size_override("font_size", 14 * s)
 		
 		# Handle Labels (Main labels for rows and material names)
 		elif node_data is Label:
