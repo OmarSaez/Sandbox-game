@@ -186,8 +186,10 @@ var visual_sparks = []
 var img: Image
 
 func _ready():
-	# Calculate grid size based on viewport - Deducting 180px for the new Unified UI bar
-	var actual_viewport_height = get_viewport_rect().size.y - 180
+	# Calculate grid size (Smart Height: Exactly above the UI)
+	var s = _get_ui_scale()
+	var h_ui = min(115 * s, 140)
+	var actual_viewport_height = get_viewport_rect().size.y - h_ui - 2 # 2px margin
 	var viewport_size = Vector2(get_viewport_rect().size.x, actual_viewport_height)
 	
 	grid_width = floor(viewport_size.x / grid_scale)
@@ -501,8 +503,8 @@ func _setup_main_ui_containers():
 		material_scroll.add_child(scroll_vbox)
 		scroll_vbox.add_child(material_grid)
 		
-		material_grid.mouse_entered.connect(func(): is_mouse_over_ui = true)
-		material_grid.mouse_exited.connect(func(): is_mouse_over_ui = false)
+		material_scroll.mouse_entered.connect(func(): is_mouse_over_ui = true)
+		material_scroll.mouse_exited.connect(func(): is_mouse_over_ui = false)
 		material_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	# ALWAYS Refresh Scroll Height for the current scale
@@ -515,11 +517,11 @@ func _setup_main_ui_containers():
 	material_scroll.anchor_bottom = 1.0
 	material_scroll.offset_bottom = 0
 
-	# PUSH GAME VIEW (TextureRect) UP by h + 1px gap (Minimal distance)
+	# PUSH GAME VIEW (TextureRect) UP by h + 1 (Finer Limit)
 	if texture_rect:
 		texture_rect.anchor_top = 0
 		texture_rect.anchor_bottom = 1.0
-		texture_rect.offset_bottom = -h - 1 
+		texture_rect.offset_bottom = -1 # Align tightly with the top of HUD floor
 		texture_rect.offset_top = 0
 
 	# 4. ROBUST CLONE DETECTION: Find and cleanup ALL ActionButtons nodes (including renamed ones)
@@ -978,7 +980,7 @@ func _is_any_ui_blocking() -> bool:
 		return true
 	if npc_panel and npc_panel.visible and npc_panel.get_global_rect().has_point(m_pos):
 		return true
-	if material_grid and material_grid.get_global_rect().has_point(m_pos):
+	if material_scroll and material_scroll.get_global_rect().has_point(m_pos):
 		return true
 	if action_vbox and action_vbox.get_global_rect().has_point(m_pos):
 		return true
