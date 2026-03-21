@@ -5,6 +5,7 @@ class_name SandboxGrid
 @export var grid_scale: int = 8
 var grid_width: int
 var grid_height: int
+var dynamic_grid_height: int # Logic floor (at HUD top)
 
 # --- CUSTOM NPC COLORS (Editable in Inspector) ---
 @export_group("NPC Visuals")
@@ -187,13 +188,11 @@ var img: Image
 
 func _ready():
 	# Calculate grid size (Smart Height: Exactly above the UI)
-	var s = _get_ui_scale()
-	var h_ui = min(115 * s, 140)
-	var actual_viewport_height = get_viewport_rect().size.y - h_ui - 2 # 2px margin
-	var viewport_size = Vector2(get_viewport_rect().size.x, actual_viewport_height)
+	var viewport_size = get_viewport_rect().size
 	
 	grid_width = floor(viewport_size.x / grid_scale)
 	grid_height = floor(viewport_size.y / grid_scale)
+	dynamic_grid_height = grid_height # Full initial
 	
 	# Update Display node size to match the grid exactly
 	$Display.custom_minimum_size = Vector2(grid_width * grid_scale, grid_height * grid_scale)
@@ -284,7 +283,8 @@ func _ready():
 	
 	# Texture setup
 	texture_rect.texture = ImageTexture.create_from_image(img)
-	texture_rect.size = viewport_size
+	texture_rect.anchor_right = 1.0
+	texture_rect.anchor_bottom = 1.0
 	texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE 
 	texture_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	
@@ -522,8 +522,11 @@ func _setup_main_ui_containers():
 		material_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	# ALWAYS Refresh Scroll Height for the current scale
-	# NEW: ULTRA-COMPACT height (38px * 3 = 114px approx)
-	var h = min(115 * s, 140)
+	# NEW: LARGER TALL HUD with logical CAP (max 210px) 
+	var h = min(185 * s, 210)
+	
+	# UPDATE PHYSICAL BOUNDARY
+	dynamic_grid_height = grid_height - ceil(h / grid_scale)
 	
 	material_scroll.custom_minimum_size = Vector2(0, h)
 	material_scroll.anchor_top = 1.0
@@ -536,14 +539,41 @@ func _setup_main_ui_containers():
 	material_scroll.offset_left = 0
 	material_scroll.offset_right = -175 * s # Leave space for ActionButtons
 
-	# PUSH GAME VIEW (TextureRect) UP by h + 1 (Finer Limit)
+	# PUSH GAME VIEW (TextureRect) ABOVE HUD
+	if not is_instance_valid(texture_rect): 
+		texture_rect = get_node_or_null("/root/SandboxMain/TextureRect")
+		
 	if texture_rect:
 		texture_rect.anchor_top = 0
 		texture_rect.anchor_bottom = 1.0
-		texture_rect.offset_bottom = -1 # Align tightly with the top of HUD floor
+		texture_rect.offset_bottom = -h # Align exactly with top of the tall HUD
 		texture_rect.offset_top = 0
 
-	# 4. FRESH ACTION ZONE REBUILD (Fixes scroll bugs on scale change)
+	# 4. UNIVERSAL HUD FOOTER BACKGROUND (Adaptive Background for any device)
+	var footer_bg = main_controls.find_child("HUD_Footer_BG", true, false)
+	if is_instance_valid(footer_bg): 
+		footer_bg.get_parent().remove_child(footer_bg)
+		footer_bg.queue_free()
+		
+	footer_bg = PanelContainer.new()
+	footer_bg.name = "HUD_Footer_BG"
+	var foot_style = StyleBoxFlat.new()
+	foot_style.bg_color = Color(0.12, 0.12, 0.15, 1.0) # Match Material Slot Dark Grey
+	footer_bg.add_theme_stylebox_override("panel", foot_style)
+	main_controls.add_child(footer_bg)
+	main_controls.move_child(footer_bg, 0) # ALWAYS BEHIND MATERIAL/ACTION
+	
+	footer_bg.anchor_top = 1.0
+	footer_bg.anchor_bottom = 1.0
+	footer_bg.anchor_left = 0
+	footer_bg.anchor_right = 1.0
+	footer_bg.offset_top = -h
+	footer_bg.offset_bottom = 0
+	footer_bg.offset_left = 0
+	footer_bg.offset_right = 0
+	footer_bg.mouse_filter = Control.MOUSE_FILTER_STOP # Block game world clicks
+
+	# 5. FRESH ACTION ZONE REBUILD (Fixes scroll bugs on scale change)
 	var action_scroll = ScrollContainer.new()
 	action_scroll.name = "ActionScroll"
 	action_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -568,7 +598,8 @@ func _setup_main_ui_containers():
 	action_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	action_vbox.add_theme_constant_override("separation", 3 * s)
-	action_vbox.alignment = BoxContainer.ALIGNMENT_END
+	action_vbox.alignment = BoxContainer.ALIGNMENT_CENTER # FLOAT IN CENTER OF TALL AREA
+	action_scroll.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE DRAG
 	
 	# CLEAN MATERIAL GRID
 	if material_grid:
@@ -599,10 +630,11 @@ func _setup_tools_ui():
 	
 	var tools_btn = Button.new()
 	tools_btn.name = "ToolsBtn"
-	tools_btn.custom_minimum_size = Vector2(160 * s, 38 * s)
+	tools_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
 	tools_btn.add_theme_font_size_override("font_size", 14 * s)
 	tools_btn.text = tr[current_language]["tools"]
 	ui_elements["tools_btn"] = tools_btn
+	tools_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	action_vbox.add_child(tools_btn)
 	
 	var btn_style = StyleBoxFlat.new()
@@ -640,7 +672,8 @@ func _setup_tools_ui():
 	
 	var panel_width = 530 * s
 	var panel_height = 220 * s
-	var bottom_gap = (min(115 * s, 140)) + (5 * s) # Dynamic GAP above HUD floor
+	var h = 185 * s # Match the Tall HUD height
+	var bottom_gap = h + (5 * s) # Dynamic GAP above HUD floor
 	
 	tools_panel.offset_left = -panel_width / 2
 	tools_panel.offset_right = panel_width / 2
@@ -728,10 +761,11 @@ func _setup_disaster_ui():
 	var s = _get_ui_scale()
 	var disaster_btn = Button.new()
 	disaster_btn.name = "DisasterBtn"
-	disaster_btn.custom_minimum_size = Vector2(160 * s, 38 * s) # Slim height
+	disaster_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
 	disaster_btn.add_theme_font_size_override("font_size", 14 * s) # Compact font
 	disaster_btn.text = tr[current_language]["disasters"]
 	ui_elements["disaster_btn"] = disaster_btn
+	disaster_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	action_vbox.add_child(disaster_btn)
 	
 	var btn_style = StyleBoxFlat.new()
@@ -768,7 +802,8 @@ func _setup_disaster_ui():
 	
 	var d_width = 530 * s
 	var d_height = 250 * s
-	var d_bottom_gap = (min(115 * s, 140)) + (5 * s)
+	var h = 185 * s # Match the Tall HUD height
+	var d_bottom_gap = h + (5 * s)
 	
 	disaster_panel.offset_left = -d_width / 2
 	disaster_panel.offset_right = d_width / 2
@@ -922,7 +957,7 @@ func _add_button(key: String, mat_id: int):
 	var slot_pnl = PanelContainer.new()
 	var slot_style = StyleBoxEmpty.new() # Invisible but stops mouse
 	slot_pnl.add_theme_stylebox_override("panel", slot_style)
-	slot_pnl.mouse_filter = Control.MOUSE_FILTER_STOP
+	slot_pnl.mouse_filter = Control.MOUSE_FILTER_PASS # PASS: ALLOW SCROLL ON DRAG (MOBILE)
 	slot_pnl.size_flags_horizontal = Control.SIZE_EXPAND_FILL # LIQUID FILL (JUSTIFY)
 	slot_pnl.custom_minimum_size = Vector2(110 * s, 85 * s) 
 	
@@ -1492,7 +1527,7 @@ func _step_simulation():
 								if should_move:
 									# Basic Move try
 									var ny = y + 1
-									if ny < grid_height:
+									if ny < dynamic_grid_height:
 										var n_idx = ny * grid_width + x
 										if cells[n_idx] == 0: # Down
 											_swap_cells(x, y, x, ny)
@@ -1953,7 +1988,8 @@ func _setup_npc_panel_node():
 	
 	var p_width = 530 * s
 	var p_height = 200 * s
-	var bottom_gap = (min(115 * s, 140)) + (5 * s)
+	var h = 185 * s # Match the Tall HUD height
+	var bottom_gap = h + (5 * s)
 	
 	npc_panel.offset_left = -p_width / 2
 	npc_panel.offset_right = p_width / 2
@@ -1986,10 +2022,11 @@ func _setup_npc_ui():
 	var s = _get_ui_scale()
 	var npc_btn = Button.new()
 	npc_btn.name = "NPCBtn"
-	npc_btn.custom_minimum_size = Vector2(160 * s, 38 * s) # Slim height
+	npc_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
 	npc_btn.add_theme_font_size_override("font_size", 14 * s) # Compact font
 	npc_btn.text = tr[current_language]["npc"]
 	ui_elements["npc_btn"] = npc_btn
+	npc_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	action_vbox.add_child(npc_btn)
 	
 	var btn_style = StyleBoxFlat.new()
