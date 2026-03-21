@@ -106,7 +106,8 @@ var tr = {
 		"team_red": "🔴 Rojo",
 		"team_blue": "🔵 Azul",
 		"team_yellow": "🟡 Amarillo",
-		"team_green": "🟢 Verde"
+		"team_green": "🟢 Verde",
+		"ice": "Hielo"
 	},
 	"en": {
 		"disasters": "🌪️ Disasters",
@@ -154,7 +155,8 @@ var tr = {
 		"team_red": "🔴 Red",
 		"team_blue": "🔵 Blue",
 		"team_yellow": "🟡 Yellow",
-		"team_green": "🟢 Green"
+		"team_green": "🟢 Green",
+		"ice": "Ice"
 	}
 }
 
@@ -312,6 +314,10 @@ func _ready():
 	# Cement (Solid Beige)
 	_register_material(26, Color("#C2B280"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
 	
+	# --- CRYOGENIC SYSTEM ---
+	# 60: Ice (Light Cyan Static Solid)
+	_register_material(60, Color("#DDF0FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
+	
 	# --- VOLCANO SYSTEM ---
 	# 27: Volcan (Block) - Neon Orange + Anti-Explosive
 	_register_material(27, Color("#FF5F1F"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
@@ -358,6 +364,10 @@ func _ready():
 	_register_material(62, npc_color_exp, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 	_register_material(63, npc_color_hit, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 	_register_material(64, npc_color_death, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	
+	# --- CRYOGENIC SYSTEM ---
+	# 70: Ice (Light Cyan Static Solid)
+	_register_material(70, Color("#bbe0fcff"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
 
 
 	# UI SETUP (Must happen AFTER materials are registered)
@@ -411,6 +421,7 @@ func _setup_materials_within_grid():
 	_add_button("cem_fresh", 25)
 	_add_button("cement", 26)
 	_add_button("volcan", 27)
+	_add_button("ice", 70)
 	
 	# FIND the scroll vbox to add the final spacer
 	var s = _get_ui_scale()
@@ -1538,6 +1549,44 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		charge_array[idx] -= 1
 		if charge_array[idx] <= 0:
 			_explode(x, y, 12)
+
+	# --- CRYOGENICS (ICE ID 60) ---
+	if mat_id == 60:
+		# 1. Melt if near heat (Incendiary)
+		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY):
+			if randf() < 0.2:
+				_set_cell(x, y, 2) # Become Water
+				return
+		
+		# 2. Freeze adjacent Water (Only 1% per frame for cool slow growth)
+		if randf() < 0.05:
+			for ny in range(y - 1, y + 2):
+				if ny < 0 or ny >= grid_height: continue
+				for nx in range(x - 1, x + 2):
+					if nx < 0 or nx >= grid_width: continue
+					if nx == x and ny == y: continue
+					if cells[ny * grid_width + nx] == 2: # WATER
+						_set_cell(nx, ny, 60) # FREEZE!
+						return
+
+	# --- CRYOGENICS (ICE ID 70) ---
+	if mat_id == 70:
+		# 1. Melt if near heat (Incendiary)
+		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY):
+			if randf() < 0.2:
+				_set_cell(x, y, 2) # Become Water
+				return
+		
+		# 2. Freeze adjacent Water (Slow growth)
+		if randf() < 0.05:
+			for ny in range(y - 1, y + 2):
+				if ny < 0 or ny >= grid_height: continue
+				for nx in range(x - 1, x + 2):
+					if nx < 0 or nx >= grid_width: continue
+					if nx == x and ny == y: continue
+					if cells[ny * grid_width + nx] == 2: # WATER
+						_set_cell(nx, ny, 70) # FREEZE!
+						return
 
 	# ELECTRIC SEEDING (Only decay temporary sparks, not persistent liquids/solids like Acid/Metal)
 	if (tags & SandboxMaterial.Tags.ELECTRICITY):
