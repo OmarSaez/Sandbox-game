@@ -2332,22 +2332,36 @@ func _miner_dig(npc, dig_down=false):
 	var ty_start = npc.pos.y - 2 + dy_offset
 	var ty_end = npc.pos.y + 5 + dy_offset
 	
-	# 1. PLACE WOOD SUPPORTS (Floor and Ceiling)
-	var beam_len = 3 if dig_down else 6 # SHORTER BEAMS FOR DIAGONAL RAMPS (3px)
+	# 1. PLACE WOOD SUPPORTS (Asymmetric Engineering)
+	var beam_len = 3 if dig_down else 6
+	
+	# CEILING: Proactive (Ahead) and Predictive (Radar Sealing)
+	var tx_c = npc.pos.x + (npc.dir * 3)
 	for ox in range(0, beam_len):
-		var wx = tx + (ox * npc.dir)
+		var wx = tx_c + (ox * npc.dir)
 		if wx < 0 or wx >= grid_width: continue
-		
-		# Ceiling support
 		if ty_start >= 0:
-			var tid = _get_cell(wx, ty_start)
-			if tid == 0 or tid == 1 or tid == 6 or tid == 10:
+			# RADAR CHECK: Look ahead 3px to see if mountain is coming
+			var mountain_ahead = false
+			for rx in range(0, 4):
+				var r_check = wx + (rx * npc.dir)
+				if r_check >= 0 and r_check < grid_width:
+					var look_id = _get_cell(r_check, ty_start)
+					if look_id != 0 and look_id != 16:
+						mountain_ahead = true; break
+			
+			if mountain_ahead:
 				_set_cell(wx, ty_start, 16)
-		
-		# Floor support
+	
+	# FLOOR: Protective (From Behind) to avoid falling
+	var tx_f = npc.pos.x - (npc.dir * 2) 
+	var f_len = 6 # Extended floor coverage
+	for ox in range(0, f_len):
+		var wx = tx_f + (ox * npc.dir)
+		if wx < 0 or wx >= grid_width: continue
 		if ty_end < dynamic_grid_height:
 			var tid = _get_cell(wx, ty_end)
-			if tid == 0 or tid == 1 or tid == 6 or tid == 10:
+			if tid != 16: # Ensure we don't mess with existing supports
 				_set_cell(wx, ty_end, 16)
 				
 	# 2. CLEAR THE PATH (Wider 4px Tunnel for 'Better Air')
