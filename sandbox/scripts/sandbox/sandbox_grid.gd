@@ -2238,27 +2238,39 @@ func _process_npcs(delta):
 			var dy_abs = abs(target.pos.y - np.y)
 			
 			if npc.type == "warrior":
-				npc.dir = 1 if dist_x > 0 else -1
+				var target_below = target.pos.y > np.y + 8
+				
+				# GLOBAL SWEEP: If target is below, walk SIDE-TO-SIDE until ledge found
+				if target_below:
+					if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+				else:
+					npc.dir = 1 if dist_x > 0 else -1
+				
 				if dx_abs < 6 and dy_abs < 6:
 					is_attacking = true
 					if npc.attack_cooldown <= 0:
 						_attack_npc(npc, target)
 						npc.attack_cooldown = 0.6
-				if dx_abs < 4: npc.dir = 0
+				
+				# Stop ONLY if on same level AND close in X
+				if dx_abs < 4 and !target_below: npc.dir = 0 
 			elif npc.type == "archer":
+				var target_below = target.pos.y > np.y + 12
+				
 				if dx_abs > 120: npc.dir = 1 if dist_x > 0 else -1
 				elif dx_abs < 50:
 					npc.dir = -1 if dist_x > 0 else 1
-					is_attacking = true
-					if npc.attack_cooldown <= 0:
-						_shoot_arrow(npc, target)
-						npc.attack_cooldown = 1.5
 				else:
-					npc.dir = 0
-					is_attacking = true
-					if npc.attack_cooldown <= 0:
-						_shoot_arrow(npc, target)
-						npc.attack_cooldown = 1.1
+					# GLOBAL HUNT: Walk until hole or ledge
+					if target_below:
+						if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+					else:
+						npc.dir = 0
+				
+				is_attacking = true
+				if npc.attack_cooldown <= 0:
+					_shoot_arrow(npc, target)
+					npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
 		
 		# 3. MINER AI
 		if npc.type == "miner":
@@ -2301,17 +2313,21 @@ func _process_npcs(delta):
 		
 		# 4. PHYSICS & MOVEMENT (Gravity)
 		if _can_npc_fit(np.x, np.y + 1):
-			np.y += 1
-		elif npc.type != "miner": # Warriors/Archers climbing
-			if not target and randf() < 0.02: npc.dir = 1 if randf() > 0.5 else -1
+			np.y += 1 # Standard Gravity
+		elif npc.type != "miner": # Warriors/Archers climbing logic
 			if npc.dir != 0:
 				var tx = np.x + npc.dir
-				if _can_npc_fit(tx, np.y):
-					np.x = tx
-				elif _can_npc_fit(tx, np.y - 1): # Simple 1px climb
-					np.x = tx; np.y -= 1
-				elif !is_attacking:
-					npc.dir = -npc.dir 
+				var moved = false
+				# 8px VERTICAL RAYCAST (Smart Climbing)
+				# Scan upwards to see if it can step up or climb
+				for dy in range(0, -9, -1):
+					if _can_npc_fit(tx, np.y + dy):
+						np.x = tx; np.y += dy
+						moved = true; break
+				
+				# WALL REBOUND: If blocked by something > 8px
+				if not moved:
+					if !is_attacking: npc.dir = -npc.dir
 		
 		# 5. FINAL RENDER: Redraw at the new position
 		npc.pos = np
