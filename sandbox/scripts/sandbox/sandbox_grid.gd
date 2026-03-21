@@ -1844,9 +1844,15 @@ func _process_npcs(delta):
 					# Perform Digging & Tube Construction
 					_miner_dig(npc, dig_down)
 					
-					# Update movement coordinates (np)
-					np.x += npc.dir
-					if dig_down: np.y += 1
+					# Update movement coordinates (np) with boundary protection
+					var next_x = np.x + npc.dir
+					var next_y = np.y + (1 if dig_down else 0)
+					
+					if next_x < 5 or next_x > grid_width - 5 or next_y >= grid_height - 10:
+						npc.dir = -npc.dir # Turn around at edges
+					else:
+						np.x = next_x
+						np.y = next_y
 		
 		# 4. PHYSICS & MOVEMENT (Gravity)
 		if _can_npc_fit(np.x, np.y + 1):
