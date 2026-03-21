@@ -79,6 +79,7 @@ var tr = {
 		"npc": "👥 NPCs",
 		"warrior": "⚔️ Guerrero",
 		"archer": "🏹 Arquero",
+		"miner": "⛏️ Minero",
 		"team_red": "🔴 Rojo",
 		"team_blue": "🔵 Azul",
 		"team_yellow": "🟡 Amarillo",
@@ -126,6 +127,7 @@ var tr = {
 		"npc": "👥 NPCs",
 		"warrior": "⚔️ Warrior",
 		"archer": "🏹 Archer",
+		"miner": "⛏️ Miner",
 		"team_red": "🔴 Red",
 		"team_blue": "🔵 Blue",
 		"team_yellow": "🟡 Yellow",
@@ -179,8 +181,8 @@ func _ready():
 	tags_array.resize(grid_width * grid_height)
 	charge_array.resize(grid_width * grid_height)
 	
-	material_colors_raw.resize(50) 
-	material_tags_raw.resize(50)
+	material_colors_raw.resize(256) # Pre-size for plenty of materials
+	material_tags_raw.resize(256)
 	
 	# Setup materials
 	_register_material(0, Color(0, 0, 0, 0), SandboxMaterial.Tags.NONE)
@@ -294,7 +296,7 @@ func _ready():
 	# 36: Team Yellow
 	_register_material(36, Color.YELLOW, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 	# 37: Team Green
-	_register_material(37, Color.GREEN, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(37, Color("#00FF00"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 	
 	# --- ARCHER SYSTEM ---
 	# 40: Archer Master
@@ -303,6 +305,12 @@ func _ready():
 	_register_material(41, Color("#8B4513"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 	# 42: Arrow Pixel
 	_register_material(42, Color("#D2B48C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
+	
+	# --- MINER SYSTEM ---
+	# 50: Miner Master
+	_register_material(50, Color("#555555"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 51: Miner Helmet
+	_register_material(51, Color("#FFD700"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 
 	# UI SETUP (Must happen AFTER materials are registered)
 	_setup_main_ui_containers()
@@ -856,6 +864,8 @@ func _update_highlights():
 					if selected_material == 30: is_active = true
 				elif key == "archer_btn":
 					if selected_material == 40: is_active = true
+				elif key == "miner_btn":
+					if selected_material == 50: is_active = true
 				elif key.begins_with("team_btn_"):
 					var idx = int(key.split("_")[-1])
 					if idx == selected_team: is_active = true
@@ -1648,6 +1658,17 @@ func _setup_npc_ui():
 		ui_elements["archer_btn"] = archer_btn
 		npc_row.add_child(archer_btn)
 		
+		var miner_btn = Button.new()
+		miner_btn.text = tr[current_language]["miner"]
+		miner_btn.custom_minimum_size = Vector2(120 * s, 45 * s)
+		miner_btn.add_theme_font_size_override("font_size", 14 * s)
+		miner_btn.pressed.connect(func():
+			selected_material = 50 # Miner Material
+			_update_highlights()
+		)
+		ui_elements["miner_btn"] = miner_btn
+		npc_row.add_child(miner_btn)
+		
 		v_box.add_child(npc_row)
 		
 		# Teams Row
@@ -1674,6 +1695,7 @@ func _place_npc(x, y):
 	
 	var n_type = "warrior"
 	if selected_material == 40 or selected_material == 41: n_type = "archer"
+	elif selected_material == 50 or selected_material == 51: n_type = "miner"
 	
 	# Register in entity list
 	var new_npc = {
@@ -1683,7 +1705,11 @@ func _place_npc(x, y):
 		"type": n_type,
 		"hp": 100.0,
 		"attack_cooldown": 0.0,
-		"hit_flash": 0
+		"hit_flash": 0,
+		"dig_timer": 0.0,
+		"spawn_y": start_y,
+		"mine_state": "ramp",
+		"state_steps": 25
 	}
 	active_npcs.append(new_npc)
 	
@@ -1696,20 +1722,22 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	var team_mat = 34 + npc.team
 	
 	var is_archer = npc.type == "archer"
+	var is_miner = npc.type == "miner"
 	var is_flashing = npc.hit_flash > 0
 	
-	var m_head = (41 if is_archer else 31) if override_mat == -1 else override_mat
+	var m_head = (41 if is_archer else (50 if is_miner else 31)) if override_mat == -1 else override_mat
 	var m_skin = 33 if override_mat == -1 else override_mat
-	var m_body = (40 if is_archer else 32) if override_mat == -1 else override_mat
-	var m_legs = 31 if override_mat == -1 else override_mat
+	var m_body = (40 if is_archer else (50 if is_miner else 32)) if override_mat == -1 else override_mat
+	var m_legs = (50 if is_miner else 31) if override_mat == -1 else override_mat
 	var m_team = team_mat if override_mat == -1 else override_mat
+	var m_helmet = 51 if override_mat == -1 else override_mat
 	
 	# Override for hit flash (White color)
 	if is_flashing and override_mat == -1:
-		m_head = 7; m_skin = 7; m_body = 7; m_legs = 7; m_team = 7
+		m_head = 7; m_skin = 7; m_body = 7; m_legs = 7; m_team = 7; m_helmet = 7
 	
 	# HEAD
-	_set_cell(sx, sy, m_head)
+	_set_cell(sx, sy, m_head if not is_miner else m_helmet)
 	_set_cell(sx+1, sy, m_skin)
 	_set_cell(sx, sy+1, m_head)
 	_set_cell(sx+1, sy+1, m_head)
@@ -1748,11 +1776,12 @@ func _process_npcs(delta):
 		var np = npc.pos
 		if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
 		
-		# 2. AI: DETECT ENEMIES
-		var target = _find_closest_enemy(npc, 180.0) # Larger range for archers
+		# 2. AI: TARGET SELECTION & BEHAVIOR
+		var target = _find_closest_enemy(npc, 180.0)
 		var is_attacking = false
 		
-		if target:
+		# Combat logic for Warriors and Archers
+		if target and npc.type != "miner":
 			var dist_x = target.pos.x - np.x
 			var dx_abs = abs(dist_x)
 			var dy_abs = abs(target.pos.y - np.y)
@@ -1765,26 +1794,64 @@ func _process_npcs(delta):
 						_attack_npc(npc, target)
 						npc.attack_cooldown = 0.6
 				if dx_abs < 4: npc.dir = 0
-			else: # ARCHER AI
-				if dx_abs > 120: # Approach
-					npc.dir = 1 if dist_x > 0 else -1
-				elif dx_abs < 50: # Too close, retreat
+			elif npc.type == "archer":
+				if dx_abs > 120: npc.dir = 1 if dist_x > 0 else -1
+				elif dx_abs < 50:
 					npc.dir = -1 if dist_x > 0 else 1
-					is_attacking = true # SHOOT WHILE RUNNING
+					is_attacking = true
 					if npc.attack_cooldown <= 0:
 						_shoot_arrow(npc, target)
-						npc.attack_cooldown = 1.5 # Slower reload when stressed
-				else: # Perfect range
+						npc.attack_cooldown = 1.5
+				else:
 					npc.dir = 0
 					is_attacking = true
 					if npc.attack_cooldown <= 0:
 						_shoot_arrow(npc, target)
 						npc.attack_cooldown = 1.1
 		
-		# 3. PHYSICS & MOVEMENT
+		# 3. MINER AI (Always active)
+		if npc.type == "miner":
+			npc.dig_timer += 0.05
+			if npc.dig_timer >= 0.15:
+				npc.dig_timer = 0.0
+				
+				# Floor Check: Only work if standing on something
+				var is_on_ground = !_can_npc_fit(np.x, np.y + 1)
+				
+				if is_on_ground:
+					# State Management: Ramp vs Gallery
+					npc.state_steps -= 1
+					
+					# Detect if we have a roof (Underground)
+					var mat_above = _get_cell(np.x, np.y - 4)
+					var is_underground = (mat_above != 0 and mat_above != 16)
+					
+					# Force ramp if we are on the surface
+					if not is_underground and npc.mine_state == "gallery":
+						npc.mine_state = "ramp"
+						npc.state_steps = 25
+						
+					if npc.state_steps <= 0:
+						if npc.mine_state == "ramp":
+							npc.mine_state = "gallery"
+							npc.state_steps = randi_range(60, 100)
+						else:
+							npc.mine_state = "ramp"
+							npc.state_steps = randi_range(15, 25)
+					
+					var dig_down = (npc.mine_state == "ramp")
+					
+					# Perform Digging & Tube Construction
+					_miner_dig(npc, dig_down)
+					
+					# Update movement coordinates (np)
+					np.x += npc.dir
+					if dig_down: np.y += 1
+		
+		# 4. PHYSICS & MOVEMENT (Gravity)
 		if _can_npc_fit(np.x, np.y + 1):
 			np.y += 1
-		else:
+		elif npc.type != "miner": # Warriors/Archers climbing logic
 			if not target and randf() < 0.02: npc.dir = 1 if randf() > 0.5 else -1
 			if npc.dir != 0:
 				var tx = np.x + npc.dir
@@ -1805,6 +1872,41 @@ func _process_npcs(delta):
 
 	dead_indices.sort(); dead_indices.reverse()
 	for idx in dead_indices: active_npcs.remove_at(idx)
+
+func _miner_dig(npc, dig_down=false):
+	var tx = npc.pos.x + npc.dir
+	var dy_offset = 1 if dig_down else 0
+	
+	# Tube dimensions
+	var ty_start = npc.pos.y - 2 + dy_offset
+	var ty_end = npc.pos.y + 5 + dy_offset
+	
+	# 1. PLACE WOOD SUPPORTS (Floor and Ceiling)
+	for ox in range(0, 6):
+		var wx = tx + (ox * npc.dir)
+		if wx < 0 or wx >= grid_width: continue
+		
+		# Ceiling support
+		if ty_start >= 0:
+			var tid = _get_cell(wx, ty_start)
+			if tid == 0 or tid == 1 or tid == 6 or tid == 10:
+				_set_cell(wx, ty_start, 16)
+		
+		# Floor support
+		if ty_end < grid_height:
+			var tid = _get_cell(wx, ty_end)
+			if tid == 0 or tid == 1 or tid == 6 or tid == 10:
+				_set_cell(wx, ty_end, 16)
+				
+	# 2. CLEAR THE PATH
+	for dx in range(2):
+		for dy in range(ty_start + 1, ty_end):
+			var cx = tx + dx
+			var cy = dy
+			if cx < 0 or cx >= grid_width or cy < 0 or cy >= grid_height: continue
+			var tid = _get_cell(cx, cy)
+			if tid == 9 or tid == 12: continue
+			_set_cell(cx, cy, 0)
 
 func _shoot_arrow(npc, target):
 	var dx = float(target.pos.x - npc.pos.x)
