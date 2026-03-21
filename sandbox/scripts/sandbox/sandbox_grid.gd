@@ -450,8 +450,16 @@ func _setup_main_ui_containers():
 	var ui_root = get_parent().get_node("UI")
 	var main_controls = ui_root.get_node("Controls")
 	
-	# 1. CLEAN UP ui_elements (Crucial to prevent stale node bug)
+	# 1. CAPTURE VISIBILITY (Fixes auto-open and lost state bugs)
+	var tools_v = is_instance_valid(tools_panel) and tools_panel.visible
+	var disaster_v = is_instance_valid(disaster_panel) and disaster_panel.visible
+	var npc_v = is_instance_valid(npc_panel) and npc_panel.visible
+	
+	# 2. PURGE OLD UI CLONES
 	ui_elements.clear()
+	for child in ui_root.get_children():
+		if child.name.begins_with("ToolsPanel") or child.name.begins_with("DisasterPanel") or child.name.begins_with("NPCPanel"):
+			child.free()
 	
 	# 2. FIND MaterialGrid (Wherever it is)
 	if not material_grid:
@@ -555,10 +563,14 @@ func _setup_main_ui_containers():
 			if is_instance_valid(child): child.free()
 
 	# 5. CONSTRUCT ALL SUB-UI
+	ui_root.set_meta("tools_v", tools_v)
+	ui_root.set_meta("disaster_v", disaster_v)
+	ui_root.set_meta("npc_v", npc_v)
+	
 	_setup_tools_ui()
 	_setup_disaster_ui()
-	_setup_npc_panel_node() # 1. Ensure node exists FIRST
-	_setup_npc_ui()         # 2. Then fill it with buttons
+	_setup_npc_panel_node()
+	_setup_npc_ui()         
 	
 	_setup_materials_within_grid()
 	_update_highlights() # Restore selection marks
@@ -567,16 +579,30 @@ func _setup_main_ui_containers():
 func _setup_tools_ui():
 	var s = _get_ui_scale()
 	var ui_root = get_parent().get_node("UI")
+	
 	var tools_btn = Button.new()
 	tools_btn.name = "ToolsBtn"
-	tools_btn.custom_minimum_size = Vector2(160 * s, 38 * s) # Slim height
-	tools_btn.add_theme_font_size_override("font_size", 14 * s) # Compact font
+	tools_btn.custom_minimum_size = Vector2(160 * s, 38 * s)
+	tools_btn.add_theme_font_size_override("font_size", 14 * s)
 	tools_btn.text = tr[current_language]["tools"]
 	ui_elements["tools_btn"] = tools_btn
 	action_vbox.add_child(tools_btn)
 	
-	tools_panel = ui_root.get_node("ToolsPanel")
+	# CREATE FRESH PANEL WITH STYLE
+	tools_panel = PanelContainer.new()
+	tools_panel.name = "ToolsPanel"
+	ui_root.add_child(tools_panel)
+	
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.1, 0.1, 0.15, 0.95) # Near opaque dark blue-grey
+	panel_style.border_width_left = 2; panel_style.border_width_top = 2
+	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
+	panel_style.border_color = Color(0.4, 0.4, 0.5)
+	panel_style.corner_radius_top_left = 10; panel_style.corner_radius_top_right = 10
+	tools_panel.add_theme_stylebox_override("panel", panel_style)
 	tools_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	# RESTORE STATE
+	tools_panel.visible = ui_root.get_meta("tools_v", false)
 	
 	# COMPACT DYNAMIC POSITIONING
 	tools_panel.anchor_left = 0.5
@@ -593,18 +619,12 @@ func _setup_tools_ui():
 	tools_panel.offset_bottom = -bottom_gap
 	tools_panel.offset_top = -bottom_gap - panel_height
 	
-	# SETUP INTERNAL BOX IF NOT PRESENT
-	var v_box: VBoxContainer
-	for child in tools_panel.get_children(): 
-		if is_instance_valid(child): child.free() # CLEAR OLD PANEL IMMEDIATELY
-	
-	v_box = VBoxContainer.new()
-	v_box.add_theme_constant_override("separation", 15 * s)
-	v_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	v_box.set_anchors_preset(Control.PRESET_FULL_RECT)
-	v_box.add_theme_constant_override("margin_bottom", 10 * s)
-	v_box.add_theme_constant_override("margin_top", 10 * s)
-	tools_panel.add_child(v_box)
+	# DYNAMIC BOX (NOW INSIDE SCROLL)
+	var scroll = ScrollContainer.new()
+	scroll.name = "ToolsScroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tools_panel.add_child(scroll)
 	
 	tools_btn.pressed.connect(func(): 
 		disaster_panel.visible = false
@@ -615,15 +635,22 @@ func _setup_tools_ui():
 	tools_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	tools_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 	
+	var v_box = VBoxContainer.new()
+	v_box.add_theme_constant_override("separation", 15 * s)
+	v_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(v_box)
+	
 	var create_row = func(label_key: String, options: Array, callback: Callable):
-		var h_box = HBoxContainer.new()
-		h_box.add_theme_constant_override("separation", 10 * s)
 		var lbl = Label.new()
 		lbl.text = tr[current_language][label_key] + ": "
-		lbl.custom_minimum_size = Vector2(120 * s, 0)
 		lbl.add_theme_font_size_override("font_size", 14 * s)
 		ui_elements[label_key + "_lbl"] = lbl
-		h_box.add_child(lbl)
+		v_box.add_child(lbl)
+		
+		var flow = HFlowContainer.new()
+		flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v_box.add_child(flow)
+		
 		for i in range(options.size()):
 			var btn = Button.new()
 			btn.text = options[i]
@@ -631,9 +658,8 @@ func _setup_tools_ui():
 			btn.add_theme_font_size_override("font_size", 14 * s)
 			var level = i
 			btn.pressed.connect(func(): callback.call(level))
-			h_box.add_child(btn)
+			flow.add_child(btn)
 			ui_elements[label_key + "_btn_" + str(i)] = btn 
-		v_box.add_child(h_box)
 
 	# Language Row (First Tool)
 	var lang_options = ["Español", "English"]
@@ -680,36 +706,46 @@ func _setup_disaster_ui():
 	ui_elements["disaster_btn"] = disaster_btn
 	action_vbox.add_child(disaster_btn)
 	
+	# CREATE FRESH PANEL WITH STYLE
 	var ui_root = get_parent().get_node("UI")
-	disaster_panel = ui_root.get_node("DisasterPanel")
+	disaster_panel = PanelContainer.new()
+	disaster_panel.name = "DisasterPanel"
+	ui_root.add_child(disaster_panel)
+	
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.15, 0.1, 0.1, 0.95) # Near opaque dark red-grey
+	panel_style.border_width_left = 2; panel_style.border_width_top = 2
+	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
+	panel_style.border_color = Color(0.5, 0.4, 0.4)
+	panel_style.corner_radius_top_left = 10; panel_style.corner_radius_top_right = 10
+	disaster_panel.add_theme_stylebox_override("panel", panel_style)
+	
 	disaster_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	# COMPACT DYNAMIC POSITIONING
 	disaster_panel.anchor_left = 0.5
 	disaster_panel.anchor_right = 0.5
 	disaster_panel.anchor_top = 1.0
 	disaster_panel.anchor_bottom = 1.0
 	
-	var d_width = 300 * s
-	var d_height = 120 * s
+	var d_width = 450 * s
+	var d_height = 250 * s
 	var d_bottom_gap = (min(115 * s, 140)) + (5 * s)
 	
 	disaster_panel.offset_left = -d_width / 2
 	disaster_panel.offset_right = d_width / 2
 	disaster_panel.offset_bottom = -d_bottom_gap
 	disaster_panel.offset_top = -d_bottom_gap - d_height
+	# RESTORE STATE
+	disaster_panel.visible = ui_root.get_meta("disaster_v", false)
 	
-	var v_box: VBoxContainer
 	for child in disaster_panel.get_children(): 
 		if is_instance_valid(child): child.free() # CLEAR OLD PANEL IMMEDIATELY
-	
-	v_box = VBoxContainer.new()
-	v_box.add_theme_constant_override("separation", 15 * s)
-	v_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	v_box.set_anchors_preset(Control.PRESET_FULL_RECT)
-	v_box.add_theme_constant_override("margin_bottom", 10 * s)
-	v_box.add_theme_constant_override("margin_top", 10 * s)
-	disaster_panel.add_child(v_box)
+		
+	var scroll = ScrollContainer.new()
+	scroll.name = "DisasterScroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	disaster_panel.add_child(scroll)
 	
 	disaster_btn.pressed.connect(func(): 
 		tools_panel.visible = false
@@ -720,15 +756,22 @@ func _setup_disaster_ui():
 	disaster_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	disaster_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 	
+	var v_box = VBoxContainer.new()
+	v_box.add_theme_constant_override("separation", 15 * s)
+	v_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(v_box)
+	
 	var create_row = func(label_key: String, options_keys: Array, callback: Callable):
-		var h_box = HBoxContainer.new()
-		h_box.add_theme_constant_override("separation", 10 * s)
 		var lbl = Label.new()
 		lbl.text = tr[current_language][label_key] + ": "
-		lbl.custom_minimum_size = Vector2(120 * s, 0)
 		lbl.add_theme_font_size_override("font_size", 14 * s)
 		ui_elements[label_key + "_lbl"] = lbl
-		h_box.add_child(lbl)
+		v_box.add_child(lbl)
+		
+		var flow = HFlowContainer.new()
+		flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v_box.add_child(flow)
+		
 		for i in range(options_keys.size()):
 			var osk = options_keys[i]
 			var btn = Button.new()
@@ -736,9 +779,9 @@ func _setup_disaster_ui():
 			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			btn.add_theme_font_size_override("font_size", 14 * s)
 			btn.pressed.connect(func(): callback.call(i))
-			h_box.add_child(btn)
-			ui_elements[label_key + "_btn_" + str(i)] = [btn, osk] # Store button and key for translation
-		v_box.add_child(h_box)
+			flow.add_child(btn)
+			ui_elements[label_key + "_btn_" + str(i)] = [btn, osk]
+		v_box.add_child(flow)
 
 	create_row.call("weather", ["off", "light", "med", "storm"], func(l): 
 		current_weather = l
@@ -1834,6 +1877,14 @@ func _setup_npc_panel_node():
 	npc_panel.name = "NPCPanel"
 	ui_root.add_child(npc_panel)
 	
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.1, 0.15, 0.1, 0.95) # Near opaque dark green-grey
+	panel_style.border_width_left = 2; panel_style.border_width_top = 2
+	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
+	panel_style.border_color = Color(0.4, 0.5, 0.4)
+	panel_style.corner_radius_top_left = 10; panel_style.corner_radius_top_right = 10
+	npc_panel.add_theme_stylebox_override("panel", panel_style)
+	
 	# Compact dynamic positioning (Middle menu)
 	var s = _get_ui_scale()
 	npc_panel.anchor_left = 0.5
@@ -1841,15 +1892,33 @@ func _setup_npc_panel_node():
 	npc_panel.anchor_top = 1.0
 	npc_panel.anchor_bottom = 1.0
 	
-	var p_width = 400 * s
-	var p_height = 130 * s
+	var p_width = 450 * s
+	var p_height = 200 * s
 	var bottom_gap = (min(115 * s, 140)) + (5 * s)
 	
 	npc_panel.offset_left = -p_width / 2
 	npc_panel.offset_right = p_width / 2
 	npc_panel.offset_bottom = -bottom_gap
 	npc_panel.offset_top = -bottom_gap - p_height
-	npc_panel.visible = false
+	
+	# RESTORE STATE
+	npc_panel.visible = ui_root.get_meta("npc_v", false)
+	
+	# SETUP INTERNAL SCROLL (REPLACEMENT FOR DIRECT VBOX)
+	for child in npc_panel.get_children(): 
+		if is_instance_valid(child): child.free()
+		
+	var scroll = ScrollContainer.new()
+	scroll.name = "NPCScroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	npc_panel.add_child(scroll)
+	
+	var v_box = VBoxContainer.new()
+	v_box.name = "NPCVBox"
+	v_box.add_theme_constant_override("separation", 10 * s)
+	v_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(v_box)
 	
 	npc_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	npc_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
@@ -1872,59 +1941,45 @@ func _setup_npc_ui():
 	
 	# Clear and Fill
 	if is_instance_valid(npc_panel):
-		for child in npc_panel.get_children(): child.free()
+		var scroll = npc_panel.get_child(0) as ScrollContainer
+		var v_box = scroll.get_child(0) as VBoxContainer
+		for child in v_box.get_children(): child.free()
 		
-		var v_box = VBoxContainer.new()
-		v_box.add_theme_constant_override("separation", 10 * s)
-		v_box.alignment = BoxContainer.ALIGNMENT_CENTER
-		npc_panel.add_child(v_box)
-		
-		# Title (NPCs)
-		var npc_row = HBoxContainer.new()
-		npc_row.add_theme_constant_override("separation", 10 * s)
+		# NPC Selection (NOW RESPONSIVE)
 		var npc_lbl = Label.new()
 		npc_lbl.text = tr[current_language]["npc"] + ": "
-		npc_lbl.custom_minimum_size = Vector2(100 * s, 0)
 		npc_lbl.add_theme_font_size_override("font_size", 14 * s)
-		npc_row.add_child(npc_lbl)
+		v_box.add_child(npc_lbl)
 		
-		var warrior_btn = Button.new()
-		warrior_btn.text = tr[current_language]["warrior"]
-		warrior_btn.custom_minimum_size = Vector2(120 * s, 45 * s)
-		warrior_btn.add_theme_font_size_override("font_size", 14 * s)
-		warrior_btn.pressed.connect(func():
-			selected_material = 30 # Master Warrior Material
-			_update_highlights()
-		)
-		ui_elements["warrior_btn"] = warrior_btn
-		npc_row.add_child(warrior_btn)
-		var archer_btn = Button.new()
-		archer_btn.text = tr[current_language]["archer"]
-		archer_btn.custom_minimum_size = Vector2(120 * s, 45 * s)
-		archer_btn.add_theme_font_size_override("font_size", 14 * s)
-		archer_btn.pressed.connect(func():
-			selected_material = 40 # Archer Material
-			_update_highlights()
-		)
-		ui_elements["archer_btn"] = archer_btn
-		npc_row.add_child(archer_btn)
+		var npc_flow = HFlowContainer.new()
+		npc_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v_box.add_child(npc_flow)
 		
-		var miner_btn = Button.new()
-		miner_btn.text = tr[current_language]["miner"]
-		miner_btn.custom_minimum_size = Vector2(120 * s, 45 * s)
-		miner_btn.add_theme_font_size_override("font_size", 14 * s)
-		miner_btn.pressed.connect(func():
-			selected_material = 50 # Miner Material
-			_update_highlights()
-		)
-		ui_elements["miner_btn"] = miner_btn
-		npc_row.add_child(miner_btn)
+		var create_npc_btn = func(key: String, id: int):
+			var btn = Button.new()
+			btn.text = tr[current_language][key]
+			btn.custom_minimum_size = Vector2(100 * s, 45 * s)
+			btn.pressed.connect(func():
+				selected_material = id # Master Warrior Material
+				_update_highlights()
+			)
+			ui_elements[key + "_btn"] = btn
+			npc_flow.add_child(btn)
 		
-		v_box.add_child(npc_row)
+		create_npc_btn.call("warrior", 30)
+		create_npc_btn.call("archer", 40)
+		create_npc_btn.call("miner", 50)
 		
-		# Teams Row
-		var team_row = HBoxContainer.new()
-		team_row.add_theme_constant_override("separation", 5 * s)
+		# Teams Row (NOW RESPONSIVE)
+		var team_lbl = Label.new()
+		team_lbl.text = "Team: "
+		team_lbl.add_theme_font_size_override("font_size", 14 * s)
+		v_box.add_child(team_lbl)
+		
+		var team_flow = HFlowContainer.new()
+		team_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v_box.add_child(team_flow)
+		
 		var team_keys = ["team_red", "team_blue", "team_yellow", "team_green"]
 		for i in range(4):
 			var t_btn = Button.new()
@@ -1937,8 +1992,7 @@ func _setup_npc_ui():
 				_update_highlights()
 			)
 			ui_elements["team_btn_" + str(i)] = t_btn
-			team_row.add_child(t_btn)
-		v_box.add_child(team_row)
+			team_flow.add_child(t_btn)
 
 func _place_npc(x, y):
 	var start_x = x - 1
