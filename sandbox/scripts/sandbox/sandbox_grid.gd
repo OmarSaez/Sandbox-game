@@ -455,10 +455,14 @@ func _setup_main_ui_containers():
 	var disaster_v = is_instance_valid(disaster_panel) and disaster_panel.visible
 	var npc_v = is_instance_valid(npc_panel) and npc_panel.visible
 	
-	# 2. PURGE OLD UI CLONES
+	# 2. PURGE OLD UI CLONES & ACTION NODES
 	ui_elements.clear()
 	for child in ui_root.get_children():
 		if child.name.begins_with("ToolsPanel") or child.name.begins_with("DisasterPanel") or child.name.begins_with("NPCPanel"):
+			child.free()
+			
+	for child in main_controls.get_children():
+		if child.name == "ActionScroll" or child.name.begins_with("ActionButtons"):
 			child.free()
 	
 	# 2. FIND MaterialGrid (Wherever it is)
@@ -537,36 +541,32 @@ func _setup_main_ui_containers():
 		texture_rect.offset_bottom = -1 # Align tightly with the top of HUD floor
 		texture_rect.offset_top = 0
 
-	# 4. ROBUST CLONE DETECTION: Find and cleanup ALL ActionButtons nodes (including renamed ones)
-	var found_action_boxes = []
-	for child in main_controls.get_children():
-		if child.name.begins_with("ActionButtons"):
-			found_action_boxes.append(child)
+	# 4. FRESH ACTION ZONE REBUILD (Fixes scroll bugs on scale change)
+	var action_scroll = ScrollContainer.new()
+	action_scroll.name = "ActionScroll"
+	action_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	action_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	main_controls.add_child(action_scroll)
 	
-	if found_action_boxes.size() > 0:
-		action_vbox = found_action_boxes[0] # Keep the first one
+	action_vbox = VBoxContainer.new()
+	action_vbox.name = "ActionButtons"
+	action_scroll.add_child(action_vbox)
 		
-		# Terminate all OTHER clones found
-		for i in range(1, found_action_boxes.size()):
-			found_action_boxes[i].free()
-			
-		# Clean the survivor COMPLETELY before rebuild
-		for child in action_vbox.get_children():
-			if is_instance_valid(child): child.free()
-			
-		# PIN Survivor to HUD Floor with FIXED LIMIT
-		action_vbox.anchor_bottom = 1.0
-		action_vbox.anchor_top = 1.0
-		action_vbox.anchor_left = 1.0
-		action_vbox.anchor_right = 1.0
-		
-		action_vbox.offset_bottom = 0
-		action_vbox.offset_top = -h
-		action_vbox.offset_left = -170 * s # Standard button width zone
-		action_vbox.offset_right = 0
-		
-		action_vbox.add_theme_constant_override("separation", 3 * s) # Compact
-		action_vbox.alignment = BoxContainer.ALIGNMENT_END # PUSH TO BOTTOM
+	# PIN SCROLL to HUD Floor
+	action_scroll.anchor_bottom = 1.0
+	action_scroll.anchor_top = 1.0
+	action_scroll.anchor_left = 1.0
+	action_scroll.anchor_right = 1.0
+	
+	action_scroll.offset_bottom = 0
+	action_scroll.offset_top = -h
+	action_scroll.offset_left = -170 * s 
+	action_scroll.offset_right = 0
+	
+	action_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	action_vbox.add_theme_constant_override("separation", 3 * s)
+	action_vbox.alignment = BoxContainer.ALIGNMENT_END
 	
 	# CLEAN MATERIAL GRID
 	if material_grid:
