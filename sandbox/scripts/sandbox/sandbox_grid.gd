@@ -2325,15 +2325,16 @@ func _process_npcs(delta):
 	for idx in dead_indices: active_npcs.remove_at(idx)
 
 func _miner_dig(npc, dig_down=false):
-	var tx = npc.pos.x + npc.dir
+	var tx = npc.pos.x + (npc.dir * 3) # PUSH WOOD 3px AHEAD to avoid 'tunnel-traps'
 	var dy_offset = 1 if dig_down else 0
 	
-	# Tube dimensions
+	# Tube height (Same 7px, but wider inner)
 	var ty_start = npc.pos.y - 2 + dy_offset
 	var ty_end = npc.pos.y + 5 + dy_offset
 	
 	# 1. PLACE WOOD SUPPORTS (Floor and Ceiling)
-	for ox in range(0, 6):
+	var beam_len = 3 if dig_down else 6 # SHORTER BEAMS FOR DIAGONAL RAMPS (3px)
+	for ox in range(0, beam_len):
 		var wx = tx + (ox * npc.dir)
 		if wx < 0 or wx >= grid_width: continue
 		
@@ -2349,11 +2350,11 @@ func _miner_dig(npc, dig_down=false):
 			if tid == 0 or tid == 1 or tid == 6 or tid == 10:
 				_set_cell(wx, ty_end, 16)
 				
-	# 2. CLEAR THE PATH
-	for dx in range(2):
+	# 2. CLEAR THE PATH (Wider 4px Tunnel for 'Better Air')
+	for dx in range(0, 4):
 		for dy in range(ty_start + 1, ty_end):
-			var cx = tx + dx
-			var cy = dy
+			var cx = npc.pos.x + (dx * npc.dir) # Start clearing from the miner's face
+			var cy = dy 
 			if cx < 0 or cx >= grid_width or cy < 0 or cy >= dynamic_grid_height: continue
 			var tid = _get_cell(cx, cy)
 			if tid == 9 or tid == 12: continue
