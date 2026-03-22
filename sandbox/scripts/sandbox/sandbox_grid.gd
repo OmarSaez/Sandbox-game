@@ -69,6 +69,7 @@ var tsunami_player: AudioStreamPlayer
 var firework_player: AudioStreamPlayer # Dedicated for rocket fuse
 var ascent_player: AudioStreamPlayer   # Dedicated for rocket flying up
 var volcano_loop_player: AudioStreamPlayer # Dedicated for volcano bubbling loop
+var fire_loop_player: AudioStreamPlayer    # Dedicated for global crackling/burning
 const SFX_POOL_SIZE = 8
 
 # Mapeo: ID del Material -> Nombre del archivo (SONIDO EN BUCLE / LOOP) MP3
@@ -122,7 +123,6 @@ var action_sfx = {
 	"weather_3": "rain_storm",
 	"quake_loop": "quake_loop",
 	"tornado_loop": "tornado_loop",
-	"tsunami_loop": "tsunami_loop",
 	"firework_launch": "rocket_launch",
 	"firework_ascent": "rocket_launch_ascent",
 	"firework_burst": "firework_explode", # Sonido de explosión de colores en el aire
@@ -131,11 +131,13 @@ var action_sfx = {
 	# --- SISTEMA SIMPLIFICADO DEL VOLCÁN ---
 	"volcan_brush": "volcan",          # (PINCEL) Sonido al dibujar
 	"volcan_active": "volcan_bubbles", # (LOOP) Burbujeo constante cuando el volcán funciona
-	"volcan_burst": "volcan_explode"   # (ONE-SHOT) Pequeños estallidos de lava
+	"volcan_burst": "volcan_explode",   # (ONE-SHOT) Pequeños estallidos de lava
+	"burn_loop": "fire_crackle"        # (LOOP) Sonido de cosas quemándose (fuego, lava, carbón)
 }
 
 var last_action_times = {} # Para controlar la saturación de sonidos
 var is_volcano_active = false 
+var is_fire_active = false
 
 var sfx_cache = {} # Cache for loaded AudioStreams
 
@@ -299,6 +301,7 @@ func _ready():
 	firework_player = AudioStreamPlayer.new(); add_child(firework_player)
 	ascent_player = AudioStreamPlayer.new(); add_child(ascent_player)
 	volcano_loop_player = AudioStreamPlayer.new(); add_child(volcano_loop_player)
+	fire_loop_player = AudioStreamPlayer.new(); add_child(fire_loop_player)
 	
 	# Calculate grid size (Smart Height: Exactly above the UI)
 	var viewport_size = get_viewport_rect().size
@@ -978,6 +981,8 @@ func _setup_disaster_ui():
 		if l > 0: 
 			earthquake_timer = randf_range(5.0, 7.0)
 			_play_action_sound("earthquake")
+		else:
+			earthquake_timer = 0 # Reset para apagar sonido e intensidad
 		_update_highlights()
 	)
 	create_row.call("tornado", ["off", "light", "med", "heavy"], func(l):
@@ -985,6 +990,8 @@ func _setup_disaster_ui():
 		if l > 0: 
 			tornado_timer = 15.0; tornado_x = randf()*grid_width; tornado_target_x = randf()*grid_width
 			_play_action_sound("tornado")
+		else:
+			tornado_timer = 0 # Apagar instantáneamente
 		_update_highlights()
 	)
 	create_row.call("tsunami", ["off", "light", "med", "storm"], func(l):
@@ -992,6 +999,8 @@ func _setup_disaster_ui():
 		if l > 0: 
 			tsunami_timer = 15.0; tsunami_wave_x = 0.0
 			_play_action_sound("tsunami")
+		else:
+			tsunami_timer = 0 # Apagar instantáneamente
 		_update_highlights()
 	)
 
@@ -1393,9 +1402,6 @@ func _process_tsunami(delta):
 	
 	tsunami_timer -= delta
 	
-	# Play sound loop while tsunami is active
-	_manage_looping_player(tsunami_player, "tsunami_loop")
-	
 	# Move the wave front from Left to Right (Gaussian Center)
 	tsunami_wave_x += (grid_width / 5.0) * delta * 5.0
 	if tsunami_wave_x > grid_width + 150:
@@ -1668,8 +1674,9 @@ func _get_cell(x, y):
 	return -1
 
 func _step_simulation():
-	# Reset flag del sonido del volcán
+	# Reset flags de sonidos ambientales
 	is_volcano_active = false
+	is_fire_active = false
 	
 	# Update active chunk countdowns
 	chunks_active = next_chunks_active.duplicate()
@@ -1777,11 +1784,16 @@ func _step_simulation():
 					count -= 1
 				y -= 1
 	
-	# === GESTIÓN GLOBAL DE SONIDO DEL VOLCÁN (SIMPLIFICADO) ===
+	# === GESTIÓN GLOBAL DE SONIDOS AMBIENTALES ===
 	if is_volcano_active: 
 		_manage_looping_player(volcano_loop_player, "volcan_active")
 	else: 
 		if volcano_loop_player.playing: volcano_loop_player.stop()
+		
+	if is_fire_active:
+		_manage_looping_player(fire_loop_player, "burn_loop")
+	else:
+		if fire_loop_player.playing: fire_loop_player.stop()
 
 func _process_electricity():
 	# Sequential processing (Beat Machine Pulse)
@@ -1879,10 +1891,12 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		
 	# FIRE AND HEAT REACTIONS
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
+		if mat_id == 3: is_fire_active = true # Sonido solo para el fuego
 		# Incendiary materials (Fire 3, Lava 11) extinguish or burn out
 		if mat_id == 3:
 			if randf() < 0.1: _set_cell(x, y, 0)
 		elif mat_id == 14: # Coal burnout (Glowing Brazas)
+			is_fire_active = true
 			if randf() < 0.002: # 6x Faster (About 3-4s per pixel)
 				_set_cell(x, y, 0)
 				if _get_cell(x, y - 1) == 0: _set_cell(x, y - 1, 15)

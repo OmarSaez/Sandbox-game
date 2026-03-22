@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://oawwkx4lmy3v"
+path="res://.godot/imported/tornado_loop 1.mp3-91c703b9a34e8b4c8044a9e09530ea2d.mp3str"
+
+[deps]
+
+source_file="res://assets/audio/sfx/tornado_loop 1.mp3"
+dest_files=["res://.godot/imported/tornado_loop 1.mp3-91c703b9a34e8b4c8044a9e09530ea2d.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
