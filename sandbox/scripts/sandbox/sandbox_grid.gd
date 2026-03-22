@@ -2380,7 +2380,8 @@ func _place_npc(x, y):
 		"mine_state": "ramp",
 		"state_steps": 25,
 		"fall_depth": 0, # Track for acrobat flips
-		"last_dig_time": 0
+		"last_dig_time": 0,
+		"miss_counter": 0 # For Archer tactical repositioning
 	}
 	active_npcs.append(new_npc)
 	
@@ -2519,19 +2520,26 @@ func _process_npcs(delta):
 			elif npc.type == "archer":
 				var target_below = target.pos.y > np.y + 12
 				
-				if dx_abs > 120: npc.dir = 1 if dist_x > 0 else -1
-				elif dx_abs < 50:
-					npc.dir = -1 if dist_x > 0 else 1
+				# REPOSITION MODE: If frustrated (miss_counter < 0), force horizontal move
+				if npc.miss_counter < 0:
+					npc.miss_counter += 1
+					if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
 				else:
-					# GLOBAL HUNT: Walk until hole or ledge
-					if target_below:
-						if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+					if dx_abs > 120: npc.dir = 1 if dist_x > 0 else -1
+					elif dx_abs < 50:
+						npc.dir = -1 if dist_x > 0 else 1
 					else:
-						npc.dir = 0
+						# GLOBAL HUNT: Walk until hole or ledge
+						if target_below:
+							if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+						else:
+							npc.dir = 0
 				
 				is_attacking = true
 				if npc.attack_cooldown <= 0:
 					_shoot_arrow(npc, target)
+					npc.miss_counter += 1
+					if npc.miss_counter >= 3: npc.miss_counter = -40 # Reposition for 40 ticks
 					npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
 		
 		# 3. MINER AI
