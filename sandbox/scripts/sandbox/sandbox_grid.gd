@@ -2516,10 +2516,11 @@ func _process_npcs(delta):
 		var target = _find_closest_enemy(npc, 250.0) # Larger radar (250px)
 		var is_attacking = false
 		
-		# DEFAULT PATROL (If no target, keep moving to explore)
+		# DEFAULT PATROL (If no target, keep moving to explore locally)
 		if !target and npc.type != "miner":
-			if Engine.get_frames_drawn() % 120 == 0: npc.dir = 1 if randf() > 0.5 else -1
-			if npc.dir == 0: npc.dir = 1
+			if randf() < 0.02: # 2% chance per tick to turn around (roam locally)
+				npc.dir = 1 if randf() > 0.5 else -1
+			if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
 			
 		if target and npc.type != "miner":
 			var dist_x = target.pos.x - np.x
@@ -2611,7 +2612,20 @@ func _process_npcs(delta):
 						np.x = next_x ; np.y -= 1 # Step up
 					else:
 						npc.dir = -npc.dir
+		# 3.5 TOWER MODE LOGIC
+		if not npc.has("is_tower"): npc["is_tower"] = false
 		
+		if npc.is_tower:
+			if target != null:
+				npc.dir = 0 # Official tower: stand still forever while target alive
+			else:
+				# Target dead or lost! Break formation
+				npc.is_tower = false
+				if npc.has("tower_dir") and npc.tower_dir != 0:
+					npc.dir = -npc.tower_dir
+				elif npc.dir == 0:
+					npc.dir = -1 if randf() > 0.5 else 1
+				
 		# 4. PHYSICS & MOVEMENT (Gravity & Knockback)
 		if not npc.has("vx"): npc["vx"] = 0.0
 		if not npc.has("vy"): npc["vy"] = 0.0
@@ -2667,21 +2681,24 @@ func _process_npcs(delta):
 					# TACTICAL JUMP: If target is above, always try to jump/catch ledges
 					var target_above = target and target.pos.y < np.y - 12
 					
-					# 10px VERTICAL RAYCAST (Smart Climbing)
+					# LADDER LOGIC: If face-to-face with an ally, climb limit is infinite!
+					# We use mathematical AABB checking so we are immune to pixel-erasure glitches!
+					var max_climb = -11
+					for other in active_npcs:
+						if other.team == npc.team and other != npc:
+							if tx < other.pos.x + 2 and tx + 2 > other.pos.x and np.y < other.pos.y + 5 and np.y + 5 > other.pos.y:
+								max_climb = -111 # Infinite ladder
+								break
+					
 					# Scan upwards to see if it can step up or climb
-					for dy in range(0, -11, -1):
+					for dy in range(0, max_climb, -1):
 						if _can_npc_fit(tx, np.y + dy, npc):
 							# If target is above, only move if we are actually GOING UP
 							if !target_above or dy < 0:
 								np.x = tx; np.y += dy
 								moved = true; break
 					
-					# IF TARGET IS ABOVE and we are NOT moving yet, try harder to jump
-					if !moved and target_above:
-						# Try a straight upward leap scan
-						for dy in range(-1, -11, -1):
-							if _can_npc_fit(np.x, np.y + dy, npc):
-								np.y += dy; moved = true; break
+
 					
 					# GAP JUMP & LUNGE: If simple climb fails, try jumping over gaps
 					if not moved:
@@ -2691,9 +2708,19 @@ func _process_npcs(delta):
 						elif _can_npc_fit(std_tx, np.y - 4, npc): # Lunge onto ramp
 							np.x = std_tx; np.y -= 4; moved = true
 					
-					# WALL REBOUND: If blocked by something > 8px
-					if not moved and !target_above: # Only rebound if not actively trying to jump up
-						if !is_attacking: npc.dir = -npc.dir
+					# WALL REBOUND AND TOWER BUILDING
+					if not moved:
+						if target == null:
+							# Exploring: just turn around randomly at walls, NO TOWERS!
+							npc.dir = -npc.dir
+						elif !is_attacking:
+							# Chasing target, blocked! Form an official tower!
+							if _can_npc_fit(np.x, np.y - 10, npc): 
+								npc["tower_dir"] = npc.dir
+								npc.is_tower = true
+								npc.dir = 0
+							elif !target_above:
+								npc.dir = -npc.dir
 		
 		# 5. FINAL RENDER: Redraw at the new position
 		npc.pos = np
@@ -2972,18 +2999,16 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 				else:
 					return false # Blocked by terrain/solid
 					
-	if encountered_npc_pixels and moving_npc != null:
-		# Check AABB against all other active NPCs
+	if moving_npc != null:
+		# Check AABB against all other active NPCs (Mathematically bulletproof)
 		for other in active_npcs:
 			if other == moving_npc: continue # Skip self
-			
 			# Custom AABB for 2x5 NPC
 			if gx < other.pos.x + 2 and gx + 2 > other.pos.x and gy < other.pos.y + 5 and gy + 5 > other.pos.y:
-				if other.team == moving_npc.team:
-					return false # Blocked by ALLIED NPC (Solid)
-		# enemies pass through, so we return true!
-	elif encountered_npc_pixels:
-		return false # Block if moving_npc is not provided
+				return false # Blocked by ANY NPC (Solid)
+	
+	if encountered_npc_pixels:
+		return false # Blocked by orphaned/unregistered NPC pixels
 
 	return true
 
