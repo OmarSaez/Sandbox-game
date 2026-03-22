@@ -2392,19 +2392,17 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	var sx = npc.pos.x
 	var sy = npc.pos.y
 	
-	# --- SMART CLEARING ---
+	# --- ROBUST CLEARING (4x7 scan area to catch shake/vfx leftovers) ---
 	if override_mat == 0:
-		# Scan a wider area (4x7) to catch any Shake/Topple leftovers
-		# But ONLY clear pixels that are actually part of an NPC
 		for oy in range(-1, 7):
 			for ox in range(-1, 3):
-				var tx = sx + ox
-				var ty = sy + oy
-				if tx < 0 or tx >= grid_width or ty < 0 or ty >= dynamic_grid_height: continue
-				var tid = cells[ty * grid_width + tx]
-				if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC):
-					_set_cell(tx, ty, 0)
-		return # Finished clearing
+				var tx = sx + ox; var ty = sy + oy
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					var tid = cells[ty * grid_width + tx]
+					# ONLY clear if it belongs to the NPC system to avoid eating terrain
+					if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC):
+						_set_cell(tx, ty, 0)
+		return
 
 	
 	var is_dead = npc.hp <= 0
@@ -2587,7 +2585,7 @@ func _process_npcs(delta):
 						npc.dir = -npc.dir
 		
 		# 4. PHYSICS & MOVEMENT (Gravity)
-		if _can_npc_fit(np.x, np.y + 1):
+		if _can_npc_fit(np.x, np.y + 1, npc.team):
 			np.y += 1 # Standard Gravity
 			npc.fall_depth += 1
 		elif npc.type != "miner": # Warriors/Archers climbing logic
@@ -2606,7 +2604,7 @@ func _process_npcs(delta):
 				# 10px VERTICAL RAYCAST (Smart Climbing)
 				# Scan upwards to see if it can step up or climb
 				for dy in range(0, -11, -1):
-					if _can_npc_fit(tx, np.y + dy):
+					if _can_npc_fit(tx, np.y + dy, npc.team):
 						# If target is above, only move if we are actually GOING UP
 						if !target_above or dy < 0:
 							np.x = tx; np.y += dy
@@ -2616,15 +2614,15 @@ func _process_npcs(delta):
 				if !moved and target_above:
 					# Try a straight upward leap scan
 					for dy in range(-1, -11, -1):
-						if _can_npc_fit(np.x, np.y + dy):
+						if _can_npc_fit(np.x, np.y + dy, npc.team):
 							np.y += dy; moved = true; break
 				
 				# GAP JUMP & LUNGE: If simple climb fails, try jumping over gaps
 				if not moved:
 					var std_tx = np.x + npc.dir # Fallback to 1px step
-					if _can_npc_fit(std_tx, np.y): # Horizontal Gap Jump
+					if _can_npc_fit(std_tx, np.y, npc.team): # Horizontal Gap Jump
 						np.x = std_tx; moved = true
-					elif _can_npc_fit(std_tx, np.y - 4): # Lunge onto ramp
+					elif _can_npc_fit(std_tx, np.y - 4, npc.team): # Lunge onto ramp
 						np.x = std_tx; np.y -= 4; moved = true
 				
 				# WALL REBOUND: If blocked by something > 8px
@@ -2642,6 +2640,11 @@ func _process_npcs(delta):
 
 	dead_indices.sort(); dead_indices.reverse()
 	for idx in dead_indices: active_npcs.remove_at(idx)
+	
+	# 6. REPAIR PASS: Redraw all NPCs to fix erasures from neighbor wide-clearing
+	# This ensures everyone is solid and visually complete for the next frame
+	for npc in active_npcs:
+		_draw_npc_pixels(npc)
 
 func _miner_dig(npc, dig_down=false):
 	# Sonar solo una vez cada 3 segundos (3000ms)
@@ -2790,31 +2793,38 @@ func _attack_npc(attacker, victim):
 	_play_action_sound("npc_hit")
 	_play_action_sound("warrior_attack")
 	
-	# Visual Sparks (Attack effects)
-	var colors = [Color.WHITE, Color.YELLOW, Color.CRIMSON]
-	for i in range(8):
+	# 1. TEAM FX (Impact Particles)
+	var t_colors = [Color.RED, Color("1E90FF"), Color.YELLOW, Color.GREEN]
+	var bleed_color = t_colors[victim.team] if victim.team < t_colors.size() else Color.WHITE
+	for i in range(10):
 		visual_sparks.append({
 			"x": float(victim.pos.x) + randf_range(0, 2),
 			"y": float(victim.pos.y) + randf_range(0, 5),
-			"vx": randf_range(-60, 60),
-			"vy": randf_range(-100, -20),
-			"color": colors.pick_random(),
-			"life": randf_range(0.3, 0.6)
+			"vx": randf_range(-80, 80),
+			"vy": randf_range(-120, -30),
+			"color": bleed_color if randf() > 0.4 else Color.WHITE,
+			"life": randf_range(0.3, 0.7)
 		})
 	
-	# Small Jump animation for attacker (Reduced to 1px to avoid climbing over enemy)
-	if _can_npc_fit(attacker.pos.x, attacker.pos.y - 1):
-		attacker.pos.y -= 1
+	# 2. AGGRESSIVE LUNGE: Kinetic boost towards victim (3px Turbo)
+	var ldir = 1 if attacker.pos.x < victim.pos.x else -1
+	for d in range(3, 0, -1):
+		var lx = attacker.pos.x + ldir * d
+		var ly = attacker.pos.y - 1
+		if _can_npc_fit(lx, ly, attacker.team):
+			attacker.pos.x = lx
+			attacker.pos.y = ly
+			break
 		
-	# KNOCKBACK (35% chance to push victim 3-5px back - Reduced for melee)
+	# 3. POWER KNOCKBACK (35% chance to push victim in parabola)
 	if randf() < 0.35:
 		var push_dir = 1 if attacker.pos.x < victim.pos.x else -1
-		var dist = randi_range(3, 5)
-		# Find furthest possible push spot (Check 6, 5, 4...)
+		var dist = randi_range(5, 8) # Stronger reach
+		# Find furthest possible push spot (Parabolic trajectory)
 		for d in range(dist, 0, -1):
 			var new_x = victim.pos.x + push_dir * d
-			var new_y = victim.pos.y - 2 # Lift 2px up!
-			if _can_npc_fit(new_x, new_y):
+			var new_y = victim.pos.y - 4 # Steep lift (4px)
+			if _can_npc_fit(new_x, new_y, victim.team):
 				_draw_npc_pixels(victim, 0) # Clear OLD
 				victim.pos.x = new_x
 				victim.pos.y = new_y
@@ -2885,7 +2895,7 @@ func _check_npc_environment_damage(npc) -> bool:
 		
 	return took_damage
 
-func _can_npc_fit(gx, gy) -> bool:
+func _can_npc_fit(gx, gy, moving_team = -1) -> bool:
 	# Bounding check
 	if gx < 0 or gx + 1 >= grid_width or gy < 0 or gy + 4 >= dynamic_grid_height:
 		return false
@@ -2894,10 +2904,9 @@ func _can_npc_fit(gx, gy) -> bool:
 	for oy in range(5):
 		for ox in range(2):
 			var tid = _get_cell(gx + ox, gy + oy)
-			# Pass through Empty(0), Smoke(15), Fire(3), Gas(17)
+			# Only allow fitting through non-solid materials (Air, Smoke, Fire, Cloud)
 			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
-				if not (material_tags_raw[tid] & SandboxMaterial.Tags.NPC):
-					return false
+				return false
 	return true
 
 func _has_tag_neighbor(x, y, tag):
@@ -3066,7 +3075,7 @@ func _explode(x, y, radius, sfx_action: String = "explosion"):
 			for d in range(push_dist, 0, -1):
 				var nx = npc.pos.x + int(blast_dir.x * d)
 				var ny = npc.pos.y + int(blast_dir.y * d) - 8 # Lift
-				if _can_npc_fit(nx, ny):
+				if _can_npc_fit(nx, ny, npc.team):
 					_draw_npc_pixels(npc, 0)
 					npc.pos.x = nx; npc.pos.y = ny
 					_draw_npc_pixels(npc)
