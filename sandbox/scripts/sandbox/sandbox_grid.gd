@@ -41,6 +41,7 @@ var material_colors_raw = PackedColorArray()
 var material_tags_raw = PackedInt32Array() 
 var selected_material: int = 1
 var current_weather: int = 0 
+var is_paused: bool = false
 # UI State
 var is_mouse_over_ui: bool = false
 var brush_radius: int = 2 
@@ -181,6 +182,8 @@ var tr = {
 		"ui_size": "Tamaño UI",
 		"size": "Escala",
 		"reset": "Limpiar Todo",
+		"pause": "⏸️ Pausar",
+		"play": "▶️ Reanudar",
 		"npc": "👥 NPCs",
 		"warrior": "⚔️ Guerrero",
 		"archer": "🏹 Arquero",
@@ -230,6 +233,8 @@ var tr = {
 		"ui_size": "UI Size",
 		"size": "Scale",
 		"reset": "Clear All",
+		"pause": "⏸️ Pause",
+		"play": "▶️ Resume",
 		"npc": "👥 NPCs",
 		"warrior": "⚔️ Warrior",
 		"archer": "🏹 Archer",
@@ -862,6 +867,22 @@ func _setup_tools_ui():
 		_update_highlights()
 	)
 	
+	# PAUSE BUTTON
+	var pause_btn = Button.new()
+	pause_btn.text = tr[current_language]["play"] if is_paused else tr[current_language]["pause"]
+	pause_btn.custom_minimum_size = Vector2(0, 50 * s) # SCALED
+	pause_btn.add_theme_font_size_override("font_size", 16 * s) # SCALED
+	pause_btn.pressed.connect(func():
+		is_paused = !is_paused
+		pause_btn.text = tr[current_language]["play"] if is_paused else tr[current_language]["pause"]
+		var players = [weather_player, quake_player, tornado_player, tsunami_player, firework_player, ascent_player, volcano_loop_player, fire_loop_player]
+		for p in players:
+			if is_instance_valid(p):
+				p.stream_paused = is_paused
+	)
+	ui_elements["pause_btn"] = pause_btn
+	v_box.add_child(pause_btn)
+
 	# DIRECT RESET BUTTON (Bottom of Tools)
 	var reset_btn = Button.new()
 	reset_btn.text = tr[current_language]["reset"]
@@ -1021,6 +1042,10 @@ func _refresh_ui_text():
 		elif key == "npc_btn": 
 			node_data.text = tr[current_language]["npc"]
 			node_data.custom_minimum_size = Vector2(160 * s, 38 * s)
+			node_data.add_theme_font_size_override("font_size", 14 * s)
+		elif key == "pause_btn": 
+			node_data.text = tr[current_language]["play"] if is_paused else tr[current_language]["pause"]
+			node_data.custom_minimum_size = Vector2(0, 38 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "reset_btn": 
 			node_data.text = tr[current_language]["reset"]
@@ -1367,29 +1392,30 @@ func _process(delta):
 		_manage_brush_sound(-1) # Stop sound when finger lifted
 
 	# Simulation
-	_step_simulation()
-	
-	# NPC AI & Physics
-	_process_npcs(delta)
-	
-	# Projectiles (Arrows)
-	_process_projectiles(delta)
-	
-	# Weather system
-	_process_weather()
-	
-	# Earthquake processing
-	_process_earthquake(delta)
-	
-	# Tornado processing
-	_process_tornado(delta)
-	
-	# Tsunami processing
-	_process_tsunami(delta)
-	
-	# Fireworks updates
-	_update_active_fireworks(delta)
-	_update_visual_sparks(delta)
+	if not is_paused:
+		_step_simulation()
+		
+		# NPC AI & Physics
+		_process_npcs(delta)
+		
+		# Projectiles (Arrows)
+		_process_projectiles(delta)
+		
+		# Weather system
+		_process_weather()
+		
+		# Earthquake processing
+		_process_earthquake(delta)
+		
+		# Tornado processing
+		_process_tornado(delta)
+		
+		# Tsunami processing
+		_process_tsunami(delta)
+		
+		# Fireworks updates
+		_update_active_fireworks(delta)
+		_update_visual_sparks(delta)
 	
 	# Render
 	_update_texture()
