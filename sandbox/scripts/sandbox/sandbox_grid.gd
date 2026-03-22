@@ -59,6 +59,62 @@ var mouse_was_pressed: bool = false
 var active_npcs = [] # Array of dicts: { "pos": Vector2i, "team": int, "dir": int, "type": string, "hp": float, etc }
 var active_projectiles = [] # { pos: Vector2, vel: Vector2, team: int, type: string }
 var npc_update_timer: float = 0.0
+var sfx_pool: Array[AudioStreamPlayer] = []
+var next_sfx_idx: int = 0
+var brush_player: AudioStreamPlayer # Dedicated for looping placement
+var weather_player: AudioStreamPlayer # Dedicated for rain/storm loop
+var quake_player: AudioStreamPlayer
+var tornado_player: AudioStreamPlayer
+var tsunami_player: AudioStreamPlayer
+const SFX_POOL_SIZE = 8
+
+# Mapeo: ID del Material -> Nombre del archivo (SONIDO EN BUCLE / LOOP) MP3
+# Estos sonidos se repiten mientras mantienes el pincel presionado.
+var material_sfx = {
+	1: "sand",      # Arena
+	2: "water",     # Agua
+	3: "fire",      # Fuego
+	4: "oil",       # Petróleo
+	5: "tnt",       # TNT
+	6: "earth",     # Tierra
+	8: "metal",     # Metal
+	9: "elec",      # Electricidad
+	10: "gravel",   # Grava
+	11: "lava",     # Lava
+	13: "acid",     # Ácido
+	16: "wood",     # Madera
+	18: "fireworks",# Cohetes
+	20: "seed",     # Semilla
+	25: "cement",   # Cemento fresco
+	70: "ice"       # Hielo
+}
+
+# Mapeo: Nombre de Acción -> Nombre del archivo (UNA SOLA VEZ / ONE-SHOT) WAV
+# Estos sonidos suenan una sola vez cuando ocurre el evento.
+var action_sfx = {
+	"npc_hit": "hit",             # Cuando un NPC recibe daño
+	"npc_death": "death",         # Cuando un NPC muere
+	"npc_place": "place_npc",     # Al colocar un NPC en el mapa
+	"explosion": "explode",       # Detonación de TNT o Volcán
+	"lightning": "lightning",     # Impacto de rayo (clima)
+	"earthquake": "quake",        # Inicio de Terremoto
+	"tornado": "tornado",         # Inicio de Tornado
+	"tsunami": "tsunami",         # Inicio de Tsunami
+	"ui_click": "click",          # Al pulsar botones de la interfaz
+	"warrior_attack": "sword_swing", # Ataque de Guerrero
+	"archer_shoot": "bow_shoot",     # Disparo de Arquero
+	"miner_dig": "pickaxe_hit",      # Minero picando tierra
+	
+	# Sonidos Continuos de Clima / Desastres (LOOP EN TIEMPO REAL) MP3
+	"weather_1": "rain_light",
+	"weather_2": "rain_med",
+	"weather_3": "rain_storm",
+	"quake_loop": "quake_loop",
+	"tornado_loop": "tornado_loop",
+	"tsunami_loop": "tsunami_loop"
+}
+
+var sfx_cache = {} # Cache for loaded AudioStreams
 
 var tr = {
 	"es": {
@@ -187,6 +243,37 @@ var visual_sparks = []
 var img: Image
 
 func _ready():
+	# 0. GLOBAL VISUAL STABILITY (Fixes grey margins on Tablets/Modern Devices)
+	RenderingServer.set_default_clear_color(Color(0.04, 0.04, 0.04, 1.0))
+	
+	var global_bg = ColorRect.new()
+	global_bg.name = "GlobalBG"
+	global_bg.color = Color(0.1, 0.1, 0.12, 1.0) # Dynamic Dark Theme
+	global_bg.anchor_right = 1.0
+	global_bg.anchor_bottom = 1.0
+	global_bg.offset_right = 0
+	global_bg.offset_bottom = 0
+	get_parent().add_child.call_deferred(global_bg)
+	get_parent().move_child.call_deferred(global_bg, 0) # Background Layer
+	
+	# Setup SFX Pool
+	for i in range(SFX_POOL_SIZE):
+		var asp = AudioStreamPlayer.new()
+		asp.bus = "Master" # You can create a "SFX" bus later
+		add_child(asp)
+		sfx_pool.append(asp)
+	
+	# Dedicated Brush Player
+	brush_player = AudioStreamPlayer.new()
+	brush_player.bus = "Master"
+	add_child(brush_player)
+	
+	# Environmental Players
+	weather_player = AudioStreamPlayer.new(); add_child(weather_player)
+	quake_player = AudioStreamPlayer.new(); add_child(quake_player)
+	tornado_player = AudioStreamPlayer.new(); add_child(tornado_player)
+	tsunami_player = AudioStreamPlayer.new(); add_child(tsunami_player)
+	
 	# Calculate grid size (Smart Height: Exactly above the UI)
 	var viewport_size = get_viewport_rect().size
 	
@@ -862,17 +949,23 @@ func _setup_disaster_ui():
 	)
 	create_row.call("quake", ["off", "light", "med", "brutal"], func(l): 
 		earthquake_intensity = l
-		if l > 0: earthquake_timer = randf_range(5.0, 7.0)
+		if l > 0: 
+			earthquake_timer = randf_range(5.0, 7.0)
+			_play_action_sound("earthquake")
 		_update_highlights()
 	)
 	create_row.call("tornado", ["off", "light", "med", "heavy"], func(l):
 		tornado_intensity = l
-		if l > 0: tornado_timer = 15.0; tornado_x = randf()*grid_width; tornado_target_x = randf()*grid_width
+		if l > 0: 
+			tornado_timer = 15.0; tornado_x = randf()*grid_width; tornado_target_x = randf()*grid_width
+			_play_action_sound("tornado")
 		_update_highlights()
 	)
 	create_row.call("tsunami", ["off", "light", "med", "storm"], func(l):
 		tsunami_intensity = l
-		if l > 0: tsunami_timer = 15.0; tsunami_wave_x = 0.0
+		if l > 0: 
+			tsunami_timer = 15.0; tsunami_wave_x = 0.0
+			_play_action_sound("tsunami")
 		_update_highlights()
 	)
 
@@ -1139,6 +1232,76 @@ func _register_material(id, color, tags):
 	material_colors_bytes[base + 2] = int(color.b * 255)
 	material_colors_bytes[base + 3] = int(color.a * 255)
 
+# --- SFX SYSTEM ---
+func _get_sfx_stream(sfx_name: String) -> AudioStream:
+	if sfx_cache.has(sfx_name):
+		return sfx_cache[sfx_name]
+	
+	var extensions = [".ogg", ".mp3", ".wav"]
+	for ext in extensions:
+		var path = "res://assets/audio/sfx/" + sfx_name + ext
+		if FileAccess.file_exists(path):
+			var stream = load(path)
+			# Ensure it loops if it's a placement sound (Logic handled in _manage_brush_sound)
+			sfx_cache[sfx_name] = stream
+			return stream
+	return null
+
+func _play_sfx(sfx_name: String):
+	if sfx_name == "": return
+	
+	var stream = _get_sfx_stream(sfx_name)
+	if not stream: return
+
+	# Force loop OFF for general one-shots from pool
+	if "loop" in stream: stream.loop = false 
+
+	# Play using next available player in pool
+	var player = sfx_pool[next_sfx_idx]
+	player.stream = stream
+	player.play()
+	
+	next_sfx_idx = (next_sfx_idx + 1) % SFX_POOL_SIZE
+
+func _manage_brush_sound(id: int):
+	# Si no hay ID, es un NPC o está sobre la UI -> DETENER SONIDO
+	if id == -1 or (material_tags_raw[id] & SandboxMaterial.Tags.NPC):
+		if brush_player.playing: brush_player.stop()
+		return
+	
+	if material_sfx.has(id):
+		_manage_looping_player(brush_player, material_sfx[id])
+	else:
+		if brush_player.playing: brush_player.stop()
+
+func _manage_looping_player(player: AudioStreamPlayer, key: String):
+	# Resolve filename from action_sfx dictionary if it exists
+	var sfx_name = key
+	if action_sfx.has(key):
+		sfx_name = action_sfx[key]
+		
+	var stream = _get_sfx_stream(sfx_name)
+	if stream:
+		# Asegurar que el LOOP esté activado
+		if "loop" in stream: stream.loop = true
+		if "loop_mode" in stream: stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		
+		if player.stream != stream:
+			player.stream = stream
+			player.play()
+		elif not player.playing:
+			player.play()
+	else:
+		if player.playing: player.stop()
+
+func _play_material_sound(id: int):
+	if material_sfx.has(id):
+		_play_sfx(material_sfx[id])
+
+func _play_action_sound(action: String):
+	if action_sfx.has(action):
+		_play_sfx(action_sfx[action])
+
 func _process(delta):
 	# Handle input with robust UI blocking
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not _is_any_ui_blocking():
@@ -1150,11 +1313,15 @@ func _process(delta):
 		if (material_tags_raw[selected_material] & SandboxMaterial.Tags.NPC):
 			if not mouse_was_pressed:
 				_place_npc(gx, gy)
+				_play_action_sound("npc_place")
+			_manage_brush_sound(-1) # Stop brush if switching to NPC
 		else:
+			_manage_brush_sound(selected_material)
 			_draw_circle(gx, gy, brush_radius, selected_material)
 		mouse_was_pressed = true
 	else:
 		mouse_was_pressed = false
+		_manage_brush_sound(-1) # Stop sound when finger lifted
 
 	# Simulation
 	_step_simulation()
@@ -1187,9 +1354,13 @@ func _process(delta):
 func _process_tsunami(delta):
 	if tsunami_timer <= 0:
 		tsunami_intensity = 0
+		if tsunami_player.playing: tsunami_player.stop()
 		return
 	
 	tsunami_timer -= delta
+	
+	# Play sound loop while tsunami is active
+	_manage_looping_player(tsunami_player, "tsunami_loop")
 	
 	# Move the wave front from Left to Right (Gaussian Center)
 	tsunami_wave_x += (grid_width / 5.0) * delta * 5.0
@@ -1249,9 +1420,13 @@ func _process_tsunami(delta):
 func _process_tornado(delta):
 	if tornado_timer <= 0:
 		tornado_intensity = 0
+		if tornado_player.playing: tornado_player.stop()
 		return
 	
 	tornado_timer -= delta
+	
+	# Play sound loop while tornado is active
+	_manage_looping_player(tornado_player, "tornado_loop")
 	
 	# 1. Autonomous Movement
 	if abs(tornado_x - tornado_target_x) < 5:
@@ -1330,9 +1505,14 @@ func _process_earthquake(delta):
 	if earthquake_timer <= 0:
 		if texture_rect.position != Vector2.ZERO:
 			texture_rect.position = Vector2.ZERO
+		earthquake_intensity = 0
+		if quake_player.playing: quake_player.stop()
 		return
 	
 	earthquake_timer -= delta
+	
+	# Play sound loop while earthquake is active
+	_manage_looping_player(quake_player, "quake_loop")
 	
 	# 1. Screen Shake (Visual)
 	var shake_force = earthquake_intensity * 5.0
@@ -1360,7 +1540,13 @@ func _process_earthquake(delta):
 		earthquake_intensity = 0
 
 func _process_weather():
-	if current_weather == 0: return
+	if current_weather == 0: 
+		if weather_player.playing: weather_player.stop()
+		return
+	
+	# Manage weather sound loop (rain_light, rain_med, rain_storm)
+	var w_key = "weather_" + str(current_weather)
+	_manage_looping_player(weather_player, w_key)
 	
 	# Always spawn some clouds at the top if weather is active
 	for i in range(5):
@@ -1392,6 +1578,7 @@ func _process_weather():
 							if i > 5: break
 
 func _strike_lightning():
+	_play_action_sound("lightning")
 	var lx = randi() % grid_width
 	# Trace a bolt from top to first solid/liquid or bottom
 	for ly in range(0, grid_height):
@@ -2373,12 +2560,17 @@ func _process_npcs(delta):
 			
 		if npc.hp <= 0 and npc.hit_flash <= 0:
 			_draw_npc_pixels(npc, 0)
+			_play_action_sound("npc_death")
 			dead_indices.append(i)
 
 	dead_indices.sort(); dead_indices.reverse()
 	for idx in dead_indices: active_npcs.remove_at(idx)
 
 func _miner_dig(npc, dig_down=false):
+	# Play sound on every few units of dirt cleared?
+	# Better: just once per call to maintain performance
+	if Engine.get_frames_drawn() % 3 == 0: # Avoid constant pickaxe noise
+		_play_action_sound("miner_dig")
 	var tx = npc.pos.x + (npc.dir * 3) # PUSH WOOD 3px AHEAD to avoid 'tunnel-traps'
 	var dy_offset = 1 if dig_down else 0
 	
@@ -2429,6 +2621,7 @@ func _miner_dig(npc, dig_down=false):
 			_set_cell(cx, cy, 0)
 
 func _shoot_arrow(npc, target):
+	_play_action_sound("archer_shoot")
 	var dx = float(target.pos.x - npc.pos.x)
 	var dy = float(target.pos.y - npc.pos.y)
 	var dir = 1 if dx > 0 else -1
@@ -2483,6 +2676,7 @@ func _process_projectiles(delta):
 			hit_npc.hp -= 40.0 # High damage (3 arrows = kill)
 			hit_npc.hit_flash = 4 # Flash
 			hit_npc.hit_type = "normal"
+			_play_action_sound("npc_hit")
 			# Visual sparks on impact
 			for j in range(5):
 				visual_sparks.append({"x":float(gx),"y":float(gy),"vx":randf_range(-40,40),"vy":randf_range(-40,0),"color":Color.WHITE,"life":0.3})
@@ -2514,6 +2708,8 @@ func _attack_npc(attacker, victim):
 	victim.hp -= 15.0 # Damage
 	victim.hit_flash = 5
 	victim.hit_type = "normal"
+	_play_action_sound("npc_hit")
+	_play_action_sound("warrior_attack")
 	
 	# Visual Sparks (Attack effects)
 	var colors = [Color.WHITE, Color.YELLOW, Color.CRIMSON]
@@ -2781,6 +2977,7 @@ func _explode(x, y, radius):
 			npc.hp -= ratio * 120.0 # Lethal at center
 			npc.hit_flash = 12
 			npc.hit_type = "explosive"
+			_play_action_sound("explosion")
 			
 			# Knockback (Fly away from center)
 			var blast_dir = (Vector2(npc.pos) - Vector2(center)).normalized()
