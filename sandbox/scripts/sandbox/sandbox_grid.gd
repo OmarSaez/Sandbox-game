@@ -2407,7 +2407,9 @@ func _place_npc(x, y):
 		"state_steps": 25,
 		"fall_depth": 0, # Track for acrobat flips
 		"last_dig_time": 0,
-		"miss_counter": 0 # For Archer tactical repositioning
+		"miss_counter": 0, # For Archer tactical repositioning
+		"vx": 0.0,
+		"vy": 0.0
 	}
 	active_npcs.append(new_npc)
 	
@@ -2576,7 +2578,7 @@ func _process_npcs(delta):
 			npc.dig_timer += dig_speed
 			if npc.dig_timer >= 0.15:
 				npc.dig_timer = 0.0
-				if !_can_npc_fit(np.x, np.y + 1): # Grounded
+				if !_can_npc_fit(np.x, np.y + 1, npc): # Grounded
 					npc.state_steps -= 1
 					var is_underground = _get_cell(np.x, np.y - 4) != 0
 					if not is_underground and npc.mine_state == "gallery":
@@ -2603,57 +2605,95 @@ func _process_npcs(delta):
 							npc.hp = 0
 							npc.hit_flash = 10 # 0.5s of red before dying
 
-					elif _can_npc_fit(next_x, next_y):
+					elif _can_npc_fit(next_x, next_y, npc):
 						np.x = next_x ; np.y = next_y
-					elif !dig_down and _can_npc_fit(next_x, np.y - 1):
+					elif !dig_down and _can_npc_fit(next_x, np.y - 1, npc):
 						np.x = next_x ; np.y -= 1 # Step up
 					else:
 						npc.dir = -npc.dir
 		
-		# 4. PHYSICS & MOVEMENT (Gravity)
-		if _can_npc_fit(np.x, np.y + 1, npc.team):
-			np.y += 1 # Standard Gravity
-			npc.fall_depth += 1
-		elif npc.type != "miner": # Warriors/Archers climbing logic
-			# BOUNCE EXPLORATION: Flip direction if landed from height
-			if npc.fall_depth >= 3:
-				npc.dir = -npc.dir
-			npc.fall_depth = 0
+		# 4. PHYSICS & MOVEMENT (Gravity & Knockback)
+		if not npc.has("vx"): npc["vx"] = 0.0
+		if not npc.has("vy"): npc["vy"] = 0.0
+		
+		var moved_by_physics = false
+		if abs(npc.vx) > 0.1 or abs(npc.vy) > 0.1:
+			var steps_x = int(round(abs(npc.vx)))
+			var dir_x = sign(npc.vx)
+			var steps_y = int(round(abs(npc.vy)))
+			var dir_y = sign(npc.vy)
 			
-			if npc.dir != 0:
-				var tx = np.x + (npc.dir * 2) # FORWARD LUNGE CHECK (2px)
-				var moved = false
+			var max_steps = max(steps_x, steps_y)
+			if max_steps > 0:
+				for j in range(max_steps):
+					var next_x = np.x + (dir_x if j < steps_x else 0)
+					var next_y = np.y + (dir_y if j < steps_y else 0)
+					
+					if _can_npc_fit(next_x, next_y, npc):
+						np.x = next_x
+						np.y = next_y
+					else:
+						# Stop specifically in the blocked direction
+						if dir_x != 0 and not _can_npc_fit(next_x, np.y, npc): npc.vx = 0.0
+						if dir_y != 0 and not _can_npc_fit(np.x, next_y, npc): npc.vy = 0.0
+						break
+			
+			# Apply gravity and friction
+			if _can_npc_fit(np.x, np.y + 1, npc):
+				npc.vy += 1.0 # Gravity acceleration
+			else:
+				if npc.vy > 0: npc.vy = 0.0 # Hit ground
+			
+			npc.vx *= 0.7 # Ground/Air friction
+			if abs(npc.vx) < 0.5: npc.vx = 0.0
+			
+			if npc.vy > 8.0: npc.vy = 8.0 # Terminal velocity
+			moved_by_physics = true
+		
+		if not moved_by_physics:
+			if _can_npc_fit(np.x, np.y + 1, npc):
+				np.y += 1 # Standard Gravity
+				npc.fall_depth += 1
+			elif npc.type != "miner": # Warriors/Archers climbing logic
+				# BOUNCE EXPLORATION: Flip direction if landed from height
+				if npc.fall_depth >= 3:
+					npc.dir = -npc.dir
+				npc.fall_depth = 0
 				
-				# TACTICAL JUMP: If target is above, always try to jump/catch ledges
-				var target_above = target and target.pos.y < np.y - 12
-				
-				# 10px VERTICAL RAYCAST (Smart Climbing)
-				# Scan upwards to see if it can step up or climb
-				for dy in range(0, -11, -1):
-					if _can_npc_fit(tx, np.y + dy, npc.team):
-						# If target is above, only move if we are actually GOING UP
-						if !target_above or dy < 0:
-							np.x = tx; np.y += dy
-							moved = true; break
-				
-				# IF TARGET IS ABOVE and we are NOT moving yet, try harder to jump
-				if !moved and target_above:
-					# Try a straight upward leap scan
-					for dy in range(-1, -11, -1):
-						if _can_npc_fit(np.x, np.y + dy, npc.team):
-							np.y += dy; moved = true; break
-				
-				# GAP JUMP & LUNGE: If simple climb fails, try jumping over gaps
-				if not moved:
-					var std_tx = np.x + npc.dir # Fallback to 1px step
-					if _can_npc_fit(std_tx, np.y, npc.team): # Horizontal Gap Jump
-						np.x = std_tx; moved = true
-					elif _can_npc_fit(std_tx, np.y - 4, npc.team): # Lunge onto ramp
-						np.x = std_tx; np.y -= 4; moved = true
-				
-				# WALL REBOUND: If blocked by something > 8px
-				if not moved and !target_above: # Only rebound if not actively trying to jump up
-					if !is_attacking: npc.dir = -npc.dir
+				if npc.dir != 0:
+					var tx = np.x + (npc.dir * 2) # FORWARD LUNGE CHECK (2px)
+					var moved = false
+					
+					# TACTICAL JUMP: If target is above, always try to jump/catch ledges
+					var target_above = target and target.pos.y < np.y - 12
+					
+					# 10px VERTICAL RAYCAST (Smart Climbing)
+					# Scan upwards to see if it can step up or climb
+					for dy in range(0, -11, -1):
+						if _can_npc_fit(tx, np.y + dy, npc):
+							# If target is above, only move if we are actually GOING UP
+							if !target_above or dy < 0:
+								np.x = tx; np.y += dy
+								moved = true; break
+					
+					# IF TARGET IS ABOVE and we are NOT moving yet, try harder to jump
+					if !moved and target_above:
+						# Try a straight upward leap scan
+						for dy in range(-1, -11, -1):
+							if _can_npc_fit(np.x, np.y + dy, npc):
+								np.y += dy; moved = true; break
+					
+					# GAP JUMP & LUNGE: If simple climb fails, try jumping over gaps
+					if not moved:
+						var std_tx = np.x + npc.dir # Fallback to 1px step
+						if _can_npc_fit(std_tx, np.y, npc): # Horizontal Gap Jump
+							np.x = std_tx; moved = true
+						elif _can_npc_fit(std_tx, np.y - 4, npc): # Lunge onto ramp
+							np.x = std_tx; np.y -= 4; moved = true
+					
+					# WALL REBOUND: If blocked by something > 8px
+					if not moved and !target_above: # Only rebound if not actively trying to jump up
+						if !is_attacking: npc.dir = -npc.dir
 		
 		# 5. FINAL RENDER: Redraw at the new position
 		npc.pos = np
@@ -2837,25 +2877,16 @@ func _attack_npc(attacker, victim):
 	for d in range(3, 0, -1):
 		var lx = attacker.pos.x + ldir * d
 		var ly = attacker.pos.y - 1
-		if _can_npc_fit(lx, ly, attacker.team):
+		if _can_npc_fit(lx, ly, attacker):
 			attacker.pos.x = lx
 			attacker.pos.y = ly
 			break
 		
-	# 3. POWER KNOCKBACK (35% chance to push victim in parabola)
+	# 3. POWER KNOCKBACK (Parabolic Trajectory)
 	if randf() < 0.35:
 		var push_dir = 1 if attacker.pos.x < victim.pos.x else -1
-		var dist = randi_range(5, 8) # Stronger reach
-		# Find furthest possible push spot (Parabolic trajectory)
-		for d in range(dist, 0, -1):
-			var new_x = victim.pos.x + push_dir * d
-			var new_y = victim.pos.y - 4 # Steep lift (4px)
-			if _can_npc_fit(new_x, new_y, victim.team):
-				_draw_npc_pixels(victim, 0) # Clear OLD
-				victim.pos.x = new_x
-				victim.pos.y = new_y
-				_draw_npc_pixels(victim)   # Redraw NEW
-				break
+		victim.vx = push_dir * randf_range(3.0, 5.0)
+		victim.vy = randf_range(-4.0, -8.0) # Vertical lift for parabola
 
 func _check_npc_environment_damage(npc) -> bool:
 	var took_damage = false
@@ -2921,18 +2952,39 @@ func _check_npc_environment_damage(npc) -> bool:
 		
 	return took_damage
 
-func _can_npc_fit(gx, gy, moving_team = -1) -> bool:
+func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 	# Bounding check
 	if gx < 0 or gx + 1 >= grid_width or gy < 0 or gy + 4 >= dynamic_grid_height:
 		return false
 	
+	var encountered_npc_pixels = false
+	
 	# 2x5 area check
 	for oy in range(5):
 		for ox in range(2):
-			var tid = _get_cell(gx + ox, gy + oy)
-			# Only allow fitting through non-solid materials (Air, Smoke, Fire, Cloud)
+			var cx = gx + ox
+			var cy = gy + oy
+			var tid = _get_cell(cx, cy)
+			# Pass through non-solid materials (Air, Smoke, Fire, Cloud)
 			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
-				return false
+				if material_tags_raw[tid] & SandboxMaterial.Tags.NPC:
+					encountered_npc_pixels = true
+				else:
+					return false # Blocked by terrain/solid
+					
+	if encountered_npc_pixels and moving_npc != null:
+		# Check AABB against all other active NPCs
+		for other in active_npcs:
+			if other == moving_npc: continue # Skip self
+			
+			# Custom AABB for 2x5 NPC
+			if gx < other.pos.x + 2 and gx + 2 > other.pos.x and gy < other.pos.y + 5 and gy + 5 > other.pos.y:
+				if other.team == moving_npc.team:
+					return false # Blocked by ALLIED NPC (Solid)
+		# enemies pass through, so we return true!
+	elif encountered_npc_pixels:
+		return false # Block if moving_npc is not provided
+
 	return true
 
 func _has_tag_neighbor(x, y, tag):
@@ -3097,15 +3149,10 @@ func _explode(x, y, radius, sfx_action: String = "explosion"):
 			var blast_dir = (Vector2(npc.pos) - Vector2(center)).normalized()
 			if blast_dir.length() < 0.1: blast_dir = Vector2.UP
 			
-			var push_dist = int(ratio * 25.0)
-			for d in range(push_dist, 0, -1):
-				var nx = npc.pos.x + int(blast_dir.x * d)
-				var ny = npc.pos.y + int(blast_dir.y * d) - 8 # Lift
-				if _can_npc_fit(nx, ny, npc.team):
-					_draw_npc_pixels(npc, 0)
-					npc.pos.x = nx; npc.pos.y = ny
-					_draw_npc_pixels(npc)
-					break
+			# Parabolic Blast Physics
+			var force = ratio * 15.0
+			npc.vx = blast_dir.x * force
+			npc.vy = blast_dir.y * force - 6.0 # Extra lift
 			
 			for s in range(5):
 				visual_sparks.append({"x":float(npc.pos.x),"y":float(npc.pos.y),"vx":randf_range(-50,50),"vy":randf_range(-80,0),"color":Color.DARK_GRAY,"life":0.6})

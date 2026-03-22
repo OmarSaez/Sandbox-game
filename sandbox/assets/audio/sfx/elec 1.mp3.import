@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://dxb0hwf5l2is6"
+path="res://.godot/imported/elec 1.mp3-a88dee090257ec2442969165dc4e302d.mp3str"
+
+[deps]
+
+source_file="res://assets/audio/sfx/elec 1.mp3"
+dest_files=["res://.godot/imported/elec 1.mp3-a88dee090257ec2442969165dc4e302d.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
