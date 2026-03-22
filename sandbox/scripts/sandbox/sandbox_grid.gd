@@ -66,7 +66,9 @@ var weather_player: AudioStreamPlayer # Dedicated for rain/storm loop
 var quake_player: AudioStreamPlayer
 var tornado_player: AudioStreamPlayer
 var tsunami_player: AudioStreamPlayer
-var firework_player: AudioStreamPlayer # Dedicated for rocket ascent
+var firework_player: AudioStreamPlayer # Dedicated for rocket fuse
+var ascent_player: AudioStreamPlayer   # Dedicated for rocket flying up
+var volcano_loop_player: AudioStreamPlayer # Dedicated for volcano bubbling loop
 const SFX_POOL_SIZE = 8
 
 # Mapeo: ID del Material -> Nombre del archivo (SONIDO EN BUCLE / LOOP) MP3
@@ -93,8 +95,8 @@ var material_sfx = {
 	24: "vine",     # Liana
 	25: "cem_fresh",# Cemento fresco
 	26: "cement",   # Cemento sólido
-	27: "volcan",   # Volcán
-	29: "fuse",     # Base de volcán encendida
+	27: "volcan_brush", # Pincel del volcán
+	29: "volcan_active", # Base activa (burbujeo)
 	70: "ice"       # Hielo
 }
 
@@ -122,9 +124,18 @@ var action_sfx = {
 	"tornado_loop": "tornado_loop",
 	"tsunami_loop": "tsunami_loop",
 	"firework_launch": "rocket_launch",
-	"firework_ascent": "fuse",
-	"fuse_burning": "fuse"
+	"firework_ascent": "rocket_launch_ascent",
+	"firework_burst": "firework_explode", # Sonido de explosión de colores en el aire
+	"fuse_burning": "fuse",
+	
+	# --- SISTEMA SIMPLIFICADO DEL VOLCÁN ---
+	"volcan_brush": "volcan",          # (PINCEL) Sonido al dibujar
+	"volcan_active": "volcan_bubbles", # (LOOP) Burbujeo constante cuando el volcán funciona
+	"volcan_burst": "volcan_explode"   # (ONE-SHOT) Pequeños estallidos de lava
 }
+
+var last_action_times = {} # Para controlar la saturación de sonidos
+var is_volcano_active = false 
 
 var sfx_cache = {} # Cache for loaded AudioStreams
 
@@ -286,6 +297,8 @@ func _ready():
 	tornado_player = AudioStreamPlayer.new(); add_child(tornado_player)
 	tsunami_player = AudioStreamPlayer.new(); add_child(tsunami_player)
 	firework_player = AudioStreamPlayer.new(); add_child(firework_player)
+	ascent_player = AudioStreamPlayer.new(); add_child(ascent_player)
+	volcano_loop_player = AudioStreamPlayer.new(); add_child(volcano_loop_player)
 	
 	# Calculate grid size (Smart Height: Exactly above the UI)
 	var viewport_size = get_viewport_rect().size
@@ -1311,8 +1324,16 @@ func _play_material_sound(id: int):
 	if material_sfx.has(id):
 		_play_sfx(material_sfx[id])
 
-func _play_action_sound(action: String):
+func _play_action_sound(action: String, min_interval: float = 0.08):
 	if action_sfx.has(action):
+		# Sistema de seguridad contra saturación: 
+		# No permite que la MISMA acción suene repetidamente en menos de min_interval segundos
+		var now = Time.get_ticks_msec() / 1000.0
+		if last_action_times.has(action):
+			if now - last_action_times[action] < min_interval:
+				return
+		
+		last_action_times[action] = now
 		_play_sfx(action_sfx[action])
 
 func _process(delta):
@@ -1647,6 +1668,9 @@ func _get_cell(x, y):
 	return -1
 
 func _step_simulation():
+	# Reset flag del sonido del volcán
+	is_volcano_active = false
+	
 	# Update active chunk countdowns
 	chunks_active = next_chunks_active.duplicate()
 	for i in range(next_chunks_active.size()):
@@ -1655,6 +1679,9 @@ func _step_simulation():
 	
 	# Pass 1: Electricity Pulse Processing (GLOBAL)
 	_process_electricity()
+	
+	# Pass 2 & 3: Movement and Interactions (Calculated)
+	# ... after main loops conclude, manage the persistent sounds once ...
 	
 	# Pass 2: RISING and SPECIAL particles (Top-to-Bottom by Active Chunks)
 	for cy in range(chunks_y):
@@ -1749,6 +1776,12 @@ func _step_simulation():
 					x += x_dir
 					count -= 1
 				y -= 1
+	
+	# === GESTIÓN GLOBAL DE SONIDO DEL VOLCÁN (SIMPLIFICADO) ===
+	if is_volcano_active: 
+		_manage_looping_player(volcano_loop_player, "volcan_active")
+	else: 
+		if volcano_loop_player.playing: volcano_loop_player.stop()
 
 func _process_electricity():
 	# Sequential processing (Beat Machine Pulse)
@@ -2052,7 +2085,7 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			charge_array[idx] = randi_range(80, 120)
 	
 	elif mat_id == 29: # Erupting Base
-		_manage_looping_player(firework_player, "fuse_burning")
+		is_volcano_active = true
 		charge_array[idx] -= 1
 		# Launch projectile every 20-25 frames
 		if charge_array[idx] % 25 == 0:
@@ -2060,7 +2093,7 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			var n_id = _get_cell(tx, y-1)
 			# Launch if NOT a core solid (Metal, Cement, Earth, or another Volcan)
 			if n_id != 13 and n_id != 26 and n_id != 5 and n_id != 27:
-				_explode(x, y-1, 2) # PUSH the plug out of the way!
+				_explode(x, y-1, 2, "volcan_burst") # PUSH the plug out of the way!
 				_set_cell(tx, y-1, 28)
 				charge_array[(y-1) * grid_width + tx] = randi_range(30, 60) # Projectile fuel
 		
@@ -2075,9 +2108,10 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			
 		if charge_array[idx] <= 0:
 			_draw_circle(x, y, 5, 11) # Burnout cluster (Slightly bigger)
-			_explode(x, y, 10) # Bigger final burnout
+			_explode(x, y, 10, "volcan_burst") # Bigger final burnout
 
 	elif mat_id == 28: # Ascending projectile
+		is_volcano_active = true
 		# FASTER MOVEMENT: Move up 3px per frame manually
 		var current_fuel = charge_array[idx]
 		
@@ -2086,7 +2120,7 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			if current_fuel <= 0:
 				_draw_circle(x, y, 6, 11) # Finale: MASSIVE cluster of LAVA
 				_draw_circle(x, y, 5, 15) # Reduced cloud of SMOKE (from 10 to 5)
-				_explode(x, y, 12) # Huge Final burst
+				_explode(x, y, 12, "volcan_burst") # Huge Final burst
 				
 				# Finale FIREWORKS: 50+ Bright Sparks
 				for j in range(50):
@@ -2157,6 +2191,11 @@ func _process_interactions(x, y, idx, mat_id, tags):
 				})
 	
 	# 7. FRESH CEMENT HARDENING (mat_id 25) - Processed every frame for accuracy
+	if mat_id == 25:
+		# ... logic existing ...
+		pass
+	
+	# 7. FRESH CEMENT HARDENING (mat_id 25)
 	if mat_id == 25:
 		if charge_array[idx] == 0:
 			charge_array[idx] = randi_range(60, 120) # 1-2 seconds at 60fps
@@ -2983,9 +3022,9 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 						else:
 							_set_cell(nx, ny, 7) # Prime TNT
 
-func _explode(x, y, radius):
+func _explode(x, y, radius, sfx_action: String = "explosion"):
 	_set_cell(x, y, 0)
-	_play_action_sound("explosion")
+	_play_action_sound(sfx_action)
 	
 	# NPC BLAST PHYSICS
 	var center = Vector2i(x, y)
@@ -3105,9 +3144,9 @@ func _launch_firework(x, y):
 
 func _update_active_fireworks(delta):
 	if active_fireworks.size() > 0:
-		_manage_looping_player(firework_player, "firework_ascent")
+		_manage_looping_player(ascent_player, "firework_ascent")
 	else:
-		if firework_player.playing: firework_player.stop()
+		if ascent_player.playing: ascent_player.stop()
 
 	var to_remove = []
 	for i in range(active_fireworks.size()):
@@ -3154,7 +3193,7 @@ func _update_visual_sparks(delta):
 		visual_sparks.remove_at(i)
 
 func _explode_firework(ex, ey, p_color):
-	_play_action_sound("explosion")
+	_play_action_sound("firework_burst")
 	# Randomized explosion scale (Reduced max to 1/3 of previous)
 	var size_mult = randf_range(0.4, 0.9) 
 	var spark_count = int(100 * size_mult)  # High density!
