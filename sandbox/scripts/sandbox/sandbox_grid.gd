@@ -1921,14 +1921,14 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			elif mat_id == 18: # Special Fireworks Fuse logic (PRIORITY)
 				_set_cell(x, y, 19)
 				charge_array[idx] = randi_range(20, 70)
+				_play_action_sound("fuse_burning", 0.1) # Suena solo al momento de encendido
 			elif (tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
 				if (tags & SandboxMaterial.Tags.EXPLOSIVE):
 					_set_cell(x, y, 7) # PRIME TNT/EXPLOSIVE
 					charge_array[idx] = randi_range(30, 60)
 	
-	# FUSE LOGIC (Standalone Fireworks)
+	# FUSE LOGIC (Standalone Fireworks) - Movido el sonido al momento de encendido en el bloque superior
 	if mat_id == 19: 
-		_manage_looping_player(firework_player, "fuse_burning")
 		charge_array[idx] -= 1
 		# Visual flash (Pink/White)
 		if Engine.get_frames_drawn() % 4 == 0:
