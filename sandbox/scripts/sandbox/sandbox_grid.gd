@@ -66,6 +66,7 @@ var weather_player: AudioStreamPlayer # Dedicated for rain/storm loop
 var quake_player: AudioStreamPlayer
 var tornado_player: AudioStreamPlayer
 var tsunami_player: AudioStreamPlayer
+var firework_player: AudioStreamPlayer # Dedicated for rocket ascent
 const SFX_POOL_SIZE = 8
 
 # Mapeo: ID del Material -> Nombre del archivo (SONIDO EN BUCLE / LOOP) MP3
@@ -81,11 +82,19 @@ var material_sfx = {
 	9: "elec",      # Electricidad
 	10: "gravel",   # Grava
 	11: "lava",     # Lava
+	12: "obsidian", # Obsidiana
 	13: "acid",     # Ácido
+	14: "coal",     # Carbón / Brazas (pincel)
 	16: "wood",     # Madera
-	18: "fireworks",# Cohetes
+	18: "fireworks",# Cohetes (pincel)
+	19: "fuse",      # Cohete encendido (subida)
 	20: "seed",     # Semilla
-	25: "cement",   # Cemento fresco
+	21: "grass",    # Pasto
+	24: "vine",     # Liana
+	25: "cem_fresh",# Cemento fresco
+	26: "cement",   # Cemento sólido
+	27: "volcan",   # Volcán
+	29: "fuse",     # Base de volcán encendida
 	70: "ice"       # Hielo
 }
 
@@ -111,7 +120,10 @@ var action_sfx = {
 	"weather_3": "rain_storm",
 	"quake_loop": "quake_loop",
 	"tornado_loop": "tornado_loop",
-	"tsunami_loop": "tsunami_loop"
+	"tsunami_loop": "tsunami_loop",
+	"firework_launch": "rocket_launch",
+	"firework_ascent": "fuse",
+	"fuse_burning": "fuse"
 }
 
 var sfx_cache = {} # Cache for loaded AudioStreams
@@ -273,6 +285,7 @@ func _ready():
 	quake_player = AudioStreamPlayer.new(); add_child(quake_player)
 	tornado_player = AudioStreamPlayer.new(); add_child(tornado_player)
 	tsunami_player = AudioStreamPlayer.new(); add_child(tsunami_player)
+	firework_player = AudioStreamPlayer.new(); add_child(firework_player)
 	
 	# Calculate grid size (Smart Height: Exactly above the UI)
 	var viewport_size = get_viewport_rect().size
@@ -1866,8 +1879,9 @@ func _process_interactions(x, y, idx, mat_id, tags):
 					_set_cell(x, y, 7) # PRIME TNT/EXPLOSIVE
 					charge_array[idx] = randi_range(30, 60)
 	
-	# FUSE LOGIC (Standalone)
-	if mat_id == 19: # Firework Fuse
+	# FUSE LOGIC (Standalone Fireworks)
+	if mat_id == 19: 
+		_manage_looping_player(firework_player, "fuse_burning")
 		charge_array[idx] -= 1
 		# Visual flash (Pink/White)
 		if Engine.get_frames_drawn() % 4 == 0:
@@ -2038,6 +2052,7 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			charge_array[idx] = randi_range(80, 120)
 	
 	elif mat_id == 29: # Erupting Base
+		_manage_looping_player(firework_player, "fuse_burning")
 		charge_array[idx] -= 1
 		# Launch projectile every 20-25 frames
 		if charge_array[idx] % 25 == 0:
@@ -2311,7 +2326,8 @@ func _place_npc(x, y):
 		"spawn_y": start_y,
 		"mine_state": "ramp",
 		"state_steps": 25,
-		"fall_depth": 0 # Track for acrobat flips
+		"fall_depth": 0, # Track for acrobat flips
+		"last_dig_time": 0
 	}
 	active_npcs.append(new_npc)
 	
@@ -2567,10 +2583,12 @@ func _process_npcs(delta):
 	for idx in dead_indices: active_npcs.remove_at(idx)
 
 func _miner_dig(npc, dig_down=false):
-	# Play sound on every few units of dirt cleared?
-	# Better: just once per call to maintain performance
-	if Engine.get_frames_drawn() % 3 == 0: # Avoid constant pickaxe noise
+	# Sonar solo una vez cada 3 segundos (3000ms)
+	var now = Time.get_ticks_msec()
+	if now - npc.last_dig_time >= 3000:
 		_play_action_sound("miner_dig")
+		npc.last_dig_time = now
+		
 	var tx = npc.pos.x + (npc.dir * 3) # PUSH WOOD 3px AHEAD to avoid 'tunnel-traps'
 	var dy_offset = 1 if dig_down else 0
 	
@@ -2967,6 +2985,7 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 
 func _explode(x, y, radius):
 	_set_cell(x, y, 0)
+	_play_action_sound("explosion")
 	
 	# NPC BLAST PHYSICS
 	var center = Vector2i(x, y)
@@ -2977,7 +2996,6 @@ func _explode(x, y, radius):
 			npc.hp -= ratio * 120.0 # Lethal at center
 			npc.hit_flash = 12
 			npc.hit_type = "explosive"
-			_play_action_sound("explosion")
 			
 			# Knockback (Fly away from center)
 			var blast_dir = (Vector2(npc.pos) - Vector2(center)).normalized()
@@ -3074,6 +3092,7 @@ func _update_texture():
 
 func _launch_firework(x, y):
 	_set_cell(x, y, 0) # Clear the station
+	_play_action_sound("firework_launch")
 	# Neon Palette for launch selection
 	var neon_colors = [Color("#00FFFF"), Color("#FF00FF"), Color("#00FF00"), Color("#FFFF00"), Color("#FFFFFF")]
 	var fw = {
@@ -3085,6 +3104,11 @@ func _launch_firework(x, y):
 	active_fireworks.append(fw)
 
 func _update_active_fireworks(delta):
+	if active_fireworks.size() > 0:
+		_manage_looping_player(firework_player, "firework_ascent")
+	else:
+		if firework_player.playing: firework_player.stop()
+
 	var to_remove = []
 	for i in range(active_fireworks.size()):
 		var fw = active_fireworks[i]
@@ -3130,6 +3154,7 @@ func _update_visual_sparks(delta):
 		visual_sparks.remove_at(i)
 
 func _explode_firework(ex, ey, p_color):
+	_play_action_sound("explosion")
 	# Randomized explosion scale (Reduced max to 1/3 of previous)
 	var size_mult = randf_range(0.4, 0.9) 
 	var spark_count = int(100 * size_mult)  # High density!
