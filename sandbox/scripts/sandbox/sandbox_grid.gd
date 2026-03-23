@@ -2621,6 +2621,7 @@ func _process_npcs(delta):
 			else:
 				# Target dead or lost! Break formation
 				npc.is_tower = false
+				npc.fall_depth = -30 # Safety grace period to survive falling from their own tall tower!
 				if npc.has("tower_dir") and npc.tower_dir != 0:
 					npc.dir = -npc.tower_dir
 				elif npc.dir == 0:
@@ -2734,25 +2735,56 @@ func _process_npcs(delta):
 						else:
 							pass # Keep walking to hit the 3px edge
 					
+					# 2. CLIFF AVOIDANCE (Don't fall to your death!)
+					if not moved:
+						var edge_x = np.x + (npc.dir * 2)
+						var drop_depth = 0
+						for dy in range(1, 15): # Check up to 14px straight down
+							if not _can_npc_fit(edge_x, np.y + dy, npc):
+								break
+							drop_depth += 1
+						
+						if drop_depth >= 12: # 12px+ drop triggers fall damage or death
+							var ignore_cliff = false
+							if target != null and target.pos.y > np.y:
+								# If the target is right below us, risk the jump to smash them!
+								if abs(target.pos.x - np.x) < 20: 
+									ignore_cliff = true
+							
+							if not ignore_cliff:
+								npc.dir = -npc.dir # Whoa, too high! Turn around!
+								moved = true
+					
 					# TACTICAL JUMP: If target is above, always try to jump/catch ledges
 					var target_above = target and target.pos.y < np.y - 12
 					
-					# LADDER LOGIC: If face-to-face with an ally, climb limit is infinite!
-					# We use mathematical AABB checking so we are immune to pixel-erasure glitches!
-					var max_climb = -11
-					for other in active_npcs:
-						if other.team == npc.team and other != npc:
-							if tx < other.pos.x + 2 and tx + 2 > other.pos.x and np.y < other.pos.y + 5 and np.y + 5 > other.pos.y:
-								max_climb = -111 # Infinite ladder
-								break
-					
-					# Scan upwards to see if it can step up or climb
-					for dy in range(0, max_climb, -1):
-						if _can_npc_fit(tx, np.y + dy, npc):
-							# If target is above, only move if we are actually GOING UP
-							if !target_above or dy < 0:
-								np.x = tx; np.y += dy
-								moved = true; break
+					# 3. CLIMB & STANDARD WALKING (Only if we haven't evaded danger/cliffs)
+					if not moved:
+						# LADDER LOGIC: If face-to-face with an ally, climb limit is infinite!
+						# We use mathematical AABB checking so we are immune to pixel-erasure glitches!
+						var max_climb = -11
+						var bumped_ally = false
+						for other in active_npcs:
+							if other.team == npc.team and other != npc:
+								if tx < other.pos.x + 2 and tx + 2 > other.pos.x and np.y < other.pos.y + 5 and np.y + 5 > other.pos.y:
+									bumped_ally = true
+									if target != null:
+										max_climb = -111 # Infinite ladder only during combat
+									break
+						
+						if target == null and bumped_ally:
+							# Patrol mode: Don't step on your friends! Turn around.
+							npc.dir = -npc.dir
+							moved = true
+						
+						if not moved:
+							# Scan upwards to see if it can step up or climb
+							for dy in range(0, max_climb, -1):
+								if _can_npc_fit(tx, np.y + dy, npc):
+									# If target is above, only move if we are actually GOING UP
+									if !target_above or dy < 0:
+										np.x = tx; np.y += dy
+										moved = true; break
 					
 
 					
@@ -2768,6 +2800,9 @@ func _process_npcs(delta):
 					if not moved:
 						if target == null:
 							# Exploring: just turn around randomly at walls, NO TOWERS!
+							npc.dir = -npc.dir
+						elif np.x <= 2 or np.x >= grid_width - 4:
+							# Muro invisible del mapa: ¡Nunca hagas torres contra el borde del universo!
 							npc.dir = -npc.dir
 						elif !is_attacking:
 							# Chasing target, blocked! Form an official tower!
