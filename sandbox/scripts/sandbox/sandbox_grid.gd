@@ -117,7 +117,7 @@ var action_sfx = {
 	"warrior_attack": "sword_swing", # Ataque de Guerrero
 	"archer_shoot": "bow_shoot",     # Disparo de Arquero
 	"miner_dig": "pickaxe_hit",      # Minero picando tierra
-	"medic_heal": "medic_heal",      # <--- CANAL RESERVADO PARA EL SONIDO DEL MÉDICO
+	"medic_heal": "medic_heal",      # SONIDO DEL MÉDICO
 	
 	# Sonidos Continuos de Clima / Desastres (LOOP EN TIEMPO REAL) MP3
 	"weather_1": "rain_light",
