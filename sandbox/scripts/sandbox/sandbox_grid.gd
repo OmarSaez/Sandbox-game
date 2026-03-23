@@ -2571,10 +2571,11 @@ func _process_npcs(delta):
 		
 		# 3. MINER AI
 		if npc.type == "miner":
-			var dig_speed = 0.05
-			if npc.hit_flash > 0: 
-				dig_speed = 0.15 # PANIC DIGGING (3x Speed)
-				if npc.hit_flash == 5: npc.dir = -npc.dir # Escape manure!
+			# PÁNICO PERMANENTE: Si recibe cualquier daño (hp < 100), cava al triple de velocidad por desesperación
+			var dig_speed = 0.15 if npc.hp < 100.0 else 0.05 
+			
+			if npc.hit_flash == 5: 
+				npc.dir = -npc.dir # Escape instintivo del golpe!
 				
 			npc.dig_timer += dig_speed
 			if npc.dig_timer >= 0.15:
@@ -2628,7 +2629,7 @@ func _process_npcs(delta):
 										_set_cell(f_idx, np.y - 1, 3) # Techo
 								npc.hp = 0
 								npc.hit_flash = 10
-								continue
+								# NO usamos 'continue' aquí! Hacerlo congelaba su cuerpo como fantasma invisible
 							else:
 								npc.dir = sign(diff) if diff != 0 else npc.dir
 								
@@ -2652,8 +2653,9 @@ func _process_npcs(delta):
 						is_saboteur = npc.has("mine_state") and npc.mine_state == "saboteur"
 						var is_returning = is_saboteur and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2
 						
-						# Construir tapón de madera grueso para TODOS los mineros (conecta pisos y techos)
-						if not is_returning:
+						# Construir tapón de madera grueso para TODOS los mineros
+						# PERO SOLO EN LOS BORDES FINALES DEL MAPA! Si chocan con algo en medio del túnel, solo se dan la vuelta.
+						if not is_returning and (next_x <= 5 or next_x >= grid_width - 5):
 							var wall_x1 = np.x + 2 if old_dir == 1 else np.x - 1
 							var wall_x2 = np.x + 3 if old_dir == 1 else np.x - 2
 							for wy in range(np.y - 1, np.y + 6):
@@ -2933,8 +2935,10 @@ func _miner_dig(npc, dig_down=false):
 				# Saboteur ALWAYS builds full Wood ceiling to spread fire
 				if mountain_ahead or is_saboteur:
 					_set_cell(wx, ty_start, c_mat)
+					if !dig_down and ty_start - 1 >= 0:
+						_set_cell(wx, ty_start - 1, c_mat) # Doble techo grueso horizontal
 	
-	# FLOOR: TNT (5) double-thick layer
+	# FLOOR: TNT (5) double-thick layer or Wood (16)
 	var f_mat = 5 if is_saboteur else 16
 	if not is_returning:
 		var tx_f = npc.pos.x - (npc.dir * 2) 
@@ -2944,8 +2948,8 @@ func _miner_dig(npc, dig_down=false):
 			if wx < 0 or wx >= grid_width: continue
 			if ty_end < dynamic_grid_height:
 				_set_cell(wx, ty_end, f_mat) # Floor Line 1
-				if is_saboteur and ty_end + 1 < dynamic_grid_height:
-					_set_cell(wx, ty_end + 1, f_mat) # Floor Line 2 (Double Thick TNT)
+				if !dig_down and ty_end + 1 < dynamic_grid_height:
+					_set_cell(wx, ty_end + 1, f_mat) # Floor Line 2 (Doble grueso horizontal)
 				
 	# 2. CLEAR THE PATH (Wider 4px Tunnel for 'Better Air')
 	for dx in range(0, 4):
