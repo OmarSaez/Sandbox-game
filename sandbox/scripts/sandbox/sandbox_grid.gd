@@ -2580,18 +2580,26 @@ func _process_npcs(delta):
 			if npc.dig_timer >= 0.15:
 				npc.dig_timer = 0.0
 				if !_can_npc_fit(np.x, np.y + 1, npc): # Grounded
-					npc.state_steps -= 1
+					var is_saboteur = npc.has("mine_state") and npc.mine_state == "saboteur"
+					if not is_saboteur: 
+						npc.state_steps -= 1
 					var is_underground = _get_cell(np.x, np.y - 4) != 0
 					if not is_underground and npc.mine_state == "gallery":
 						npc.mine_state = "ramp"; npc.state_steps = 25
 						
 					if npc.state_steps <= 0:
-						if npc.mine_state == "ramp":
+						if npc.mine_state == "saboteur":
+							_set_cell(np.x, np.y + 5, 3) # Fire trigger on TNT floor!
+							npc.hp = 0
+							npc.hit_flash = 10
+						elif npc.mine_state == "ramp":
 							npc.mine_state = "gallery"
 							npc.state_steps = randi_range(60, 100)
 						else:
 							npc.mine_state = "ramp"
 							npc.state_steps = randi_range(15, 25)
+					
+					if npc.hp <= 0: continue # Stop moving if detonated!
 					
 					var dig_down = (npc.mine_state == "ramp")
 					_miner_dig(npc, dig_down)
@@ -2599,19 +2607,66 @@ func _process_npcs(delta):
 					var next_x = np.x + npc.dir
 					var next_y = np.y + (1 if dig_down else 0)
 					
+					var hit_wall = false
+					
+					# State trigger check (completely separate from movement)
+					if next_y >= dynamic_grid_height - 15:
+						if npc.mine_state != "saboteur":
+							npc.mine_state = "saboteur"
+							npc["saboteur_start_x"] = np.x
+							npc["saboteur_bounces"] = 0
+							npc.dir = 1 if randf() > 0.5 else -1
+						
+						if npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2:
+							var diff = npc.saboteur_start_x - np.x
+							if abs(diff) <= 2:
+								# Misión Sabotaje Completa! Volver y prender fuego.
+								for fx in range(-2, 3):
+									var f_idx = np.x + fx
+									if f_idx >= 0 and f_idx < grid_width:
+										_set_cell(f_idx, np.y + 5, 3) # Piso
+										_set_cell(f_idx, np.y - 1, 3) # Techo
+								npc.hp = 0
+								npc.hit_flash = 10
+								continue
+							else:
+								npc.dir = sign(diff) if diff != 0 else npc.dir
+								
+						next_y = np.y # Siempre horizontal
+						next_x = np.x + npc.dir # Recalcular 'next_x' en caso de que saboteur haya cambiado el 'dir'
+						
+					# Movement Execution Block
+					var old_dir = npc.dir
 					if next_x < 5 or next_x > grid_width - 5:
+						hit_wall = true
 						npc.dir = -npc.dir
-					elif next_y >= dynamic_grid_height - 10:
-						if npc.hp > 0: # Only trigger death once to allow animation to finish
-							npc.hp = 0
-							npc.hit_flash = 10 # 0.5s of red before dying
-
 					elif _can_npc_fit(next_x, next_y, npc):
 						np.x = next_x ; np.y = next_y
 					elif !dig_down and _can_npc_fit(next_x, np.y - 1, npc):
 						np.x = next_x ; np.y -= 1 # Step up
 					else:
+						hit_wall = true
 						npc.dir = -npc.dir
+						
+					if hit_wall:
+						is_saboteur = npc.has("mine_state") and npc.mine_state == "saboteur"
+						var is_returning = is_saboteur and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2
+						
+						# Construir tapón de madera grueso para TODOS los mineros (conecta pisos y techos)
+						if not is_returning:
+							var wall_x1 = np.x + 2 if old_dir == 1 else np.x - 1
+							var wall_x2 = np.x + 3 if old_dir == 1 else np.x - 2
+							for wy in range(np.y - 1, np.y + 6):
+								if wy >= 0 and wy < dynamic_grid_height:
+									if wall_x1 >= 0 and wall_x1 < grid_width:
+										_set_cell(wall_x1, wy, 16)
+									if wall_x2 >= 0 and wall_x2 < grid_width:
+										_set_cell(wall_x2, wy, 16)
+						
+						if is_saboteur:
+							if not npc.has("saboteur_bounces"): npc["saboteur_bounces"] = 0
+							if npc.saboteur_bounces < 2:
+								npc.saboteur_bounces += 1
 		# 3.5 TOWER MODE LOGIC
 		if not npc.has("is_tower"): npc["is_tower"] = false
 		
@@ -2820,6 +2875,15 @@ func _process_npcs(delta):
 		if npc.hp <= 0 and npc.hit_flash <= 0:
 			_draw_npc_pixels(npc, 0)
 			_play_action_sound("npc_death")
+			
+			# EL BOTÓN DEL HOMBRE MUERTO (Dead Man's Switch)
+			if npc.type == "miner" and npc.has("mine_state") and npc.mine_state == "saboteur":
+				for fx in range(-2, 3):
+					var f_idx = np.x + fx
+					if f_idx >= 0 and f_idx < grid_width:
+						_set_cell(f_idx, np.y + 5, 3) # Fuego al Piso
+						_set_cell(f_idx, np.y - 1, 3) # Fuego al Techo
+						
 			dead_indices.append(i)
 
 	dead_indices.sort(); dead_indices.reverse()
@@ -2847,34 +2911,41 @@ func _miner_dig(npc, dig_down=false):
 	# 1. PLACE WOOD SUPPORTS (Asymmetric Engineering)
 	var beam_len = 3 if dig_down else 6
 	
-	# CEILING: Proactive (Ahead) and Predictive (Radar Sealing)
-	var tx_c = npc.pos.x + (npc.dir * 3)
-	for ox in range(0, beam_len):
-		var wx = tx_c + (ox * npc.dir)
-		if wx < 0 or wx >= grid_width: continue
-		if ty_start >= 0:
-			# RADAR CHECK: Look ahead 3px to see if mountain is coming
-			var mountain_ahead = false
-			for rx in range(0, 4):
-				var r_check = wx + (rx * npc.dir)
-				if r_check >= 0 and r_check < grid_width:
-					var look_id = _get_cell(r_check, ty_start)
-					if look_id != 0 and look_id != 16:
-						mountain_ahead = true; break
-			
-			if mountain_ahead:
-				_set_cell(wx, ty_start, 16)
+	var is_saboteur = npc.has("mine_state") and npc.mine_state == "saboteur"
+	var is_returning = is_saboteur and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2
 	
-	# FLOOR: Protective (From Behind) to avoid falling
-	var tx_f = npc.pos.x - (npc.dir * 2) 
-	var f_len = 6 # Extended floor coverage
-	for ox in range(0, f_len):
-		var wx = tx_f + (ox * npc.dir)
-		if wx < 0 or wx >= grid_width: continue
-		if ty_end < dynamic_grid_height:
-			var tid = _get_cell(wx, ty_end)
-			if tid != 16: # Ensure we don't mess with existing supports
-				_set_cell(wx, ty_end, 16)
+	# CEILING: Wood (16) to connect perfectly with the downward tunnel
+	var c_mat = 16 
+	if not is_returning:
+		var tx_c = npc.pos.x + (npc.dir * 3)
+		for ox in range(0, beam_len):
+			var wx = tx_c + (ox * npc.dir)
+			if wx < 0 or wx >= grid_width: continue
+			if ty_start >= 0:
+				var mountain_ahead = false
+				for rx in range(0, 4):
+					var r_check = wx + (rx * npc.dir)
+					if r_check >= 0 and r_check < grid_width:
+						var look_id = _get_cell(r_check, ty_start)
+						if look_id != 0 and look_id != c_mat:
+							mountain_ahead = true; break
+				
+				# Saboteur ALWAYS builds full Wood ceiling to spread fire
+				if mountain_ahead or is_saboteur:
+					_set_cell(wx, ty_start, c_mat)
+	
+	# FLOOR: TNT (5) double-thick layer
+	var f_mat = 5 if is_saboteur else 16
+	if not is_returning:
+		var tx_f = npc.pos.x - (npc.dir * 2) 
+		var f_len = 6 # Extended floor coverage
+		for ox in range(0, f_len):
+			var wx = tx_f + (ox * npc.dir)
+			if wx < 0 or wx >= grid_width: continue
+			if ty_end < dynamic_grid_height:
+				_set_cell(wx, ty_end, f_mat) # Floor Line 1
+				if is_saboteur and ty_end + 1 < dynamic_grid_height:
+					_set_cell(wx, ty_end + 1, f_mat) # Floor Line 2 (Double Thick TNT)
 				
 	# 2. CLEAR THE PATH (Wider 4px Tunnel for 'Better Air')
 	for dx in range(0, 4):
