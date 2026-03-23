@@ -2768,12 +2768,12 @@ func _process_npcs(delta):
 							if other.team == npc.team and other != npc:
 								if tx < other.pos.x + 2 and tx + 2 > other.pos.x and np.y < other.pos.y + 5 and np.y + 5 > other.pos.y:
 									bumped_ally = true
-									if target != null:
-										max_climb = -111 # Infinite ladder only during combat
+									if other.is_tower:
+										max_climb = -111 # Infinite ladder ONLY if ally is an official tower!
 									break
 						
-						if target == null and bumped_ally:
-							# Patrol mode: Don't step on your friends! Turn around.
+						if bumped_ally and max_climb != -111:
+							# Hit a friend who is NOT a tower? Don't step on them! Turn around.
 							npc.dir = -npc.dir
 							moved = true
 						
