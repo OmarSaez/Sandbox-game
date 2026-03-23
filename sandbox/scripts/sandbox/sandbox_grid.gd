@@ -2889,20 +2889,20 @@ func _miner_dig(npc, dig_down=false):
 func _shoot_arrow(npc, target):
 	_play_action_sound("archer_shoot")
 	var dx = float(target.pos.x - npc.pos.x)
-	var dy = float(target.pos.y - npc.pos.y)
 	var dir = 1 if dx > 0 else -1
-	
-	# TRAJECTORY MATH (Slowed down to 130px for visibility & precision)
-	var vx = dir * 130.0 # Horizontal speed (Reduced from 220)
-	var t = abs(dx) / 130.0 # Time to travel distance
-	if t < 0.05: t = 0.05 # Prevent division by zero
+	# TRAJECTORY MATH (Mejor parábola dinámica)
+	var aim_dy = float((target.pos.y + 2) - npc.pos.y) # Aim for the chest/belly
+	var speed_x = clamp(abs(dx) * 1.5, 90.0, 150.0) # Slower horizontal speed for short shots = higher arc
+	var vx = dir * speed_x
+	var t = abs(dx) / speed_x
+	if t < 0.1: t = 0.1 # Prevent division by zero
 	
 	var arrow_gravity = 200.0
 	# Formula: dy = vy * t + 0.5 * g * t^2 -> vy = (dy / t) - (0.5 * g * t)
-	var vy = (dy / t) - (0.5 * arrow_gravity * t)
+	var vy = (aim_dy / t) - (0.5 * arrow_gravity * t)
 	
-	# Safety cap for vy
-	vy = clamp(vy, -160.0, 40.0) 
+	# Mínimos y máximos mucho más permisivos para parábolas orgánicas y altas
+	vy = clamp(vy, -280.0, 40.0)
 	
 	active_projectiles.append({
 		"pos": Vector2(npc.pos.x + dir*2, npc.pos.y + 1),
@@ -3000,11 +3000,21 @@ func _attack_npc(attacker, victim):
 			attacker.pos.y = ly
 			break
 		
-	# 3. POWER KNOCKBACK (Parabolic Trajectory)
-	if randf() < 0.35:
-		var push_dir = 1 if attacker.pos.x < victim.pos.x else -1
-		victim.vx = push_dir * randf_range(3.0, 5.0)
-		victim.vy = randf_range(-4.0, -8.0) # Vertical lift for parabola
+	# 3. KINETIC KNOCKBACK (Evasion vs Power)
+	var push_dir = 1 if attacker.pos.x < victim.pos.x else -1
+	
+	if victim.type == "archer":
+		# ARCHER DEFENSIVE KICK: The archer kicks the ATTACKER ~15px BACKWARD!
+		var repulsion_vx = -push_dir * 3.5 
+		var repulsion_vy = -4.0
+		# Push the warrior away to maintain shooting area
+		attacker.vx = repulsion_vx
+		attacker.vy = repulsion_vy 
+	else:
+		# STANDARD WARRIOR BRAWL: 35% chance to wildly knockback the enemy
+		if randf() < 0.35:
+			victim.vx = push_dir * randf_range(3.0, 5.0)
+			victim.vy = randf_range(-4.0, -8.0) # Vertical lift for parabola
 
 func _check_npc_environment_damage(npc) -> bool:
 	var took_damage = false
