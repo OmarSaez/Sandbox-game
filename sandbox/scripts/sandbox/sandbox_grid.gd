@@ -2655,10 +2655,17 @@ func _process_npcs(delta):
 			# Apply gravity and friction
 			if _can_npc_fit(np.x, np.y + 1, npc):
 				npc.vy += 1.0 # Gravity acceleration
+				npc.fall_depth += 1 # Track physics freefall too
+				npc.vx *= 0.98 # Low Air friction (keeps momentum for parabolas)
 			else:
-				if npc.vy > 0: npc.vy = 0.0 # Hit ground
+				if npc.vy > 0: 
+					if npc.vy >= 7.0 or npc.fall_depth >= 15: # Hard impact
+						npc.hp -= max(5.0, (npc.fall_depth - 10) * 1.5)
+						npc.hit_flash = 5
+					npc.vy = 0.0 # Hit ground
+					npc.fall_depth = 0
+				npc.vx *= 0.6 # High Ground friction (brakes quickly)
 			
-			npc.vx *= 0.7 # Ground/Air friction
 			if abs(npc.vx) < 0.5: npc.vx = 0.0
 			
 			if npc.vy > 8.0: npc.vy = 8.0 # Terminal velocity
@@ -2670,6 +2677,10 @@ func _process_npcs(delta):
 				npc.fall_depth += 1
 			elif npc.type != "miner": # Warriors/Archers climbing logic
 				# BOUNCE EXPLORATION: Flip direction if landed from height
+				if npc.fall_depth >= 12: # Fall damage from standard walking off cliffs (>12px drop)
+					npc.hp -= (npc.fall_depth - 10) * 1.5
+					npc.hit_flash = 5
+				
 				if npc.fall_depth >= 3:
 					npc.dir = -npc.dir
 				npc.fall_depth = 0
@@ -2677,6 +2688,51 @@ func _process_npcs(delta):
 				if npc.dir != 0:
 					var tx = np.x + (npc.dir * 2) # FORWARD LUNGE CHECK (2px)
 					var moved = false
+					
+					# 1. DANGER AVOIDANCE (Fire, Acid, Explosives)
+					var danger_dist = -1
+					var safe_landing_dist = -1
+					var front_edge = np.x + 1 if npc.dir == 1 else np.x
+					
+					for dx in range(1, 25): # Ultra Deep scan up to 24px ahead
+						var detect_x = front_edge + (npc.dir * dx)
+						if detect_x < 0 or detect_x >= grid_width: break
+						
+						var is_danger = false
+						# Full vertical scan for obstacles: from head (0) to floor (5)
+						for oy in range(0, 6):
+							var tid = _get_cell(detect_x, np.y + oy)
+							if tid > 0:
+								var tags = material_tags_raw[tid]
+								if tags & (SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.EXPLOSIVE):
+									is_danger = true
+									break
+						
+						if is_danger:
+							if danger_dist == -1: danger_dist = dx
+						elif danger_dist != -1 and not is_danger:
+							# End of danger found! Mark safe landing distance.
+							safe_landing_dist = dx
+							break
+					
+					if danger_dist != -1 and not moved:
+						if danger_dist <= 5: # PERFECT MARGIN: 5px
+							var hazard_width = safe_landing_dist - danger_dist
+							if safe_landing_dist != -1 and hazard_width <= 20:
+								# Puddle is jumpable (up to 20px wide) safely from 5px away
+								if _can_npc_fit(np.x, np.y - 1, npc):
+									npc.vy = -4.6 # Powerful enough to not dip
+									npc.vx = npc.dir * 3.4 # Covers ~28px to clear gap + puddle
+									moved = true
+								else:
+									npc.dir = -npc.dir # Roof blocked, retreat!
+									moved = true
+							else:
+								# Too wide to jump! (Lake or no safe landing)
+								npc.dir = -npc.dir # Retreat!
+								moved = true
+						else:
+							pass # Keep walking to hit the 3px edge
 					
 					# TACTICAL JUMP: If target is above, always try to jump/catch ledges
 					var target_above = target and target.pos.y < np.y - 12
