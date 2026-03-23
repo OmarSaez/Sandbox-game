@@ -117,6 +117,7 @@ var action_sfx = {
 	"warrior_attack": "sword_swing", # Ataque de Guerrero
 	"archer_shoot": "bow_shoot",     # Disparo de Arquero
 	"miner_dig": "pickaxe_hit",      # Minero picando tierra
+	"medic_heal": "medic_heal",      # <--- CANAL RESERVADO PARA EL SONIDO DEL MÉDICO
 	
 	# Sonidos Continuos de Clima / Desastres (LOOP EN TIEMPO REAL) MP3
 	"weather_1": "rain_light",
@@ -188,6 +189,7 @@ var tr = {
 		"warrior": "⚔️ Guerrero",
 		"archer": "🏹 Arquero",
 		"miner": "⛏️ Minero",
+		"medic": "💊 Médico",
 		"team_red": "🔴 Rojo",
 		"team_blue": "🔵 Azul",
 		"team_yellow": "🟡 Amarillo",
@@ -239,6 +241,7 @@ var tr = {
 		"warrior": "⚔️ Warrior",
 		"archer": "🏹 Archer",
 		"miner": "⛏️ Miner",
+		"medic": "💊 Medic",
 		"team_red": "🔴 Red",
 		"team_blue": "🔵 Blue",
 		"team_yellow": "🟡 Yellow",
@@ -492,6 +495,11 @@ func _ready():
 	# 70: Ice (Light Cyan Static Solid)
 	_register_material(70, Color("#bbe0fcff"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
 
+	# --- MEDIC SYSTEM ---
+	# 80: Medic Uniform (White)
+	_register_material(80, Color("#EEEEEE"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 81: Medic Cross (Red)
+	_register_material(81, Color("#FF1111"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 
 	# UI SETUP (Must happen AFTER materials are registered)
 	_setup_main_ui_containers()
@@ -1247,6 +1255,8 @@ func _update_highlights():
 					if selected_material == 40: is_active = true
 				elif key == "miner_btn":
 					if selected_material == 50: is_active = true
+				elif key == "medic_btn":
+					if selected_material == 80: is_active = true
 				elif key.begins_with("team_btn_"):
 					var idx = int(key.split("_")[-1])
 					if idx == selected_team: is_active = true
@@ -2358,6 +2368,7 @@ func _setup_npc_ui():
 		create_npc_btn.call("warrior", 30)
 		create_npc_btn.call("archer", 40)
 		create_npc_btn.call("miner", 50)
+		create_npc_btn.call("medic", 80)
 		
 		# Teams Row (NOW RESPONSIVE)
 		var team_lbl = Label.new()
@@ -2390,6 +2401,7 @@ func _place_npc(x, y):
 	var n_type = "warrior"
 	if selected_material == 40 or selected_material == 41: n_type = "archer"
 	elif selected_material == 50 or selected_material == 51: n_type = "miner"
+	elif selected_material == 80 or selected_material == 81: n_type = "medic"
 	
 	# Register in entity list
 	var new_npc = {
@@ -2417,6 +2429,7 @@ func _place_npc(x, y):
 		"knockback_mult": randf_range(0.7, 1.3), # Unidades fuertes tiran más lejos
 		"cowardice": randf_range(0.15, 0.45), # Probabilidad personal de huir
 		"precision": randf_range(-0.6, 0.6), # Peor/Mejor puntería con arco
+		"heal_power": randf_range(15.0, 35.0), # Variación en fuerza de las curas médicas
 		
 		# VARIANTE ELEMENTAL (1 de cada 20 = 5%)
 		"is_fire_variant": randf() < 0.05
@@ -2463,13 +2476,14 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	
 	var is_archer = npc.type == "archer"
 	var is_miner = npc.type == "miner"
+	var is_medic = npc.type == "medic"
 	
-	var m_head = (41 if is_archer else (50 if is_miner else 31)) if override_mat == -1 else override_mat
+	var m_head = (41 if is_archer else (50 if is_miner else (80 if is_medic else 31))) if override_mat == -1 else override_mat
 	var m_skin = 33 if override_mat == -1 else override_mat
-	var m_body = (40 if is_archer else (50 if is_miner else 32)) if override_mat == -1 else override_mat
-	var m_legs = (50 if is_miner else 31) if override_mat == -1 else override_mat
+	var m_body = (40 if is_archer else (50 if is_miner else (80 if is_medic else 32))) if override_mat == -1 else override_mat
+	var m_legs = (50 if is_miner else (80 if is_medic else 31)) if override_mat == -1 else override_mat
 	var m_team = team_mat if override_mat == -1 else override_mat
-	var m_helmet = 51 if override_mat == -1 else override_mat
+	var m_helmet = (51 if is_miner else (81 if is_medic else 31)) if override_mat == -1 else override_mat
 	
 	# Override for hit flash (More vibrant colors)
 	if is_flashing and override_mat == -1:
@@ -2523,9 +2537,75 @@ func _process_npcs(delta):
 		var np = npc.pos
 		
 		# 2. AI: TARGET SELECTION & BEHAVIOR
-		if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
-		var target = _find_closest_enemy(npc, 250.0) # Larger radar (250px)
+		var target = null
 		var is_attacking = false
+		
+		# ==============================================================
+		# A. MEDIC AI (Pacifista y Sanador)
+		if npc.type == "medic":
+			var heal_cd = npc.get("attack_cooldown", 0.0)
+			if heal_cd > 0: heal_cd -= 0.05
+			npc["attack_cooldown"] = heal_cd
+			
+			var closest_enemy = _find_closest_enemy(npc, 180.0)
+			var closest_ally = null
+			var ally_dist = 999.0
+			
+			# Buscar aliados heridos
+			for other in active_npcs:
+				if other.team == npc.team and other != npc and other.hp > 0 and other.type != "medic":
+					var mhp = other.get("max_hp", 100.0)
+					if other.hp < mhp: # Necesita cura!
+						var d = npc.pos.distance_to(other.pos)
+						if d < ally_dist:
+							ally_dist = d; closest_ally = other
+			
+			# 1. HUIDA VERSUS DEBER (Valor Médico)
+			# Los médicos son valientes A MENOS que su propia vida baje del 50%.
+			var medic_critical = npc.hp < (npc.get("max_hp", 100.0) * 0.5)
+			var enemy_very_close = closest_enemy and npc.pos.distance_to(closest_enemy.pos) < 120.0
+			
+			if (medic_critical and enemy_very_close) or (enemy_very_close and not closest_ally):
+				# Huye porque está casi muerto, o porque hay peligro y NO hay heridos que salvar
+				npc.dir = 1 if closest_enemy.pos.x < np.x else -1
+				npc["is_fleeing"] = true # Llora de pánico
+			else:
+				# 2. ASISTENCIA MÉDICA ES MÁXIMA PRIORIDAD
+				npc["is_fleeing"] = false # Mantiene la compostura si ve heridos
+				if closest_ally:
+					if ally_dist < 25.0:
+						npc.dir = 0 # Parar y curar bajo fuego cruzado
+						if heal_cd <= 0:
+							var maxh = closest_ally.get("max_hp", 100.0)
+							var heal_amt = npc.get("heal_power", 20.0) # Potencia de cura aleatoria por individuo
+							closest_ally.hp = min(closest_ally.hp + heal_amt, maxh)
+							npc["attack_cooldown"] = 1.0 # 1 segundo por inyección (aprox)
+							_play_action_sound("medic_heal")
+							
+							# Reanimación de Morale
+							if closest_ally.hp > maxh * 0.3:
+								closest_ally["morale_broken"] = false
+								closest_ally["is_fleeing"] = false
+								
+							# Trazar cruces verdes en partículas!
+							for f in range(6):
+								visual_sparks.append({"x":float(closest_ally.pos.x+randf_range(-3,3)),"y":float(closest_ally.pos.y+randf_range(-5,0)),"vx":0.0,"vy":randf_range(-35.0,-15.0),"color":Color.GREEN,"life":0.6})
+					else:
+						# Correr hacia el aliado herido (¡Incluso si hay enemigos cerca!)
+						npc.dir = 1 if closest_ally.pos.x > np.x else -1
+				else:
+					# Patrullaje médico pasivo (todos están sanos y no hay peligro)
+					if randf() < 0.02: npc.dir = 1 if randf() > 0.5 else -1
+					if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+
+			# Salta el resto del código de los guerreros y arqueros
+			pass
+		
+		# ==============================================================
+		# B. WARRIOR / ARCHER AI (Agresores)
+		elif npc.type != "miner":
+			target = _find_closest_enemy(npc, 250.0) # Larger radar (250px)
+			if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
 		
 		# -- SISTEMA DE MORAL (Instinto de Supervivencia) --
 		var critical_hp = npc.get("max_hp", 100.0) * 0.3
@@ -2540,73 +2620,74 @@ func _process_npcs(delta):
 				if _get_cell(start_drop_x, np.y) == 0:
 					_set_cell(start_drop_x, np.y, 2)
 				
-		var fleeing = npc.get("is_fleeing", false)
-		
-		if fleeing and npc.type != "miner":
-			# MODO HUIDA: Correr en dirección contraria a la amenaza
-			if target:
-				npc.dir = 1 if target.pos.x < np.x else -1
-			# Si no hay amenaza cerca (se alejó bastante), igual sigue corriendo asustado
-			if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+		if npc.type != "miner" and npc.type != "medic":
+			var fleeing = npc.get("is_fleeing", false)
 			
-			# LÁGRIMAS DE PÁNICO: 10% de probabilidad por tick de soltar una gota de agua (llorar)
-			if randf() < 0.10:
-				var drop_x = np.x + (1 if npc.dir == -1 else 0) # Dejar la lágrima detrás de la cara
-				if _get_cell(drop_x, np.y) == 0:
-					_set_cell(drop_x, np.y, 2) # Agua (ID 2)
-			
-		elif !target and npc.type != "miner":
-			# DEFAULT PATROL (If no target, keep moving to explore locally)
-			if randf() < 0.02: # 2% chance per tick to turn around (roam locally)
-				npc.dir = 1 if randf() > 0.5 else -1
-			if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-			
-		elif target and npc.type != "miner":
-			var dist_x = target.pos.x - np.x
-			var dx_abs = abs(dist_x)
-			var dy_abs = abs(target.pos.y - np.y)
-			
-			if npc.type == "warrior":
-				var target_below = target.pos.y > np.y + 8
+			if fleeing:
+				# MODO HUIDA: Correr en dirección contraria a la amenaza
+				if target:
+					npc.dir = 1 if target.pos.x < np.x else -1
+				# Si no hay amenaza cerca (se alejó bastante), igual sigue corriendo asustado
+				if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
 				
-				# GLOBAL SWEEP: If target is below, walk SIDE-TO-SIDE until ledge found
-				if target_below:
-					if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-				else:
-					npc.dir = 1 if dist_x > 0 else -1
+				# LÁGRIMAS DE PÁNICO: 10% de probabilidad por tick de soltar una gota de agua (llorar)
+				if randf() < 0.10:
+					var drop_x = np.x + (1 if npc.dir == -1 else 0) # Dejar la lágrima detrás de la cara
+					if _get_cell(drop_x, np.y) == 0:
+						_set_cell(drop_x, np.y, 2) # Agua (ID 2)
 				
-				if dx_abs < 6 and dy_abs < 6:
+			elif !target:
+				# DEFAULT PATROL (If no target, keep moving to explore locally)
+				if randf() < 0.02: # 2% chance per tick to turn around (roam locally)
+					npc.dir = 1 if randf() > 0.5 else -1
+				if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+				
+			elif target:
+				var dist_x = target.pos.x - np.x
+				var dx_abs = abs(dist_x)
+				var dy_abs = abs(target.pos.y - np.y)
+				
+				if npc.type == "warrior":
+					var target_below = target.pos.y > np.y + 8
+					
+					# GLOBAL SWEEP: If target is below, walk SIDE-TO-SIDE until ledge found
+					if target_below:
+						if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+					else:
+						npc.dir = 1 if dist_x > 0 else -1
+					
+					if dx_abs < 6 and dy_abs < 6:
+						is_attacking = true
+						if npc.attack_cooldown <= 0:
+							_attack_npc(npc, target)
+							npc.attack_cooldown = 0.6
+					
+					# Stop ONLY if on same level AND close in X
+					if dx_abs < 4 and !target_below: npc.dir = 0 
+				elif npc.type == "archer":
+					var target_below = target.pos.y > np.y + 12
+					
+					# REPOSITION MODE: If frustrated (miss_counter < 0), force horizontal move
+					if npc.miss_counter < 0:
+						npc.miss_counter += 1
+						if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+					else:
+						if dx_abs > 120: npc.dir = 1 if dist_x > 0 else -1
+						elif dx_abs < 50:
+							npc.dir = -1 if dist_x > 0 else 1
+						else:
+							# GLOBAL HUNT: Walk until hole or ledge
+							if target_below:
+								if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+							else:
+								npc.dir = 0
+					
 					is_attacking = true
 					if npc.attack_cooldown <= 0:
-						_attack_npc(npc, target)
-						npc.attack_cooldown = 0.6
-				
-				# Stop ONLY if on same level AND close in X
-				if dx_abs < 4 and !target_below: npc.dir = 0 
-			elif npc.type == "archer":
-				var target_below = target.pos.y > np.y + 12
-				
-				# REPOSITION MODE: If frustrated (miss_counter < 0), force horizontal move
-				if npc.miss_counter < 0:
-					npc.miss_counter += 1
-					if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-				else:
-					if dx_abs > 120: npc.dir = 1 if dist_x > 0 else -1
-					elif dx_abs < 50:
-						npc.dir = -1 if dist_x > 0 else 1
-					else:
-						# GLOBAL HUNT: Walk until hole or ledge
-						if target_below:
-							if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-						else:
-							npc.dir = 0
-				
-				is_attacking = true
-				if npc.attack_cooldown <= 0:
-					_shoot_arrow(npc, target)
-					npc.miss_counter += 1
-					if npc.miss_counter >= 3: npc.miss_counter = -40 # Reposition for 40 ticks
-					npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
+						_shoot_arrow(npc, target)
+						npc.miss_counter += 1
+						if npc.miss_counter >= 3: npc.miss_counter = -40 # Reposition for 40 ticks
+						npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
 		
 		# 3. MINER AI
 		if npc.type == "miner":
