@@ -105,9 +105,10 @@ var material_sfx = {
 # Mapeo: Nombre de Acción -> Nombre del archivo (UNA SOLA VEZ / ONE-SHOT) WAV
 # Estos sonidos suenan una sola vez cuando ocurre el evento.
 var action_sfx = {
-	"npc_hit": "hit",             # Cuando un NPC recibe daño
+	"npc_hit": "hit",             # Cuando un NPC recibe daño normal (armas)
+	"damage_npc": "damage_npc",   # Daño de entorno (fuego, ácido, explosivo, asfixia)
 	"npc_death": "death",         # Cuando un NPC muere
-	"npc_place": "place_npc",     # Al colocar un NPC en el mapa
+	"npc_place": "spawn",         # Al colocar un NPC en el mapa
 	"explosion": "explode",       # Detonación de TNT o Volcán
 	"lightning": "lightning",     # Impacto de rayo (clima)
 	"earthquake": "quake",        # Inicio de Terremoto
@@ -1071,6 +1072,10 @@ func _refresh_ui_text():
 			node_data.text = tr[current_language]["miner"]
 			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
+		elif key == "medic_btn":
+			node_data.text = tr[current_language]["medic"]
+			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
+			node_data.add_theme_font_size_override("font_size", 14 * s)
 		
 		# Handle Labels (Main labels for rows and material names)
 		elif node_data is Label:
@@ -1310,7 +1315,7 @@ func _get_sfx_stream(sfx_name: String) -> AudioStream:
 	var extensions = [".ogg", ".mp3", ".wav"]
 	for ext in extensions:
 		var path = "res://assets/audio/sfx/" + sfx_name + ext
-		if FileAccess.file_exists(path):
+		if ResourceLoader.exists(path) or FileAccess.file_exists(path) or FileAccess.file_exists(path + ".import"):
 			var stream = load(path)
 			# Ensure it loops if it's a placement sound (Logic handled in _manage_brush_sound)
 			sfx_cache[sfx_name] = stream
@@ -1383,6 +1388,12 @@ func _play_action_sound(action: String, min_interval: float = 0.08):
 func _process(delta):
 	# Handle input with robust UI blocking
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not _is_any_ui_blocking():
+		# 1. AUTOCLOSE MENUS ON WORKSPACE TAP
+		if not mouse_was_pressed:
+			if is_instance_valid(tools_panel) and tools_panel.visible: tools_panel.visible = false
+			if is_instance_valid(disaster_panel) and disaster_panel.visible: disaster_panel.visible = false
+			if is_instance_valid(npc_panel) and npc_panel.visible: npc_panel.visible = false
+			
 		var m_pos = get_local_mouse_position()
 		var gx = int(m_pos.x / grid_scale)
 		var gy = int(m_pos.y / grid_scale)
@@ -2395,8 +2406,37 @@ func _setup_npc_ui():
 			team_flow.add_child(t_btn)
 
 func _place_npc(x, y):
-	var start_x = x - 1
-	var start_y = y - 4
+	var origin_x = x - 1
+	var origin_y = y - 4
+	
+	var start_x = origin_x
+	var start_y = origin_y
+	
+	# AUTO-REPOSITION (Protección Exclusiva Anti-Clones)
+	# Busca el primer hueco libre de OTROS NPCs, ignorando la arena/tierra/paredes para permitir ahogos manuales
+	var found_spot = false
+	for radius in range(0, 15):
+		for dx in range(-radius, radius + 1):
+			for dy in range(-radius, 2): 
+				if abs(dx) == radius or abs(dy) == radius or radius == 0:
+					var test_x = origin_x + dx
+					var test_y = origin_y + dy
+					
+					var overlap = false
+					for other in active_npcs:
+						if test_x < other.pos.x + 2 and test_x + 2 > other.pos.x and test_y < other.pos.y + 5 and test_y + 5 > other.pos.y:
+							overlap = true
+							break
+					
+					if not overlap:
+						start_x = test_x
+						start_y = test_y
+						found_spot = true
+						break
+			if found_spot: break
+		if found_spot: break
+		
+	if not found_spot: return # Imposible encontrar hueco incluso a 15 pixeles, abortar spawn silenciosamente
 	
 	var n_type = "warrior"
 	if selected_material == 40 or selected_material == 41: n_type = "archer"
@@ -3237,6 +3277,8 @@ func _attack_npc(attacker, victim):
 			victim.vy = randf_range(-4.0, -8.0) # Vertical lift for parabola
 
 func _check_npc_environment_damage(npc) -> bool:
+	if npc.hp <= 0: return false # Los cadáveres no sufren daño, no parpadean y no se quejan. Dejalos morir en paz.
+	
 	var took_damage = false
 	# Check key damage points (Head, Chest, Feet, and Ground Below)
 	var check_points = [
@@ -3297,6 +3339,10 @@ func _check_npc_environment_damage(npc) -> bool:
 		npc.hp -= 3.0 # Ahogo (Suffocation)
 		npc.hit_flash = 4 # Blinking red for struggle visibility
 		took_damage = true
+		
+	# Efecto de sonido global si el terreno o entorno lo lastima
+	if took_damage:
+		_play_action_sound("damage_npc", 0.4) # Frecuencia limitada para evitar ruido sordo continuo
 		
 	return took_damage
 
