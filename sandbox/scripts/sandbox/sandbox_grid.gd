@@ -2397,7 +2397,7 @@ func _place_npc(x, y):
 		"team": selected_team,
 		"dir": 1 if randf() > 0.5 else -1,
 		"type": n_type,
-		"hp": 100.0,
+		"hp": randf_range(85.0, 115.0), # Variación en resistencia base
 		"attack_cooldown": 0.0,
 		"hit_flash": 0,
 		"hit_type": "none",
@@ -2405,12 +2405,23 @@ func _place_npc(x, y):
 		"spawn_y": start_y,
 		"mine_state": "ramp",
 		"state_steps": 25,
-		"fall_depth": 0, # Track for acrobat flips
+		"fall_depth": 0,
 		"last_dig_time": 0,
-		"miss_counter": 0, # For Archer tactical repositioning
+		"miss_counter": 0,
 		"vx": 0.0,
-		"vy": 0.0
+		"vy": 0.0,
+		
+		# -- ESTADÍSTICAS RPG ÚNICAS POR SOLDADO --
+		"max_hp": 0.0, # Se calibra debajo
+		"atk_dmg": randf_range(0.8, 1.25), # +-20% Variación en daño
+		"knockback_mult": randf_range(0.7, 1.3), # Unidades fuertes tiran más lejos
+		"cowardice": randf_range(0.15, 0.45), # Probabilidad personal de huir
+		"precision": randf_range(-0.6, 0.6), # Peor/Mejor puntería con arco
+		
+		# VARIANTE ELEMENTAL (1 de cada 20 = 5%)
+		"is_fire_variant": randf() < 0.05
 	}
+	new_npc["max_hp"] = new_npc["hp"]
 	active_npcs.append(new_npc)
 	
 	# Initial draw
@@ -2516,13 +2527,41 @@ func _process_npcs(delta):
 		var target = _find_closest_enemy(npc, 250.0) # Larger radar (250px)
 		var is_attacking = false
 		
-		# DEFAULT PATROL (If no target, keep moving to explore locally)
-		if !target and npc.type != "miner":
+		# -- SISTEMA DE MORAL (Instinto de Supervivencia) --
+		var critical_hp = npc.get("max_hp", 100.0) * 0.3
+		if npc.hp <= critical_hp and not npc.get("morale_broken", false):
+			npc["morale_broken"] = true
+			if randf() < npc.get("cowardice", 0.30): # Probabilidad personal de acobardarse
+				npc["is_fleeing"] = true
+				npc["is_tower"] = false # Abandona su puesto defensivo inmediatamente
+				
+				# PRIMERA LÁGRIMA GARANTIZADA: Justo en el instante en que rompe a llorar
+				var start_drop_x = np.x + (1 if npc.dir == -1 else 0)
+				if _get_cell(start_drop_x, np.y) == 0:
+					_set_cell(start_drop_x, np.y, 2)
+				
+		var fleeing = npc.get("is_fleeing", false)
+		
+		if fleeing and npc.type != "miner":
+			# MODO HUIDA: Correr en dirección contraria a la amenaza
+			if target:
+				npc.dir = 1 if target.pos.x < np.x else -1
+			# Si no hay amenaza cerca (se alejó bastante), igual sigue corriendo asustado
+			if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+			
+			# LÁGRIMAS DE PÁNICO: 10% de probabilidad por tick de soltar una gota de agua (llorar)
+			if randf() < 0.10:
+				var drop_x = np.x + (1 if npc.dir == -1 else 0) # Dejar la lágrima detrás de la cara
+				if _get_cell(drop_x, np.y) == 0:
+					_set_cell(drop_x, np.y, 2) # Agua (ID 2)
+			
+		elif !target and npc.type != "miner":
+			# DEFAULT PATROL (If no target, keep moving to explore locally)
 			if randf() < 0.02: # 2% chance per tick to turn around (roam locally)
 				npc.dir = 1 if randf() > 0.5 else -1
 			if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
 			
-		if target and npc.type != "miner":
+		elif target and npc.type != "miner":
 			var dist_x = target.pos.x - np.x
 			var dx_abs = abs(dist_x)
 			var dy_abs = abs(target.pos.y - np.y)
@@ -2825,7 +2864,7 @@ func _process_npcs(delta):
 							if other.team == npc.team and other != npc:
 								if tx < other.pos.x + 2 and tx + 2 > other.pos.x and np.y < other.pos.y + 5 and np.y + 5 > other.pos.y:
 									bumped_ally = true
-									if other.is_tower:
+									if other.get("is_tower", false):
 										max_climb = -111 # Infinite ladder ONLY if ally is an official tower!
 									break
 						
@@ -2976,6 +3015,9 @@ func _shoot_arrow(npc, target):
 	# Formula: dy = vy * t + 0.5 * g * t^2 -> vy = (dy / t) - (0.5 * g * t)
 	var vy = (aim_dy / t) - (0.5 * arrow_gravity * t)
 	
+	# RPG: Aplicar puntería aleatoria de cada arquero (+- 15px de desviación vertical)
+	vy += npc.get("precision", 0.0) * 15.0
+	
 	# Mínimos y máximos mucho más permisivos para parábolas orgánicas y altas
 	vy = clamp(vy, -280.0, 40.0)
 	
@@ -2984,7 +3026,9 @@ func _shoot_arrow(npc, target):
 		"vel": Vector2(vx, vy),
 		"team": npc.team,
 		"type": "arrow",
-		"life": 2.5
+		"life": 2.5,
+		"atk_dmg": npc.get("atk_dmg", 1.0), # Heredar daño del arquero original
+		"is_fire": npc.get("is_fire_variant", false)
 	})
 
 func _process_projectiles(delta):
@@ -3014,9 +3058,15 @@ func _process_projectiles(delta):
 					hit_npc = other; break
 		
 		if hit_npc:
-			hit_npc.hp -= 40.0 # High damage (3 arrows = kill)
+			hit_npc.hp -= 40.0 * p.get("atk_dmg", 1.0) # Daño varía según el nivel del arquero!
 			hit_npc.hit_flash = 4 # Flash
 			hit_npc.hit_type = "normal"
+			
+			# Efecto de flecha de fuego
+			if p.get("is_fire", false):
+				if _get_cell(gx, gy) == 0: _set_cell(gx, gy, 3)
+				if _get_cell(gx, gy - 1) == 0: _set_cell(gx, gy - 1, 3)
+				
 			_play_action_sound("npc_hit")
 			# Visual sparks on impact
 			for j in range(5):
@@ -3026,6 +3076,11 @@ func _process_projectiles(delta):
 		# 3. Grid Collision (Solids)
 		var tid = _get_cell(gx, gy)
 		if tid != 0 and tid != 15 and tid != 3 and tid != 17:
+			# Flecha de fuego prendiendo la pared/suelo
+			if p.get("is_fire", false):
+				var px = gx - int(sign(p.vel.x))
+				if px >= 0 and px < grid_width and _get_cell(px, gy) == 0:
+					_set_cell(px, gy, 3)
 			to_remove.append(i); continue # Stuck in ground
 			
 		# Draw new
@@ -3046,9 +3101,17 @@ func _find_closest_enemy(me, radar_range):
 	return closest
 
 func _attack_npc(attacker, victim):
-	victim.hp -= 15.0 # Damage
+	victim.hp -= (15.0 * attacker.get("atk_dmg", 1.0)) # Damage personalizado
 	victim.hit_flash = 5
 	victim.hit_type = "normal"
+	
+	# Efecto de espada de fuego
+	if attacker.get("is_fire_variant", false):
+		var fx = victim.pos.x + randi_range(0, 1)
+		var fy = victim.pos.y + randi_range(2, 4)
+		if fx >= 0 and fx < grid_width and fy >= 0 and fy < dynamic_grid_height:
+			if _get_cell(fx, fy) == 0: _set_cell(fx, fy, 3)
+			
 	_play_action_sound("npc_hit")
 	_play_action_sound("warrior_attack")
 	
@@ -3088,7 +3151,8 @@ func _attack_npc(attacker, victim):
 	else:
 		# STANDARD WARRIOR BRAWL: 35% chance to wildly knockback the enemy
 		if randf() < 0.35:
-			victim.vx = push_dir * randf_range(3.0, 5.0)
+			var base_power = randf_range(3.0, 5.0)
+			victim.vx = push_dir * base_power * attacker.get("knockback_mult", 1.0)
 			victim.vy = randf_range(-4.0, -8.0) # Vertical lift for parabola
 
 func _check_npc_environment_damage(npc) -> bool:
