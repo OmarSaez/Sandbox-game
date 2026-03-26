@@ -146,7 +146,7 @@ var is_fire_active = false
 
 var sfx_cache = {} # Cache for loaded AudioStreams
 
-var tr = {
+var translations_map = {
 	"es": {
 		"disasters": "🌪️ Desastres",
 		"tools": "🛠️ Herramientas",
@@ -767,7 +767,7 @@ func _setup_tools_ui():
 	tools_btn.name = "ToolsBtn"
 	tools_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
 	tools_btn.add_theme_font_size_override("font_size", 14 * s)
-	tools_btn.text = tr[current_language]["tools"]
+	tools_btn.text = translations_map[current_language]["tools"]
 	ui_elements["tools_btn"] = tools_btn
 	tools_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	action_vbox.add_child(tools_btn)
@@ -838,7 +838,7 @@ func _setup_tools_ui():
 	
 	var create_row = func(label_key: String, options: Array, callback: Callable):
 		var lbl = Label.new()
-		lbl.text = tr[current_language][label_key] + ": "
+		lbl.text = translations_map[current_language][label_key] + ": "
 		lbl.add_theme_font_size_override("font_size", 14 * s)
 		ui_elements[label_key + "_lbl"] = lbl
 		v_box.add_child(lbl)
@@ -866,7 +866,7 @@ func _setup_tools_ui():
 	)
 
 	# UI SCALE ROW (Now 2nd)
-	var scale_labels = [tr[current_language]["size"] + " 1.0", tr[current_language]["size"] + " 1.2", tr[current_language]["size"] + " 1.5", tr[current_language]["size"] + " 2.0"]
+	var scale_labels = [translations_map[current_language]["size"] + " 1.0", translations_map[current_language]["size"] + " 1.2", translations_map[current_language]["size"] + " 1.5", translations_map[current_language]["size"] + " 2.0"]
 	create_row.call("ui_size", scale_labels, func(l): 
 		ui_scale_level = l
 		ui_root.set_meta("tools_v", true) # Safe persistence
@@ -882,7 +882,7 @@ func _setup_tools_ui():
 	)
 	# 1. SUPPORT CREATOR BUTTON (AD)
 	var support_btn = Button.new()
-	support_btn.text = tr[current_language]["support"]
+	support_btn.text = translations_map[current_language]["support"]
 	support_btn.custom_minimum_size = Vector2(0, 60 * s) 
 	support_btn.add_theme_font_size_override("font_size", 16 * s)
 	
@@ -911,7 +911,7 @@ func _setup_tools_ui():
 
 	# 2. PAUSE BUTTON
 	var pause_btn = Button.new()
-	pause_btn.text = tr[current_language]["play"] if is_paused else tr[current_language]["pause"]
+	pause_btn.text = translations_map[current_language]["play"] if is_paused else translations_map[current_language]["pause"]
 	pause_btn.custom_minimum_size = Vector2(0, 50 * s) # SCALED
 	pause_btn.add_theme_font_size_override("font_size", 16 * s) # SCALED
 	pause_btn.pressed.connect(func():
@@ -920,7 +920,7 @@ func _setup_tools_ui():
 			AdMobManager.check_and_show_interstitial("pause") 
 		
 		is_paused = !is_paused
-		pause_btn.text = tr[current_language]["play"] if is_paused else tr[current_language]["pause"]
+		pause_btn.text = translations_map[current_language]["play"] if is_paused else translations_map[current_language]["pause"]
 		var players = [weather_player, quake_player, tornado_player, tsunami_player, firework_player, ascent_player, volcano_loop_player, fire_loop_player]
 		for p in players:
 			if is_instance_valid(p):
@@ -931,7 +931,7 @@ func _setup_tools_ui():
 
 	# 3. DIRECT RESET BUTTON (Bottom of Tools)
 	var reset_btn_node = Button.new() # Named local variable to avoid conflict with field
-	reset_btn_node.text = tr[current_language]["reset"]
+	reset_btn_node.text = translations_map[current_language]["reset"]
 	reset_btn_node.custom_minimum_size = Vector2(0, 50 * s)
 	reset_btn_node.add_theme_font_size_override("font_size", 16 * s)
 	reset_btn_node.pressed.connect(func():
@@ -949,7 +949,7 @@ func _setup_disaster_ui():
 	disaster_btn.name = "DisasterBtn"
 	disaster_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
 	disaster_btn.add_theme_font_size_override("font_size", 14 * s) # Compact font
-	disaster_btn.text = tr[current_language]["disasters"]
+	disaster_btn.text = translations_map[current_language]["disasters"]
 	ui_elements["disaster_btn"] = disaster_btn
 	disaster_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	action_vbox.add_child(disaster_btn)
@@ -1023,7 +1023,7 @@ func _setup_disaster_ui():
 	
 	var create_row = func(label_key: String, options_keys: Array, callback: Callable):
 		var lbl = Label.new()
-		lbl.text = tr[current_language][label_key] + ": "
+		lbl.text = translations_map[current_language][label_key] + ": "
 		lbl.add_theme_font_size_override("font_size", 14 * s)
 		ui_elements[label_key + "_lbl"] = lbl
 		v_box.add_child(lbl)
@@ -1035,7 +1035,7 @@ func _setup_disaster_ui():
 		for i in range(options_keys.size()):
 			var osk = options_keys[i]
 			var btn = Button.new()
-			btn.text = tr[current_language][osk]
+			btn.text = translations_map[current_language][osk]
 			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			btn.add_theme_font_size_override("font_size", 14 * s)
 			btn.pressed.connect(func(): callback.call(i))
@@ -1081,43 +1081,43 @@ func _refresh_ui_text():
 		
 		# Handle direct button nodes (Tools/Disasters)
 		if key == "tools_btn": 
-			node_data.text = tr[current_language]["tools"]
+			node_data.text = translations_map[current_language]["tools"]
 			node_data.custom_minimum_size = Vector2(160 * s, 38 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "disaster_btn": 
-			node_data.text = tr[current_language]["disasters"]
+			node_data.text = translations_map[current_language]["disasters"]
 			node_data.custom_minimum_size = Vector2(160 * s, 38 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "npc_btn": 
-			node_data.text = tr[current_language]["npc"]
+			node_data.text = translations_map[current_language]["npc"]
 			node_data.custom_minimum_size = Vector2(160 * s, 38 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "pause_btn": 
-			node_data.text = tr[current_language]["play"] if is_paused else tr[current_language]["pause"]
+			node_data.text = translations_map[current_language]["play"] if is_paused else translations_map[current_language]["pause"]
 			node_data.custom_minimum_size = Vector2(0, 38 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "reset_btn": 
-			node_data.text = tr[current_language]["reset"]
+			node_data.text = translations_map[current_language]["reset"]
 			node_data.custom_minimum_size = Vector2(0, 38 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "support_btn":
-			node_data.text = tr[current_language]["support"]
+			node_data.text = translations_map[current_language]["support"]
 			node_data.custom_minimum_size = Vector2(0, 60 * s)
 			node_data.add_theme_font_size_override("font_size", 16 * s)
 		elif key == "warrior_btn":
-			node_data.text = tr[current_language]["warrior"]
+			node_data.text = translations_map[current_language]["warrior"]
 			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "archer_btn":
-			node_data.text = tr[current_language]["archer"]
+			node_data.text = translations_map[current_language]["archer"]
 			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "miner_btn":
-			node_data.text = tr[current_language]["miner"]
+			node_data.text = translations_map[current_language]["miner"]
 			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "medic_btn":
-			node_data.text = tr[current_language]["medic"]
+			node_data.text = translations_map[current_language]["medic"]
 			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		
@@ -1125,13 +1125,13 @@ func _refresh_ui_text():
 		elif node_data is Label:
 			if key.ends_with("_mat_lbl"):
 				var pure_key = key.replace("_mat_lbl", "")
-				if tr[current_language].has(pure_key):
-					node_data.text = tr[current_language][pure_key]
+				if translations_map[current_language].has(pure_key):
+					node_data.text = translations_map[current_language][pure_key]
 					node_data.add_theme_font_size_override("font_size", 12 * s) # Scale material label font
 			elif key.ends_with("_lbl"):
 				var pure_key = key.replace("_lbl", "")
-				if tr[current_language].has(pure_key):
-					node_data.text = tr[current_language][pure_key] + ": "
+				if translations_map[current_language].has(pure_key):
+					node_data.text = translations_map[current_language][pure_key] + ": "
 					node_data.custom_minimum_size = Vector2(120 * s, 0)
 					node_data.add_theme_font_size_override("font_size", 14 * s)
 		
@@ -1139,7 +1139,7 @@ func _refresh_ui_text():
 		elif node_data is Array:
 			var btn = node_data[0]
 			var osk = node_data[1]
-			btn.text = tr[current_language][osk]
+			btn.text = translations_map[current_language][osk]
 			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			btn.add_theme_font_size_override("font_size", 14 * s)
 		# Handle other buttons in rows (lang, brush, ui_size)
@@ -1149,14 +1149,14 @@ func _refresh_ui_text():
 				node_data.add_theme_font_size_override("font_size", 14 * s)
 			elif key.begins_with("ui_size_btn_"):
 				var idx = int(key.split("_")[-1])
-				var scale_labels = [tr[current_language]["size"] + " 1.0", tr[current_language]["size"] + " 1.2", tr[current_language]["size"] + " 1.5", tr[current_language]["size"] + " 2.0"]
+				var scale_labels = [translations_map[current_language]["size"] + " 1.0", translations_map[current_language]["size"] + " 1.2", translations_map[current_language]["size"] + " 1.5", translations_map[current_language]["size"] + " 2.0"]
 				node_data.text = scale_labels[idx]
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
 			elif key.begins_with("team_btn_"):
 				var idx = int(key.split("_")[-1])
 				var team_keys = ["team_red", "team_blue", "team_yellow", "team_green"]
-				node_data.text = tr[current_language][team_keys[idx]]
+				node_data.text = translations_map[current_language][team_keys[idx]]
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 12 * s)
 
@@ -1216,7 +1216,7 @@ func _add_button(key: String, mat_id: int):
 	
 	var btn_lbl = Label.new()
 	btn_lbl.name = "MatLabel"
-	btn_lbl.text = tr[current_language][key]
+	btn_lbl.text = translations_map[current_language][key]
 	btn_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	btn_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 	btn_lbl.add_theme_font_size_override("font_size", 18 * s) # EVEN LARGER TEXT
@@ -1494,14 +1494,12 @@ func _process_tsunami(delta):
 	var max_wave_height = 4 + (3 * tsunami_intensity) # MEGA = ~13 pixels total
 	var sigma_sq = pow(radius / 2.5, 2)
 	
-	# Determine SEA LEVEL (Reference height outside the wave)
+	# Determine Sea Reference Level (Reference height outside the wave)
 	var ref_x = int(tsunami_wave_x - radius - 10)
-	var sea_level = grid_height - 10 # Default to bottom if no water
 	if ref_x >= 0 and ref_x < grid_width:
 		for gy in range(5, grid_height - 5):
 			var idx = gy * grid_width + ref_x
-			if cells[idx] > 0 and (material_tags_raw[cells[idx]] & SandboxMaterial.Tags.LIQUID):
-				sea_level = gy
+			if (cells[idx] & 0xFF) > 0 and (material_tags_raw[cells[idx] & 0xFF] & SandboxMaterial.Tags.LIQUID):
 				break
 	
 	for ox in range(-radius, radius):
@@ -1645,7 +1643,7 @@ func _process_earthquake(delta):
 		var rx = randi() % grid_width
 		var ry = randi() % grid_height
 		var idx = ry * grid_width + rx
-		var tid = cells[idx]
+		var _tid = cells[idx]
 		
 		# In a earthquake, even static things can juggle a bit, but mostly powders/liquids
 		var nx = rx + randi_range(-earthquake_intensity, earthquake_intensity)
@@ -1727,6 +1725,16 @@ func _register_material(id: int, color1: Color, tags: int, color2 = null, color3
 func _set_cell(x, y, mat_id):
 	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
 		var idx = y * grid_width + x
+		
+		# CRITICAL PERFORMANCE OPTIMIZATION: Early Exit for Air
+		if mat_id == 0:
+			if cells[idx] == 0: return # Already air, no work needed
+			cells[idx] = 0
+			tags_array[idx] = 0
+			charge_array[idx] = 0
+			_activate_chunk(x, y)
+			return
+
 		var tags = material_tags_raw[mat_id]
 		
 		# Scalable Texturing Variant calculation
@@ -1914,7 +1922,7 @@ func _process_electricity():
 		# 2. SPREAD LOGIC (Only if full 100)
 		if charge == 100:
 			var x = i % grid_width
-			var y = i / grid_width
+			var y = int(i / grid_width)
 			var my_tags = material_tags_raw[mid]
 			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
 				# Scan neighbors for 0-charge conductors
@@ -1936,11 +1944,11 @@ func _process_electricity():
 			charge_array[i] -= 5
 			if charge_array[i] > 100: charge_array[i] = 100
 			if charge_array[i] > 0:
-				_activate_chunk(i % grid_width, i / grid_width)
+				_activate_chunk(i % grid_width, int(i / grid_width))
 		elif mid == 7: # TNT logic
 			charge_array[i] -= 5
 			if charge_array[i] > 0:
-				_activate_chunk(i % grid_width, i / grid_width)
+				_activate_chunk(i % grid_width, int(i / grid_width))
 
 
 
@@ -1986,7 +1994,7 @@ func _swap_cells(x1, y1, x2, y2):
 	_activate_chunk(x1, y1)
 	_activate_chunk(x2, y2)
 
-func _process_interactions(x, y, idx, raw_id, pure_id, tags):
+func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 	# PULSANT ELECTRICAL SOURCE
 	if pure_id == 9:
 		if charge_array[idx] == 0:
@@ -2342,7 +2350,7 @@ func _setup_npc_ui():
 	npc_btn.name = "NPCBtn"
 	npc_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
 	npc_btn.add_theme_font_size_override("font_size", 14 * s) # Compact font
-	npc_btn.text = tr[current_language]["npc"]
+	npc_btn.text = translations_map[current_language]["npc"]
 	ui_elements["npc_btn"] = npc_btn
 	npc_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	action_vbox.add_child(npc_btn)
@@ -2373,7 +2381,7 @@ func _setup_npc_ui():
 		
 		# NPC Selection (NOW RESPONSIVE)
 		var npc_lbl = Label.new()
-		npc_lbl.text = tr[current_language]["npc"] + ": "
+		npc_lbl.text = translations_map[current_language]["npc"] + ": "
 		npc_lbl.add_theme_font_size_override("font_size", 14 * s)
 		v_box.add_child(npc_lbl)
 		
@@ -2383,7 +2391,7 @@ func _setup_npc_ui():
 		
 		var create_npc_btn = func(key: String, id: int):
 			var btn = Button.new()
-			btn.text = tr[current_language][key]
+			btn.text = translations_map[current_language][key]
 			btn.custom_minimum_size = Vector2(100 * s, 45 * s)
 			btn.pressed.connect(func():
 				selected_material = id # Master Warrior Material
@@ -2410,7 +2418,7 @@ func _setup_npc_ui():
 		var team_keys = ["team_red", "team_blue", "team_yellow", "team_green"]
 		for i in range(4):
 			var t_btn = Button.new()
-			t_btn.text = tr[current_language][team_keys[i]]
+			t_btn.text = translations_map[current_language][team_keys[i]]
 			t_btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			t_btn.add_theme_font_size_override("font_size", 12 * s)
 			var tidx = i
@@ -2500,6 +2508,7 @@ func _draw_npc_pixels(npc, override_mat = -1):
 				var tx = sx + ox; var ty = sy + oy
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var tid = cells[ty * grid_width + tx] & 0xFF
+					# OPTIMIZATION: Solo limpia si es necesario
 					if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC): _set_cell(tx, ty, 0)
 		return
 	var is_dead = npc.hp <= 0; var is_flashing = npc.hit_flash > 0
@@ -2768,8 +2777,16 @@ func _process_npcs(delta):
 func _miner_dig(npc, dig_down=false):
 	var now = Time.get_ticks_msec()
 	if now - npc.last_dig_time >= 3000: _play_action_sound("miner_dig"); npc.last_dig_time = now
-	var tx = npc.pos.x + (npc.dir * 3); var dy_offset = 1 if dig_down else 0; var ty_start = npc.pos.y - 2 + dy_offset; var ty_end = npc.pos.y + 5 + dy_offset; var beam_len = 3 if dig_down else 6; var is_saboteur = npc.has("mine_state") and npc.mine_state == "saboteur"; var is_returning = is_saboteur and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2
+	
+	# RESTORED MISSING LOGIC
+	var dy_offset = 1 if dig_down else 0
+	var ty_start = npc.pos.y - 2 + dy_offset
+	var ty_end = npc.pos.y + 5 + dy_offset
+	var beam_len = 3 if dig_down else 6
+	var is_saboteur = npc.has("mine_state") and npc.mine_state == "saboteur"
+	var is_returning = is_saboteur and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2
 	var c_mat = 16 
+
 	if not is_returning:
 		var tx_c = npc.pos.x + (npc.dir * 3)
 		for ox in range(0, beam_len):
@@ -2800,7 +2817,7 @@ func _miner_dig(npc, dig_down=false):
 			var cx = npc.pos.x + (dx * npc.dir); var cy = dy 
 			if cx < 0 or cx >= grid_width or cy < 0 or cy >= dynamic_grid_height: continue
 			var tid = _get_cell(cx, cy)
-			if tid == 9 or tid == 12: continue
+			if tid == 0 or tid == 9 or tid == 12: continue
 			_set_cell(cx, cy, 0)
 
 func _shoot_arrow(npc, target):
