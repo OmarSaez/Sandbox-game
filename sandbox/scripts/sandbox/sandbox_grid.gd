@@ -358,15 +358,15 @@ func _ready():
 	#Water
 	_register_material(2, Color("80D0FF"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.CONDUCTOR)
 	#Fire
-	_register_material(3, Color("FCD123"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(3, Color("EBB400"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
 	# Petroleum (Dark Purple + Flammable)
 	_register_material(4, Color("560075"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.BURN_SMOKE)
 	
 	# TNT (Static + Explosive + Electric Activated)
-	_register_material(5, Color("FF0000"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(5, Color("E30000"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC)
 	
 	# Earth (Slow gravity)
-	_register_material(6, Color("#66503D"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW)
+	_register_material(6, Color("#66380C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW)
 	
 	# Primed TNT (Flashes white, soon to BOOM) - Now NOT incendiary to avoid premature chain reactions
 	_register_material(7, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC)
@@ -379,10 +379,10 @@ func _ready():
 	_register_material(9, Color("FFF300"), SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
 	
 	# Gravel (Gray stones)
-	_register_material(10, Color("999288"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL)
+	_register_material(10, Color("4D4D4D"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL)
 	
 	# Lava (Slow Liquid + Hot)
-	_register_material(11, Color("FF8200"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_SLOW)
+	_register_material(11, Color("FF4000"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_SLOW)
 	
 	# Obsidian (Hard Rock + Anti-Acid + Anti-Explosive)
 	_register_material(12, Color("1E023B"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
@@ -397,7 +397,7 @@ func _ready():
 	_register_material(15, Color("454545ff"), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP | SandboxMaterial.Tags.BURN_NONE)
 	
 	# Wood (Strong Brown)
-	_register_material(16, Color("66380C"), SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.SOLID)
+	_register_material(16, Color("#3E2609"), SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.SOLID)
 	
 	# Cloud (Whity Gray Gas)
 	_register_material(17, Color("8C8C8C"), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP)
@@ -482,6 +482,10 @@ func _ready():
 	_register_material(42, Color("#D2B48C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
 	# 43: Electric Spark (Physical Inertial Spark)
 	_register_material(43, Color("#FFFF00"), SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.VOLATILE | SandboxMaterial.Tags.GRAV_STATIC)
+	
+	# --- ACID SPARK / CORROSIVE PROJECTILE ---
+	# 44: Acid Spark (Stunning Neon Green Projectile that turns to real Acid)
+	_register_material(44, Color("#39FF14"), SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.VOLATILE | SandboxMaterial.Tags.GRAV_STATIC)
 	
 	# --- MINER SYSTEM ---
 	# 50: Miner Master
@@ -2022,8 +2026,11 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			# EXPLOSIVE IGNITION (TNT/Gunpowder) - Delay with spectral flash
 			elif (tags & SandboxMaterial.Tags.EXPLOSIVE):
 				var flags = 0
-				if charge_array[idx] > 50 or _count_neighbor_id(x, y, 9) > 0:
-					flags |= 128 # ELECTRIC IGNITION
+				# PRIORITIZE ACID: Using tag neighbor catches liquid (13) and sparks (44)
+				if _has_tag_neighbor(x, y, SandboxMaterial.Tags.ACID):
+					flags = 64
+				elif charge_array[idx] > 50 or _count_neighbor_id(x, y, 9) > 0:
+					flags = 128 # ELECTRIC IGNITION
 				_prime_explosive(x, y, mat_id, flags)
 			
 			# FIREWORKS (Independent of Explosives)
@@ -2149,7 +2156,9 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			charge_array[idx] = (new_energy << 3) | dir_idx
 			_swap_cells(x, y, nx, ny)
 		else:
-			_set_cell(x, y, 0)
+			# IMPACT: Turn into real liquid acid if it's an acid spark, otherwise vanish
+			if mat_id == 44: _set_cell(x, y, 13)
+			else: _set_cell(x, y, 0)
 		return
 
 	# ELECTRIC SEEDING (Pure Static Electricity)
@@ -2167,8 +2176,8 @@ func _process_interactions(x, y, idx, mat_id, tags):
 					if nid > 0:
 						var n_tags = material_tags_raw[nid]
 						if not (n_tags & SandboxMaterial.Tags.ANTI_ACID):
-							# CORROSION: Destroy material and spark ELECTRICITY
-							_set_cell(nx, ny, 9) 
+							# CORROSION: Destroy material and spark CORROSIVE ACID (ID 44)
+							_set_cell(nx, ny, 44) 
 							
 							# Acid has 30% chance to evaporate upon reaction
 							if randf() < 0.3:
@@ -3040,7 +3049,24 @@ func _count_neighbor_id_radius(x, y, id, radius):
 func _prime_explosive(x, y, id, ignition_flags = 0):
 	if x < 0 or x >= grid_width or y < 0 or y >= grid_height: return
 	var idx = y * grid_width + x; var current_id = cells[idx]
-	if current_id == 7 or current_id == 77 or current_id == 71 or current_id == 72: return 
+	
+	# FAILSAVE: If it's touching Acid RIGHT NOW, force Acid ignition
+	if _has_tag_neighbor(x, y, SandboxMaterial.Tags.ACID):
+		ignition_flags = 64
+	
+	# Handle already primed cells (Priority upgrade: Acid > Electric > Normal)
+	if current_id == 7 or current_id == 77 or current_id == 71 or current_id == 72:
+		var current_flags = charge_array[idx] & 192
+		var target_flags = ignition_flags
+		
+		# Allow upgrading anything to ACID (64)
+		if target_flags == 64 and current_flags != 64: 
+			charge_array[idx] = (charge_array[idx] & 63) | 64
+		# Allow upgrading NORMAL (0) to ELECTRIC (128)
+		elif target_flags == 128 and current_flags == 0:
+			charge_array[idx] = (charge_array[idx] & 63) | 128
+		return 
+	
 	_set_cell(x, y, 7 if id == 5 else 71) 
 	charge_array[idx] = 40 | ignition_flags
 
@@ -3062,8 +3088,12 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 				if (my_id == 11 and n_id == 2) or (my_id == 2 and n_id == 11): _set_cell(x, y, 12); _set_cell(nx, ny, 12); return
 				var my_tags = tags_array[y * grid_width + x]
 				if (my_tags & SandboxMaterial.Tags.ACID):
+					# If neighbor is NOT empty and NOT acid and NOT anti-acid
 					if n_id > 0 and n_id != 13 and !(n_tags & SandboxMaterial.Tags.ANTI_ACID):
-						if randf() < 0.6: _set_cell(nx, ny, 0); if randf() < 0.05: _set_cell(x, y, 0); return
+						if randf() < 0.6: # Faster melting speed
+							_set_cell(nx, ny, 0) # Dissolve neighbor
+							if randf() < 0.05: _set_cell(x, y, 0)
+							return
 				if is_heat:
 					if (n_tags & SandboxMaterial.Tags.FLAMMABLE):
 						if n_id == 14: continue
@@ -3078,13 +3108,18 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 					elif (n_tags & SandboxMaterial.Tags.EXPLOSIVE):
 						if n_id == 27: _set_cell(nx, ny, 29); charge_array[nx + ny * grid_width] = randi_range(80, 120)
 						elif n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = randi_range(20, 70)
-						else: _prime_explosive(nx, ny, n_id, 128 if my_id == 9 else 0)
+						else:
+							# Hierarchy: Acid (64) > Electric (128) > Heat (0)
+							var f = 64 if (my_tags & SandboxMaterial.Tags.ACID) else (128 if my_id == 9 else 0)
+							_prime_explosive(nx, ny, n_id, f)
 				else:
 					if (n_tags & SandboxMaterial.Tags.CONDUCTOR) and charge_array[n_idx] == 0: charge_array[n_idx] = 101
 					elif (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
 						if n_id == 27: _set_cell(nx, ny, 29); charge_array[n_idx] = randi_range(80, 120)
 						elif n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = randi_range(20, 70)
-						else: _prime_explosive(nx, ny, n_id, 128)
+						else:
+							var f = 64 if (my_tags & SandboxMaterial.Tags.ACID) else 128
+							_prime_explosive(nx, ny, n_id, f)
 
 var explosions_this_frame = 0
 func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0):
@@ -3125,6 +3160,27 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 					var deg = rad_to_deg(ang); if deg < 0: deg += 360
 					var dir_idx = int((deg + 22.5 + 90) / 45) % 8
 					charge_array[sy * grid_width + sx] = (31 << 3) | dir_idx
+	
+	# 2. CORROSIVE DROPS EFFECT (If ACID BIT 64 is set)
+	if ignition_flags & 64:
+		var drop_count = 20 if is_heavy_load else 45
+		for i in range(drop_count):
+			var dist = randi_range(2, 7); var ang = randf() * TAU
+			var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
+			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
+				if _get_cell(sx, sy) == 0:
+					_set_cell(sx, sy, 44) # Acid Projectile (Turns into ID 13 on hit)
+					_activate_chunk(sx, sy)
+					var deg = rad_to_deg(ang); if deg < 0: deg += 360
+					var dir_idx = int((deg + 22.5 + 90) / 45) % 8
+					charge_array[sy * grid_width + sx] = (randi_range(20, 31) << 3) | dir_idx
+		
+		# TOXIC SMOKE: Add clouds of corrosive gas
+		for i in range(12 if is_heavy_load else 25):
+			var dist = randi_range(1, radius - 2); var ang = randf() * TAU
+			var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
+			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
+				if _get_cell(sx, sy) == 0: _set_cell(sx, sy, 15)
 
 func _push_particle(x, y, dx, dy):
 	var dir_x = sign(dx); var dir_y = -1 if dy < 0 else (1 if dy > 0 else 0)
