@@ -1772,6 +1772,9 @@ func _step_simulation():
 	is_volcano_active = false
 	is_fire_active = false
 	
+	# PASS 0: RESET FRAME COUNTERS
+	explosions_this_frame = 0
+	
 	# Update active chunk countdowns
 	chunks_active = next_chunks_active.duplicate()
 	for i in range(next_chunks_active.size()):
@@ -2126,19 +2129,14 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		var dir_idx = charge & 7
 		
 		if energy <= 0:
-			_set_cell(x, y, 0)
-			return
+			_set_cell(x, y, 0); return
 			
-		# Lookup Dir (Static array for performance)
-		var dx = 0; var dy = 0
-		if dir_idx == 0: dy = -1 # UP
-		elif dir_idx == 1: dx = 1; dy = -1 # UR
-		elif dir_idx == 2: dx = 1 # R
-		elif dir_idx == 3: dx = 1; dy = 1 # DR
-		elif dir_idx == 4: dy = 1 # D
-		elif dir_idx == 5: dx = -1; dy = 1 # DL
-		elif dir_idx == 6: dx = -1 # L
-		elif dir_idx == 7: dx = -1; dy = -1 # UL
+		# Pre-calculated coordinate arrays for 8 directions
+		var dxs = [0, 1, 1, 1, 0, -1, -1, -1]
+		var dys = [-1, -1, 0, 1, 1, 1, 0, -1]
+		
+		var dx = dxs[dir_idx]
+		var dy = dys[dir_idx]
 		
 		var nx = x + dx; var ny = y + dy
 		if nx < 0 or nx >= grid_width or ny < 0 or ny >= dynamic_grid_height:
@@ -2147,13 +2145,10 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		if _get_cell(nx, ny) == 0:
 			# Advance with inertia (Double duration: decrement energy every 2 frames)
 			var new_energy = energy
-			if Engine.get_frames_drawn() % 2 == 0:
-				new_energy -= 1
-			
+			if Engine.get_frames_drawn() % 2 == 0: new_energy -= 1
 			charge_array[idx] = (new_energy << 3) | dir_idx
 			_swap_cells(x, y, nx, ny)
 		else:
-			# Hit wall/solid -> Vanish
 			_set_cell(x, y, 0)
 		return
 
@@ -2579,613 +2574,289 @@ func _place_npc(x, y):
 		"cowardice": randf_range(0.15, 0.45), # Probabilidad personal de huir
 		"precision": randf_range(-0.6, 0.6), # Peor/Mejor puntería con arco
 		"heal_power": randf_range(15.0, 35.0), # Variación en fuerza de las curas médicas
-		
-		# VARIANTE ELEMENTAL (1 de cada 20 = 5%)
 		"is_fire_variant": randf() < 0.05
 	}
 	new_npc["max_hp"] = new_npc["hp"]
 	active_npcs.append(new_npc)
-	
-	# Initial draw
 	_draw_npc_pixels(new_npc)
 
 func _draw_npc_pixels(npc, override_mat = -1):
-	var sx = npc.pos.x
-	var sy = npc.pos.y
-	
-	# --- ROBUST CLEARING (4x7 scan area to catch shake/vfx leftovers) ---
+	var sx = npc.pos.x; var sy = npc.pos.y
 	if override_mat == 0:
 		for oy in range(-1, 7):
 			for ox in range(-1, 3):
 				var tx = sx + ox; var ty = sy + oy
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var tid = cells[ty * grid_width + tx]
-					# ONLY clear if it belongs to the NPC system to avoid eating terrain
-					if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC):
-						_set_cell(tx, ty, 0)
+					if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC): _set_cell(tx, ty, 0)
 		return
-
-	
-	var is_dead = npc.hp <= 0
-	var is_flashing = npc.hit_flash > 0
-	
-	# --- POLISH: SHAKE & TOPPLE EFFECTS ---
+	var is_dead = npc.hp <= 0; var is_flashing = npc.hit_flash > 0
 	if is_flashing and not is_dead:
-		# NPCs vibrate when taking damage
-		sx += randi_range(-1, 1)
-		sy += randi_range(-1, 1)
+		sx += randi_range(-1, 1); sy += randi_range(-1, 1)
 	elif is_dead:
-		# NPCs "fall over" slightly and sink when dead
-		sy += 2 
-		sx += 1 if (npc.dir > 0) else -1
-		# Flicker effect (Red / Clear)
-		if (npc.hit_flash % 2 == 0): override_mat = 0 # Don't draw on some frames
-	
-	var team_mat = 34 + npc.team
-	
-	var is_archer = npc.type == "archer"
-	var is_miner = npc.type == "miner"
-	var is_medic = npc.type == "medic"
-	
+		sy += 2; sx += 1 if (npc.dir > 0) else -1
+		if (npc.hit_flash % 2 == 0): override_mat = 0
+	var team_mat = 34 + npc.team; var is_archer = npc.type == "archer"; var is_miner = npc.type == "miner"; var is_medic = npc.type == "medic"
 	var m_head = (41 if is_archer else (50 if is_miner else (80 if is_medic else 31))) if override_mat == -1 else override_mat
 	var m_skin = 33 if override_mat == -1 else override_mat
 	var m_body = (40 if is_archer else (50 if is_miner else (80 if is_medic else 32))) if override_mat == -1 else override_mat
 	var m_legs = (50 if is_miner else (80 if is_medic else 31)) if override_mat == -1 else override_mat
 	var m_team = team_mat if override_mat == -1 else override_mat
 	var m_helmet = (51 if is_miner else (81 if is_medic else 31)) if override_mat == -1 else override_mat
-	
-	# Override for hit flash (More vibrant colors)
 	if is_flashing and override_mat == -1:
-		var f_mat = 62 # Default to White (Exp slot)
-		if is_dead: f_mat = 64 # Death Color Slot
-		elif npc.hit_type == "acid": f_mat = 60 # Acid Slot
-		elif npc.hit_type == "fire": f_mat = 61 # Fire Slot
-		elif npc.hit_type == "explosive": f_mat = 62 # Exp Slot
-		else: f_mat = 63 # Normal Hit Slot
+		var f_mat = 62
+		if is_dead: f_mat = 64
+		elif npc.hit_type == "acid": f_mat = 60
+		elif npc.hit_type == "fire": f_mat = 61
+		elif npc.hit_type == "explosive": f_mat = 62
+		else: f_mat = 63
 		m_head = f_mat; m_skin = f_mat; m_body = f_mat; m_legs = f_mat; m_team = f_mat; m_helmet = f_mat
-	
-	# HEAD
-	_set_cell(sx, sy, m_head if not is_miner else m_helmet)
-	_set_cell(sx+1, sy, m_skin)
-	_set_cell(sx, sy+1, m_head)
-	_set_cell(sx+1, sy+1, m_head)
-	
-	# BODY
-	_set_cell(sx, sy+2, m_body)
-	_set_cell(sx+1, sy+2, m_team)
-	_set_cell(sx, sy+3, m_team)
-	_set_cell(sx+1, sy+3, m_body)
-	
-	# LEGS
-	_set_cell(sx, sy+4, m_legs)
-	_set_cell(sx+1, sy+4, m_legs)
+	_set_cell(sx, sy, m_head if not is_miner else m_helmet); _set_cell(sx+1, sy, m_skin)
+	_set_cell(sx, sy+1, m_head); _set_cell(sx+1, sy+1, m_head)
+	_set_cell(sx, sy+2, m_body); _set_cell(sx+1, sy+2, m_team)
+	_set_cell(sx, sy+3, m_team); _set_cell(sx+1, sy+3, m_body)
+	_set_cell(sx, sy+4, m_legs); _set_cell(sx+1, sy+4, m_legs)
 
 func _process_npcs(delta):
 	npc_update_timer += delta
 	if npc_update_timer < 0.05: return 
 	npc_update_timer = 0.0
-	
 	var dead_indices = []
-	
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
 		if npc.hit_flash > 0: 
 			npc.hit_flash -= 1
-			if npc.hit_flash == 0: npc.hit_type = "none" # Clear damage state when flash ends
-		
-		# 0. PRE-PROCESS: Clear pixels so they don't block their own environmental checks
+			if npc.hit_flash == 0: npc.hit_type = "none"
 		_draw_npc_pixels(npc, 0)
-		
-		# 1. Damage from Environment
-		if _check_npc_environment_damage(npc):
-			if npc.hp <= 0:
-				# Red death animation handled at bottom
-				pass
-		
-		# 2. Store old position and data for AI/Physics
-		var np = npc.pos
-		
-		# 2. AI: TARGET SELECTION & BEHAVIOR
-		var target = null
-		var is_attacking = false
-		
-		# ==============================================================
-		# A. MEDIC AI (Pacifista y Sanador)
+		_check_npc_environment_damage(npc)
+		var np = npc.pos; var target = null; var is_attacking = false
 		if npc.type == "medic":
 			var heal_cd = npc.get("attack_cooldown", 0.0)
 			if heal_cd > 0: heal_cd -= 0.05
 			npc["attack_cooldown"] = heal_cd
-			
-			var closest_enemy = _find_closest_enemy(npc, 180.0)
-			var closest_ally = null
-			var ally_dist = 999.0
-			
-			# Buscar aliados heridos
+			var closest_enemy = _find_closest_enemy(npc, 180.0); var closest_ally = null; var ally_dist = 999.0
 			for other in active_npcs:
 				if other.team == npc.team and other != npc and other.hp > 0 and other.type != "medic":
 					var mhp = other.get("max_hp", 100.0)
-					if other.hp < mhp: # Necesita cura!
+					if other.hp < mhp: 
 						var d = npc.pos.distance_to(other.pos)
-						if d < ally_dist:
-							ally_dist = d; closest_ally = other
-			
-			# 1. HUIDA VERSUS DEBER (Valor Médico)
-			# Los médicos son valientes A MENOS que su propia vida baje del 50%.
+						if d < ally_dist: ally_dist = d; closest_ally = other
 			var medic_critical = npc.hp < (npc.get("max_hp", 100.0) * 0.5)
 			var enemy_very_close = closest_enemy and npc.pos.distance_to(closest_enemy.pos) < 120.0
-			
 			if (medic_critical and enemy_very_close) or (enemy_very_close and not closest_ally):
-				# Huye porque está casi muerto, o porque hay peligro y NO hay heridos que salvar
-				npc.dir = 1 if closest_enemy.pos.x < np.x else -1
-				npc["is_fleeing"] = true # Llora de pánico
+				npc.dir = 1 if closest_enemy.pos.x < np.x else -1; npc["is_fleeing"] = true
 			else:
-				# 2. ASISTENCIA MÉDICA ES MÁXIMA PRIORIDAD
-				npc["is_fleeing"] = false # Mantiene la compostura si ve heridos
+				npc["is_fleeing"] = false
 				if closest_ally:
 					if ally_dist < 25.0:
-						npc.dir = 0 # Parar y curar bajo fuego cruzado
+						npc.dir = 0
 						if heal_cd <= 0:
-							var maxh = closest_ally.get("max_hp", 100.0)
-							var heal_amt = npc.get("heal_power", 20.0) # Potencia de cura aleatoria por individuo
-							closest_ally.hp = min(closest_ally.hp + heal_amt, maxh)
-							npc["attack_cooldown"] = 1.0 # 1 segundo por inyección (aprox)
-							_play_action_sound("medic_heal")
-							
-							# Reanimación de Morale
-							if closest_ally.hp > maxh * 0.3:
-								closest_ally["morale_broken"] = false
-								closest_ally["is_fleeing"] = false
-								
-							# Trazar cruces verdes en partículas!
-							for f in range(6):
-								visual_sparks.append({"x":float(closest_ally.pos.x+randf_range(-3,3)),"y":float(closest_ally.pos.y+randf_range(-5,0)),"vx":0.0,"vy":randf_range(-35.0,-15.0),"color":Color.GREEN,"life":0.6})
-					else:
-						# Correr hacia el aliado herido (¡Incluso si hay enemigos cerca!)
-						npc.dir = 1 if closest_ally.pos.x > np.x else -1
+							closest_ally.hp = min(closest_ally.hp + npc.get("heal_power", 20.0), closest_ally.get("max_hp", 100.0))
+							npc["attack_cooldown"] = 1.0; _play_action_sound("medic_heal")
+							if closest_ally.hp > closest_ally.get("max_hp", 100.0) * 0.3:
+								closest_ally["morale_broken"] = false; closest_ally["is_fleeing"] = false
+							for f in range(6): visual_sparks.append({"x":float(closest_ally.pos.x+randf_range(-3,3)),"y":float(closest_ally.pos.y+randf_range(-5,0)),"vx":0.0,"vy":randf_range(-35.0,-15.0),"color":Color.GREEN,"life":0.6})
+					else: npc.dir = 1 if closest_ally.pos.x > np.x else -1
 				else:
-					# Patrullaje médico pasivo (todos están sanos y no hay peligro)
 					if randf() < 0.02: npc.dir = 1 if randf() > 0.5 else -1
 					if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-
-			# Salta el resto del código de los guerreros y arqueros
-			pass
-		
-		# ==============================================================
-		# B. WARRIOR / ARCHER AI (Agresores)
 		elif npc.type != "miner":
-			target = _find_closest_enemy(npc, 250.0) # Larger radar (250px)
+			target = _find_closest_enemy(npc, 250.0)
 			if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
-		
-		# -- SISTEMA DE MORAL (Instinto de Supervivencia) --
 		var critical_hp = npc.get("max_hp", 100.0) * 0.3
 		if npc.hp <= critical_hp and not npc.get("morale_broken", false):
 			npc["morale_broken"] = true
-			if randf() < npc.get("cowardice", 0.30): # Probabilidad personal de acobardarse
-				npc["is_fleeing"] = true
-				npc["is_tower"] = false # Abandona su puesto defensivo inmediatamente
-				
-				# PRIMERA LÁGRIMA GARANTIZADA: Justo en el instante en que rompe a llorar
+			if randf() < npc.get("cowardice", 0.30):
+				npc["is_fleeing"] = true; npc["is_tower"] = false
 				var start_drop_x = np.x + (1 if npc.dir == -1 else 0)
-				if _get_cell(start_drop_x, np.y) == 0:
-					_set_cell(start_drop_x, np.y, 2)
-				
+				if _get_cell(start_drop_x, np.y) == 0: _set_cell(start_drop_x, np.y, 2)
 		if npc.type != "miner" and npc.type != "medic":
-			var fleeing = npc.get("is_fleeing", false)
-			
-			if fleeing:
-				# MODO HUIDA: Correr en dirección contraria a la amenaza
-				if target:
-					npc.dir = 1 if target.pos.x < np.x else -1
-				# Si no hay amenaza cerca (se alejó bastante), igual sigue corriendo asustado
+			if npc.get("is_fleeing", false):
+				if target: npc.dir = 1 if target.pos.x < np.x else -1
 				if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-				
-				# LÁGRIMAS DE PÁNICO: 10% de probabilidad por tick de soltar una gota de agua (llorar)
 				if randf() < 0.10:
-					var drop_x = np.x + (1 if npc.dir == -1 else 0) # Dejar la lágrima detrás de la cara
-					if _get_cell(drop_x, np.y) == 0:
-						_set_cell(drop_x, np.y, 2) # Agua (ID 2)
-				
+					var drop_x = np.x + (1 if npc.dir == -1 else 0)
+					if _get_cell(drop_x, np.y) == 0: _set_cell(drop_x, np.y, 2)
 			elif !target:
-				# DEFAULT PATROL (If no target, keep moving to explore locally)
-				if randf() < 0.02: # 2% chance per tick to turn around (roam locally)
-					npc.dir = 1 if randf() > 0.5 else -1
+				if randf() < 0.02: npc.dir = 1 if randf() > 0.5 else -1
 				if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-				
 			elif target:
-				var dist_x = target.pos.x - np.x
-				var dx_abs = abs(dist_x)
-				var dy_abs = abs(target.pos.y - np.y)
-				
+				var dist_x = target.pos.x - np.x; var dx_abs = abs(dist_x); var dy_abs = abs(target.pos.y - np.y)
 				if npc.type == "warrior":
 					var target_below = target.pos.y > np.y + 8
-					
-					# GLOBAL SWEEP: If target is below, walk SIDE-TO-SIDE until ledge found
 					if target_below:
 						if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-					else:
-						npc.dir = 1 if dist_x > 0 else -1
-					
+					else: npc.dir = 1 if dist_x > 0 else -1
 					if dx_abs < 6 and dy_abs < 6:
 						is_attacking = true
-						if npc.attack_cooldown <= 0:
-							_attack_npc(npc, target)
-							npc.attack_cooldown = 0.6
-					
-					# Stop ONLY if on same level AND close in X
+						if npc.attack_cooldown <= 0: _attack_npc(npc, target); npc.attack_cooldown = 0.6
 					if dx_abs < 4 and !target_below: npc.dir = 0 
 				elif npc.type == "archer":
 					var target_below = target.pos.y > np.y + 12
-					
-					# REPOSITION MODE: If frustrated (miss_counter < 0), force horizontal move
 					if npc.miss_counter < 0:
 						npc.miss_counter += 1
 						if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
 					else:
 						if dx_abs > 120: npc.dir = 1 if dist_x > 0 else -1
-						elif dx_abs < 50:
-							npc.dir = -1 if dist_x > 0 else 1
+						elif dx_abs < 50: npc.dir = -1 if dist_x > 0 else 1
 						else:
-							# GLOBAL HUNT: Walk until hole or ledge
 							if target_below:
 								if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-							else:
-								npc.dir = 0
-					
+							else: npc.dir = 0
 					is_attacking = true
 					if npc.attack_cooldown <= 0:
-						_shoot_arrow(npc, target)
-						npc.miss_counter += 1
-						if npc.miss_counter >= 3: npc.miss_counter = -40 # Reposition for 40 ticks
+						_shoot_arrow(npc, target); npc.miss_counter += 1
+						if npc.miss_counter >= 3: npc.miss_counter = -40
 						npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
-		
-		# 3. MINER AI
 		if npc.type == "miner":
-			# PÁNICO PERMANENTE: Si recibe cualquier daño (hp < 100), cava al triple de velocidad por desesperación
 			var dig_speed = 0.15 if npc.hp < 100.0 else 0.05 
-			
-			if npc.hit_flash == 5: 
-				npc.dir = -npc.dir # Escape instintivo del golpe!
-				
+			if npc.hit_flash == 5: npc.dir = -npc.dir
 			npc.dig_timer += dig_speed
 			if npc.dig_timer >= 0.15:
 				npc.dig_timer = 0.0
-				if !_can_npc_fit(np.x, np.y + 1, npc): # Grounded
-					var is_saboteur = npc.has("mine_state") and npc.mine_state == "saboteur"
-					if not is_saboteur: 
-						npc.state_steps -= 1
-					var is_underground = _get_cell(np.x, np.y - 4) != 0
-					if not is_underground and npc.mine_state == "gallery":
+				if !_can_npc_fit(np.x, np.y + 1, npc):
+					if not (npc.has("mine_state") and npc.mine_state == "saboteur"): npc.state_steps -= 1
+					if !(_get_cell(np.x, np.y - 4) != 0) and npc.mine_state == "gallery":
 						npc.mine_state = "ramp"; npc.state_steps = 25
-						
 					if npc.state_steps <= 0:
 						if npc.mine_state == "saboteur":
-							_set_cell(np.x, np.y + 5, 3) # Fire trigger on TNT floor!
-							npc.hp = 0
-							npc.hit_flash = 10
-						elif npc.mine_state == "ramp":
-							npc.mine_state = "gallery"
-							npc.state_steps = randi_range(60, 100)
-						else:
-							npc.mine_state = "ramp"
-							npc.state_steps = randi_range(15, 25)
-					
-					if npc.hp <= 0: continue # Stop moving if detonated!
-					
+							_set_cell(np.x, np.y + 5, 3); npc.hp = 0; npc.hit_flash = 10
+						elif npc.mine_state == "ramp": npc.mine_state = "gallery"; npc.state_steps = randi_range(60, 100)
+						else: npc.mine_state = "ramp"; npc.state_steps = randi_range(15, 25)
+					if npc.hp <= 0: continue
 					var dig_down = (npc.mine_state == "ramp")
 					_miner_dig(npc, dig_down)
-					
-					var next_x = np.x + npc.dir
-					var next_y = np.y + (1 if dig_down else 0)
-					
-					var hit_wall = false
-					
-					# State trigger check (completely separate from movement)
+					var next_x = np.x + npc.dir; var next_y = np.y + (1 if dig_down else 0); var hit_wall = false
 					if next_y >= dynamic_grid_height - 15:
 						if npc.mine_state != "saboteur":
-							npc.mine_state = "saboteur"
-							npc["saboteur_start_x"] = np.x
-							npc["saboteur_bounces"] = 0
-							npc.dir = 1 if randf() > 0.5 else -1
-						
+							npc.mine_state = "saboteur"; npc["saboteur_start_x"] = np.x; npc["saboteur_bounces"] = 0; npc.dir = 1 if randf() > 0.5 else -1
 						if npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2:
 							var diff = npc.saboteur_start_x - np.x
 							if abs(diff) <= 2:
-								# Misión Sabotaje Completa! Volver y prender fuego.
 								for fx in range(-2, 3):
 									var f_idx = np.x + fx
-									if f_idx >= 0 and f_idx < grid_width:
-										_set_cell(f_idx, np.y + 5, 3) # Piso
-										_set_cell(f_idx, np.y - 1, 3) # Techo
-								npc.hp = 0
-								npc.hit_flash = 10
-								# NO usamos 'continue' aquí! Hacerlo congelaba su cuerpo como fantasma invisible
-							else:
-								npc.dir = sign(diff) if diff != 0 else npc.dir
-								
-						next_y = np.y # Siempre horizontal
-						next_x = np.x + npc.dir # Recalcular 'next_x' en caso de que saboteur haya cambiado el 'dir'
-						
-					# Movement Execution Block
+									if f_idx >= 0 and f_idx < grid_width: _set_cell(f_idx, np.y + 5, 3); _set_cell(f_idx, np.y - 1, 3)
+								npc.hp = 0; npc.hit_flash = 10
+							else: npc.dir = sign(diff) if diff != 0 else npc.dir
+						next_y = np.y; next_x = np.x + npc.dir
 					var old_dir = npc.dir
-					if next_x < 5 or next_x > grid_width - 5:
-						hit_wall = true
-						npc.dir = -npc.dir
-					elif _can_npc_fit(next_x, next_y, npc):
-						np.x = next_x ; np.y = next_y
-					elif !dig_down and _can_npc_fit(next_x, np.y - 1, npc):
-						np.x = next_x ; np.y -= 1 # Step up
-					else:
-						hit_wall = true
-						npc.dir = -npc.dir
-						
+					if next_x < 5 or next_x > grid_width - 5: hit_wall = true; npc.dir = -npc.dir
+					elif _can_npc_fit(next_x, next_y, npc): np.x = next_x ; np.y = next_y
+					elif !dig_down and _can_npc_fit(next_x, np.y - 1, npc): np.x = next_x ; np.y -= 1
+					else: hit_wall = true; npc.dir = -npc.dir
 					if hit_wall:
-						is_saboteur = npc.has("mine_state") and npc.mine_state == "saboteur"
-						var is_returning = is_saboteur and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2
-						
-						# Construir tapón de madera grueso para TODOS los mineros
-						# PERO SOLO EN LOS BORDES FINALES DEL MAPA! Si chocan con algo en medio del túnel, solo se dan la vuelta.
-						if not is_returning and (next_x <= 5 or next_x >= grid_width - 5):
+						if not (npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2) and (next_x <= 5 or next_x >= grid_width - 5):
 							var wall_x1 = np.x + 2 if old_dir == 1 else np.x - 1
 							var wall_x2 = np.x + 3 if old_dir == 1 else np.x - 2
 							for wy in range(np.y - 1, np.y + 6):
 								if wy >= 0 and wy < dynamic_grid_height:
-									if wall_x1 >= 0 and wall_x1 < grid_width:
-										_set_cell(wall_x1, wy, 16)
-									if wall_x2 >= 0 and wall_x2 < grid_width:
-										_set_cell(wall_x2, wy, 16)
-						
-						if is_saboteur:
+									if wall_x1 >= 0 and wall_x1 < grid_width: _set_cell(wall_x1, wy, 16)
+									if wall_x2 >= 0 and wall_x2 < grid_width: _set_cell(wall_x2, wy, 16)
+						if npc.has("mine_state") and npc.mine_state == "saboteur":
 							if not npc.has("saboteur_bounces"): npc["saboteur_bounces"] = 0
-							if npc.saboteur_bounces < 2:
-								npc.saboteur_bounces += 1
-		# 3.5 TOWER MODE LOGIC
+							if npc.saboteur_bounces < 2: npc.saboteur_bounces += 1
 		if not npc.has("is_tower"): npc["is_tower"] = false
-		
 		if npc.is_tower:
-			if target != null:
-				npc.dir = 0 # Official tower: stand still forever while target alive
+			if target != null: npc.dir = 0
 			else:
-				# Target dead or lost! Break formation
-				npc.is_tower = false
-				npc.fall_depth = -30 # Safety grace period to survive falling from their own tall tower!
-				if npc.has("tower_dir") and npc.tower_dir != 0:
-					npc.dir = -npc.tower_dir
-				elif npc.dir == 0:
-					npc.dir = -1 if randf() > 0.5 else 1
-				
-		# 4. PHYSICS & MOVEMENT (Gravity & Knockback)
+				npc.is_tower = false; npc.fall_depth = -30
+				if npc.has("tower_dir") and npc.tower_dir != 0: npc.dir = -npc.tower_dir
+				elif npc.dir == 0: npc.dir = -1 if randf() > 0.5 else 1
 		if not npc.has("vx"): npc["vx"] = 0.0
 		if not npc.has("vy"): npc["vy"] = 0.0
-		
 		var moved_by_physics = false
 		if abs(npc.vx) > 0.1 or abs(npc.vy) > 0.1:
-			var steps_x = int(round(abs(npc.vx)))
-			var dir_x = sign(npc.vx)
-			var steps_y = int(round(abs(npc.vy)))
-			var dir_y = sign(npc.vy)
-			
+			var steps_x = int(round(abs(npc.vx))); var dir_x = sign(npc.vx); var steps_y = int(round(abs(npc.vy))); var dir_y = sign(npc.vy)
 			var max_steps = max(steps_x, steps_y)
 			if max_steps > 0:
 				for j in range(max_steps):
-					var next_x = np.x + (dir_x if j < steps_x else 0)
-					var next_y = np.y + (dir_y if j < steps_y else 0)
-					
-					if _can_npc_fit(next_x, next_y, npc):
-						np.x = next_x
-						np.y = next_y
+					var next_x = np.x + (dir_x if j < steps_x else 0); var next_y = np.y + (dir_y if j < steps_y else 0)
+					if _can_npc_fit(next_x, next_y, npc): np.x = next_x; np.y = next_y
 					else:
-						# Stop specifically in the blocked direction
 						if dir_x != 0 and not _can_npc_fit(next_x, np.y, npc): npc.vx = 0.0
 						if dir_y != 0 and not _can_npc_fit(np.x, next_y, npc): npc.vy = 0.0
 						break
-			
-			# Apply gravity and friction
-			if _can_npc_fit(np.x, np.y + 1, npc):
-				npc.vy += 1.0 # Gravity acceleration
-				npc.fall_depth += 1 # Track physics freefall too
-				npc.vx *= 0.98 # Low Air friction (keeps momentum for parabolas)
+			if _can_npc_fit(np.x, np.y + 1, npc): npc.vy += 1.0; npc.fall_depth += 1; npc.vx *= 0.98
 			else:
 				if npc.vy > 0: 
-					if npc.vy >= 7.0 or npc.fall_depth >= 15: # Hard impact
-						npc.hp -= max(5.0, (npc.fall_depth - 10) * 1.5)
-						npc.hit_flash = 5
-					npc.vy = 0.0 # Hit ground
-					npc.fall_depth = 0
-				npc.vx *= 0.6 # High Ground friction (brakes quickly)
-			
+					if npc.vy >= 7.0 or npc.fall_depth >= 15: npc.hp -= max(5.0, (npc.fall_depth - 10) * 1.5); npc.hit_flash = 5
+					npc.vy = 0.0; npc.fall_depth = 0
+				npc.vx *= 0.6
 			if abs(npc.vx) < 0.5: npc.vx = 0.0
-			
-			if npc.vy > 8.0: npc.vy = 8.0 # Terminal velocity
+			if npc.vy > 8.0: npc.vy = 8.0
 			moved_by_physics = true
-		
 		if not moved_by_physics:
-			if _can_npc_fit(np.x, np.y + 1, npc):
-				np.y += 1 # Standard Gravity
-				npc.fall_depth += 1
-			elif npc.type != "miner": # Warriors/Archers climbing logic
-				# BOUNCE EXPLORATION: Flip direction if landed from height
-				if npc.fall_depth >= 12: # Fall damage from standard walking off cliffs (>12px drop)
-					npc.hp -= (npc.fall_depth - 10) * 1.5
-					npc.hit_flash = 5
-				
-				if npc.fall_depth >= 3:
-					npc.dir = -npc.dir
+			if _can_npc_fit(np.x, np.y + 1, npc): np.y += 1; npc.fall_depth += 1
+			elif npc.type != "miner":
+				if npc.fall_depth >= 12: npc.hp -= (npc.fall_depth - 10) * 1.5; npc.hit_flash = 5
+				if npc.fall_depth >= 3: npc.dir = -npc.dir
 				npc.fall_depth = 0
-				
 				if npc.dir != 0:
-					var tx = np.x + (npc.dir * 2) # FORWARD LUNGE CHECK (2px)
-					var moved = false
-					
-					# 1. DANGER AVOIDANCE (Fire, Acid, Explosives)
-					var danger_dist = -1
-					var safe_landing_dist = -1
-					var front_edge = np.x + 1 if npc.dir == 1 else np.x
-					
-					for dx in range(1, 25): # Ultra Deep scan up to 24px ahead
+					var tx = np.x + (npc.dir * 2); var moved = false; var danger_dist = -1; var safe_landing_dist = -1; var front_edge = np.x + 1 if npc.dir == 1 else np.x
+					for dx in range(1, 25):
 						var detect_x = front_edge + (npc.dir * dx)
 						if detect_x < 0 or detect_x >= grid_width: break
-						
 						var is_danger = false
-						# Full vertical scan for obstacles: from head (0) to floor (5)
 						for oy in range(0, 6):
 							var tid = _get_cell(detect_x, np.y + oy)
-							if tid > 0:
-								var tags = material_tags_raw[tid]
-								if tags & (SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.EXPLOSIVE):
-									is_danger = true
-									break
-						
+							if tid > 0 and (material_tags_raw[tid] & (SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.EXPLOSIVE)): is_danger = true; break
 						if is_danger:
 							if danger_dist == -1: danger_dist = dx
-						elif danger_dist != -1 and not is_danger:
-							# End of danger found! Mark safe landing distance.
-							safe_landing_dist = dx
-							break
-					
+						elif danger_dist != -1 and not is_danger: safe_landing_dist = dx; break
 					if danger_dist != -1 and not moved:
-						if danger_dist <= 5: # PERFECT MARGIN: 5px
+						if danger_dist <= 5: 
 							var hazard_width = safe_landing_dist - danger_dist
 							if safe_landing_dist != -1 and hazard_width <= 20:
-								# Puddle is jumpable (up to 20px wide) safely from 5px away
-								if _can_npc_fit(np.x, np.y - 1, npc):
-									npc.vy = -4.6 # Powerful enough to not dip
-									npc.vx = npc.dir * 3.4 # Covers ~28px to clear gap + puddle
-									moved = true
-								else:
-									npc.dir = -npc.dir # Roof blocked, retreat!
-									moved = true
-							else:
-								# Too wide to jump! (Lake or no safe landing)
-								npc.dir = -npc.dir # Retreat!
-								moved = true
-						else:
-							pass # Keep walking to hit the 3px edge
-					
-					# 2. CLIFF AVOIDANCE (Don't fall to your death!)
+								if _can_npc_fit(np.x, np.y - 1, npc): npc.vy = -4.6; npc.vx = npc.dir * 3.4; moved = true
+								else: npc.dir = -npc.dir; moved = true
+							else: npc.dir = -npc.dir; moved = true
 					if not moved:
-						var edge_x = np.x + (npc.dir * 2)
-						var drop_depth = 0
-						for dy in range(1, 15): # Check up to 14px straight down
-							if not _can_npc_fit(edge_x, np.y + dy, npc):
-								break
+						var edge_x = np.x + (npc.dir * 2); var drop_depth = 0
+						for dy in range(1, 15):
+							if not _can_npc_fit(edge_x, np.y + dy, npc): break
 							drop_depth += 1
-						
-						if drop_depth >= 12: # 12px+ drop triggers fall damage or death
+						if drop_depth >= 12:
 							var ignore_cliff = false
-							if target != null and target.pos.y > np.y:
-								# If the target is right below us, risk the jump to smash them!
-								if abs(target.pos.x - np.x) < 20: 
-									ignore_cliff = true
-							
-							if not ignore_cliff:
-								npc.dir = -npc.dir # Whoa, too high! Turn around!
-								moved = true
-					
-					# TACTICAL JUMP: If target is above, always try to jump/catch ledges
+							if target != null and target.pos.y > np.y and abs(target.pos.x - np.x) < 20: ignore_cliff = true
+							if not ignore_cliff: npc.dir = -npc.dir; moved = true
 					var target_above = target and target.pos.y < np.y - 12
-					
-					# 3. CLIMB & STANDARD WALKING (Only if we haven't evaded danger/cliffs)
 					if not moved:
-						# LADDER LOGIC: If face-to-face with an ally, climb limit is infinite!
-						# We use mathematical AABB checking so we are immune to pixel-erasure glitches!
-						var max_climb = -11
-						var bumped_ally = false
+						var max_climb = -11; var bumped_ally = false
 						for other in active_npcs:
 							if other.team == npc.team and other != npc:
 								if tx < other.pos.x + 2 and tx + 2 > other.pos.x and np.y < other.pos.y + 5 and np.y + 5 > other.pos.y:
-									bumped_ally = true
-									if other.get("is_tower", false):
-										max_climb = -111 # Infinite ladder ONLY if ally is an official tower!
-									break
-						
-						if bumped_ally and max_climb != -111:
-							# Hit a friend who is NOT a tower? Don't step on them! Turn around.
-							npc.dir = -npc.dir
-							moved = true
-						
+									bumped_ally = true; if other.get("is_tower", false): max_climb = -111; break
+						if bumped_ally and max_climb != -111: npc.dir = -npc.dir; moved = true
 						if not moved:
-							# Scan upwards to see if it can step up or climb
 							for dy in range(0, max_climb, -1):
 								if _can_npc_fit(tx, np.y + dy, npc):
-									# If target is above, only move if we are actually GOING UP
-									if !target_above or dy < 0:
-										np.x = tx; np.y += dy
-										moved = true; break
-					
-
-					
-					# GAP JUMP & LUNGE: If simple climb fails, try jumping over gaps
+									if !target_above or dy < 0: np.x = tx; np.y += dy; moved = true; break
 					if not moved:
-						var std_tx = np.x + npc.dir # Fallback to 1px step
-						if _can_npc_fit(std_tx, np.y, npc): # Horizontal Gap Jump
-							np.x = std_tx; moved = true
-						elif _can_npc_fit(std_tx, np.y - 4, npc): # Lunge onto ramp
-							np.x = std_tx; np.y -= 4; moved = true
-					
-					# WALL REBOUND AND TOWER BUILDING
+						var std_tx = np.x + npc.dir
+						if _can_npc_fit(std_tx, np.y, npc): np.x = std_tx; moved = true
+						elif _can_npc_fit(std_tx, np.y - 4, npc): np.x = std_tx; np.y -= 4; moved = true
 					if not moved:
-						if target == null:
-							# Exploring: just turn around randomly at walls, NO TOWERS!
-							npc.dir = -npc.dir
-						elif np.x <= 2 or np.x >= grid_width - 4:
-							# Muro invisible del mapa: ¡Nunca hagas torres contra el borde del universo!
-							npc.dir = -npc.dir
+						if target == null: npc.dir = -npc.dir
+						elif np.x <= 2 or np.x >= grid_width - 4: npc.dir = -npc.dir
 						elif !is_attacking:
-							# Chasing target, blocked! Form an official tower!
-							if _can_npc_fit(np.x, np.y - 10, npc): 
-								npc["tower_dir"] = npc.dir
-								npc.is_tower = true
-								npc.dir = 0
-							elif !target_above:
-								npc.dir = -npc.dir
-		
-		# 5. FINAL RENDER: Redraw at the new position
-		npc.pos = np
-		_draw_npc_pixels(npc)
-			
+							if _can_npc_fit(np.x, np.y - 10, npc): npc["tower_dir"] = npc.dir; npc.is_tower = true; npc.dir = 0
+							elif !target_above: npc.dir = -npc.dir
+		npc.pos = np; _draw_npc_pixels(npc)
 		if npc.hp <= 0 and npc.hit_flash <= 0:
-			_draw_npc_pixels(npc, 0)
-			_play_action_sound("npc_death")
-			
-			# EL BOTÓN DEL HOMBRE MUERTO (Dead Man's Switch)
+			_draw_npc_pixels(npc, 0); _play_action_sound("npc_death")
 			if npc.type == "miner" and npc.has("mine_state") and npc.mine_state == "saboteur":
 				for fx in range(-2, 3):
 					var f_idx = np.x + fx
-					if f_idx >= 0 and f_idx < grid_width:
-						_set_cell(f_idx, np.y + 5, 3) # Fuego al Piso
-						_set_cell(f_idx, np.y - 1, 3) # Fuego al Techo
-						
+					if f_idx >= 0 and f_idx < grid_width: _set_cell(f_idx, np.y + 5, 3); _set_cell(f_idx, np.y - 1, 3)
 			dead_indices.append(i)
-
 	dead_indices.sort(); dead_indices.reverse()
 	for idx in dead_indices: active_npcs.remove_at(idx)
-	
-	# 6. REPAIR PASS: Redraw all NPCs to fix erasures from neighbor wide-clearing
-	# This ensures everyone is solid and visually complete for the next frame
-	for npc in active_npcs:
-		_draw_npc_pixels(npc)
+	for npc in active_npcs: _draw_npc_pixels(npc)
 
 func _miner_dig(npc, dig_down=false):
-	# Sonar solo una vez cada 3 segundos (3000ms)
 	var now = Time.get_ticks_msec()
-	if now - npc.last_dig_time >= 3000:
-		_play_action_sound("miner_dig")
-		npc.last_dig_time = now
-		
-	var tx = npc.pos.x + (npc.dir * 3) # PUSH WOOD 3px AHEAD to avoid 'tunnel-traps'
-	var dy_offset = 1 if dig_down else 0
-	
-	# Tube height (Same 7px, but wider inner)
-	var ty_start = npc.pos.y - 2 + dy_offset
-	var ty_end = npc.pos.y + 5 + dy_offset
-	
-	# 1. PLACE WOOD SUPPORTS (Asymmetric Engineering)
-	var beam_len = 3 if dig_down else 6
-	
-	var is_saboteur = npc.has("mine_state") and npc.mine_state == "saboteur"
-	var is_returning = is_saboteur and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2
-	
-	# CEILING: Wood (16) to connect perfectly with the downward tunnel
+	if now - npc.last_dig_time >= 3000: _play_action_sound("miner_dig"); npc.last_dig_time = now
+	var tx = npc.pos.x + (npc.dir * 3); var dy_offset = 1 if dig_down else 0; var ty_start = npc.pos.y - 2 + dy_offset; var ty_end = npc.pos.y + 5 + dy_offset; var beam_len = 3 if dig_down else 6; var is_saboteur = npc.has("mine_state") and npc.mine_state == "saboteur"; var is_returning = is_saboteur and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2
 	var c_mat = 16 
 	if not is_returning:
 		var tx_c = npc.pos.x + (npc.dir * 3)
@@ -3198,294 +2869,125 @@ func _miner_dig(npc, dig_down=false):
 					var r_check = wx + (rx * npc.dir)
 					if r_check >= 0 and r_check < grid_width:
 						var look_id = _get_cell(r_check, ty_start)
-						if look_id != 0 and look_id != c_mat:
-							mountain_ahead = true; break
-				
-				# Saboteur ALWAYS builds full Wood ceiling to spread fire
+						if look_id != 0 and look_id != c_mat: mountain_ahead = true; break
 				if mountain_ahead or is_saboteur:
 					_set_cell(wx, ty_start, c_mat)
-					if !dig_down and ty_start - 1 >= 0:
-						_set_cell(wx, ty_start - 1, c_mat) # Doble techo grueso horizontal
-	
-	# FLOOR: TNT (5) double-thick layer or Wood (16)
+					if !dig_down and ty_start - 1 >= 0: _set_cell(wx, ty_start - 1, c_mat)
 	var f_mat = 5 if is_saboteur else 16
 	if not is_returning:
 		var tx_f = npc.pos.x - (npc.dir * 2) 
-		var f_len = 6 # Extended floor coverage
+		var f_len = 6
 		for ox in range(0, f_len):
 			var wx = tx_f + (ox * npc.dir)
 			if wx < 0 or wx >= grid_width: continue
 			if ty_end < dynamic_grid_height:
-				_set_cell(wx, ty_end, f_mat) # Floor Line 1
-				if !dig_down and ty_end + 1 < dynamic_grid_height:
-					_set_cell(wx, ty_end + 1, f_mat) # Floor Line 2 (Doble grueso horizontal)
-				
-	# 2. CLEAR THE PATH (Wider 4px Tunnel for 'Better Air')
+				_set_cell(wx, ty_end, f_mat)
+				if !dig_down and ty_end + 1 < dynamic_grid_height: _set_cell(wx, ty_end + 1, f_mat)
 	for dx in range(0, 4):
 		for dy in range(ty_start + 1, ty_end):
-			var cx = npc.pos.x + (dx * npc.dir) # Start clearing from the miner's face
-			var cy = dy 
+			var cx = npc.pos.x + (dx * npc.dir); var cy = dy 
 			if cx < 0 or cx >= grid_width or cy < 0 or cy >= dynamic_grid_height: continue
 			var tid = _get_cell(cx, cy)
 			if tid == 9 or tid == 12: continue
 			_set_cell(cx, cy, 0)
 
 func _shoot_arrow(npc, target):
-	_play_action_sound("archer_shoot")
-	var dx = float(target.pos.x - npc.pos.x)
-	var dir = 1 if dx > 0 else -1
-	# TRAJECTORY MATH (Mejor parábola dinámica)
-	var aim_dy = float((target.pos.y + 2) - npc.pos.y) # Aim for the chest/belly
-	var speed_x = clamp(abs(dx) * 1.5, 90.0, 150.0) # Slower horizontal speed for short shots = higher arc
-	var vx = dir * speed_x
-	var t = abs(dx) / speed_x
-	if t < 0.1: t = 0.1 # Prevent division by zero
-	
-	var arrow_gravity = 200.0
-	# Formula: dy = vy * t + 0.5 * g * t^2 -> vy = (dy / t) - (0.5 * g * t)
-	var vy = (aim_dy / t) - (0.5 * arrow_gravity * t)
-	
-	# RPG: Aplicar puntería aleatoria de cada arquero (+- 15px de desviación vertical)
-	vy += npc.get("precision", 0.0) * 15.0
-	
-	# Mínimos y máximos mucho más permisivos para parábolas orgánicas y altas
-	vy = clamp(vy, -280.0, 40.0)
-	
-	active_projectiles.append({
-		"pos": Vector2(npc.pos.x + dir*2, npc.pos.y + 1),
-		"vel": Vector2(vx, vy),
-		"team": npc.team,
-		"type": "arrow",
-		"life": 2.5,
-		"atk_dmg": npc.get("atk_dmg", 1.0), # Heredar daño del arquero original
-		"is_fire": npc.get("is_fire_variant", false)
-	})
+	_play_action_sound("archer_shoot"); var dx = float(target.pos.x - npc.pos.x); var dir = 1 if dx > 0 else -1; var aim_dy = float((target.pos.y + 2) - npc.pos.y); var speed_x = clamp(abs(dx) * 1.5, 90.0, 150.0); var vx = dir * speed_x; var t = abs(dx) / speed_x
+	if t < 0.1: t = 0.1
+	var arrow_gravity = 200.0; var vy = (aim_dy / t) - (0.5 * arrow_gravity * t); vy += npc.get("precision", 0.0) * 15.0; vy = clamp(vy, -280.0, 40.0)
+	active_projectiles.append({ "pos": Vector2(npc.pos.x + dir*2, npc.pos.y + 1), "vel": Vector2(vx, vy), "team": npc.team, "type": "arrow", "life": 2.5, "atk_dmg": npc.get("atk_dmg", 1.0), "is_fire": npc.get("is_fire_variant", false) })
 
 func _process_projectiles(delta):
 	var to_remove = []
 	for i in range(active_projectiles.size()):
-		var p = active_projectiles[i]
-		# Erase old (from grid)
-		_set_cell(int(p.pos.x), int(p.pos.y), 0)
-		
-		p.pos += p.vel * delta
-		p.vel.y += 200.0 * delta # Gravity for arrow
-		p.life -= delta
-		
-		var gx = int(p.pos.x)
-		var gy = int(p.pos.y)
-		
-		# 1. World Bounds
-		if gx < 0 or gx >= grid_width or gy < 0 or gy >= dynamic_grid_height or p.life <= 0:
-			to_remove.append(i); continue
-			
-		# 2. NPC Collision
+		var p = active_projectiles[i]; _set_cell(int(p.pos.x), int(p.pos.y), 0)
+		p.pos += p.vel * delta; p.vel.y += 200.0 * delta; p.life -= delta
+		var gx = int(p.pos.x); var gy = int(p.pos.y)
+		if gx < 0 or gx >= grid_width or gy < 0 or gy >= dynamic_grid_height or p.life <= 0: to_remove.append(i); continue
 		var hit_npc = null
 		for other in active_npcs:
 			if other.team != p.team:
-				# 2x5 simple bbox
-				if gx >= other.pos.x and gx <= other.pos.x + 1 and gy >= other.pos.y and gy <= other.pos.y + 4:
-					hit_npc = other; break
-		
+				if gx >= other.pos.x and gx <= other.pos.x + 1 and gy >= other.pos.y and gy <= other.pos.y + 4: hit_npc = other; break
 		if hit_npc:
-			hit_npc.hp -= 40.0 * p.get("atk_dmg", 1.0) # Daño varía según el nivel del arquero!
-			hit_npc.hit_flash = 4 # Flash
-			hit_npc.hit_type = "normal"
-			
-			# Efecto de flecha de fuego
+			hit_npc.hp -= 40.0 * p.get("atk_dmg", 1.0); hit_npc.hit_flash = 4; hit_npc.hit_type = "normal"
 			if p.get("is_fire", false):
 				if _get_cell(gx, gy) == 0: _set_cell(gx, gy, 3)
-				if _get_cell(gx, gy - 1) == 0: _set_cell(gx, gy - 1, 3)
-				
 			_play_action_sound("npc_hit")
-			# Visual sparks on impact
-			for j in range(5):
-				visual_sparks.append({"x":float(gx),"y":float(gy),"vx":randf_range(-40,40),"vy":randf_range(-40,0),"color":Color.WHITE,"life":0.3})
+			for j in range(5): visual_sparks.append({"x":float(gx),"y":float(gy),"vx":randf_range(-40,40),"vy":randf_range(-40,0),"color":Color.WHITE,"life":0.3})
 			to_remove.append(i); continue
-			
-		# 3. Grid Collision (Solids)
 		var tid = _get_cell(gx, gy)
 		if tid != 0 and tid != 15 and tid != 3 and tid != 17:
-			# Flecha de fuego prendiendo la pared/suelo
 			if p.get("is_fire", false):
 				var px = gx - int(sign(p.vel.x))
-				if px >= 0 and px < grid_width and _get_cell(px, gy) == 0:
-					_set_cell(px, gy, 3)
-			to_remove.append(i); continue # Stuck in ground
-			
-		# Draw new
+				if px >= 0 and px < grid_width and _get_cell(px, gy) == 0: _set_cell(px, gy, 3)
+			to_remove.append(i); continue
 		_set_cell(gx, gy, 42)
-	
 	to_remove.reverse()
 	for idx in to_remove: active_projectiles.remove_at(idx)
 
 func _find_closest_enemy(me, radar_range):
-	var closest = null
-	var min_dist = radar_range
+	var closest = null; var min_dist = radar_range
 	for other in active_npcs:
 		if other.team != me.team:
 			var d = me.pos.distance_to(other.pos)
-			if d < min_dist:
-				min_dist = d
-				closest = other
+			if d < min_dist: min_dist = d; closest = other
 	return closest
 
 func _attack_npc(attacker, victim):
-	victim.hp -= (15.0 * attacker.get("atk_dmg", 1.0)) # Damage personalizado
-	victim.hit_flash = 5
-	victim.hit_type = "normal"
-	
-	# Efecto de espada de fuego
+	victim.hp -= (15.0 * attacker.get("atk_dmg", 1.0)); victim.hit_flash = 5; victim.hit_type = "normal"
 	if attacker.get("is_fire_variant", false):
-		var fx = victim.pos.x + randi_range(0, 1)
-		var fy = victim.pos.y + randi_range(2, 4)
+		var fx = victim.pos.x + randi_range(0, 1); var fy = victim.pos.y + randi_range(2, 4)
 		if fx >= 0 and fx < grid_width and fy >= 0 and fy < dynamic_grid_height:
 			if _get_cell(fx, fy) == 0: _set_cell(fx, fy, 3)
-			
-	_play_action_sound("npc_hit")
-	_play_action_sound("warrior_attack")
-	
-	# 1. TEAM FX (Impact Particles)
-	var t_colors = [Color.RED, Color("1E90FF"), Color.YELLOW, Color.GREEN]
-	var bleed_color = t_colors[victim.team] if victim.team < t_colors.size() else Color.WHITE
-	for i in range(10):
-		visual_sparks.append({
-			"x": float(victim.pos.x) + randf_range(0, 2),
-			"y": float(victim.pos.y) + randf_range(0, 5),
-			"vx": randf_range(-80, 80),
-			"vy": randf_range(-120, -30),
-			"color": bleed_color if randf() > 0.4 else Color.WHITE,
-			"life": randf_range(0.3, 0.7)
-		})
-	
-	# 2. AGGRESSIVE LUNGE: Kinetic boost towards victim (3px Turbo)
+	_play_action_sound("npc_hit"); _play_action_sound("warrior_attack")
+	var t_colors = [Color.RED, Color("1E90FF"), Color.YELLOW, Color.GREEN]; var bleed_color = t_colors[victim.team] if victim.team < t_colors.size() else Color.WHITE
+	for i in range(10): visual_sparks.append({ "x": float(victim.pos.x) + randf_range(0, 2), "y": float(victim.pos.y) + randf_range(0, 5), "vx": randf_range(-80, 80), "vy": randf_range(-120, -30), "color": bleed_color if randf() > 0.4 else Color.WHITE, "life": randf_range(0.3, 0.7) })
 	var ldir = 1 if attacker.pos.x < victim.pos.x else -1
 	for d in range(3, 0, -1):
-		var lx = attacker.pos.x + ldir * d
-		var ly = attacker.pos.y - 1
-		if _can_npc_fit(lx, ly, attacker):
-			attacker.pos.x = lx
-			attacker.pos.y = ly
-			break
-		
-	# 3. KINETIC KNOCKBACK (Evasion vs Power)
+		var lx = attacker.pos.x + ldir * d; var ly = attacker.pos.y - 1
+		if _can_npc_fit(lx, ly, attacker): attacker.pos.x = lx; attacker.pos.y = ly; break
 	var push_dir = 1 if attacker.pos.x < victim.pos.x else -1
-	
-	if victim.type == "archer":
-		# ARCHER DEFENSIVE KICK: The archer kicks the ATTACKER ~15px BACKWARD!
-		var repulsion_vx = -push_dir * 3.5 
-		var repulsion_vy = -4.0
-		# Push the warrior away to maintain shooting area
-		attacker.vx = repulsion_vx
-		attacker.vy = repulsion_vy 
+	if victim.type == "archer": attacker.vx = -push_dir * 3.5; attacker.vy = -4.0
 	else:
-		# STANDARD WARRIOR BRAWL: 35% chance to wildly knockback the enemy
-		if randf() < 0.35:
-			var base_power = randf_range(3.0, 5.0)
-			victim.vx = push_dir * base_power * attacker.get("knockback_mult", 1.0)
-			victim.vy = randf_range(-4.0, -8.0) # Vertical lift for parabola
+		if randf() < 0.35: victim.vx = push_dir * randf_range(3.0, 5.0) * attacker.get("knockback_mult", 1.0); victim.vy = randf_range(-4.0, -8.0)
 
 func _check_npc_environment_damage(npc) -> bool:
-	if npc.hp <= 0: return false # Los cadáveres no sufren daño, no parpadean y no se quejan. Dejalos morir en paz.
-	
-	var took_damage = false
-	# Check key damage points (Head, Chest, Feet, and Ground Below)
-	var check_points = [
-		npc.pos,                  # Head
-		npc.pos + Vector2i(1, 2), # Chest
-		npc.pos + Vector2i(0, 4), # Feet
-		npc.pos + Vector2i(0, 5), # Floor (below feet)
-		npc.pos + Vector2i(1, 5), # Floor right
-		npc.pos + Vector2i(-1, 2),# Left Side
-		npc.pos + Vector2i(2, 2), # Right Side
-		npc.pos + Vector2i(-1, 4),# Left Foot Side
-		npc.pos + Vector2i(2, 4)  # Right Foot Side
-	]
-	
-	for p in check_points:
-		if p.x < 0 or p.x >= grid_width or p.y < 0 or p.y >= dynamic_grid_height: continue
-		var tid = cells[p.y * grid_width + p.x] # Use raw cells for speed
-		var t_tags = material_tags_raw[tid]
-		
-		
-		# Detailed Damage Detection with Priority (Acid > Fire)
+	if npc.hp <= 0: return false
+	var took_damage = false; var p = npc.pos
+	var check_points = [p, p + Vector2i(1, 2), p + Vector2i(0, 4), p + Vector2i(0, 5), p + Vector2i(1, 5), p + Vector2i(-1, 2), p + Vector2i(2, 2)]
+	for pt in check_points:
+		if pt.x < 0 or pt.x >= grid_width or pt.y < 0 or pt.y >= dynamic_grid_height: continue
+		var tid = cells[pt.y * grid_width + pt.x]; var t_tags = material_tags_raw[tid]
 		if (t_tags & SandboxMaterial.Tags.ACID):
-			npc.hp -= 3.5 
-			npc.hit_flash = 5
-			npc.hit_type = "acid"
-			took_damage = true
-			if randf() < 0.4: # More Acid Bubbles
-				visual_sparks.append({"x":float(p.x)+randf_range(-2,2),"y":float(p.y),"vx":randf_range(-10,10),"vy":randf_range(-40,-20),"color":Color("#39FF14"),"life":0.6})
+			npc.hp -= 3.5; npc.hit_flash = 5; npc.hit_type = "acid"; took_damage = true
+			if randf() < 0.4: visual_sparks.append({"x":float(pt.x)+randf_range(-2,2),"y":float(pt.y),"vx":randf_range(-10,10),"vy":randf_range(-40,-20),"color":Color("#39FF14"),"life":0.6})
 		elif (t_tags & SandboxMaterial.Tags.INCENDIARY):
-			npc.hp -= 1.2
-			took_damage = true
-			if npc.hit_type != "acid": 
-				npc.hit_flash = 5
-				npc.hit_type = "fire"
-			if randf() < 0.3: # Improved Fire Particles (Sparks + INTENSE Smoke)
-				visual_sparks.append({"x":float(p.x),"y":float(p.y),"vx":randf_range(-15,15),"vy":randf_range(-35,-15),"color":Color("#FF8200"),"life":0.5})
-				# High density smoke
-				if randf() < 0.7: 
-					visual_sparks.append({"x":float(p.x),"y":float(p.y),"vx":randf_range(-10,10),"vy":randf_range(-60,-30),"color":Color.WEB_GRAY,"life":1.5})
-
-
-	# SUFFOCATION CHECK: Must touch Air (0), Smoke (15), or Cloud (17) AT THE BOUNDARY
+			npc.hp -= 1.2; took_damage = true; if npc.hit_type != "acid": npc.hit_flash = 5; npc.hit_type = "fire"
+			if randf() < 0.3: visual_sparks.append({"x":float(pt.x),"y":float(pt.y),"vx":randf_range(-15,15),"vy":randf_range(-35,-15),"color":Color("#FF8200"),"life":0.5})
 	var air_found = false
-	for oy in range(-1, 6): # 1px ring around 2x5
+	for oy in range(-1, 6):
 		for ox in range(-1, 3):
-			# Skip the internal body area (0,0 to 1,4) because it's cleared to AIR during processing
 			if oy >= 0 and oy <= 4 and ox >= 0 and ox <= 1: continue
-			
-			var tx = npc.pos.x + ox
-			var ty = npc.pos.y + oy
+			var tx = npc.pos.x + ox; var ty = npc.pos.y + oy
 			if tx < 0 or tx >= grid_width or ty < 0 or ty >= dynamic_grid_height: continue
 			var nid = cells[ty * grid_width + tx]
-			if nid == 0 or nid == 15 or nid == 17:
-				air_found = true; break
+			if nid == 0 or nid == 15 or nid == 17: air_found = true; break
 		if air_found: break
-	
-	if !air_found:
-		npc.hp -= 3.0 # Ahogo (Suffocation)
-		npc.hit_flash = 4 # Blinking red for struggle visibility
-		took_damage = true
-		
-	# Efecto de sonido global si el terreno o entorno lo lastima
-	if took_damage:
-		_play_action_sound("damage_npc", 0.4) # Frecuencia limitada para evitar ruido sordo continuo
-		
+	if !air_found: npc.hp -= 3.0; npc.hit_flash = 4; took_damage = true
+	if took_damage: _play_action_sound("damage_npc", 0.4)
 	return took_damage
 
 func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
-	# Bounding check
-	if gx < 0 or gx + 1 >= grid_width or gy < 0 or gy + 4 >= dynamic_grid_height:
-		return false
-	
-	var encountered_npc_pixels = false
-	
-	# 2x5 area check
+	if gx < 0 or gx + 1 >= grid_width or gy < 0 or gy + 4 >= dynamic_grid_height: return false
 	for oy in range(5):
 		for ox in range(2):
-			var cx = gx + ox
-			var cy = gy + oy
-			var tid = _get_cell(cx, cy)
-			# Pass through non-solid materials (Air, Smoke, Fire, Cloud)
+			var tid = _get_cell(gx + ox, gy + oy)
 			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
-				if material_tags_raw[tid] & SandboxMaterial.Tags.NPC:
-					encountered_npc_pixels = true
-				else:
-					return false # Blocked by terrain/solid
-					
+				if !(material_tags_raw[tid] & SandboxMaterial.Tags.NPC): return false
 	if moving_npc != null:
-		# Check AABB against all other active NPCs (Mathematically bulletproof)
 		for other in active_npcs:
-			if other == moving_npc: continue # Skip self
-			# Custom AABB for 2x5 NPC
-			if gx < other.pos.x + 2 and gx + 2 > other.pos.x and gy < other.pos.y + 5 and gy + 5 > other.pos.y:
-				return false # Blocked by ANY NPC (Solid)
-	
-	if encountered_npc_pixels:
-		return false # Blocked by orphaned/unregistered NPC pixels
-
+			if other == moving_npc: continue
+			if gx < other.pos.x + 2 and gx + 2 > other.pos.x and gy < other.pos.y + 5 and gy + 5 > other.pos.y: return false
 	return true
 
 func _has_tag_neighbor(x, y, tag):
@@ -3493,29 +2995,22 @@ func _has_tag_neighbor(x, y, tag):
 		for nx in range(x - 1, x + 2):
 			if nx == x and ny == y: continue
 			var nid = _get_cell(nx, ny)
-			if nid > 0:
-				if (material_tags_raw[nid] & tag):
-					return true
+			if nid > 0 and (material_tags_raw[nid] & tag): return true
 	return false
 
 func _has_tag_within_oval(x, y, tag, rx, ry):
-	# Deterministic sweep with step for performance in oval
 	for oy in range(-ry, ry + 1, 3): 
 		for ox in range(-rx, rx + 1, 3):
-			# Oval check: (x^2/rx^2) + (y^2/ry^2) <= 1
 			if (float(ox*ox)/(rx*rx) + float(oy*oy)/(ry*ry)) <= 1.0:
 				var nid = _get_cell(x + ox, y + oy)
-				if nid > 0 and (material_tags_raw[nid] & tag):
-					return true
+				if nid > 0 and (material_tags_raw[nid] & tag): return true
 	return false
 
 func _has_id_within_oval(x, y, target_id, rx, ry):
-	# Deterministic sweep with step for performance in oval
 	for oy in range(-ry, ry + 1, 3): 
 		for ox in range(-rx, rx + 1, 3):
 			if (float(ox*ox)/(rx*rx) + float(oy*oy)/(ry*ry)) <= 1.0:
-				if _get_cell(x + ox, y + oy) == target_id:
-					return true
+				if _get_cell(x + ox, y + oy) == target_id: return true
 	return false
 
 func _consume_neighbor_tag(x, y, tag):
@@ -3523,10 +3018,7 @@ func _consume_neighbor_tag(x, y, tag):
 		for nx in range(x - 1, x + 2):
 			if nx == x and ny == y: continue
 			var nid = _get_cell(nx, ny)
-			if nid > 0:
-				if (material_tags_raw[nid] & tag):
-					_set_cell(nx, ny, 0) # EAT IT
-					return true
+			if nid > 0 and (material_tags_raw[nid] & tag): _set_cell(nx, ny, 0); return true
 	return false
 
 func _count_neighbor_id(x, y, id):
@@ -3534,8 +3026,7 @@ func _count_neighbor_id(x, y, id):
 	for ny in range(y - 1, y + 2):
 		for nx in range(x - 1, x + 2):
 			if nx == x and ny == y: continue
-			if _get_cell(nx, ny) == id:
-				count += 1
+			if _get_cell(nx, ny) == id: count += 1
 	return count
 
 func _count_neighbor_id_radius(x, y, id, radius):
@@ -3543,21 +3034,14 @@ func _count_neighbor_id_radius(x, y, id, radius):
 	for ny in range(y - radius, y + radius + 1):
 		for nx in range(x - radius, x + radius + 1):
 			if nx == x and ny == y: continue
-			if _get_cell(nx, ny) == id:
-				count += 1
+			if _get_cell(nx, ny) == id: count += 1
 	return count
 
 func _prime_explosive(x, y, id, ignition_flags = 0):
 	if x < 0 or x >= grid_width or y < 0 or y >= grid_height: return
-	var idx = y * grid_width + x
-	var current_id = cells[idx]
-	# Si ya está en cualquiera de los estados de cebado, no hacer nada
+	var idx = y * grid_width + x; var current_id = cells[idx]
 	if current_id == 7 or current_id == 77 or current_id == 71 or current_id == 72: return 
-	
-	var prime_id = 7 if id == 5 else 71 
-	_set_cell(x, y, prime_id) 
-	
-	# Store timer (bits 0-5) and ignition flags (bits 6-7)
+	_set_cell(x, y, 7 if id == 5 else 71) 
 	charge_array[idx] = 40 | ignition_flags
 
 func _trigger_electric_devices(x, y):
@@ -3565,189 +3049,88 @@ func _trigger_electric_devices(x, y):
 		for nx in range(x - 1, x + 2):
 			if nx == x and ny == y: continue
 			var n_id = _get_cell(nx, ny)
-			if n_id > 0:
-				var n_tags = material_tags_raw[n_id]
-				if (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
-					_prime_explosive(nx, ny, n_id)
-
+			if n_id > 0 and (material_tags_raw[n_id] & SandboxMaterial.Tags.ELECTRIC_ACTIVATED): _prime_explosive(nx, ny, n_id)
 
 func _check_neighbors_for_reaction(x, y, is_heat):
 	var my_id = _get_cell(x, y)
-	
 	for ny in range(y - 1, y + 2):
 		for nx in range(x - 1, x + 2):
 			if nx == x and ny == y: continue
 			var n_id = _get_cell(nx, ny)
 			if n_id > 0:
-				var n_idx = ny * grid_width + nx
-				var n_tags = material_tags_raw[n_id]
-				
-				# Lava + Water -> Obsidian
-				if (my_id == 11 and n_id == 2) or (my_id == 2 and n_id == 11):
-					_set_cell(x, y, 12)
-					_set_cell(nx, ny, 12)
-					return
-
-				# ACID LOGIC
+				var n_idx = ny * grid_width + nx; var n_tags = material_tags_raw[n_id]
+				if (my_id == 11 and n_id == 2) or (my_id == 2 and n_id == 11): _set_cell(x, y, 12); _set_cell(nx, ny, 12); return
 				var my_tags = tags_array[y * grid_width + x]
 				if (my_tags & SandboxMaterial.Tags.ACID):
-					# If neighbor is NOT empty and NOT acid and NOT anti-acid
 					if n_id > 0 and n_id != 13 and !(n_tags & SandboxMaterial.Tags.ANTI_ACID):
-						if randf() < 0.6: # Faster melting speed (from 0.2 to 0.6)
-							_set_cell(nx, ny, 0) # Dissolve neighbor
-							# Optional: Acid might also be consumed (very slowly)
-							if randf() < 0.05: _set_cell(x, y, 0)
-							return
-
+						if randf() < 0.6: _set_cell(nx, ny, 0); if randf() < 0.05: _set_cell(x, y, 0); return
 				if is_heat:
 					if (n_tags & SandboxMaterial.Tags.FLAMMABLE):
-						# Catch fire / Transmute based on producer type
-						if n_id == 14: continue # BRASAS: Do not consume already burning coal!
-						
-						if randf() < 0.8: # FAST Carbonization for Wood
-							if n_id == 18:
-								_set_cell(nx, ny, 19) # Ignite Firework
-								charge_array[n_idx] = randi_range(20, 70)
-							elif (n_tags & SandboxMaterial.Tags.BURN_COAL):
-								if randf() < 0.5: # 50% chance to become persistent coal
-									_set_cell(nx, ny, 14)
-								else: # 50% chance to be consumed as fire
-									_set_cell(nx, ny, 3)
+						if n_id == 14: continue
+						if randf() < 0.8:
+							if n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = randi_range(20, 70)
+							elif (n_tags & SandboxMaterial.Tags.BURN_COAL): _set_cell(nx, ny, 14 if randf() < 0.5 else 3)
 							elif (n_tags & SandboxMaterial.Tags.BURN_SMOKE):
-								# Release smoke above if possible
-								if _get_cell(nx, ny - 1) == 0:
-									_set_cell(nx, ny - 1, 15)
-								if randf() < 0.1: _set_cell(nx, ny, 3) # Turn to Fire (Lower chance)
+								if _get_cell(nx, ny - 1) == 0: _set_cell(nx, ny - 1, 15)
+								if randf() < 0.1: _set_cell(nx, ny, 3)
 								else: _set_cell(nx, ny, 0)
-							else:
-								_set_cell(nx, ny, 3) # Spread Fire!
+							else: _set_cell(nx, ny, 3)
 					elif (n_tags & SandboxMaterial.Tags.EXPLOSIVE):
-						if n_id == 27: # Volcan persistent ignition
-							_set_cell(nx, ny, 29)
-							charge_array[nx + ny * grid_width] = randi_range(80, 120)
-						elif n_id == 18:
-							_set_cell(nx, ny, 19)
-							charge_array[n_idx] = randi_range(20, 70)
-						else:
-							# Si el que lo prende es Electricidad (9), marcar como electrico (Bit 128)
-							_prime_explosive(nx, ny, n_id, 128 if my_id == 9 else 0)
+						if n_id == 27: _set_cell(nx, ny, 29); charge_array[nx + ny * grid_width] = randi_range(80, 120)
+						elif n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = randi_range(20, 70)
+						else: _prime_explosive(nx, ny, n_id, 128 if my_id == 9 else 0)
 				else:
-					# ONLY Electricity material can start a new pulse in a conductor
-					if (n_tags & SandboxMaterial.Tags.CONDUCTOR):
-						if charge_array[n_idx] == 0:
-							charge_array[n_idx] = 101 # Start pulse
+					if (n_tags & SandboxMaterial.Tags.CONDUCTOR) and charge_array[n_idx] == 0: charge_array[n_idx] = 101
 					elif (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
-						if n_id == 27: # Volcan activates as persistent launcher
-							_set_cell(nx, ny, 29)
-							charge_array[n_idx] = randi_range(80, 120)
-						elif n_id == 18: # IGNITE FIREWORK
-							_set_cell(nx, ny, 19)
-							charge_array[n_idx] = randi_range(20, 70)
-						else:
-							_prime_explosive(nx, ny, n_id, 128) # Bit 128 for electric ignition
+						if n_id == 27: _set_cell(nx, ny, 29); charge_array[n_idx] = randi_range(80, 120)
+						elif n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = randi_range(20, 70)
+						else: _prime_explosive(nx, ny, n_id, 128)
 
+var explosions_this_frame = 0
 func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0):
-	_set_cell(x, y, 0)
-	_play_action_sound(sfx_action)
-	
-	
-	# NPC BLAST PHYSICS
+	explosions_this_frame += 1
+	var is_heavy_load = explosions_this_frame > 10
+	_set_cell(x, y, 0); _play_action_sound(sfx_action)
 	var center = Vector2i(x, y)
 	for npc in active_npcs:
 		var dist = Vector2(npc.pos).distance_to(Vector2(center))
 		if dist < radius:
-			var ratio = 1.0 - (dist / radius)
-			npc.hp -= ratio * 120.0 # Lethal at center
-			npc.hit_flash = 12
-			npc.hit_type = "explosive"
-			
-			# Knockback (Fly away from center)
+			var ratio = 1.0 - (dist / radius); npc.hp -= ratio * 120.0; npc.hit_flash = 12; npc.hit_type = "explosive"
 			var blast_dir = (Vector2(npc.pos) - Vector2(center)).normalized()
 			if blast_dir.length() < 0.1: blast_dir = Vector2.UP
-			
-			# Parabolic Blast Physics
-			var force = ratio * 15.0
-			npc.vx = blast_dir.x * force
-			npc.vy = blast_dir.y * force - 6.0 # Extra lift
-			
-			for s in range(5):
-				visual_sparks.append({"x":float(npc.pos.x),"y":float(npc.pos.y),"vx":randf_range(-50,50),"vy":randf_range(-80,0),"color":Color.DARK_GRAY,"life":0.6})
-
-	
+			npc.vx = blast_dir.x * ratio * 15.0; npc.vy = blast_dir.y * ratio * 15.0 - 6.0
+			for s in range(5): visual_sparks.append({"x":float(npc.pos.x),"y":float(npc.pos.y),"vx":randf_range(-50,50),"vy":randf_range(-80,0),"color":Color.DARK_GRAY,"life":0.6})
 	for ry in range(-radius, radius):
 		for rx in range(-radius, radius):
 			var dist_sq = rx*rx + ry*ry
 			if dist_sq <= radius*radius:
-				var tx = x + rx
-				var ty = y + ry
-				
-				var t_id = _get_cell(tx, ty)
+				var tx = x + rx; var ty = y + ry; var t_id = _get_cell(tx, ty)
 				if t_id <= 0: continue
-				
-				var t_idx = ty * grid_width + tx
-				var t_tags = tags_array[t_idx]
-				
-				# Chain reaction: TRIGGER nearby launchers
+				var t_idx = ty * grid_width + tx; var t_tags = tags_array[t_idx]
 				if (t_tags & SandboxMaterial.Tags.EXPLOSIVE):
-					if t_id == 27: # Volcan launcher chain
-						_set_cell(tx, ty, 29)
-						# Give it ENERGY to launch multiple shots
-						charge_array[tx + ty * grid_width] = randi_range(80, 120)
-					else:
-						# HEREDAR: Pasamos los mismos ignition_flags a la siguiente TNT
-						_prime_explosive(tx, ty, t_id, ignition_flags)
+					if t_id == 27: _set_cell(tx, ty, 29); charge_array[tx + ty * grid_width] = randi_range(80, 120)
+					else: _prime_explosive(tx, ty, t_id, ignition_flags)
 					continue
-
-				# ANTI-EXPLOSIVE CHECK: Skip physical movement/deletion
-				if (t_tags & SandboxMaterial.Tags.ANTI_EXPLOSIVE):
-					continue
-				
-				# Faster destruction check
-				if dist_sq < (radius * 0.4) ** 2:
-					_set_cell(tx, ty, 0) 
+				if (t_tags & SandboxMaterial.Tags.ANTI_EXPLOSIVE): continue
+				if dist_sq < (radius * 0.4) ** 2: _set_cell(tx, ty, 0) 
 				else:
-					# Displacement with upward bias for WOW effect
-					if randf() < 0.6: # More particles moved
-						_push_particle(tx, ty, rx, ry)
-	
-	# 1. OVERCHARGE SPARKS EFFECT (If ELECTRIC BIT 128 is set)
+					var prob = 0.15 if is_heavy_load else 0.45
+					if randf() < prob: _push_particle(tx, ty, rx, ry)
 	if ignition_flags & 128:
-		for i in range(40):
-			var dist = randi_range(2, 5) # Spawn at blast edge or air center
-			var ang = randf() * TAU
-			var sx = x + int(cos(ang) * dist)
-			var sy = y + int(sin(ang) * dist)
-			
+		for i in range(12 if is_heavy_load else 25):
+			var dist = randi_range(2, 5); var ang = randf() * TAU; var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
 			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
 				if _get_cell(sx, sy) == 0:
-					_set_cell(sx, sy, 43) 
-					_activate_chunk(sx, sy)
-					
-					# Calculate Inertia Direction from radial angle
-					var deg = rad_to_deg(ang)
-					if deg < 0: deg += 360
-					# Snap to 8-directions (0=UP, 1=UR, 2=R, 3=DR, 4=D, 5=DL, 6=L, 7=UL)
+					_set_cell(sx, sy, 43); _activate_chunk(sx, sy)
+					var deg = rad_to_deg(ang); if deg < 0: deg += 360
 					var dir_idx = int((deg + 22.5 + 90) / 45) % 8
-					# Max energy for 5 bits is 31 (with the 2-frame mod, this is 62 frames of life)
-					var energy = 31
-					charge_array[sy * grid_width + sx] = (energy << 3) | dir_idx
+					charge_array[sy * grid_width + sx] = (31 << 3) | dir_idx
 
 func _push_particle(x, y, dx, dy):
-	# Trajectory with upward bias and air boost
-	var is_near_air = _get_cell(x, y - 1) == 0 or _get_cell(x + int(sign(dx)), y) == 0
-	var force = randi_range(6, 15) if is_near_air else randi_range(2, 5)
-	
-	var dir_x = sign(dx)
-	var dir_y = -1 if force > 5 else sign(dy) # Force UP if fast
-	
-	# Trace to find the furthest air spot
-	for i in range(force, 1, -1):
-		var tx = x + dir_x * i
-		var ty = y + dir_y * i
-		if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-			if _get_cell(tx, ty) == 0:
-				_swap_cells(x, y, tx, ty)
-				return
+	var dir_x = sign(dx); var dir_y = -1 if dy < 0 else (1 if dy > 0 else 0)
+	var tx = x + dir_x * 2; var ty = y + dir_y * 2
+	if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+		if _get_cell(tx, ty) == 0: _swap_cells(x, y, tx, ty)
 
 func _update_texture():
 	# ZERO-COPY GPU RENDER PASS (Peak GDScript Performance)
