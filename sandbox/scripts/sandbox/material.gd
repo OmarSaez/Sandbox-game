@@ -41,7 +41,14 @@ enum Tags {
 	NPC = 1 << 23,
 	
 	# Volatile/Projectile behavior
-	VOLATILE = 1 << 24
+	VOLATILE = 1 << 24,
+	
+	# --- SCALABLE TEXTURING SYSTEM ---
+	TEXTURE_DOUBLE = 1 << 25, # Material uses 2 colors
+	TEXTURE_TRIPLE = 1 << 26, # Material uses 3 colors
+	MIX_LOW = 1 << 27,        # ~15% secondary color
+	MIX_MEDIUM = 1 << 28,     # ~35% secondary color
+	MIX_HIGH = 1 << 29        # ~50% secondary color
 }
 
 @export var name: String = "Material"

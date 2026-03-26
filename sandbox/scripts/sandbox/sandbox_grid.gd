@@ -37,7 +37,9 @@ var chunks_y: int
 var material_colors_bytes = PackedByteArray() # RGBA bytes for each material
 
 # Material data mapping
-var material_colors_raw = PackedColorArray() 
+var mat_colors_1 = PackedColorArray()
+var mat_colors_2 = PackedColorArray()
+var mat_colors_3 = PackedColorArray()
 var material_tags_raw = PackedInt32Array() 
 var selected_material: int = 1
 var current_weather: int = 0 
@@ -348,157 +350,139 @@ func _ready():
 	img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8) # Main ID Texture
 	charge_img = Image.create(grid_width, grid_height, false, Image.FORMAT_L8) # Charge (Grayscale)
 	
-	material_colors_raw.resize(256) # Pre-size for plenty of materials
+	mat_colors_1.resize(256)
+	mat_colors_2.resize(256)
+	mat_colors_3.resize(256)
 	material_tags_raw.resize(256)
 	
-	# Setup materials
-	_register_material(0, Color(0, 0, 0, 0), SandboxMaterial.Tags.NONE)
-	#Sand
-	_register_material(1, Color("FFF9C4"), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_NORMAL)
-	#Water
-	_register_material(2, Color("80D0FF"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.CONDUCTOR)
-	#Fire
-	_register_material(3, Color("EBB400"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
-	# Petroleum (Dark Purple + Flammable)
-	_register_material(4, Color("560075"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.BURN_SMOKE)
-	
-	# TNT (Static + Explosive + Electric Activated)
-	_register_material(5, Color("E30000"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC)
-	
-	# Earth (Slow gravity)
-	_register_material(6, Color("#66380C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW)
-	
-	# Primed TNT (Flashes white, soon to BOOM) - Now NOT incendiary to avoid premature chain reactions
-	_register_material(7, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC)
-	_register_material(77, Color("FF0000"), SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
-	
-	# Metal (Solid + Conductor)
-	_register_material(8, Color("EDEDED"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.GRAV_STATIC)
-	
-	# Electricity (Energy!)
-	_register_material(9, Color("FFF300"), SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
-	
-	# Gravel (Gray stones)
-	_register_material(10, Color("4D4D4D"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL)
-	
-	# Lava (Slow Liquid + Hot)
-	_register_material(11, Color("FF4000"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_SLOW)
-	
-	# Obsidian (Hard Rock + Anti-Acid + Anti-Explosive)
-	_register_material(12, Color("1E023B"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
-	
-	# Acid (Neon Green + Melts things + Conductive + SELF-IMMUNE)
-	_register_material(13, Color("#39FF14"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.ANTI_ACID)
-	
-	# Coal (Brazas - Dark Brown/Black)
-	_register_material(14, Color("#1A1110"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.INCENDIARY)
-	
-	# Smoke (Light Gray Gas)
-	_register_material(15, Color("454545ff"), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP | SandboxMaterial.Tags.BURN_NONE)
-	
-	# Wood (Strong Brown)
-	_register_material(16, Color("#3E2609"), SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.SOLID)
-	
-	# Cloud (Whity Gray Gas)
-	_register_material(17, Color("8C8C8C"), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP)
-
-	# Fuegos Artificiales (Rosa brillante) + Anti-Explosivo para que no se muevan al encenderse la bateria
-	_register_material(18, Color("FF7D7D"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
-	
-	# Fill with empty
 	cells.fill(0)
 	charge_array.fill(0)
+	tags_array.fill(0)
 	
-	# Texture setup
-	texture_rect.texture = ImageTexture.create_from_image(img)
-	texture_rect.anchor_right = 1.0
-	texture_rect.anchor_bottom = 1.0
-	texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE 
-	texture_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	# Setup materials (0-255)
+	_register_material(0, Color(0, 0, 0, 0), SandboxMaterial.Tags.NONE)
 	
-	charge_tex = ImageTexture.create_from_image(charge_img)
-
-	# Gunpowder (Gray)
-	_register_material(20, Color("#6B6A66"), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)
-	# Grass (Bright Green)
-	_register_material(21, Color("#4CAF50"), SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL)
+	# --- RAW MATERIALS (0-20) ---
+	# 1: Arena
+	_register_material(1, Color("FFF9C4"), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("FDEB7A")) # Arena
+	# 2: Agua
+	_register_material(2, Color("80D0FF"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.CONDUCTOR) # Agua
+	# 3: Fuego
+	_register_material(3, Color("EBB400"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_MEDIUM, Color("FF4500")) # Fuego
+	# 4: Petroleo
+	_register_material(4, Color("560075"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.BURN_SMOKE) # Petroleo
+	# 5: TNT
+	_register_material(5, Color("E30000"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC) # TNT
+	# 6: Tierra
+	_register_material(6, Color("#66380C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#4D2A09")) # Tierra
 	
-	# Mark existing materials as FERTILE
+	# 8: Metal
+	_register_material(8, Color("EDEDED"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.GRAV_STATIC) # Metal
+	# 9: Electricidad
+	_register_material(9, Color("FFF300"), SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC) # Electricidad
+	# 10: Rocas
+	_register_material(10, Color("4D4D4D"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL) # Rocas
+	# 11: Lava
+	_register_material(11, Color("FF4000"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.TEXTURE_TRIPLE | SandboxMaterial.Tags.MIX_MEDIUM, Color("FF7A00"), Color("2A0000")) # Lava
+	# 12: Obsidiana
+	_register_material(12, Color("1E023B"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # Obsidiana
+	# 13: Acido
+	_register_material(13, Color("#39FF14"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.ANTI_ACID) # Acido
+	
+	# 14: Carbon
+	_register_material(14, Color("#1A1110"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#3D1A10")) # Carbon
+	# 15: Humo
+	_register_material(15, Color("454545ff"), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP | SandboxMaterial.Tags.BURN_NONE) # Humo
+	# 16: Madera
+	_register_material(16, Color("#3E2609"), SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#5D3A1A")) # Madera
+	# 17: Vapor/Nube
+	_register_material(17, Color("8C8C8C"), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP) # Nube/Vapor
+	# 18: Mecha / Fuegos artificiales
+	_register_material(18, Color("FF7D7D"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # Mecha / Fuegos artificiales
+	# 19: Destello
+	_register_material(19, Color(1, 0.8, 0.9), SandboxMaterial.Tags.GRAV_STATIC) # Destello Visual
+	# 20: Polvora
+	_register_material(20, Color("#6B6A66"), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Polvora
+	
+	# --- BIOLOGICALS (21-24) ---
+	# 21: Pasto
+	_register_material(21, Color("#4CAF50"), SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL) # Pasto
+	# 24: Enredadera
+	_register_material(24, Color("#3E5E2A"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL) # Enredadera / Tallo
+	
+	# Setup Fertility
 	material_tags_raw[1] |= SandboxMaterial.Tags.FERTILE
 	material_tags_raw[6] |= SandboxMaterial.Tags.FERTILE
 	
-	# --- WET STATES (For Debug & Realism) ---
-	# Wet Sand (Darker Yellow)
-	_register_material(22, Color("#C2B280").darkened(0.2), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.FERTILE)
-	# Wet Earth (Darker Brown)
-	_register_material(23, Color("#8B4513").darkened(0.2), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.FERTILE | SandboxMaterial.Tags.BURN_COAL)
+	# 22: Arena Mojada
+	_register_material(22, Color("#C2B280").darkened(0.2), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.FERTILE) # Arena Mojada
+	# 23: Tierra Mojada
+	_register_material(23, Color("#8B4513").darkened(0.2), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.FERTILE | SandboxMaterial.Tags.BURN_COAL) # Tierra Mojada
 	
-	# --- NEW VINE (Stem) ---
-	# Forest Green (Darker) - Now leaves coal when burned
-	_register_material(24, Color("#3E5E2A"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL)
-
-	# --- NEW CONSTRUCTION MATERIALS ---
-	# Fresh Cement (Light Beige Liquid)
-	_register_material(25, Color("#E5D3B3"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL)
-	# Cement (Solid Beige)
-	_register_material(26, Color("#C2B280"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
+	# --- STATES AND VFX ---
+	# 7: TNT Flash (Blanco)
+	_register_material(7, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC) # TNT Flashing (Normal)
+	# 77: TNT Flash (Rojo)
+	_register_material(77, Color("FF0000"), SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # TNT Flashing (Red)
+	# 43: Chispa
+	_register_material(43, Color("#FFFF00"), SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.VOLATILE | SandboxMaterial.Tags.GRAV_STATIC) # Chispa Amarilla
+	# 44: Proyectil Acido
+	_register_material(44, Color("#39FF14"), SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.VOLATILE | SandboxMaterial.Tags.GRAV_STATIC) # Proyectil Acido
 	
-	# --- CRYOGENIC SYSTEM ---
-	# 60: Ice (Light Cyan Static Solid)
-	_register_material(60, Color("#DDF0FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
+	# --- CONSTRUCTION ---
+	# 25: Cemento Fresco
+	_register_material(25, Color("#E5D3B3"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL) # Cemento Fresco
+	# 26: Cemento Solido
+	_register_material(26, Color("#C2B280"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Cemento Solido
 	
-	# --- VOLCANO SYSTEM ---
-	# 27: Volcan (Block) - Neon Orange + Anti-Explosive
-	_register_material(27, Color("#FF5F1F"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
-	# 28: Eruption (Projectile) - Bright Yellow/Orange - Handled manually
-	_register_material(28, Color("#FFFF00"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_UP | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
-	# 29: Active Base (Launcher) - Glowing Orange-Red
-	_register_material(29, Color("#FF4500"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
+	# --- SPECIAL SYSTEMS ---
+	# 27: Volcan Bloque
+	_register_material(27, Color("#FF5F1F"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # Volcan Bloque
+	# 28: Proyectil Volcan
+	_register_material(28, Color("#FFFF00"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_UP | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # Proyectil Volcan
+	# 29: Base de Volcan
+	_register_material(29, Color("#FF4500"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # Base de Volcan Activa
 
 	# --- NPC SYSTEM ---
-	# 30: Warrior (Dummy/Master)
-	_register_material(30, Color.SLATE_GRAY, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	# 31: NPC Part Gray
-	_register_material(31, Color.GRAY, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	# 32: NPC Part Dark Gray
-	_register_material(32, Color(0.2, 0.2, 0.2), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	# 33: NPC Part Skin
-	_register_material(33, Color("#FFDBAC"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	# 34: Team Red
-	_register_material(34, Color.RED, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	# 35: Team Blue
-	_register_material(35, Color.BLUE, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	# 36: Team Yellow
-	_register_material(36, Color.YELLOW, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	# 37: Team Green
-	_register_material(37, Color("#00FF00"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 30: Guerrero
+	_register_material(30, Color.SLATE_GRAY, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Guerrero
+	# 31: Parte Gris
+	_register_material(31, Color.GRAY, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Parte Gris
+	# 32: Parte Oscura
+	_register_material(32, Color(0.2, 0.2, 0.2), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Parte Oscura
+	# 33: Piel
+	_register_material(33, Color("#FFDBAC"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Piel
+	# 34: Equipo Rojo
+	_register_material(34, Color.RED, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Rojo
+	# 35: Equipo Azul
+	_register_material(35, Color.BLUE, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Azul
+	# 36: Equipo Amarillo
+	_register_material(36, Color.YELLOW, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Amarillo
+	# 37: Equipo Verde
+	_register_material(37, Color("#00FF00"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Verde
 	
-	# --- ARCHER SYSTEM ---
-	# 40: Archer Master
-	_register_material(40, Color("#228B22"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	# 41: Archer Cloth
-	_register_material(41, Color("#8B4513"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	# 42: Arrow Pixel
-	_register_material(42, Color("#D2B48C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
-	# 43: Electric Spark (Physical Inertial Spark)
-	_register_material(43, Color("#FFFF00"), SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.VOLATILE | SandboxMaterial.Tags.GRAV_STATIC)
-	
-	# --- ACID SPARK / CORROSIVE PROJECTILE ---
-	# 44: Acid Spark (Stunning Neon Green Projectile that turns to real Acid)
-	_register_material(44, Color("#39FF14"), SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.VOLATILE | SandboxMaterial.Tags.GRAV_STATIC)
+	# 40: Maestro Arquero
+	_register_material(40, Color("#228B22"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Maestro Arquero
+	# 41: Tela Arquero
+	_register_material(41, Color("#8B4513"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Tela Arquero
+	# 42: Flecha
+	_register_material(42, Color("#D2B48C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Flecha
 	
 	# --- MINER SYSTEM ---
-	# 50: Miner Master
-	_register_material(50, Color("#555555"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	# 51: Miner Helmet
-	_register_material(51, Color("#FFD700"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(50, Color("#555555"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Minero Maestro
+	_register_material(51, Color("#FFD700"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Casco Minero
 
 	# --- CUSTOM NPC DAMAGE COLORS (IDs 60-64) ---
-	_register_material(60, npc_color_acid, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	_register_material(61, npc_color_fire, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	_register_material(62, npc_color_exp, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	_register_material(63, npc_color_hit, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	_register_material(64, npc_color_death, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 60: Color Daño Acido
+	_register_material(60, npc_color_acid, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Daño Acido
+	# 61: Color Daño Fuego
+	_register_material(61, npc_color_fire, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Daño Fuego
+	# 62: Color Daño Explosivo
+	_register_material(62, npc_color_exp, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Daño Explosivo
+	# 63: Color Golpe
+	_register_material(63, npc_color_hit, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Golpe
+	# 64: Color Muerte
+	_register_material(64, npc_color_death, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Muerte
 	
 	# --- CRYOGENIC SYSTEM ---
 	# 70: Ice (Light Cyan Static Solid)
@@ -514,7 +498,14 @@ func _ready():
 	_register_material(71, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC)
 	_register_material(72, Color("#6B6A66"), SandboxMaterial.Tags.GRAV_STATIC)
 
-	# UI SETUP (Must happen AFTER materials are registered)
+	# UI AND TEXTURE SETUP (Must happen AFTER materials are registered)
+	texture_rect.texture = ImageTexture.create_from_image(img)
+	texture_rect.anchor_right = 1.0
+	texture_rect.anchor_bottom = 1.0
+	texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE 
+	texture_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	charge_tex = ImageTexture.create_from_image(charge_img)
+
 	_setup_main_ui_containers()
 	
 	# FORCE START HIDDEN
@@ -527,11 +518,13 @@ func _ready():
 	# INITIAL HIGHLIGHT
 	_update_highlights()
 	
-	# FINAL SHADER & PALETTE SYNC (Critical Fix for Black Elements)
-	var palette_img = Image.create(256, 1, false, Image.FORMAT_RGBA8)
+	# FINAL SHADER & PALETTE SYNC (Now 256x3 for Textures)
+	var palette_img = Image.create(256, 3, false, Image.FORMAT_RGBA8)
 	palette_img.fill(Color(0,0,0,0))
 	for i in range(256):
-		palette_img.set_pixel(i, 0, material_colors_raw[i])
+		palette_img.set_pixel(i, 0, mat_colors_1[i])
+		palette_img.set_pixel(i, 1, mat_colors_2[i])
+		palette_img.set_pixel(i, 2, mat_colors_3[i])
 	var palette_tex = ImageTexture.create_from_image(palette_img)
 	
 	var shader = load("res://scripts/sandbox/sandbox_render.gdshader")
@@ -1195,7 +1188,7 @@ func _add_button(key: String, mat_id: int):
 	# 1. ICON LAYER (Always visible material color)
 	var icon_panel = PanelContainer.new()
 	var icon_style = StyleBoxFlat.new()
-	icon_style.bg_color = material_colors_raw[mat_id]
+	icon_style.bg_color = mat_colors_1[mat_id]
 	var radius = int(8 * s)
 	icon_style.corner_radius_top_left = radius
 	icon_style.corner_radius_top_right = radius
@@ -1347,16 +1340,6 @@ func _is_any_ui_blocking() -> bool:
 		
 	return false
 
-func _register_material(id, color, tags):
-	material_colors_raw[id] = color
-	material_tags_raw[id] = tags
-	
-	# Pre-calculate bytes for the fast loop
-	var base = id * 4
-	material_colors_bytes[base] = int(color.r * 255)
-	material_colors_bytes[base + 1] = int(color.g * 255)
-	material_colors_bytes[base + 2] = int(color.b * 255)
-	material_colors_bytes[base + 3] = int(color.a * 255)
 
 # --- SFX SYSTEM ---
 func _get_sfx_stream(sfx_name: String) -> AudioStream:
@@ -1735,30 +1718,44 @@ func _draw_circle(cx, cy, radius, mat_id):
 			if x*x + y*y <= radius*radius:
 				_set_cell(cx + x, cy + y, mat_id)
 
+func _register_material(id: int, color1: Color, tags: int, color2 = null, color3 = null):
+	mat_colors_1[id] = color1
+	mat_colors_2[id] = color2 if color2 != null else color1
+	mat_colors_3[id] = color3 if color3 != null else (color2 if color2 != null else color1)
+	material_tags_raw[id] = tags
+
 func _set_cell(x, y, mat_id):
 	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
 		var idx = y * grid_width + x
-		cells[idx] = mat_id
-		tags_array[idx] = material_tags_raw[mat_id]
+		var tags = material_tags_raw[mat_id]
 		
-		# Wake up simulation
+		# Scalable Texturing Variant calculation
+		var variant = 0
+		if (tags & (SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.TEXTURE_TRIPLE)):
+			var mix_prob = 0.35 # Medium default
+			if (tags & SandboxMaterial.Tags.MIX_LOW): mix_prob = 0.15
+			elif (tags & SandboxMaterial.Tags.MIX_HIGH): mix_prob = 0.55
+			
+			if randf() < mix_prob:
+				variant = 1
+				if (tags & SandboxMaterial.Tags.TEXTURE_TRIPLE) and randf() < 0.35:
+					variant = 2
+		
+		# Store Mat ID in Bits 0-7, Variant in Bits 24-31 (Alpha Channel)
+		cells[idx] = mat_id | (variant << 24)
+		tags_array[idx] = tags
 		_activate_chunk(x, y)
 		
-		# Reset charge - but IF IT IS ELECTRICITY, give it initial charge to spark!
-		if (material_tags_raw[mat_id] & SandboxMaterial.Tags.ELECTRICITY):
-			charge_array[idx] = 101
-		else:
-			charge_array[idx] = 0
-			
+		if (tags & SandboxMaterial.Tags.ELECTRICITY): charge_array[idx] = 101
+		else: charge_array[idx] = 0
+
 func _activate_chunk(gx, gy):
 	var cx = int(gx / CHUNK_SIZE)
 	var cy = int(gy / CHUNK_SIZE)
 	if cx >= 0 and cx < chunks_x and cy >= 0 and cy < chunks_y:
 		var c_idx = cy * chunks_x + cx
-		# PERFORMANCE OPTIMIZATION: Skip redundant wakeups
 		if next_chunks_active[c_idx] >= 60: return
 		next_chunks_active[c_idx] = 60
-		# Wake neighbors
 		for oy in range(-1, 2):
 			for ox in range(-1, 2):
 				var ncx = cx + ox
@@ -1768,7 +1765,7 @@ func _activate_chunk(gx, gy):
 
 func _get_cell(x, y):
 	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
-		return cells[y * grid_width + x]
+		return cells[y * grid_width + x] & 0xFF
 	return -1
 
 func _step_simulation():
@@ -1807,19 +1804,20 @@ func _step_simulation():
 				if Engine.get_frames_drawn() % 2 == 0: sweep = range(x_end - 1, x_start - 1, -1)
 				for x in sweep:
 					var idx = y * grid_width + x
-					var mat_id = cells[idx]
-					if mat_id == 0: continue
+					var raw_id = cells[idx]
+					var pure_id = raw_id & 0xFF
+					if pure_id == 0: continue
 					
 					var tags = tags_array[idx]
 					
-					if mat_id == 7: # Primed Explosives (Processed in Pass 3)
+					if pure_id == 7: # Primed Explosives (Processed in Pass 3)
 						_activate_chunk(x, y) # Keep alive for timer
 						continue
 
 					if (tags & SandboxMaterial.Tags.GRAV_UP):
-						_process_interactions(x, y, idx, mat_id, tags)
-						if cells[idx] == mat_id and mat_id != 28:
-							_move_particle(x, y, mat_id, tags, -1)
+						_process_interactions(x, y, idx, raw_id, pure_id, tags)
+						if cells[idx] == raw_id and pure_id != 28:
+							_move_particle(x, y, raw_id, tags, -1)
 
 	# Pass 3: FALLING/STATIC particles (Bottom-to-Top by Active Chunks)
 	for cy in range(chunks_y - 1, -1, -1):
@@ -1844,14 +1842,15 @@ func _step_simulation():
 				var count = x_end - x_start
 				while count > 0:
 					var idx = y * grid_width + x
-					var mid = cells[idx]
+					var raw_id = cells[idx]
+					var pure_id = raw_id & 0xFF
 					
 					# FASTER INLINE FLOW (Avoid most calls)
-					if mid > 0: # Process all active materials (including primed explosives)
+					if pure_id > 0: # Process all active materials
 						var tags = tags_array[idx]
 						if not (tags & SandboxMaterial.Tags.GRAV_UP): 
-							_process_interactions(x, y, idx, mid, tags)
-							if cells[idx] == mid and not (tags & SandboxMaterial.Tags.GRAV_STATIC):
+							_process_interactions(x, y, idx, raw_id, pure_id, tags)
+							if cells[idx] == raw_id and not (tags & SandboxMaterial.Tags.GRAV_STATIC):
 								# GRAVITY INLINED for speed
 								var should_move = true
 								if (tags & SandboxMaterial.Tags.GRAV_SLOW) and randf() > 0.3:
@@ -1862,20 +1861,20 @@ func _step_simulation():
 									var ny = y + 1
 									if ny < dynamic_grid_height:
 										var n_idx = ny * grid_width + x
-										if cells[n_idx] == 0: # Down
+										if (cells[n_idx] & 0xFF) == 0: # Down
 											_swap_cells(x, y, x, ny)
 										elif (tags & SandboxMaterial.Tags.LIQUID):
 											# Liquis flow side-ways too
 											if randf() > 0.5:
-												if x < grid_width - 1 and cells[idx + 1] == 0: _swap_cells(x, y, x + 1, y)
-												elif x > 0 and cells[idx - 1] == 0: _swap_cells(x, y, x - 1, y)
+												if x < grid_width - 1 and (cells[idx + 1] & 0xFF) == 0: _swap_cells(x, y, x + 1, y)
+												elif x > 0 and (cells[idx - 1] & 0xFF) == 0: _swap_cells(x, y, x - 1, y)
 										elif (tags & SandboxMaterial.Tags.POWDER):
 											# Powders move diagonally
 											var dx = 1 if randf() > 0.5 else -1
 											var nx = x + dx
 											if nx >= 0 and nx < grid_width:
 												var ni = ny * grid_width + nx
-												if cells[ni] == 0: _swap_cells(x, y, nx, ny)
+												if (cells[ni] & 0xFF) == 0: _swap_cells(x, y, nx, ny)
 
 								pass # Interaction already processed at top
 					x += x_dir
@@ -1900,7 +1899,7 @@ func _process_electricity():
 		if charge == 0: continue
 		
 		# Skip Priming Explosives (Timer handled in Interaction pass)
-		var mid = cells[i]
+		var mid = cells[i] & 0xFF
 		if mid == 7 or mid == 77 or mid == 71 or mid == 72:
 			continue
 		
@@ -1916,7 +1915,6 @@ func _process_electricity():
 		if charge == 100:
 			var x = i % grid_width
 			var y = i / grid_width
-			mid = cells[i]
 			var my_tags = material_tags_raw[mid]
 			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
 				# Scan neighbors for 0-charge conductors
@@ -1926,20 +1924,20 @@ func _process_electricity():
 						if nx < 0 or nx >= grid_width: continue
 						if nx == x and ny == y: continue
 						var n_idx = ny * grid_width + nx
-						var n_id = cells[n_idx]
-						if n_id <= 0: continue
+						var n_pid = cells[n_idx] & 0xFF
+						if n_pid <= 0: continue
 						var n_tags = tags_array[n_idx]
 						if (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)) and charge_array[n_idx] == 0:
 							charge_array[n_idx] = 101 # NEW PULSE (Wait 1 frame)
 							_activate_chunk(nx, ny)
 		
 		# 3. DECAY LOGIC (-5 per frame)
-		if (material_tags_raw[cells[i]] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
+		if (material_tags_raw[mid] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
 			charge_array[i] -= 5
 			if charge_array[i] > 100: charge_array[i] = 100
 			if charge_array[i] > 0:
 				_activate_chunk(i % grid_width, i / grid_width)
-		elif cells[i] == 7: # TNT logic (Leave 19 for main loop)
+		elif mid == 7: # TNT logic
 			charge_array[i] -= 5
 			if charge_array[i] > 0:
 				_activate_chunk(i % grid_width, i / grid_width)
@@ -1977,85 +1975,69 @@ func _swap_cells(x1, y1, x2, y2):
 	var c2 = charge_array[idx2]
 	
 	cells[idx1] = m2
-	tags_array[idx1] = material_tags_raw[m2]
+	tags_array[idx1] = material_tags_raw[m2 & 0xFF]
 	charge_array[idx1] = c2
 	
 	cells[idx2] = m1
-	tags_array[idx2] = material_tags_raw[m1]
+	tags_array[idx2] = material_tags_raw[m1 & 0xFF]
 	charge_array[idx2] = c1
 	
 	# Wake up chunks
 	_activate_chunk(x1, y1)
 	_activate_chunk(x2, y2)
 
-func _process_interactions(x, y, idx, mat_id, tags):
-	# PULSANT ELECTRICAL SOURCE (Wait for previous pulse to clear)
-	if mat_id == 9:
+func _process_interactions(x, y, idx, raw_id, pure_id, tags):
+	# PULSANT ELECTRICAL SOURCE
+	if pure_id == 9:
 		if charge_array[idx] == 0:
-			# Automatically start a new single pulse
 			charge_array[idx] = 101
 		
 	# FIRE AND HEAT REACTIONS
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
-		if mat_id == 3: is_fire_active = true # Sonido solo para el fuego
-		# Incendiary materials (Fire 3, Lava 11) extinguish or burn out
-		if mat_id == 3:
+		if pure_id == 3: is_fire_active = true 
+		if pure_id == 3:
 			if randf() < 0.1: _set_cell(x, y, 0)
-		elif mat_id == 14: # Coal burnout (Glowing Brazas)
+		elif pure_id == 14: # Coal burnout
 			is_fire_active = true
-			if randf() < 0.002: # 6x Faster (About 3-4s per pixel)
+			if randf() < 0.002: 
 				_set_cell(x, y, 0)
 				if _get_cell(x, y - 1) == 0: _set_cell(x, y - 1, 15)
-			if randf() < 0.1 and _get_cell(x, y-1) == 0: # 20x more fire
+			if randf() < 0.1 and _get_cell(x, y-1) == 0:
 				_set_cell(x, y - 1, 3)
 		
-		# Spreading fire to neighbors
 		_check_neighbors_for_reaction(x, y, true)
 
-	# FLAMMABLE / REACTIVE MATERIALS (Independent of being incendiary themselves)
-	
-	# Wood (16) or Coal (14) or Fireworks (18) or Petro (4) ignition
+	# FLAMMABLE / REACTIVE MATERIALS
 	if (tags & SandboxMaterial.Tags.FLAMMABLE) or (tags & SandboxMaterial.Tags.EXPLOSIVE):
 		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY) or charge_array[idx] > 50:
-			if mat_id == 16: # Wood (50/50 Split Brasa vs Consumption)
+			if pure_id == 16: # Wood
 				if randf() < 0.5: 
 					_set_cell(x, y, 14 if randf() < 0.5 else 3)
-			elif mat_id == 4: # Petro catches fire
+			elif pure_id == 4: # Petro
 				if randf() < 0.1: _set_cell(x, y, 3)
-			
-			# EXPLOSIVE IGNITION (TNT/Gunpowder) - Delay with spectral flash
 			elif (tags & SandboxMaterial.Tags.EXPLOSIVE):
 				var flags = 0
-				# PRIORITIZE ACID: Using tag neighbor catches liquid (13) and sparks (44)
 				if _has_tag_neighbor(x, y, SandboxMaterial.Tags.ACID):
 					flags = 64
 				elif charge_array[idx] > 50 or _count_neighbor_id(x, y, 9) > 0:
-					flags = 128 # ELECTRIC IGNITION
-				_prime_explosive(x, y, mat_id, flags)
-			
-			# FIREWORKS (Independent of Explosives)
-			elif mat_id == 18:
-				_set_cell(x, y, 19) # Transform to Fuse
+					flags = 128
+				_prime_explosive(x, y, pure_id, flags)
+			elif pure_id == 18:
+				_set_cell(x, y, 19)
 				charge_array[idx] = randi_range(20, 70)
 				_play_action_sound("fuse_burning", 0.1)
 	
-	# FUSE LOGIC (Standalone Fireworks) - Movido el sonido al momento de encendido en el bloque superior
-	if mat_id == 19: 
+	if pure_id == 19: 
 		charge_array[idx] -= 1
-		# Visual flash (Pink/White)
-		if Engine.get_frames_drawn() % 4 == 0:
-			_set_cell(x, y, 18)
-		elif Engine.get_frames_drawn() % 4 == 2:
-			_set_cell(x, y, 19)
-		
-		if charge_array[idx] <= 0:
-			_launch_firework(x, y)
+		if Engine.get_frames_drawn() % 4 == 0: _set_cell(x, y, 18)
+		elif Engine.get_frames_drawn() % 4 == 2: _set_cell(x, y, 19)
+		if charge_array[idx] <= 0: _launch_firework(x, y)
 
-	elif mat_id == 7 or mat_id == 77 or mat_id == 71 or mat_id == 72: # Primed Explosive (Timer + Visual Flash)
+	elif pure_id == 7 or pure_id == 77 or pure_id == 71 or pure_id == 72: 
 		var charge = charge_array[idx]
-		var timer = charge & 63 # Use 6 bits for timer (up to 64 frames)
-		var flags = charge & 192 # Keep top 2 bits for Ignition Type (128=Elec, 64=Acid)
-		var is_gunpowder = (mat_id == 71 or mat_id == 72)
+		var timer = charge & 63
+		var flags = charge & 192
+		var is_gunpowder = (pure_id == 71 or pure_id == 72)
 		var base_id = 77 if not is_gunpowder else 72
 		var prime_id = 7 if not is_gunpowder else 71
 		
@@ -2064,56 +2046,40 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			_explode(x, y, 12 if not is_gunpowder else 8, "explosion", flags)
 			return
 		
-		# Restore timer and flags
 		charge_array[idx] = flags | timer
-		
-		# Visual Flash: Alternamos entre los dos IDs del set de cebado
-		if Engine.get_frames_drawn() % 10 < 5:
-			cells[idx] = prime_id # White
-		else:
-			cells[idx] = base_id # Red/Gray (Primed version)
-		
+		if Engine.get_frames_drawn() % 10 < 5: cells[idx] = (cells[idx] & 0xFFFFFF00) | prime_id
+		else: cells[idx] = (cells[idx] & 0xFFFFFF00) | base_id
 		_activate_chunk(x, y)
 
-	# --- CRYOGENICS (ICE ID 60) ---
-	if mat_id == 60:
-		# 1. Melt if near heat (Incendiary)
+	# --- CRYOGENICS ---
+	if pure_id == 60:
 		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY):
-			if randf() < 0.2:
-				_set_cell(x, y, 2) # Become Water
-				return
-		
-		# 2. Freeze adjacent Water (Only 1% per frame for cool slow growth)
+			if randf() < 0.2: _set_cell(x, y, 2); return
 		if randf() < 0.05:
 			for ny in range(y - 1, y + 2):
 				if ny < 0 or ny >= grid_height: continue
 				for nx in range(x - 1, x + 2):
 					if nx < 0 or nx >= grid_width: continue
 					if nx == x and ny == y: continue
-					if cells[ny * grid_width + nx] == 2: # WATER
-						_set_cell(nx, ny, 60) # FREEZE!
-						return
-
-	# --- CRYOGENICS (ICE ID 70) ---
-	if mat_id == 70:
-		# 1. Thermal Shock / Vaporization
+					if (cells[ny * grid_width + nx] & 0xFF) == 2:
+						_set_cell(nx, ny, 60); return
+						
+	if pure_id == 70:
 		for ny in range(y - 1, y + 2):
 			if ny < 0 or ny >= grid_height: continue
 			for nx in range(x - 1, x + 2):
 				if nx < 0 or nx >= grid_width: continue
 				if nx == x and ny == y: continue
 				var n_idx = ny * grid_width + nx
-				var n_id = cells[n_idx]
+				var n_pid = cells[n_idx] & 0xFF
 				
-				if n_id == 11: # LAVA (Extreme Heat)
-					_set_cell(x, y, 17) # Vaporize Ice -> Cloud
-					_set_cell(nx, ny, 12) # Cool Lava -> Obsidian
-					return
-				elif n_id == 3: # FIRE (High Heat)
+				if n_pid == 11: 
+					_set_cell(x, y, 17); _set_cell(nx, ny, 12); return
+				elif n_pid == 3:
 					_set_cell(x, y, 2) # Melt Ice -> Water
 					_set_cell(nx, ny, 15) # Extinguish Fire -> Smoke
 					return
-				elif n_id == 15 or n_id == 17: # SMOKE/CLOUD (Warm Air)
+				elif n_pid == 15 or n_pid == 17: # SMOKE/CLOUD (Warm Air)
 					if randf() < 0.02: # Slow melting
 						_set_cell(x, y, 2) # Melt Ice -> Water
 						return
@@ -2125,7 +2091,7 @@ func _process_interactions(x, y, idx, mat_id, tags):
 				for nx in range(x - 1, x + 2):
 					if nx < 0 or nx >= grid_width: continue
 					if nx == x and ny == y: continue
-					if cells[ny * grid_width + nx] == 2: # WATER
+					if (cells[ny * grid_width + nx] & 0xFF) == 2: # WATER
 						_set_cell(nx, ny, 70) # FREEZE!
 						return
 
@@ -2150,14 +2116,14 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			_set_cell(x, y, 0); return
 			
 		if _get_cell(nx, ny) == 0:
-			# Advance with inertia (Double duration: decrement energy every 2 frames)
+			# Advance with inertia
 			var new_energy = energy
 			if Engine.get_frames_drawn() % 2 == 0: new_energy -= 1
 			charge_array[idx] = (new_energy << 3) | dir_idx
 			_swap_cells(x, y, nx, ny)
 		else:
 			# IMPACT: Turn into real liquid acid if it's an acid spark, otherwise vanish
-			if mat_id == 44: _set_cell(x, y, 13)
+			if pure_id == 44: _set_cell(x, y, 13)
 			else: _set_cell(x, y, 0)
 		return
 
@@ -2192,11 +2158,8 @@ func _process_interactions(x, y, idx, mat_id, tags):
 	# --- BIOLOGICAL INTERACTIONS (PLANTS & SEEDS) ---
 	# OPTIMIZATION: Only process 5% of biological pixels per frame to save FPS
 	if randf() < 0.05:
-		# 1. Gunpowder logic handled generically by EXPLOSIVE/ELECTRIC_ACTIVATED tags
-		pass
-		
-		# 2. PLANT GROWTH (mat_id 21 - Grass)
-		if mat_id == 21:
+		# 2. PLANT GROWTH (pure_id 21 - Grass)
+		if pure_id == 21:
 			# STRICT: Must detect water to grow
 			if _has_id_within_oval(x, y, 2, 20, 10) or current_weather > 0:
 				if randf() < 0.3:
@@ -2209,13 +2172,13 @@ func _process_interactions(x, y, idx, mat_id, tags):
 							_set_cell(gx, gy, 21)
 	
 		# 3. MOISTURE ABSORPTION (ID 1 -> 22, ID 6 -> 23)
-		elif mat_id == 1 or mat_id == 6:
+		elif pure_id == 1 or pure_id == 6:
 			# Spread moisture more horizontally
 			if current_weather > 0 or _has_id_within_oval(x, y, 2, 20, 10):
-				_set_cell(x, y, 22 if mat_id == 1 else 23) # Transition to wet
+				_set_cell(x, y, 22 if pure_id == 1 else 23) # Transition to wet
 		
 		# 4. SPONTANEOUS GROWTH ON WET SOIL
-		elif mat_id == 22 or mat_id == 23:
+		elif pure_id == 22 or pure_id == 23:
 			var has_water = _has_id_within_oval(x, y, 2, 15, 10) or current_weather > 0
 			if has_water:
 				# ROOT LOGIC: Soil only turns to Grass if connected AND NOT crowded (< 3 neighbours)
@@ -2238,10 +2201,10 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			else:
 				# Dry out
 				if current_weather == 0:
-					if randf() < 0.1: _set_cell(x, y, 1 if mat_id == 22 else 6)
+					if randf() < 0.1: _set_cell(x, y, 1 if pure_id == 22 else 6)
 
-		# 5. VINE GROWTH (mat_id 24) - Vertical upward growth
-		elif mat_id == 24:
+		# 5. VINE GROWTH (pure_id 24) - Vertical upward growth
+		elif pure_id == 24:
 			var h_left = charge_array[idx]
 			if h_left > 0 and randf() < 0.3: # Faster growth speed
 				var tid_up = _get_cell(x, y-1)
@@ -2250,14 +2213,14 @@ func _process_interactions(x, y, idx, mat_id, tags):
 					charge_array[idx - grid_width] = h_left - 1 # Pass height gene (4-8)
 					charge_array[idx] = 0 # Vine is now "mature"
 		
-	# 6. VOLCANO LOGIC (mat_id 27, 28, 29)
-	if mat_id == 27: # Static block
+	# 6. VOLCANO LOGIC (pure_id 27, 28, 29)
+	if pure_id == 27: # Static block
 		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY) or charge_array[idx] > 50:
 			_set_cell(x, y, 29) # Transform to ACTIVE BASE
 			# Life duration for 3-5 shots (Approx 80-120 frames)
 			charge_array[idx] = randi_range(80, 120)
 	
-	elif mat_id == 29: # Erupting Base
+	elif pure_id == 29: # Erupting Base
 		is_volcano_active = true
 		charge_array[idx] -= 1
 		# Launch projectile every 20-25 frames
@@ -2283,99 +2246,39 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			_draw_circle(x, y, 5, 11) # Burnout cluster (Slightly bigger)
 			_explode(x, y, 10, "volcan_burst") # Bigger final burnout
 
-	elif mat_id == 28: # Ascending projectile
+	elif pure_id == 28: # Ascending projectile
 		is_volcano_active = true
-		# FASTER MOVEMENT: Move up 3px per frame manually
 		var current_fuel = charge_array[idx]
-		
 		for i in range(3):
-			# Detonate if energy spent
 			if current_fuel <= 0:
-				_draw_circle(x, y, 6, 11) # Finale: MASSIVE cluster of LAVA
-				_draw_circle(x, y, 5, 15) # Reduced cloud of SMOKE (from 10 to 5)
-				_explode(x, y, 12, "volcan_burst") # Huge Final burst
-				
-				# Finale FIREWORKS: 50+ Bright Sparks
+				_draw_circle(x, y, 6, 11) 
+				_draw_circle(x, y, 5, 15) 
+				_explode(x, y, 12, "volcan_burst")
 				for j in range(50):
-					visual_sparks.append({
-						"x": float(x), "y": float(y),
-						"vx": randf_range(-120, 120), "vy": randf_range(-150, 50),
-						"color": [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(),
-						"life": randf_range(0.4, 0.8)
-					})
+					visual_sparks.append({"x": float(x), "y": float(y),"vx": randf_range(-120, 120), "vy": randf_range(-150, 50),"color": [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(),"life": randf_range(0.4, 0.8)})
 				return
-			
 			var next_y = y - 1
-			if next_y < 5: # Ceiling safety
-				_set_cell(x, y, 11)
-				_explode(x, y, 6)
-				return
-			
+			if next_y < 5: _set_cell(x, y, 11); _explode(x, y, 6); return
 			var next_id = _get_cell(x, next_y)
-			# Attempt move: Allow passing through Empty, Fire, Elec, Lava, and Smoke
 			if next_id == 0 or next_id == 3 or next_id == 9 or next_id == 11 or next_id == 15:
-				# 1. First, move the projectile to the new spot
 				_swap_cells(x, y, x, next_y)
-				
-				# 2. Leave trail of ELECTRICITY (9), FIRE (3) and SMOKE (15)
-				# Reduced smoke probability: (15 if rand < 0.2 instead of 0.4)
 				var trail_id = 15 if randf() < 0.2 else (9 if randf() < 0.5 else 3)
 				_set_cell(x, y, trail_id)
-				
-				# 2.5 MASSIVE MAGMA LEAK: Triple lava per move step
 				for j in range(3):
-					var lx = x + randi_range(-2, 2)
-					var ly = y + randi_range(-1, 1)
-					if _get_cell(lx, ly) == 0 or _get_cell(lx, ly) == 15:
-						_set_cell(lx, ly, 11)
-				
-				# 3. Update current state to the new position
-				y = next_y
-				idx = y * grid_width + x
-				current_fuel -= 1
-				charge_array[idx] = current_fuel
-				
-				# 4. GHOST SPARKS (High-Density Electric Aura)
-				for j in range(12): # Increased density (12 sparks per sub-step!)
-					visual_sparks.append({
-						"x": float(x) + randf_range(-6, 6),
-						"y": float(y) + randf_range(0, 10),
-						"vx": randf_range(-60, 60),
-						"vy": randi_range(40, 100),
-						"color": [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(),
-						"life": randf_range(0.2, 0.5)
-					})
-			else:
-				# Blockage by real solids (Metal, Concrete, Earth)? Stop/Detonate
-				current_fuel = 0 # Force detonation
-				break
-
-		# Additional Visual Sparks (Cyber-Electric aesthetics)
+					var lx = x + randi_range(-2, 2); var ly = y + randi_range(-1, 1)
+					if _get_cell(lx, ly) == 0 or _get_cell(lx, ly) == 15: _set_cell(lx, ly, 11)
+				y = next_y; idx = y * grid_width + x; current_fuel -= 1; charge_array[idx] = current_fuel
+				for j in range(12): visual_sparks.append({"x": float(x) + randf_range(-6, 6),"y": float(y) + randf_range(0, 10),"vx": randf_range(-60, 60),"vy": randi_range(40, 100),"color": [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(),"life": randf_range(0.2, 0.5)})
+			else: current_fuel = 0; break
 		if randf() < 0.8:
 			var e_colors = [Color.YELLOW, Color.CYAN, Color.WHITE, Color("#FFFF33")]
-			for i in range(4):
-				visual_sparks.append({
-					"x": float(x) + randf_range(-3, 3),
-					"y": float(y + 1),
-					"vx": randf_range(-50, 50),
-					"vy": randf_range(20, 80),
-					"color": e_colors[randi() % e_colors.size()],
-					"life": randf_range(0.1, 0.4)
-				})
+			for i in range(4): visual_sparks.append({"x": float(x) + randf_range(-3, 3),"y": float(y + 1),"vx": randf_range(-50, 50),"vy": randf_range(20, 80),"color": e_colors[randi() % e_colors.size()],"life": randf_range(0.1, 0.4)})
 	
-	# 7. FRESH CEMENT HARDENING (mat_id 25) - Processed every frame for accuracy
-	if mat_id == 25:
-		# ... logic existing ...
-		pass
-	
-	# 7. FRESH CEMENT HARDENING (mat_id 25)
-	if mat_id == 25:
-		if charge_array[idx] == 0:
-			charge_array[idx] = randi_range(60, 120) # 1-2 seconds at 60fps
-		
+	# 7. FRESH CEMENT HARDENING 
+	if pure_id == 25:
+		if charge_array[idx] == 0: charge_array[idx] = randi_range(60, 120) 
 		charge_array[idx] -= 1
-		if charge_array[idx] <= 1:
-			_set_cell(x, y, 26) # Harden to Solid Cement
+		if charge_array[idx] <= 1: _set_cell(x, y, 26) 
 
 func _setup_npc_panel_node():
 	# If it exists but was lost during a UI refresh, we need to ensure it's in the tree
@@ -2596,7 +2499,7 @@ func _draw_npc_pixels(npc, override_mat = -1):
 			for ox in range(-1, 3):
 				var tx = sx + ox; var ty = sy + oy
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-					var tid = cells[ty * grid_width + tx]
+					var tid = cells[ty * grid_width + tx] & 0xFF
 					if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC): _set_cell(tx, ty, 0)
 		return
 	var is_dead = npc.hp <= 0; var is_flashing = npc.hit_flash > 0
@@ -2966,7 +2869,8 @@ func _check_npc_environment_damage(npc) -> bool:
 	var check_points = [p, p + Vector2i(1, 2), p + Vector2i(0, 4), p + Vector2i(0, 5), p + Vector2i(1, 5), p + Vector2i(-1, 2), p + Vector2i(2, 2)]
 	for pt in check_points:
 		if pt.x < 0 or pt.x >= grid_width or pt.y < 0 or pt.y >= dynamic_grid_height: continue
-		var tid = cells[pt.y * grid_width + pt.x]; var t_tags = material_tags_raw[tid]
+		var tid = cells[pt.y * grid_width + pt.x] & 0xFF
+		var t_tags = material_tags_raw[tid]
 		if (t_tags & SandboxMaterial.Tags.ACID):
 			npc.hp -= 3.5; npc.hit_flash = 5; npc.hit_type = "acid"; took_damage = true
 			if randf() < 0.4: visual_sparks.append({"x":float(pt.x)+randf_range(-2,2),"y":float(pt.y),"vx":randf_range(-10,10),"vy":randf_range(-40,-20),"color":Color("#39FF14"),"life":0.6})
@@ -2979,7 +2883,7 @@ func _check_npc_environment_damage(npc) -> bool:
 			if oy >= 0 and oy <= 4 and ox >= 0 and ox <= 1: continue
 			var tx = npc.pos.x + ox; var ty = npc.pos.y + oy
 			if tx < 0 or tx >= grid_width or ty < 0 or ty >= dynamic_grid_height: continue
-			var nid = cells[ty * grid_width + tx]
+			var nid = cells[ty * grid_width + tx] & 0xFF
 			if nid == 0 or nid == 15 or nid == 17: air_found = true; break
 		if air_found: break
 	if !air_found: npc.hp -= 3.0; npc.hit_flash = 4; took_damage = true
@@ -3048,7 +2952,7 @@ func _count_neighbor_id_radius(x, y, id, radius):
 
 func _prime_explosive(x, y, id, ignition_flags = 0):
 	if x < 0 or x >= grid_width or y < 0 or y >= grid_height: return
-	var idx = y * grid_width + x; var current_id = cells[idx]
+	var idx = y * grid_width + x; var current_id = cells[idx] & 0xFF
 	
 	# FAILSAVE: If it's touching Acid RIGHT NOW, force Acid ignition
 	if _has_tag_neighbor(x, y, SandboxMaterial.Tags.ACID):
