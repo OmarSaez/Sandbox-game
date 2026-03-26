@@ -141,8 +141,9 @@ var action_sfx = {
 }
 
 var last_action_times = {} # Para controlar la saturación de sonidos
+var emoji_layer: Control # Capa para los emojis flotantes
 var is_volcano_active = false 
-var is_fire_active = false
+var is_fire_active = false 
 
 var sfx_cache = {} # Cache for loaded AudioStreams
 
@@ -322,6 +323,12 @@ func _ready():
 	grid_width = floor(viewport_size.x / grid_scale)
 	grid_height = floor(viewport_size.y / grid_scale)
 	dynamic_grid_height = grid_height # Full initial
+	
+	# Emoji Layer Setup (Placed above texture display)
+	emoji_layer = Control.new()
+	emoji_layer.name = "EmojiLayer"
+	emoji_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(emoji_layer)
 	
 	# Update Display node size to match the grid exactly
 	$Display.custom_minimum_size = Vector2(grid_width * grid_scale, grid_height * grid_scale)
@@ -2489,8 +2496,26 @@ func _place_npc(x, y):
 		"cowardice": randf_range(0.15, 0.45), # Probabilidad personal de huir
 		"precision": randf_range(-0.6, 0.6), # Peor/Mejor puntería con arco
 		"heal_power": randf_range(15.0, 35.0), # Variación en fuerza de las curas médicas
-		"is_fire_variant": randf() < 0.05
+		"is_fire_variant": randf() < 0.05,
+		
+		# --- SISTEMA EMOCIONAL ---
+		"emoji_node": null,
+		"emoji_timer": 0.0,
+		"current_emoji": "",
+		"idle_emote_timer": randf_range(2.0, 5.0),
+		"has_spotted_enemy": false
 	}
+	
+	# Crear el Label del Emoji con mejor visibilidad
+	var emoji_lab = Label.new()
+	emoji_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	emoji_lab.add_theme_font_size_override("font_size", 16)
+	emoji_lab.add_theme_color_override("font_shadow_color", Color.BLACK)
+	emoji_lab.add_theme_constant_override("shadow_outline_size", 4)
+	emoji_lab.z_index = 20
+	emoji_layer.add_child(emoji_lab)
+	new_npc["emoji_node"] = emoji_lab
+	
 	new_npc["max_hp"] = new_npc["hp"]
 	active_npcs.append(new_npc)
 	_draw_npc_pixels(new_npc)
@@ -2560,6 +2585,32 @@ func _process_npcs(delta):
 	var dead_indices = []
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
+		
+		# 1. ACTUALIZAR POSICIÓN EMOJI
+		if is_instance_valid(npc.emoji_node):
+			var n_node = npc.emoji_node
+			# Corrección de Escala: Usar grid_scale para posicionar píxeles en pantalla
+			var world_pos = Vector2(npc.pos.x, npc.pos.y) * grid_scale
+			n_node.position = world_pos + Vector2(-4, -28) # Margen arriba de la cabeza
+			
+			# Lógica de visibilidad y timers de emoji
+			if npc.hp <= 0:
+				_set_npc_emoji(npc, "💀", -1) # Permanecer hasta morir
+			elif npc.get("morale_broken", false) and npc.get("is_fleeing", false) and npc.get("has_spotted_enemy", false):
+				# Solo llorar si hay pánico ACTIVO (Huyendo + Enemigo a la vista)
+				_set_npc_emoji(npc, "😭", -1)
+			elif npc.emoji_timer > 0:
+				npc.emoji_timer -= 0.05
+				if npc.emoji_timer <= 0:
+					n_node.text = ""
+					npc.current_emoji = ""
+			else:
+				# Vigilancia o Calma (Si no hay peligro inminente)
+				npc.idle_emote_timer -= 0.05
+				if npc.idle_emote_timer <= 0 and npc.get("current_emoji", "") == "":
+					_set_npc_emoji(npc, "👀", 2.0)
+					npc.idle_emote_timer = randf_range(8.0, 15.0)
+
 		if npc.hit_flash > 0: 
 			npc.hit_flash -= 1
 			if npc.hit_flash == 0: npc.hit_type = "none"
@@ -2589,8 +2640,10 @@ func _process_npcs(delta):
 						if heal_cd <= 0:
 							closest_ally.hp = min(closest_ally.hp + npc.get("heal_power", 20.0), closest_ally.get("max_hp", 100.0))
 							npc["attack_cooldown"] = 1.0; _play_action_sound("medic_heal")
+							_set_npc_emoji(npc, "💚", 1.0) # El médico muestra que está curando
 							if closest_ally.hp > closest_ally.get("max_hp", 100.0) * 0.3:
 								closest_ally["morale_broken"] = false; closest_ally["is_fleeing"] = false
+							_set_npc_emoji(closest_ally, "😊", 1.5)
 							for f in range(6): visual_sparks.append({"x":float(closest_ally.pos.x+randf_range(-3,3)),"y":float(closest_ally.pos.y+randf_range(-5,0)),"vx":0.0,"vy":randf_range(-35.0,-15.0),"color":Color.GREEN,"life":0.6})
 					else: npc.dir = 1 if closest_ally.pos.x > np.x else -1
 				else:
@@ -2598,10 +2651,18 @@ func _process_npcs(delta):
 					if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
 		elif npc.type != "miner":
 			target = _find_closest_enemy(npc, 250.0)
+			if target and !npc.get("morale_broken", false):
+				if !npc.get("has_spotted_enemy", false):
+					_set_npc_emoji(npc, "❗", 1.2)
+					npc["has_spotted_enemy"] = true
+			elif !target:
+				npc["has_spotted_enemy"] = false
+				
 			if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
 		var critical_hp = npc.get("max_hp", 100.0) * 0.3
 		if npc.hp <= critical_hp and not npc.get("morale_broken", false):
 			npc["morale_broken"] = true
+			_set_npc_emoji(npc, "😭", 3.0)
 			if randf() < npc.get("cowardice", 0.30):
 				npc["is_fleeing"] = true; npc["is_tower"] = false
 				var start_drop_x = np.x + (1 if npc.dir == -1 else 0)
@@ -2645,6 +2706,12 @@ func _process_npcs(delta):
 						if npc.miss_counter >= 3: npc.miss_counter = -40
 						npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
 		if npc.type == "miner":
+			# Lógica de Sabotaje (Alternar emojis)
+			if npc.get("mine_state", "") == "saboteur":
+				npc.emoji_timer = 0.5 # Forzar visbilidad rápida
+				if Engine.get_frames_drawn() % 40 < 20: _set_npc_emoji(npc, "⭐", 0.5)
+				else: _set_npc_emoji(npc, "😄", 0.5)
+				
 			var dig_speed = 0.15 if npc.hp < 100.0 else 0.05 
 			if npc.hit_flash == 5: npc.dir = -npc.dir
 			npc.dig_timer += dig_speed
@@ -2782,11 +2849,13 @@ func _process_npcs(delta):
 							elif !target_above: npc.dir = -npc.dir
 		npc.pos = np; _draw_npc_pixels(npc)
 		if npc.hp <= 0 and npc.hit_flash <= 0:
+			_set_npc_emoji(npc, "💀", 2.0)
 			_draw_npc_pixels(npc, 0); _play_action_sound("npc_death")
 			if npc.type == "miner" and npc.has("mine_state") and npc.mine_state == "saboteur":
 				for fx in range(-2, 3):
 					var f_idx = np.x + fx
 					if f_idx >= 0 and f_idx < grid_width: _set_cell(f_idx, np.y + 5, 3); _set_cell(f_idx, np.y - 1, 3)
+			if is_instance_valid(npc.emoji_node): npc.emoji_node.queue_free()
 			dead_indices.append(i)
 	dead_indices.sort(); dead_indices.reverse()
 	for idx in dead_indices: active_npcs.remove_at(idx)
@@ -2836,6 +2905,7 @@ func _miner_dig(npc, dig_down=false):
 			_set_cell(cx, cy, 0)
 
 func _shoot_arrow(npc, target):
+	if !npc.get("morale_broken", false): _set_npc_emoji(npc, "😡", 0.8)
 	_play_action_sound("archer_shoot"); var dx = float(target.pos.x - npc.pos.x); var dir = 1 if dx > 0 else -1; var aim_dy = float((target.pos.y + 2) - npc.pos.y); var speed_x = clamp(abs(dx) * 1.5, 90.0, 150.0); var vx = dir * speed_x; var t = abs(dx) / speed_x
 	if t < 0.1: t = 0.1
 	var arrow_gravity = 200.0; var vy = (aim_dy / t) - (0.5 * arrow_gravity * t); vy += npc.get("precision", 0.0) * 15.0; vy = clamp(vy, -280.0, 40.0)
@@ -2878,6 +2948,7 @@ func _find_closest_enemy(me, radar_range):
 	return closest
 
 func _attack_npc(attacker, victim):
+	if !attacker.get("morale_broken", false): _set_npc_emoji(attacker, "😡", 0.8)
 	victim.hp -= (15.0 * attacker.get("atk_dmg", 1.0)); victim.hit_flash = 5; victim.hit_type = "normal"
 	if attacker.get("is_fire_variant", false):
 		var fx = victim.pos.x + randi_range(0, 1); var fy = victim.pos.y + randi_range(2, 4)
@@ -2926,6 +2997,13 @@ func _check_npc_environment_damage(npc) -> bool:
 	if !air_found: npc.hp -= 3.0; npc.hit_flash = 4; took_damage = true
 	if took_damage: _play_action_sound("damage_npc", 0.4)
 	return took_damage
+
+func _set_npc_emoji(npc, emoji_text: String, duration: float = 2.0):
+	if !is_instance_valid(npc.get("emoji_node")): return
+	if npc.current_emoji == emoji_text: return # Avoid spamming same emoji
+	npc.emoji_node.text = emoji_text
+	npc.current_emoji = emoji_text
+	npc.emoji_timer = duration
 
 func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 	if gx < 0 or gx + 1 >= grid_width or gy < 0 or gy + 4 >= dynamic_grid_height: return false
