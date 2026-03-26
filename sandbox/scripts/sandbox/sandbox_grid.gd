@@ -443,60 +443,52 @@ func _ready():
 	# 29: Base de Volcan
 	_register_material(29, Color("#FF4500"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # Base de Volcan Activa
 
-	# --- NPC SYSTEM ---
-	# 1000: Guerrero
-	_register_material(1000, Color("1b977cff"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Guerrero
-	# 1001: Parte Gris
-	_register_material(1001, Color("717E80"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Parte Gris
-	# 1002: Parte Oscura
-	_register_material(1002, Color("1F1F1F"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Parte Oscura
-	# 1003: Piel
+	# --- NPC SYSTEM: GUERRERO (1000-1009) ---
+	_register_material(1000, Color("1b977cff"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Master
+	_register_material(1001, Color("717E80"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Cabeza
+	_register_material(1002, Color("1F1F1F"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Torso
 	_register_material(1003, Color("FFE2BD"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Piel
-	# 1004: Equipo Rojo
-	_register_material(1004, Color.RED, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Rojo
-	# 1005: Equipo Azul
-	_register_material(1005, Color.BLUE, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Azul
-	# 1006: Equipo Amarillo
-	_register_material(1006, Color.YELLOW, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Amarillo
-	# 1007: Equipo Verde
-	_register_material(1007, Color("#00FF00"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Verde
+	_register_material(1008, Color("717E80"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Zapatos
 	
-	# 1010: Maestro Arquero
-	_register_material(1010, Color("#228B22"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Maestro Arquero
-	# 1011: Tela Arquero
-	_register_material(1011, Color("#AA6F27"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Tela Arquero
-	# 1012: Flecha
-	_register_material(1012, Color("#D2B48C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Flecha
+	# EQUIPOS (1004-1007)
+	_register_material(1004, Color("E00000"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Rojo
+	_register_material(1005, Color("008EE6"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Azul
+	_register_material(1006, Color("FFD000"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Amarillo
+	_register_material(1007, Color("00E317"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Verde
 	
-	# --- MINER SYSTEM ---
-	_register_material(1020, Color("#555555"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Minero Maestro
-	_register_material(1021, Color("#FFD700"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Casco Minero
+	# --- NPC SYSTEM: ARQUERO (1010-1019) ---
+	_register_material(1010, Color("#228B22"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Master
+	_register_material(1011, Color("9C5B00"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Cabeza (Tela)
+	_register_material(1012, Color("D46E00"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Flecha
+	_register_material(1013, Color("FFBC78"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Piel Arquero
+	_register_material(1014, Color("9D00FF"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Torso Arquero
+	_register_material(1015, Color("#594E61"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Zapatos Arquero
+	
+	# --- NPC SYSTEM: MINERO (1020-1029) ---
+	_register_material(1020, Color("#555555"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Master
+	_register_material(1021, Color("#FFFB00"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Casco (Luz)
+	_register_material(1022, Color("7D522D"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Piel Minero
+	_register_material(1023, Color("#FF8D00"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Torso Minero
+	_register_material(1024, Color("#000000"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Zapatos Minero
 
-	# --- CUSTOM NPC DAMAGE COLORS (IDs 1030-1034) ---
-	# 1030: Color Daño Acido
-	_register_material(1030, npc_color_acid, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Daño Acido
-	# 1031: Color Daño Fuego
-	_register_material(1031, npc_color_fire, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Daño Fuego
-	# 1032: Color Daño Explosivo
-	_register_material(1032, npc_color_exp, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Daño Explosivo
-	# 1033: Color Golpe
-	_register_material(1033, npc_color_hit, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Golpe
-	# 1034: Color Muerte
-	_register_material(1034, npc_color_death, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Muerte
-	# 1035: Color Daño Eléctrico (Cyan/Yellow mix)
-	_register_material(1035, Color.CYAN, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Eléctrico
+	# --- NPC SYSTEM: MÉDICO (1040-1049) ---
+	_register_material(1040, Color("#EEEEEE"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Master/Uniforme
+	_register_material(1041, Color("#7A0000"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Cruz Roja
+	_register_material(1042, Color("FFA691"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Piel Médico
+	_register_material(1043, Color("#EEEEEE"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Torso Médico
+	_register_material(1044, Color("#FFFFFF"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Cabeza Médica
+	_register_material(1045, Color("#DEDEDE"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Zapatos Médico
 	
-	# --- CRYOGENIC SYSTEM ---
-	# 70: Ice (Light Cyan Static Solid)
+	# --- SISTEMA DE DAÑO Y HIT (1030-1035) ---
+	_register_material(1030, npc_color_acid, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(1031, npc_color_fire, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(1032, npc_color_exp, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(1033, npc_color_hit, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(1034, npc_color_death, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(1035, Color.CYAN, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+
+	# --- CRYOGENIC SYSTEM (70-72) ---
 	_register_material(70, Color("#bbe0fcff"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
-
-	# --- MEDIC SYSTEM ---
-	# 1040: Medic Uniform (White)
-	_register_material(1040, Color("#EEEEEE"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	# 1041: Medic Cross (Red)
-	_register_material(1041, Color("#FF1111"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	
-	# --- PRIMED EXPLOSIVES (Flashing States) ---
 	_register_material(71, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC)
 	_register_material(72, Color("#6B6A66"), SandboxMaterial.Tags.GRAV_STATIC)
 
@@ -2511,36 +2503,55 @@ func _draw_npc_pixels(npc, override_mat = -1):
 				var tx = sx + ox; var ty = sy + oy
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var tid = cells[ty * grid_width + tx] & 0xFFFF
-					# OPTIMIZATION: Solo limpia si es necesario
 					if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC): _set_cell(tx, ty, 0)
 		return
+		
 	var is_dead = npc.hp <= 0; var is_flashing = npc.hit_flash > 0
 	if is_flashing and not is_dead:
 		sx += randi_range(-1, 1); sy += randi_range(-1, 1)
 	elif is_dead:
 		sy += 2; sx += 1 if (npc.dir > 0) else -1
 		if (npc.hit_flash % 2 == 0): override_mat = 0
-	var team_mat = 1004 + npc.team; var is_archer = npc.type == "archer"; var is_miner = npc.type == "miner"; var is_medic = npc.type == "medic"
-	var m_head = (1011 if is_archer else (1020 if is_miner else (1040 if is_medic else 1001))) if override_mat == -1 else override_mat
-	var m_skin = 1003 if override_mat == -1 else override_mat
-	var m_body = (1010 if is_archer else (1020 if is_miner else (1040 if is_medic else 1002))) if override_mat == -1 else override_mat
-	var m_legs = (1020 if is_miner else (1040 if is_medic else 1001)) if override_mat == -1 else override_mat
-	var m_team = team_mat if override_mat == -1 else override_mat
-	var m_helmet = (1021 if is_miner else (1041 if is_medic else 1001)) if override_mat == -1 else override_mat
-	if is_flashing and override_mat == -1:
-		var f_mat = 1032
-		if is_dead: f_mat = 1034
+		
+	# 1. Definir materiales por Clase (Dedicados para personalización)
+	var m_head = 1001; var m_skin = 1003; var m_torso = 1002; var m_shoes = 1008
+	var team_mat = 1004 + npc.team
+	
+	if npc.type == "archer":
+		m_head = 1011; m_skin = 1013; m_torso = 1014; m_shoes = 1015
+	elif npc.type == "miner":
+		m_head = 1021; m_skin = 1022; m_torso = 1023; m_shoes = 1024
+	elif npc.type == "medic":
+		m_head = 1044; m_skin = 1042; m_torso = 1043; m_shoes = 1045
+	
+	# 2. Aplicar Overrides (Daño/Muerte)
+	if override_mat != -1:
+		m_head = override_mat; m_skin = override_mat; m_torso = override_mat; m_shoes = override_mat; team_mat = override_mat
+	elif is_flashing:
+		var f_mat = 1033; if is_dead: f_mat = 1034
 		elif npc.hit_type == "acid": f_mat = 1030
 		elif npc.hit_type == "fire": f_mat = 1031
 		elif npc.hit_type == "explosive": f_mat = 1032
 		elif npc.hit_type == "electric": f_mat = 1035
-		else: f_mat = 1033
-		m_head = f_mat; m_skin = f_mat; m_body = f_mat; m_legs = f_mat; m_team = f_mat; m_helmet = f_mat
-	_set_cell(sx, sy, m_head if not is_miner else m_helmet); _set_cell(sx+1, sy, m_skin)
-	_set_cell(sx, sy+1, m_head); _set_cell(sx+1, sy+1, m_head)
-	_set_cell(sx, sy+2, m_body); _set_cell(sx+1, sy+2, m_team)
-	_set_cell(sx, sy+3, m_team); _set_cell(sx+1, sy+3, m_body)
-	_set_cell(sx, sy+4, m_legs); _set_cell(sx+1, sy+4, m_legs)
+		m_head = f_mat; m_skin = f_mat; m_torso = f_mat; m_shoes = f_mat; team_mat = f_mat
+		
+	# 3. SET PIXELS (2x5 Grid)
+	# Fila 0: Cabeza x2 (Casco cubriendo la parte superior)
+	_set_cell(sx, sy, m_head); _set_cell(sx+1, sy, m_head)
+	# Fila 1: Cabeza + Piel
+	_set_cell(sx, sy+1, m_head); _set_cell(sx+1, sy+1, m_skin)
+	# Fila 2 & 3: Torso (Mezcla de Color de Clase y Color de Equipo)
+	if npc.type == "medic" and override_mat == -1 and !is_flashing:
+		_set_cell(sx, sy+2, 1041); _set_cell(sx+1, sy+2, 1041)       # Torso arriba: Franja Médica (ID 1041)
+		_set_cell(sx, sy+3, team_mat); _set_cell(sx+1, sy+3, team_mat) # Torso abajo: Color Equipo
+	elif npc.type == "archer" and override_mat == -1 and !is_flashing:
+		_set_cell(sx, sy+2, team_mat); _set_cell(sx+1, sy+2, team_mat) # Torso arriba: Equipo Completo
+		_set_cell(sx, sy+3, team_mat); _set_cell(sx+1, sy+3, team_mat) # Torso abajo: Equipo Completo
+	else:
+		_set_cell(sx, sy+2, m_torso); _set_cell(sx+1, sy+2, team_mat) # Mezcla clase/equipo
+		_set_cell(sx, sy+3, team_mat); _set_cell(sx+1, sy+3, m_torso)
+	# Fila 4: Zapatos
+	_set_cell(sx, sy+4, m_shoes); _set_cell(sx+1, sy+4, m_shoes)
 
 func _process_npcs(delta):
 	npc_update_timer += delta
