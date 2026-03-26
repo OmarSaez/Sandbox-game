@@ -2651,15 +2651,18 @@ func _process_npcs(delta):
 					if next_y >= dynamic_grid_height - 15:
 						if npc.mine_state != "saboteur":
 							npc.mine_state = "saboteur"; npc["saboteur_start_x"] = np.x; npc["saboteur_bounces"] = 0; npc.dir = 1 if randf() > 0.5 else -1
-						if npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2:
-							var diff = npc.saboteur_start_x - np.x
-							if abs(diff) <= 2:
-								for fx in range(-2, 3):
-									var f_idx = np.x + fx
-									if f_idx >= 0 and f_idx < grid_width: _set_cell(f_idx, np.y + 5, 3); _set_cell(f_idx, np.y - 1, 3)
-								npc.hp = 0; npc.hit_flash = 10
-							else: npc.dir = sign(diff) if diff != 0 else npc.dir
+						
 						next_y = np.y; next_x = np.x + npc.dir
+					
+					# PRIORITY SABOTAGE MISSION: If bounces >= 3, always explode regardless of height
+					if npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 3:
+						for fx in range(-2, 3):
+							var f_idx = np.x + fx
+							if f_idx >= 0 and f_idx < grid_width: 
+								_set_cell(f_idx, np.y + 5, 3) 
+								_set_cell(f_idx, np.y - 1, 3)
+						npc.hp = 0; npc.hit_flash = 10
+						continue 
 					var old_dir = npc.dir
 					if next_x < 5 or next_x > grid_width - 5: hit_wall = true; npc.dir = -npc.dir
 					elif _can_npc_fit(next_x, next_y, npc): np.x = next_x ; np.y = next_y
@@ -2675,7 +2678,7 @@ func _process_npcs(delta):
 									if wall_x2 >= 0 and wall_x2 < grid_width: _set_cell(wall_x2, wy, 16)
 						if npc.has("mine_state") and npc.mine_state == "saboteur":
 							if not npc.has("saboteur_bounces"): npc["saboteur_bounces"] = 0
-							if npc.saboteur_bounces < 2: npc.saboteur_bounces += 1
+							if npc.saboteur_bounces < 4: npc.saboteur_bounces += 1
 		if not npc.has("is_tower"): npc["is_tower"] = false
 		if npc.is_tower:
 			if target != null: npc.dir = 0
@@ -2784,34 +2787,31 @@ func _miner_dig(npc, dig_down=false):
 	var ty_end = npc.pos.y + 5 + dy_offset
 	var beam_len = 3 if dig_down else 6
 	var is_saboteur = npc.has("mine_state") and npc.mine_state == "saboteur"
-	var is_returning = is_saboteur and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2
 	var c_mat = 16 
 
-	if not is_returning:
-		var tx_c = npc.pos.x + (npc.dir * 3)
-		for ox in range(0, beam_len):
-			var wx = tx_c + (ox * npc.dir)
-			if wx < 0 or wx >= grid_width: continue
-			if ty_start >= 0:
-				var mountain_ahead = false
-				for rx in range(0, 4):
-					var r_check = wx + (rx * npc.dir)
-					if r_check >= 0 and r_check < grid_width:
-						var look_id = _get_cell(r_check, ty_start)
-						if look_id != 0 and look_id != c_mat: mountain_ahead = true; break
-				if mountain_ahead or is_saboteur:
-					_set_cell(wx, ty_start, c_mat)
-					if !dig_down and ty_start - 1 >= 0: _set_cell(wx, ty_start - 1, c_mat)
-	var f_mat = 5 if is_saboteur else 16
-	if not is_returning:
-		var tx_f = npc.pos.x - (npc.dir * 2) 
-		var f_len = 6
-		for ox in range(0, f_len):
-			var wx = tx_f + (ox * npc.dir)
-			if wx < 0 or wx >= grid_width: continue
-			if ty_end < dynamic_grid_height:
-				_set_cell(wx, ty_end, f_mat)
-				if !dig_down and ty_end + 1 < dynamic_grid_height: _set_cell(wx, ty_end + 1, f_mat)
+	var tx_c = npc.pos.x + (npc.dir * 3)
+	for ox in range(0, beam_len):
+		var wx = tx_c + (ox * npc.dir)
+		if wx < 0 or wx >= grid_width: continue
+		if ty_start >= 0:
+			var mountain_ahead = false
+			for rx in range(0, 4):
+				var r_check = wx + (rx * npc.dir)
+				if r_check >= 0 and r_check < grid_width:
+					var look_id = _get_cell(r_check, ty_start)
+					if look_id != 0 and look_id != c_mat: mountain_ahead = true; break
+			if mountain_ahead or is_saboteur:
+				_set_cell(wx, ty_start, c_mat)
+				if !dig_down and ty_start - 1 >= 0: _set_cell(wx, ty_start - 1, c_mat)
+	var f_mat = 5 if is_saboteur else 16 # Piso TNT o Madera normal
+	var tx_f = npc.pos.x - (npc.dir * 2) 
+	var f_len = 6
+	for ox in range(0, f_len):
+		var wx = tx_f + (ox * npc.dir)
+		if wx < 0 or wx >= grid_width: continue
+		if ty_end < dynamic_grid_height:
+			_set_cell(wx, ty_end, f_mat)
+			if !dig_down and ty_end + 1 < dynamic_grid_height: _set_cell(wx, ty_end + 1, f_mat)
 	for dx in range(0, 4):
 		for dy in range(ty_start + 1, ty_end):
 			var cx = npc.pos.x + (dx * npc.dir); var cy = dy 
