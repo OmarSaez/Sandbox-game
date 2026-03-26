@@ -195,7 +195,8 @@ var tr = {
 		"team_blue": "🔵 Azul",
 		"team_yellow": "🟡 Amarillo",
 		"team_green": "🟢 Verde",
-		"ice": "Hielo"
+		"ice": "Hielo",
+		"support": "💎 Apoya al Creador (Anuncio)"
 	},
 	"en": {
 		"disasters": "🌪️ Disasters",
@@ -247,7 +248,8 @@ var tr = {
 		"team_blue": "🔵 Blue",
 		"team_yellow": "🟡 Yellow",
 		"team_green": "🟢 Green",
-		"ice": "Ice"
+		"ice": "Ice",
+		"support": "💎 Support Creator (Ad)"
 	}
 }
 
@@ -875,13 +877,45 @@ func _setup_tools_ui():
 		brush_radius = brush_sizes[l]
 		_update_highlights()
 	)
+	# 1. SUPPORT CREATOR BUTTON (AD)
+	var support_btn = Button.new()
+	support_btn.text = tr[current_language]["support"]
+	support_btn.custom_minimum_size = Vector2(0, 60 * s) 
+	support_btn.add_theme_font_size_override("font_size", 16 * s)
 	
-	# PAUSE BUTTON
+	var support_style = StyleBoxFlat.new()
+	support_style.bg_color = Color(0.2, 0.4, 0.2, 1.0) # Nice Emerald Green
+	support_style.border_width_left = 2; support_style.border_width_top = 2
+	support_style.border_width_right = 2; support_style.border_width_bottom = 2
+	support_style.border_color = Color.GOLD
+	support_style.corner_radius_top_left = 8; support_style.corner_radius_top_right = 8
+	support_style.corner_radius_bottom_left = 8; support_style.corner_radius_bottom_right = 8
+	
+	support_btn.add_theme_stylebox_override("normal", support_style)
+	support_btn.add_theme_stylebox_override("hover", support_style)
+	support_btn.add_theme_stylebox_override("pressed", support_style)
+	support_btn.add_theme_color_override("font_color", Color.GOLD)
+
+	support_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		if Engine.has_singleton("PoingGodotAdMob"):
+			AdMobManager.show_interstitial()
+		else:
+			print("DEBUG: Anuncio apoyo (PC)")
+	)
+	ui_elements["support_btn"] = support_btn
+	v_box.add_child(support_btn)
+
+	# 2. PAUSE BUTTON
 	var pause_btn = Button.new()
 	pause_btn.text = tr[current_language]["play"] if is_paused else tr[current_language]["pause"]
 	pause_btn.custom_minimum_size = Vector2(0, 50 * s) # SCALED
 	pause_btn.add_theme_font_size_override("font_size", 16 * s) # SCALED
 	pause_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		if Engine.has_singleton("PoingGodotAdMob"):
+			AdMobManager.check_and_show_interstitial("pause") 
+		
 		is_paused = !is_paused
 		pause_btn.text = tr[current_language]["play"] if is_paused else tr[current_language]["pause"]
 		var players = [weather_player, quake_player, tornado_player, tsunami_player, firework_player, ascent_player, volcano_loop_player, fire_loop_player]
@@ -892,16 +926,19 @@ func _setup_tools_ui():
 	ui_elements["pause_btn"] = pause_btn
 	v_box.add_child(pause_btn)
 
-	# DIRECT RESET BUTTON (Bottom of Tools)
-	var reset_btn = Button.new()
-	reset_btn.text = tr[current_language]["reset"]
-	reset_btn.custom_minimum_size = Vector2(0, 50 * s) # SCALED
-	reset_btn.add_theme_font_size_override("font_size", 16 * s) # SCALED
-	reset_btn.pressed.connect(func():
+	# 3. DIRECT RESET BUTTON (Bottom of Tools)
+	var reset_btn_node = Button.new() # Named local variable to avoid conflict with field
+	reset_btn_node.text = tr[current_language]["reset"]
+	reset_btn_node.custom_minimum_size = Vector2(0, 50 * s)
+	reset_btn_node.add_theme_font_size_override("font_size", 16 * s)
+	reset_btn_node.pressed.connect(func():
+		_play_action_sound("ui_click")
+		if Engine.has_singleton("PoingGodotAdMob"):
+			AdMobManager.check_and_show_interstitial("reset")
 		_clear_all()
 	)
-	ui_elements["reset_btn"] = reset_btn
-	v_box.add_child(reset_btn)
+	ui_elements["reset_btn"] = reset_btn_node
+	v_box.add_child(reset_btn_node)
 
 func _setup_disaster_ui():
 	var s = _get_ui_scale()
@@ -1060,6 +1097,10 @@ func _refresh_ui_text():
 			node_data.text = tr[current_language]["reset"]
 			node_data.custom_minimum_size = Vector2(0, 38 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
+		elif key == "support_btn":
+			node_data.text = tr[current_language]["support"]
+			node_data.custom_minimum_size = Vector2(0, 60 * s)
+			node_data.add_theme_font_size_override("font_size", 16 * s)
 		elif key == "warrior_btn":
 			node_data.text = tr[current_language]["warrior"]
 			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)

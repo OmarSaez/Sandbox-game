@@ -1,6 +1,6 @@
 # MIT License
 
-# Copyright (c) 2025-present Poing Studios
+# Copyright (c) 2026-present Poing Studios
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -22,14 +22,9 @@
 
 const Library := preload("res://addons/admob/internal/exporters/android/library.gd")
 
-const APPLICATION_ID := "ca-app-pub-3940256099942544~3347511713" # Change to your own AdMob App ID when releasing your game.
+const APPLICATION_ID := "ca-app-pub-3940256099942544~3347511713" # Test App ID for Android
 
 var libraries: Array[Library] = [
 	# Main Plugin
 	Library.new("ads", true), # Disable if you don't want to use AdMob.
-	
-	# Supported Mediations
-	Library.new("adcolony", false),
-	Library.new("meta", false),
-	Library.new("vungle", false)
 ]

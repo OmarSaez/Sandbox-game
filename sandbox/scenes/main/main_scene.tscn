@@ -5,8 +5,8 @@
 [node name="MainScene" type="Node2D" unique_id=1441274808]
 
 [node name="Background" type="ColorRect" parent="." unique_id=1865854086]
-offset_right = 1080.0
-offset_bottom = 1920.0
+offset_right = 1631.0
+offset_bottom = 2537.0
 color = Color(0.12, 0.12, 0.12, 1)
 
 [node name="SandboxGrid" type="Node2D" parent="." unique_id=20750457]
