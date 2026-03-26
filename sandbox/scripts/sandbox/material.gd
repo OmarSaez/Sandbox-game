@@ -38,7 +38,10 @@ enum Tags {
 	FERTILE = 1 << 22,
 	
 	# NPC system
-	NPC = 1 << 23
+	NPC = 1 << 23,
+	
+	# Volatile/Projectile behavior
+	VOLATILE = 1 << 24
 }
 
 @export var name: String = "Material"

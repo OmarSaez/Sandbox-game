@@ -480,6 +480,8 @@ func _ready():
 	_register_material(41, Color("#8B4513"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 	# 42: Arrow Pixel
 	_register_material(42, Color("#D2B48C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
+	# 43: Electric Spark (Physical Inertial Spark)
+	_register_material(43, Color("#FFFF00"), SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.VOLATILE | SandboxMaterial.Tags.GRAV_STATIC)
 	
 	# --- MINER SYSTEM ---
 	# 50: Miner Master
@@ -1808,9 +1810,9 @@ func _step_simulation():
 						continue
 
 					if (tags & SandboxMaterial.Tags.GRAV_UP):
-						if mat_id != 28: # Volcan
-							_move_particle(x, y, mat_id, tags, -1)
 						_process_interactions(x, y, idx, mat_id, tags)
+						if cells[idx] == mat_id and mat_id != 28:
+							_move_particle(x, y, mat_id, tags, -1)
 
 	# Pass 3: FALLING/STATIC particles (Bottom-to-Top by Active Chunks)
 	for cy in range(chunks_y - 1, -1, -1):
@@ -1841,9 +1843,8 @@ func _step_simulation():
 					if mid > 0: # Process all active materials (including primed explosives)
 						var tags = tags_array[idx]
 						if not (tags & SandboxMaterial.Tags.GRAV_UP): 
-							if (tags & SandboxMaterial.Tags.GRAV_STATIC): # Stationary but interactive
-								_process_interactions(x, y, idx, mid, tags)
-							else:
+							_process_interactions(x, y, idx, mid, tags)
+							if cells[idx] == mid and not (tags & SandboxMaterial.Tags.GRAV_STATIC):
 								# GRAVITY INLINED for speed
 								var should_move = true
 								if (tags & SandboxMaterial.Tags.GRAV_SLOW) and randf() > 0.3:
@@ -1869,8 +1870,7 @@ func _step_simulation():
 												var ni = ny * grid_width + nx
 												if cells[ni] == 0: _swap_cells(x, y, nx, ny)
 
-								# Always check interactions (e.g. fire spreading)
-								_process_interactions(x, y, idx, mid, tags)
+								pass # Interaction already processed at top
 					x += x_dir
 					count -= 1
 				y -= 1
@@ -2016,9 +2016,12 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			elif mat_id == 4: # Petro catches fire
 				if randf() < 0.1: _set_cell(x, y, 3)
 			
-			# EXPLOSIVE IGNITION (TNT/Gunpowder) - 1.5s Delay with spectral flash
-			elif (tags & SandboxMaterial.Tags.EXPLOSIVE) and charge_array[idx] == 0:
-				_prime_explosive(x, y, mat_id)
+			# EXPLOSIVE IGNITION (TNT/Gunpowder) - Delay with spectral flash
+			elif (tags & SandboxMaterial.Tags.EXPLOSIVE):
+				var flags = 0
+				if charge_array[idx] > 50 or _count_neighbor_id(x, y, 9) > 0:
+					flags |= 128 # ELECTRIC IGNITION
+				_prime_explosive(x, y, mat_id, flags)
 			
 			# FIREWORKS (Independent of Explosives)
 			elif mat_id == 18:
@@ -2039,17 +2042,20 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			_launch_firework(x, y)
 
 	elif mat_id == 7 or mat_id == 77 or mat_id == 71 or mat_id == 72: # Primed Explosive (Timer + Visual Flash)
-		var timer = charge_array[idx]
+		var charge = charge_array[idx]
+		var timer = charge & 63 # Use 6 bits for timer (up to 64 frames)
+		var flags = charge & 192 # Keep top 2 bits for Ignition Type (128=Elec, 64=Acid)
 		var is_gunpowder = (mat_id == 71 or mat_id == 72)
 		var base_id = 77 if not is_gunpowder else 72
 		var prime_id = 7 if not is_gunpowder else 71
 		
 		timer -= 1
 		if timer <= 0:
-			_explode(x, y, 12 if not is_gunpowder else 8)
+			_explode(x, y, 12 if not is_gunpowder else 8, "explosion", flags)
 			return
 		
-		charge_array[idx] = timer
+		# Restore timer and flags
+		charge_array[idx] = flags | timer
 		
 		# Visual Flash: Alternamos entre los dos IDs del set de cebado
 		if Engine.get_frames_drawn() % 10 < 5:
@@ -2113,9 +2119,47 @@ func _process_interactions(x, y, idx, mat_id, tags):
 						_set_cell(nx, ny, 70) # FREEZE!
 						return
 
-	# ELECTRIC SEEDING (Only decay temporary sparks, not persistent liquids/solids like Acid/Metal)
+	# VOLATILE INERTIA (Projectiles like Sparks)
+	if (tags & SandboxMaterial.Tags.VOLATILE):
+		var charge = charge_array[idx]
+		var energy = charge >> 3
+		var dir_idx = charge & 7
+		
+		if energy <= 0:
+			_set_cell(x, y, 0)
+			return
+			
+		# Lookup Dir (Static array for performance)
+		var dx = 0; var dy = 0
+		if dir_idx == 0: dy = -1 # UP
+		elif dir_idx == 1: dx = 1; dy = -1 # UR
+		elif dir_idx == 2: dx = 1 # R
+		elif dir_idx == 3: dx = 1; dy = 1 # DR
+		elif dir_idx == 4: dy = 1 # D
+		elif dir_idx == 5: dx = -1; dy = 1 # DL
+		elif dir_idx == 6: dx = -1 # L
+		elif dir_idx == 7: dx = -1; dy = -1 # UL
+		
+		var nx = x + dx; var ny = y + dy
+		if nx < 0 or nx >= grid_width or ny < 0 or ny >= dynamic_grid_height:
+			_set_cell(x, y, 0); return
+			
+		if _get_cell(nx, ny) == 0:
+			# Advance with inertia (Double duration: decrement energy every 2 frames)
+			var new_energy = energy
+			if Engine.get_frames_drawn() % 2 == 0:
+				new_energy -= 1
+			
+			charge_array[idx] = (new_energy << 3) | dir_idx
+			_swap_cells(x, y, nx, ny)
+		else:
+			# Hit wall/solid -> Vanish
+			_set_cell(x, y, 0)
+		return
+
+	# ELECTRIC SEEDING (Pure Static Electricity)
 	if (tags & SandboxMaterial.Tags.ELECTRICITY):
-		if not (tags & (SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.SOLID)):
+		if not (tags & (SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.VOLATILE)):
 			if randf() < 0.7: _set_cell(x, y, 0)
 
 	# --- CORROSION (ACID) ---
@@ -3503,7 +3547,7 @@ func _count_neighbor_id_radius(x, y, id, radius):
 				count += 1
 	return count
 
-func _prime_explosive(x, y, id):
+func _prime_explosive(x, y, id, ignition_flags = 0):
 	if x < 0 or x >= grid_width or y < 0 or y >= grid_height: return
 	var idx = y * grid_width + x
 	var current_id = cells[idx]
@@ -3512,7 +3556,9 @@ func _prime_explosive(x, y, id):
 	
 	var prime_id = 7 if id == 5 else 71 
 	_set_cell(x, y, prime_id) 
-	charge_array[idx] = 40 # Sostener parpadeo por 1 segundo (60 frames)
+	
+	# Store timer (bits 0-5) and ignition flags (bits 6-7)
+	charge_array[idx] = 40 | ignition_flags
 
 func _trigger_electric_devices(x, y):
 	for ny in range(y - 1, y + 2):
@@ -3583,7 +3629,8 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 							_set_cell(nx, ny, 19)
 							charge_array[n_idx] = randi_range(20, 70)
 						else:
-							_prime_explosive(nx, ny, n_id)
+							# Si el que lo prende es Electricidad (9), marcar como electrico (Bit 128)
+							_prime_explosive(nx, ny, n_id, 128 if my_id == 9 else 0)
 				else:
 					# ONLY Electricity material can start a new pulse in a conductor
 					if (n_tags & SandboxMaterial.Tags.CONDUCTOR):
@@ -3597,11 +3644,12 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 							_set_cell(nx, ny, 19)
 							charge_array[n_idx] = randi_range(20, 70)
 						else:
-							_prime_explosive(nx, ny, n_id)
+							_prime_explosive(nx, ny, n_id, 128) # Bit 128 for electric ignition
 
-func _explode(x, y, radius, sfx_action: String = "explosion"):
+func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0):
 	_set_cell(x, y, 0)
 	_play_action_sound(sfx_action)
+	
 	
 	# NPC BLAST PHYSICS
 	var center = Vector2i(x, y)
@@ -3646,7 +3694,8 @@ func _explode(x, y, radius, sfx_action: String = "explosion"):
 						# Give it ENERGY to launch multiple shots
 						charge_array[tx + ty * grid_width] = randi_range(80, 120)
 					else:
-						_prime_explosive(tx, ty, t_id)
+						# HEREDAR: Pasamos los mismos ignition_flags a la siguiente TNT
+						_prime_explosive(tx, ty, t_id, ignition_flags)
 					continue
 
 				# ANTI-EXPLOSIVE CHECK: Skip physical movement/deletion
@@ -3660,6 +3709,28 @@ func _explode(x, y, radius, sfx_action: String = "explosion"):
 					# Displacement with upward bias for WOW effect
 					if randf() < 0.6: # More particles moved
 						_push_particle(tx, ty, rx, ry)
+	
+	# 1. OVERCHARGE SPARKS EFFECT (If ELECTRIC BIT 128 is set)
+	if ignition_flags & 128:
+		for i in range(40):
+			var dist = randi_range(2, 5) # Spawn at blast edge or air center
+			var ang = randf() * TAU
+			var sx = x + int(cos(ang) * dist)
+			var sy = y + int(sin(ang) * dist)
+			
+			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
+				if _get_cell(sx, sy) == 0:
+					_set_cell(sx, sy, 43) 
+					_activate_chunk(sx, sy)
+					
+					# Calculate Inertia Direction from radial angle
+					var deg = rad_to_deg(ang)
+					if deg < 0: deg += 360
+					# Snap to 8-directions (0=UP, 1=UR, 2=R, 3=DR, 4=D, 5=DL, 6=L, 7=UL)
+					var dir_idx = int((deg + 22.5 + 90) / 45) % 8
+					# Max energy for 5 bits is 31 (with the 2-frame mod, this is 62 frames of life)
+					var energy = 31
+					charge_array[sy * grid_width + sx] = (energy << 3) | dir_idx
 
 func _push_particle(x, y, dx, dy):
 	# Trajectory with upward bias and air boost
