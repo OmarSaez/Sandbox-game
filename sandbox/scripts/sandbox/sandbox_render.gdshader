@@ -40,7 +40,7 @@ void fragment() {
         
         // 5. ELECTRIC GLOW (Exclude Fresh Cement ID 25 and Acid ID 13)
         // Only glow if charge is high (> 0.1) and it's NOT a material using charge for metadata
-        if (charge > 0.1 && id > 0 && id != 13 && id != 25) {
+        if (charge > 0.1 && id > 0 && id != 13 && id != 25 && id != 5 && id != 7 && id != 20 && id != 71 && id != 72 && id != 77) {
             vec4 electric_yellow = vec4(1.0, 1.0, 0.0, 1.0);
             color = mix(color, electric_yellow, 0.9);
             color.rgb += vec3(0.2, 0.2, 0.0);

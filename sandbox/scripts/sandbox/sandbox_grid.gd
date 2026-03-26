@@ -368,8 +368,9 @@ func _ready():
 	# Earth (Slow gravity)
 	_register_material(6, Color("#66503D"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW)
 	
-	# Primed TNT (Flashes white, soon to BOOM)
-	_register_material(7, Color.WHITE, SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC)
+	# Primed TNT (Flashes white, soon to BOOM) - Now NOT incendiary to avoid premature chain reactions
+	_register_material(7, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(77, Color("FF0000"), SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE)
 	
 	# Metal (Solid + Conductor)
 	_register_material(8, Color("EDEDED"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.GRAV_STATIC)
@@ -502,6 +503,10 @@ func _ready():
 	_register_material(80, Color("#EEEEEE"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 	# 81: Medic Cross (Red)
 	_register_material(81, Color("#FF1111"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	
+	# --- PRIMED EXPLOSIVES (Flashing States) ---
+	_register_material(71, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(72, Color("#6B6A66"), SandboxMaterial.Tags.GRAV_STATIC)
 
 	# UI SETUP (Must happen AFTER materials are registered)
 	_setup_main_ui_containers()
@@ -1798,9 +1803,8 @@ func _step_simulation():
 					
 					var tags = tags_array[idx]
 					
-					if mat_id == 7: # Primed TNT
-						if randf() < 0.05: _explode(x, y, 10)
-						_activate_chunk(x, y) # Keep alive
+					if mat_id == 7: # Primed Explosives (Processed in Pass 3)
+						_activate_chunk(x, y) # Keep alive for timer
 						continue
 
 					if (tags & SandboxMaterial.Tags.GRAV_UP):
@@ -1834,7 +1838,7 @@ func _step_simulation():
 					var mid = cells[idx]
 					
 					# FASTER INLINE FLOW (Avoid most calls)
-					if mid > 0 and mid != 7: # Skip air/primed
+					if mid > 0: # Process all active materials (including primed explosives)
 						var tags = tags_array[idx]
 						if not (tags & SandboxMaterial.Tags.GRAV_UP): 
 							if (tags & SandboxMaterial.Tags.GRAV_STATIC): # Stationary but interactive
@@ -1888,6 +1892,14 @@ func _process_electricity():
 		var charge = charge_array[i]
 		if charge == 0: continue
 		
+		# Skip Priming Explosives (Timer handled in Interaction pass)
+		var mid = cells[i]
+		if mid == 7 or mid == 77 or mid == 71 or mid == 72:
+			continue
+		
+		if (mid == 5 or mid == 20) and charge < 101: 
+			continue
+		
 		# 1. SYNCHRONIZE NEW PULSE (Fix for propagation death)
 		if charge == 101:
 			charge_array[i] = 100
@@ -1897,7 +1909,7 @@ func _process_electricity():
 		if charge == 100:
 			var x = i % grid_width
 			var y = i / grid_width
-			var mid = cells[i]
+			mid = cells[i]
 			var my_tags = material_tags_raw[mid]
 			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
 				# Scan neighbors for 0-charge conductors
@@ -2004,15 +2016,15 @@ func _process_interactions(x, y, idx, mat_id, tags):
 			elif mat_id == 4: # Petro catches fire
 				if randf() < 0.1: _set_cell(x, y, 3)
 			
-			# GENERIC ELECTRIC ACTIVATED TRIGGER
-			elif mat_id == 18: # Special Fireworks Fuse logic (PRIORITY)
-				_set_cell(x, y, 19)
+			# EXPLOSIVE IGNITION (TNT/Gunpowder) - 1.5s Delay with spectral flash
+			elif (tags & SandboxMaterial.Tags.EXPLOSIVE) and charge_array[idx] == 0:
+				_prime_explosive(x, y, mat_id)
+			
+			# FIREWORKS (Independent of Explosives)
+			elif mat_id == 18:
+				_set_cell(x, y, 19) # Transform to Fuse
 				charge_array[idx] = randi_range(20, 70)
-				_play_action_sound("fuse_burning", 0.1) # Suena solo al momento de encendido
-			elif (tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
-				if (tags & SandboxMaterial.Tags.EXPLOSIVE):
-					_set_cell(x, y, 7) # PRIME TNT/EXPLOSIVE
-					charge_array[idx] = randi_range(30, 60)
+				_play_action_sound("fuse_burning", 0.1)
 	
 	# FUSE LOGIC (Standalone Fireworks) - Movido el sonido al momento de encendido en el bloque superior
 	if mat_id == 19: 
@@ -2026,10 +2038,26 @@ func _process_interactions(x, y, idx, mat_id, tags):
 		if charge_array[idx] <= 0:
 			_launch_firework(x, y)
 
-	elif mat_id == 7: # Primed TNT
-		charge_array[idx] -= 1
-		if charge_array[idx] <= 0:
-			_explode(x, y, 12)
+	elif mat_id == 7 or mat_id == 77 or mat_id == 71 or mat_id == 72: # Primed Explosive (Timer + Visual Flash)
+		var timer = charge_array[idx]
+		var is_gunpowder = (mat_id == 71 or mat_id == 72)
+		var base_id = 77 if not is_gunpowder else 72
+		var prime_id = 7 if not is_gunpowder else 71
+		
+		timer -= 1
+		if timer <= 0:
+			_explode(x, y, 12 if not is_gunpowder else 8)
+			return
+		
+		charge_array[idx] = timer
+		
+		# Visual Flash: Alternamos entre los dos IDs del set de cebado
+		if Engine.get_frames_drawn() % 10 < 5:
+			cells[idx] = prime_id # White
+		else:
+			cells[idx] = base_id # Red/Gray (Primed version)
+		
+		_activate_chunk(x, y)
 
 	# --- CRYOGENICS (ICE ID 60) ---
 	if mat_id == 60:
@@ -3475,6 +3503,17 @@ func _count_neighbor_id_radius(x, y, id, radius):
 				count += 1
 	return count
 
+func _prime_explosive(x, y, id):
+	if x < 0 or x >= grid_width or y < 0 or y >= grid_height: return
+	var idx = y * grid_width + x
+	var current_id = cells[idx]
+	# Si ya está en cualquiera de los estados de cebado, no hacer nada
+	if current_id == 7 or current_id == 77 or current_id == 71 or current_id == 72: return 
+	
+	var prime_id = 7 if id == 5 else 71 
+	_set_cell(x, y, prime_id) 
+	charge_array[idx] = 40 # Sostener parpadeo por 1 segundo (60 frames)
+
 func _trigger_electric_devices(x, y):
 	for ny in range(y - 1, y + 2):
 		for nx in range(x - 1, x + 2):
@@ -3483,7 +3522,7 @@ func _trigger_electric_devices(x, y):
 			if n_id > 0:
 				var n_tags = material_tags_raw[n_id]
 				if (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
-					_set_cell(nx, ny, 7) # Prime TNT
+					_prime_explosive(nx, ny, n_id)
 
 
 func _check_neighbors_for_reaction(x, y, is_heat):
@@ -3544,7 +3583,7 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 							_set_cell(nx, ny, 19)
 							charge_array[n_idx] = randi_range(20, 70)
 						else:
-							_set_cell(nx, ny, 7) # Prime TNT
+							_prime_explosive(nx, ny, n_id)
 				else:
 					# ONLY Electricity material can start a new pulse in a conductor
 					if (n_tags & SandboxMaterial.Tags.CONDUCTOR):
@@ -3558,7 +3597,7 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 							_set_cell(nx, ny, 19)
 							charge_array[n_idx] = randi_range(20, 70)
 						else:
-							_set_cell(nx, ny, 7) # Prime TNT
+							_prime_explosive(nx, ny, n_id)
 
 func _explode(x, y, radius, sfx_action: String = "explosion"):
 	_set_cell(x, y, 0)
@@ -3607,7 +3646,7 @@ func _explode(x, y, radius, sfx_action: String = "explosion"):
 						# Give it ENERGY to launch multiple shots
 						charge_array[tx + ty * grid_width] = randi_range(80, 120)
 					else:
-						_set_cell(tx, ty, 7) # Prime TNT
+						_prime_explosive(tx, ty, t_id)
 					continue
 
 				# ANTI-EXPLOSIVE CHECK: Skip physical movement/deletion
@@ -3618,15 +3657,26 @@ func _explode(x, y, radius, sfx_action: String = "explosion"):
 				if dist_sq < (radius * 0.4) ** 2:
 					_set_cell(tx, ty, 0) 
 				else:
-					# Displacement with random spread to avoid tight loops
-					if randf() < 0.3:
+					# Displacement with upward bias for WOW effect
+					if randf() < 0.6: # More particles moved
 						_push_particle(tx, ty, rx, ry)
 
 func _push_particle(x, y, dx, dy):
-	var nx = x + sign(dx) * 2
-	var ny = y + sign(dy) * 2
-	if _get_cell(nx, ny) == 0:
-		_swap_cells(x, y, nx, ny)
+	# Trajectory with upward bias and air boost
+	var is_near_air = _get_cell(x, y - 1) == 0 or _get_cell(x + int(sign(dx)), y) == 0
+	var force = randi_range(6, 15) if is_near_air else randi_range(2, 5)
+	
+	var dir_x = sign(dx)
+	var dir_y = -1 if force > 5 else sign(dy) # Force UP if fast
+	
+	# Trace to find the furthest air spot
+	for i in range(force, 1, -1):
+		var tx = x + dir_x * i
+		var ty = y + dir_y * i
+		if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+			if _get_cell(tx, ty) == 0:
+				_swap_cells(x, y, tx, ty)
+				return
 
 func _update_texture():
 	# ZERO-COPY GPU RENDER PASS (Peak GDScript Performance)
