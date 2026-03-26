@@ -445,13 +445,13 @@ func _ready():
 
 	# --- NPC SYSTEM ---
 	# 30: Guerrero
-	_register_material(30, Color.SLATE_GRAY, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Guerrero
+	_register_material(30, Color("1b977cff"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Guerrero
 	# 31: Parte Gris
-	_register_material(31, Color.GRAY, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Parte Gris
+	_register_material(31, Color("717E80"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Parte Gris
 	# 32: Parte Oscura
-	_register_material(32, Color(0.2, 0.2, 0.2), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Parte Oscura
+	_register_material(32, Color("1F1F1F"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Parte Oscura
 	# 33: Piel
-	_register_material(33, Color("#FFDBAC"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Piel
+	_register_material(33, Color("FFE2BD"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Piel
 	# 34: Equipo Rojo
 	_register_material(34, Color.RED, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Rojo
 	# 35: Equipo Azul
@@ -464,7 +464,7 @@ func _ready():
 	# 40: Maestro Arquero
 	_register_material(40, Color("#228B22"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Maestro Arquero
 	# 41: Tela Arquero
-	_register_material(41, Color("#8B4513"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Tela Arquero
+	_register_material(41, Color("#AA6F27"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Tela Arquero
 	# 42: Flecha
 	_register_material(42, Color("#D2B48C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Flecha
 	
