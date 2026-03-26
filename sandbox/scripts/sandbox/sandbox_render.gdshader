@@ -12,22 +12,25 @@ void fragment() {
     vec4 raw_data = texture(TEXTURE, UV);
     
     // 2. HYBRID RENDERING DETECTION
-    // If Green or Blue channels have data, it's a visual effect (Spark/Rocket) 
-    if (raw_data.g > 0.01 || raw_data.b > 0.01) {
+    // Material IDs (0-65535) use R and G bytes, and variant uses A.
+    // Blue channel (B) is reserved as a marker for visual effects (Sparks/Rockets).
+    if (raw_data.b > 0.005) {
         COLOR = raw_data;
     } else {
         // 3. MATERIAL ID RENDERING
-        int id = int(raw_data.r * 255.0 + 0.1);
+        int id_low = int(raw_data.r * 255.0 + 0.5);
+        int id_high = int(raw_data.g * 255.0 + 0.5);
+        int id = id_low + (id_high * 256);
         
         // Scalable Texturing: Get Variant from Alpha channel (Byte 3)
-        int variant = int(raw_data.a * 255.0 + 0.1);
+        int variant = int(raw_data.a * 255.0 + 0.5);
         float py = (float(variant) + 0.5) / 3.0; // 3 rows for variants
         
         // Get Charge from secondary L8 texture
         float charge = texture(charge_tex, UV).r;
         
-        // Palette Lookup with variant row offset
-        vec4 color = texture(palette_tex, vec2((float(id) + 0.5) / 256.0, py));
+        // Palette Lookup with variant row offset (Now 2048 wide)
+        vec4 color = texture(palette_tex, vec2((float(id) + 0.5) / 2048.0, py));
         
         // 4. Tornado Funnel for Air (ID 0)
         if (id == 0 && tornado_intensity > 0.0) {

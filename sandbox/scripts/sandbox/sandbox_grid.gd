@@ -333,7 +333,7 @@ func _ready():
 	color_buffer.resize(grid_width * grid_height * 4)
 	surface_cache.resize(grid_width)
 	
-	material_colors_bytes.resize(256 * 4)
+	material_colors_bytes.resize(2048 * 4)
 	material_colors_bytes.fill(0)
 	
 	chunks_x = ceil(float(grid_width) / CHUNK_SIZE)
@@ -350,10 +350,10 @@ func _ready():
 	img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8) # Main ID Texture
 	charge_img = Image.create(grid_width, grid_height, false, Image.FORMAT_L8) # Charge (Grayscale)
 	
-	mat_colors_1.resize(256)
-	mat_colors_2.resize(256)
-	mat_colors_3.resize(256)
-	material_tags_raw.resize(256)
+	mat_colors_1.resize(2048)
+	mat_colors_2.resize(2048)
+	mat_colors_3.resize(2048)
+	material_tags_raw.resize(2048)
 	
 	cells.fill(0)
 	charge_array.fill(0)
@@ -444,55 +444,57 @@ func _ready():
 	_register_material(29, Color("#FF4500"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # Base de Volcan Activa
 
 	# --- NPC SYSTEM ---
-	# 30: Guerrero
-	_register_material(30, Color("1b977cff"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Guerrero
-	# 31: Parte Gris
-	_register_material(31, Color("717E80"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Parte Gris
-	# 32: Parte Oscura
-	_register_material(32, Color("1F1F1F"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Parte Oscura
-	# 33: Piel
-	_register_material(33, Color("FFE2BD"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Piel
-	# 34: Equipo Rojo
-	_register_material(34, Color.RED, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Rojo
-	# 35: Equipo Azul
-	_register_material(35, Color.BLUE, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Azul
-	# 36: Equipo Amarillo
-	_register_material(36, Color.YELLOW, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Amarillo
-	# 37: Equipo Verde
-	_register_material(37, Color("#00FF00"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Verde
+	# 1000: Guerrero
+	_register_material(1000, Color("1b977cff"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Guerrero
+	# 1001: Parte Gris
+	_register_material(1001, Color("717E80"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Parte Gris
+	# 1002: Parte Oscura
+	_register_material(1002, Color("1F1F1F"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Parte Oscura
+	# 1003: Piel
+	_register_material(1003, Color("FFE2BD"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Piel
+	# 1004: Equipo Rojo
+	_register_material(1004, Color.RED, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Rojo
+	# 1005: Equipo Azul
+	_register_material(1005, Color.BLUE, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Azul
+	# 1006: Equipo Amarillo
+	_register_material(1006, Color.YELLOW, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Amarillo
+	# 1007: Equipo Verde
+	_register_material(1007, Color("#00FF00"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Equipo Verde
 	
-	# 40: Maestro Arquero
-	_register_material(40, Color("#228B22"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Maestro Arquero
-	# 41: Tela Arquero
-	_register_material(41, Color("#AA6F27"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Tela Arquero
-	# 42: Flecha
-	_register_material(42, Color("#D2B48C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Flecha
+	# 1010: Maestro Arquero
+	_register_material(1010, Color("#228B22"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Maestro Arquero
+	# 1011: Tela Arquero
+	_register_material(1011, Color("#AA6F27"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Tela Arquero
+	# 1012: Flecha
+	_register_material(1012, Color("#D2B48C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Flecha
 	
 	# --- MINER SYSTEM ---
-	_register_material(50, Color("#555555"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Minero Maestro
-	_register_material(51, Color("#FFD700"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Casco Minero
+	_register_material(1020, Color("#555555"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Minero Maestro
+	_register_material(1021, Color("#FFD700"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Casco Minero
 
-	# --- CUSTOM NPC DAMAGE COLORS (IDs 60-64) ---
-	# 60: Color Daño Acido
-	_register_material(60, npc_color_acid, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Daño Acido
-	# 61: Color Daño Fuego
-	_register_material(61, npc_color_fire, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Daño Fuego
-	# 62: Color Daño Explosivo
-	_register_material(62, npc_color_exp, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Daño Explosivo
-	# 63: Color Golpe
-	_register_material(63, npc_color_hit, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Golpe
-	# 64: Color Muerte
-	_register_material(64, npc_color_death, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Muerte
+	# --- CUSTOM NPC DAMAGE COLORS (IDs 1030-1034) ---
+	# 1030: Color Daño Acido
+	_register_material(1030, npc_color_acid, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Daño Acido
+	# 1031: Color Daño Fuego
+	_register_material(1031, npc_color_fire, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Daño Fuego
+	# 1032: Color Daño Explosivo
+	_register_material(1032, npc_color_exp, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Daño Explosivo
+	# 1033: Color Golpe
+	_register_material(1033, npc_color_hit, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Golpe
+	# 1034: Color Muerte
+	_register_material(1034, npc_color_death, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Muerte
+	# 1035: Color Daño Eléctrico (Cyan/Yellow mix)
+	_register_material(1035, Color.CYAN, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Color Eléctrico
 	
 	# --- CRYOGENIC SYSTEM ---
 	# 70: Ice (Light Cyan Static Solid)
 	_register_material(70, Color("#bbe0fcff"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
 
 	# --- MEDIC SYSTEM ---
-	# 80: Medic Uniform (White)
-	_register_material(80, Color("#EEEEEE"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
-	# 81: Medic Cross (Red)
-	_register_material(81, Color("#FF1111"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 1040: Medic Uniform (White)
+	_register_material(1040, Color("#EEEEEE"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+	# 1041: Medic Cross (Red)
+	_register_material(1041, Color("#FF1111"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 	
 	# --- PRIMED EXPLOSIVES (Flashing States) ---
 	_register_material(71, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC)
@@ -518,10 +520,10 @@ func _ready():
 	# INITIAL HIGHLIGHT
 	_update_highlights()
 	
-	# FINAL SHADER & PALETTE SYNC (Now 256x3 for Textures)
-	var palette_img = Image.create(256, 3, false, Image.FORMAT_RGBA8)
+	# FINAL SHADER & PALETTE SYNC (Now 2048x3 for Textures)
+	var palette_img = Image.create(2048, 3, false, Image.FORMAT_RGBA8)
 	palette_img.fill(Color(0,0,0,0))
-	for i in range(256):
+	for i in range(2048):
 		palette_img.set_pixel(i, 0, mat_colors_1[i])
 		palette_img.set_pixel(i, 1, mat_colors_2[i])
 		palette_img.set_pixel(i, 2, mat_colors_3[i])
@@ -1299,13 +1301,13 @@ func _update_highlights():
 				elif key.begins_with("tsunami_btn_"):
 					if int(key.split("_")[-1]) == tsunami_intensity: is_active = true
 				elif key == "warrior_btn":
-					if selected_material == 30: is_active = true
+					if selected_material == 1000: is_active = true
 				elif key == "archer_btn":
-					if selected_material == 40: is_active = true
+					if selected_material == 1010: is_active = true
 				elif key == "miner_btn":
-					if selected_material == 50: is_active = true
+					if selected_material == 1020: is_active = true
 				elif key == "medic_btn":
-					if selected_material == 80: is_active = true
+					if selected_material == 1040: is_active = true
 				elif key.begins_with("team_btn_"):
 					var idx = int(key.split("_")[-1])
 					if idx == selected_team: is_active = true
@@ -1749,8 +1751,9 @@ func _set_cell(x, y, mat_id):
 				if (tags & SandboxMaterial.Tags.TEXTURE_TRIPLE) and randf() < 0.35:
 					variant = 2
 		
-		# Store Mat ID in Bits 0-7, Variant in Bits 24-31 (Alpha Channel)
-		cells[idx] = mat_id | (variant << 24)
+		# Store Mat ID in Bits 0-15 (Red/Green channels), Variant in Bits 24-31 (Alpha Channel)
+		# Bits 16-23 (Blue) are kept zero for Material ID - used to flag Visual Effects (Sparks) in shader
+		cells[idx] = (mat_id & 0xFFFF) | (variant << 24)
 		tags_array[idx] = tags
 		_activate_chunk(x, y)
 		
@@ -1773,7 +1776,7 @@ func _activate_chunk(gx, gy):
 
 func _get_cell(x, y):
 	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
-		return cells[y * grid_width + x] & 0xFF
+		return cells[y * grid_width + x] & 0xFFFF
 	return -1
 
 func _step_simulation():
@@ -1813,7 +1816,7 @@ func _step_simulation():
 				for x in sweep:
 					var idx = y * grid_width + x
 					var raw_id = cells[idx]
-					var pure_id = raw_id & 0xFF
+					var pure_id = raw_id & 0xFFFF
 					if pure_id == 0: continue
 					
 					var tags = tags_array[idx]
@@ -1851,7 +1854,7 @@ func _step_simulation():
 				while count > 0:
 					var idx = y * grid_width + x
 					var raw_id = cells[idx]
-					var pure_id = raw_id & 0xFF
+					var pure_id = raw_id & 0xFFFF
 					
 					# FASTER INLINE FLOW (Avoid most calls)
 					if pure_id > 0: # Process all active materials
@@ -1869,20 +1872,20 @@ func _step_simulation():
 									var ny = y + 1
 									if ny < dynamic_grid_height:
 										var n_idx = ny * grid_width + x
-										if (cells[n_idx] & 0xFF) == 0: # Down
+										if (cells[n_idx] & 0xFFFF) == 0: # Down
 											_swap_cells(x, y, x, ny)
 										elif (tags & SandboxMaterial.Tags.LIQUID):
 											# Liquis flow side-ways too
 											if randf() > 0.5:
-												if x < grid_width - 1 and (cells[idx + 1] & 0xFF) == 0: _swap_cells(x, y, x + 1, y)
-												elif x > 0 and (cells[idx - 1] & 0xFF) == 0: _swap_cells(x, y, x - 1, y)
+												if x < grid_width - 1 and (cells[idx + 1] & 0xFFFF) == 0: _swap_cells(x, y, x + 1, y)
+												elif x > 0 and (cells[idx - 1] & 0xFFFF) == 0: _swap_cells(x, y, x - 1, y)
 										elif (tags & SandboxMaterial.Tags.POWDER):
 											# Powders move diagonally
 											var dx = 1 if randf() > 0.5 else -1
 											var nx = x + dx
 											if nx >= 0 and nx < grid_width:
 												var ni = ny * grid_width + nx
-												if (cells[ni] & 0xFF) == 0: _swap_cells(x, y, nx, ny)
+												if (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
 
 								pass # Interaction already processed at top
 					x += x_dir
@@ -1907,7 +1910,7 @@ func _process_electricity():
 		if charge == 0: continue
 		
 		# Skip Priming Explosives (Timer handled in Interaction pass)
-		var mid = cells[i] & 0xFF
+		var mid = cells[i] & 0xFFFF
 		if mid == 7 or mid == 77 or mid == 71 or mid == 72:
 			continue
 		
@@ -1932,7 +1935,7 @@ func _process_electricity():
 						if nx < 0 or nx >= grid_width: continue
 						if nx == x and ny == y: continue
 						var n_idx = ny * grid_width + nx
-						var n_pid = cells[n_idx] & 0xFF
+						var n_pid = cells[n_idx] & 0xFFFF
 						if n_pid <= 0: continue
 						var n_tags = tags_array[n_idx]
 						if (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)) and charge_array[n_idx] == 0:
@@ -1983,11 +1986,11 @@ func _swap_cells(x1, y1, x2, y2):
 	var c2 = charge_array[idx2]
 	
 	cells[idx1] = m2
-	tags_array[idx1] = material_tags_raw[m2 & 0xFF]
+	tags_array[idx1] = material_tags_raw[m2 & 0xFFFF]
 	charge_array[idx1] = c2
 	
 	cells[idx2] = m1
-	tags_array[idx2] = material_tags_raw[m1 & 0xFF]
+	tags_array[idx2] = material_tags_raw[m1 & 0xFFFF]
 	charge_array[idx2] = c1
 	
 	# Wake up chunks
@@ -2055,8 +2058,8 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			return
 		
 		charge_array[idx] = flags | timer
-		if Engine.get_frames_drawn() % 10 < 5: cells[idx] = (cells[idx] & 0xFFFFFF00) | prime_id
-		else: cells[idx] = (cells[idx] & 0xFFFFFF00) | base_id
+		if Engine.get_frames_drawn() % 10 < 5: cells[idx] = (cells[idx] & 0xFFFF0000) | prime_id
+		else: cells[idx] = (cells[idx] & 0xFFFF0000) | base_id
 		_activate_chunk(x, y)
 
 	# --- CRYOGENICS ---
@@ -2069,7 +2072,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				for nx in range(x - 1, x + 2):
 					if nx < 0 or nx >= grid_width: continue
 					if nx == x and ny == y: continue
-					if (cells[ny * grid_width + nx] & 0xFF) == 2:
+					if (cells[ny * grid_width + nx] & 0xFFFF) == 2:
 						_set_cell(nx, ny, 60); return
 						
 	if pure_id == 70:
@@ -2079,7 +2082,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				if nx < 0 or nx >= grid_width: continue
 				if nx == x and ny == y: continue
 				var n_idx = ny * grid_width + nx
-				var n_pid = cells[n_idx] & 0xFF
+				var n_pid = cells[n_idx] & 0xFFFF
 				
 				if n_pid == 11: 
 					_set_cell(x, y, 17); _set_cell(nx, ny, 12); return
@@ -2099,7 +2102,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				for nx in range(x - 1, x + 2):
 					if nx < 0 or nx >= grid_width: continue
 					if nx == x and ny == y: continue
-					if (cells[ny * grid_width + nx] & 0xFF) == 2: # WATER
+					if (cells[ny * grid_width + nx] & 0xFFFF) == 2: # WATER
 						_set_cell(nx, ny, 70) # FREEZE!
 						return
 
@@ -2400,10 +2403,10 @@ func _setup_npc_ui():
 			ui_elements[key + "_btn"] = btn
 			npc_flow.add_child(btn)
 		
-		create_npc_btn.call("warrior", 30)
-		create_npc_btn.call("archer", 40)
-		create_npc_btn.call("miner", 50)
-		create_npc_btn.call("medic", 80)
+		create_npc_btn.call("warrior", 1000)
+		create_npc_btn.call("archer", 1010)
+		create_npc_btn.call("miner", 1020)
+		create_npc_btn.call("medic", 1040)
 		
 		# Teams Row (NOW RESPONSIVE)
 		var team_lbl = Label.new()
@@ -2463,9 +2466,9 @@ func _place_npc(x, y):
 	if not found_spot: return # Imposible encontrar hueco incluso a 15 pixeles, abortar spawn silenciosamente
 	
 	var n_type = "warrior"
-	if selected_material == 40 or selected_material == 41: n_type = "archer"
-	elif selected_material == 50 or selected_material == 51: n_type = "miner"
-	elif selected_material == 80 or selected_material == 81: n_type = "medic"
+	if selected_material == 1010 or selected_material == 1011: n_type = "archer"
+	elif selected_material == 1020 or selected_material == 1021: n_type = "miner"
+	elif selected_material == 1040 or selected_material == 1041: n_type = "medic"
 	
 	# Register in entity list
 	var new_npc = {
@@ -2507,7 +2510,7 @@ func _draw_npc_pixels(npc, override_mat = -1):
 			for ox in range(-1, 3):
 				var tx = sx + ox; var ty = sy + oy
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-					var tid = cells[ty * grid_width + tx] & 0xFF
+					var tid = cells[ty * grid_width + tx] & 0xFFFF
 					# OPTIMIZATION: Solo limpia si es necesario
 					if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC): _set_cell(tx, ty, 0)
 		return
@@ -2517,20 +2520,21 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	elif is_dead:
 		sy += 2; sx += 1 if (npc.dir > 0) else -1
 		if (npc.hit_flash % 2 == 0): override_mat = 0
-	var team_mat = 34 + npc.team; var is_archer = npc.type == "archer"; var is_miner = npc.type == "miner"; var is_medic = npc.type == "medic"
-	var m_head = (41 if is_archer else (50 if is_miner else (80 if is_medic else 31))) if override_mat == -1 else override_mat
-	var m_skin = 33 if override_mat == -1 else override_mat
-	var m_body = (40 if is_archer else (50 if is_miner else (80 if is_medic else 32))) if override_mat == -1 else override_mat
-	var m_legs = (50 if is_miner else (80 if is_medic else 31)) if override_mat == -1 else override_mat
+	var team_mat = 1004 + npc.team; var is_archer = npc.type == "archer"; var is_miner = npc.type == "miner"; var is_medic = npc.type == "medic"
+	var m_head = (1011 if is_archer else (1020 if is_miner else (1040 if is_medic else 1001))) if override_mat == -1 else override_mat
+	var m_skin = 1003 if override_mat == -1 else override_mat
+	var m_body = (1010 if is_archer else (1020 if is_miner else (1040 if is_medic else 1002))) if override_mat == -1 else override_mat
+	var m_legs = (1020 if is_miner else (1040 if is_medic else 1001)) if override_mat == -1 else override_mat
 	var m_team = team_mat if override_mat == -1 else override_mat
-	var m_helmet = (51 if is_miner else (81 if is_medic else 31)) if override_mat == -1 else override_mat
+	var m_helmet = (1021 if is_miner else (1041 if is_medic else 1001)) if override_mat == -1 else override_mat
 	if is_flashing and override_mat == -1:
-		var f_mat = 62
-		if is_dead: f_mat = 64
-		elif npc.hit_type == "acid": f_mat = 60
-		elif npc.hit_type == "fire": f_mat = 61
-		elif npc.hit_type == "explosive": f_mat = 62
-		else: f_mat = 63
+		var f_mat = 1032
+		if is_dead: f_mat = 1034
+		elif npc.hit_type == "acid": f_mat = 1030
+		elif npc.hit_type == "fire": f_mat = 1031
+		elif npc.hit_type == "explosive": f_mat = 1032
+		elif npc.hit_type == "electric": f_mat = 1035
+		else: f_mat = 1033
 		m_head = f_mat; m_skin = f_mat; m_body = f_mat; m_legs = f_mat; m_team = f_mat; m_helmet = f_mat
 	_set_cell(sx, sy, m_head if not is_miner else m_helmet); _set_cell(sx+1, sy, m_skin)
 	_set_cell(sx, sy+1, m_head); _set_cell(sx+1, sy+1, m_head)
@@ -2850,7 +2854,7 @@ func _process_projectiles(delta):
 				var px = gx - int(sign(p.vel.x))
 				if px >= 0 and px < grid_width and _get_cell(px, gy) == 0: _set_cell(px, gy, 3)
 			to_remove.append(i); continue
-		_set_cell(gx, gy, 42)
+		_set_cell(gx, gy, 1012)
 	to_remove.reverse()
 	for idx in to_remove: active_projectiles.remove_at(idx)
 
@@ -2886,7 +2890,7 @@ func _check_npc_environment_damage(npc) -> bool:
 	var check_points = [p, p + Vector2i(1, 2), p + Vector2i(0, 4), p + Vector2i(0, 5), p + Vector2i(1, 5), p + Vector2i(-1, 2), p + Vector2i(2, 2)]
 	for pt in check_points:
 		if pt.x < 0 or pt.x >= grid_width or pt.y < 0 or pt.y >= dynamic_grid_height: continue
-		var tid = cells[pt.y * grid_width + pt.x] & 0xFF
+		var tid = cells[pt.y * grid_width + pt.x] & 0xFFFF
 		var t_tags = material_tags_raw[tid]
 		if (t_tags & SandboxMaterial.Tags.ACID):
 			npc.hp -= 3.5; npc.hit_flash = 5; npc.hit_type = "acid"; took_damage = true
@@ -2894,13 +2898,18 @@ func _check_npc_environment_damage(npc) -> bool:
 		elif (t_tags & SandboxMaterial.Tags.INCENDIARY):
 			npc.hp -= 1.2; took_damage = true; if npc.hit_type != "acid": npc.hit_flash = 5; npc.hit_type = "fire"
 			if randf() < 0.3: visual_sparks.append({"x":float(pt.x),"y":float(pt.y),"vx":randf_range(-15,15),"vy":randf_range(-35,-15),"color":Color("#FF8200"),"life":0.5})
+		
+		# Electricity Damage
+		if charge_array[pt.y * grid_width + pt.x] > 50:
+			npc.hp -= 2.5; took_damage = true; npc.hit_flash = 5; npc.hit_type = "electric"
+			if randf() < 0.4: visual_sparks.append({"x":float(pt.x),"y":float(pt.y),"vx":randf_range(-20,20),"vy":randf_range(-40,-10),"color":Color.CYAN,"life":0.4})
 	var air_found = false
 	for oy in range(-1, 6):
 		for ox in range(-1, 3):
 			if oy >= 0 and oy <= 4 and ox >= 0 and ox <= 1: continue
 			var tx = npc.pos.x + ox; var ty = npc.pos.y + oy
 			if tx < 0 or tx >= grid_width or ty < 0 or ty >= dynamic_grid_height: continue
-			var nid = cells[ty * grid_width + tx] & 0xFF
+			var nid = cells[ty * grid_width + tx] & 0xFFFF
 			if nid == 0 or nid == 15 or nid == 17: air_found = true; break
 		if air_found: break
 	if !air_found: npc.hp -= 3.0; npc.hit_flash = 4; took_damage = true
@@ -2969,7 +2978,7 @@ func _count_neighbor_id_radius(x, y, id, radius):
 
 func _prime_explosive(x, y, id, ignition_flags = 0):
 	if x < 0 or x >= grid_width or y < 0 or y >= grid_height: return
-	var idx = y * grid_width + x; var current_id = cells[idx] & 0xFF
+	var idx = y * grid_width + x; var current_id = cells[idx] & 0xFFFF
 	
 	# FAILSAVE: If it's touching Acid RIGHT NOW, force Acid ignition
 	if _has_tag_neighbor(x, y, SandboxMaterial.Tags.ACID):
@@ -3126,15 +3135,15 @@ func _update_texture():
 		var sx = int(spark.x); var sy = int(spark.y)
 		if sx >= 0 and sx < grid_width and sy >= 0 and sy < grid_height:
 			var sc = spark.color; sc.a = spark.life
-			# Marker: Ensure G > 0 to bypass ID lookup and keep actual color
-			sc.g = max(0.01, sc.g)
+			# Marker: Ensure B > 0.01 to bypass ID lookup and keep actual color
+			sc.b = max(0.02, sc.b) # Using blue channel as the exclusive shader marker for visual effects
 			img.set_pixel(sx, sy, sc)
 			
 	for fw in active_fireworks:
 		var fx = int(fw.x); var fy = int(fw.y)
 		if fx >= 0 and fx < grid_width and fy >= 0 and fy < grid_height:
 			var fc = fw.color
-			fc.g = max(0.01, fc.g) # Bypass ID lookup
+			fc.b = max(0.02, fc.b) # Bypass ID lookup (Visual Marker)
 			img.set_pixel(fx, fy, fc) # Bright head
 			
 	# Update Charge Texture for Shader effects
