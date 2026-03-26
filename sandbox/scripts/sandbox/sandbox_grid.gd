@@ -92,7 +92,7 @@ var material_sfx = {
 	16: "wood",     # Madera
 	18: "fireworks",# Cohetes (pincel)
 	19: "fuse",      # Cohete encendido (subida)
-	20: "seed",     # Semilla
+	20: "sand",     # Pólvora (Gunpowder)
 	21: "grass",    # Pasto
 	24: "vine",     # Liana
 	25: "cem_fresh",# Cemento fresco
@@ -175,7 +175,7 @@ var tr = {
 		"wood": "Madera",
 		"petro": "Petróleo",
 		"fireworks": "Cohetes",
-		"seed": "Semilla",
+		"powd": "Pólvora",
 		"grass": "Pasto",
 		"vine": "Liana",
 		"cem_fresh": "Cem. Fresco",
@@ -228,7 +228,7 @@ var tr = {
 		"wood": "Wood",
 		"petro": "Oil",
 		"fireworks": "Fireworks",
-		"seed": "Seed",
+		"powd": "Gunpowder",
 		"grass": "Grass",
 		"vine": "Vine",
 		"cem_fresh": "Fresh Cem.",
@@ -417,9 +417,8 @@ func _ready():
 	
 	charge_tex = ImageTexture.create_from_image(charge_img)
 
-	# --- NEW PLANT LIFE ---
-	# Seed (Light Green)
-	_register_material(20, Color("#A2D149"), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.SEED | SandboxMaterial.Tags.FLAMMABLE)
+	# Gunpowder (Gray)
+	_register_material(20, Color("#6B6A66"), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)
 	# Grass (Bright Green)
 	_register_material(21, Color("#4CAF50"), SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL)
 	
@@ -549,7 +548,7 @@ func _setup_materials_within_grid():
 	_add_button("wood", 16)
 	_add_button("petro", 4)
 	_add_button("fireworks", 18)
-	_add_button("seed", 20)
+	_add_button("powd", 20)
 	_add_button("grass", 21)
 	_add_button("vine", 24)
 	_add_button("cem_fresh", 25)
@@ -2117,15 +2116,11 @@ func _process_interactions(x, y, idx, mat_id, tags):
 	# --- BIOLOGICAL INTERACTIONS (PLANTS & SEEDS) ---
 	# OPTIMIZATION: Only process 5% of biological pixels per frame to save FPS
 	if randf() < 0.05:
-		# 1. SEED LOGIC (mat_id 20)
-		if mat_id == 20: 
-			var is_on_fertile = _has_tag_neighbor(x, y, SandboxMaterial.Tags.FERTILE)
-			var is_wet = _get_cell(x, y+1) == 22 or _get_cell(x, y+1) == 23 or _has_id_within_oval(x, y, 2, 15, 10) or current_weather > 0
-			if is_on_fertile and is_wet:
-				_set_cell(x, y, 21) # Transform to Grass
+		# 1. Gunpowder logic handled generically by EXPLOSIVE/ELECTRIC_ACTIVATED tags
+		pass
 		
 		# 2. PLANT GROWTH (mat_id 21 - Grass)
-		elif mat_id == 21:
+		if mat_id == 21:
 			# STRICT: Must detect water to grow
 			if _has_id_within_oval(x, y, 2, 20, 10) or current_weather > 0:
 				if randf() < 0.3:
