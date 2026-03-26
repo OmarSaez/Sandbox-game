@@ -179,7 +179,7 @@ var translations_map = {
 		"fireworks": "Cohetes",
 		"powd": "Pólvora",
 		"grass": "Pasto",
-		"vine": "Liana",
+		"vine": "Pasto Alto",
 		"cem_fresh": "Cem. Fresco",
 		"cement": "Cemento",
 		"volcan": "Volcán",
@@ -370,7 +370,7 @@ func _ready():
 	# 3: Fuego
 	_register_material(3, Color("EBB400"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_MEDIUM, Color("FF4500")) # Fuego
 	# 4: Petroleo
-	_register_material(4, Color("560075"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.BURN_SMOKE) # Petroleo
+	_register_material(4, Color("041200"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.BURN_SMOKE) # Petroleo
 	# 5: TNT
 	_register_material(5, Color("E30000"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC) # TNT
 	# 6: Tierra
@@ -381,20 +381,20 @@ func _ready():
 	# 9: Electricidad
 	_register_material(9, Color("FFF300"), SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC) # Electricidad
 	# 10: Rocas
-	_register_material(10, Color("4D4D4D"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL) # Rocas
+	_register_material(10, Color("4D4D4D"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#292929")) # Rocas
 	# 11: Lava
 	_register_material(11, Color("FF4000"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.TEXTURE_TRIPLE | SandboxMaterial.Tags.MIX_MEDIUM, Color("FF7A00"), Color("2A0000")) # Lava
 	# 12: Obsidiana
-	_register_material(12, Color("1E023B"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # Obsidiana
+	_register_material(12, Color("0E0017"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.ANTI_EXPLOSIVE | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#59008F")) # Obsidiana
 	# 13: Acido
-	_register_material(13, Color("#39FF14"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.ANTI_ACID) # Acido
+	_register_material(13, Color("#39FF14"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.ANTI_ACID  | SandboxMaterial.Tags.TEXTURE_TRIPLE | SandboxMaterial.Tags.MIX_LOW, Color("B7FC49"), Color("F2FF00")) # Acido
 	
 	# 14: Carbon
 	_register_material(14, Color("#1A1110"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#3D1A10")) # Carbon
 	# 15: Humo
 	_register_material(15, Color("454545ff"), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP | SandboxMaterial.Tags.BURN_NONE) # Humo
 	# 16: Madera
-	_register_material(16, Color("#3E2609"), SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#5D3A1A")) # Madera
+	_register_material(16, Color("#3E2609"), SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.SOLID) # Madera
 	# 17: Vapor/Nube
 	_register_material(17, Color("8C8C8C"), SandboxMaterial.Tags.GAS | SandboxMaterial.Tags.GRAV_UP) # Nube/Vapor
 	# 18: Mecha / Fuegos artificiales
