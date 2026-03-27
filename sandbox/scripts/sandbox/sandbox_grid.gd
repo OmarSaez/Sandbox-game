@@ -1235,17 +1235,11 @@ func _add_button(key: String, mat_id: int):
 	
 	# 2. SELECTION OVERLAY (Only visible when selected)
 	var selection_overlay = PanelContainer.new()
-	var sel_style = StyleBoxFlat.new()
-	sel_style.draw_center = false # TRANSPARENT CENTER (On Top)
-	sel_style.corner_radius_top_left = radius
-	sel_style.corner_radius_top_right = radius
-	sel_style.corner_radius_bottom_left = radius
-	sel_style.corner_radius_bottom_right = radius
-	
-	selection_overlay.add_theme_stylebox_override("panel", sel_style)
-	selection_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	selection_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	selection_overlay.visible = false # Managed by _update_highlights
+	selection_overlay.visible = false # Managed by highlights
+	
+	# Center it over the icon
+	selection_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	stack.add_child(selection_overlay)
 	
 	var btn_lbl = Label.new()
@@ -1295,13 +1289,17 @@ func _update_material_highlights():
 			if not overlay.has_theme_stylebox_override("panel"):
 				var sel_style = StyleBoxFlat.new()
 				sel_style.draw_center = false
+				# THICK WHITE INNER BORDER
 				sel_style.border_width_left = 6; sel_style.border_width_top = 6
 				sel_style.border_width_right = 6; sel_style.border_width_bottom = 6
 				sel_style.border_color = Color.WHITE
+				# THICK BLACK OUTER SHADOW (looks like a border)
 				sel_style.shadow_color = Color.BLACK
-				sel_style.shadow_size = 6
-				sel_style.corner_radius_top_left = 8; sel_style.corner_radius_top_right = 8
-				sel_style.corner_radius_bottom_left = 8; sel_style.corner_radius_bottom_right = 8
+				sel_style.shadow_size = 25
+				sel_style.shadow_offset = Vector2(0, 0)
+				# MATCH ICON CORNERS
+				sel_style.corner_radius_top_left = 10; sel_style.corner_radius_top_right = 10
+				sel_style.corner_radius_bottom_left = 10; sel_style.corner_radius_bottom_right = 10
 				overlay.add_theme_stylebox_override("panel", sel_style)
 			
 			label.add_theme_color_override("font_color", Color.YELLOW)
