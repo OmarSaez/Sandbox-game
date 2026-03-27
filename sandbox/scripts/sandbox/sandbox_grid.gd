@@ -185,7 +185,6 @@ var action_sfx = {
 }
 
 var last_action_times = {} # Para controlar la saturación de sonidos
-var emoji_layer: Control # Capa para los emojis flotantes
 var is_volcano_active = false 
 var is_fire_active = false 
 
@@ -369,12 +368,6 @@ func _ready():
 	grid_width = floor(viewport_size.x / grid_scale)
 	grid_height = floor(viewport_size.y / grid_scale)
 	dynamic_grid_height = grid_height # Full initial
-	
-	# Emoji Layer Setup (Placed above texture display)
-	emoji_layer = Control.new()
-	emoji_layer.name = "EmojiLayer"
-	emoji_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(emoji_layer)
 	
 	# Update Display node size to match the grid exactly
 	$Display.custom_minimum_size = Vector2(grid_width * grid_scale, grid_height * grid_scale)
@@ -649,15 +642,6 @@ func _setup_main_ui_containers():
 			child.get_parent().remove_child(child)
 			child.queue_free()
 			
-	# NUEVO: Limpiar la capa de emojis de NPCs para evitar duplicados al refrescar escala
-	if is_instance_valid(emoji_layer):
-		for child in emoji_layer.get_children():
-			child.queue_free()
-		# Reconectar cada NPC activo a su nueva etiqueta después de limpiar
-		for npc in active_npcs:
-			var lab = _create_npc_emoji_label()
-			emoji_layer.add_child(lab)
-			npc["emoji_node"] = lab
 	
 	# 2. FIND MaterialGrid (Wherever it is)
 	if not material_grid:
@@ -963,7 +947,7 @@ func _setup_tools_ui():
 	var support_btn = Button.new()
 	support_btn.text = translations_map[current_language]["support"]
 	support_btn.custom_minimum_size = Vector2(0, 60 * s) 
-	support_btn.add_theme_font_size_override("font_size", 16 * s)
+	support_btn.add_theme_font_size_override("font_size", 16 * s) 
 	support_btn.add_theme_font_override("font", _get_safe_font())
 	
 	var support_style = StyleBoxFlat.new()
@@ -1620,6 +1604,17 @@ func _process(delta):
 	
 	# Render
 	_update_texture()
+	queue_redraw()
+
+func _draw():
+	var f = _get_safe_font()
+	if not f: return
+	var s = _get_ui_scale()
+	for npc in active_npcs:
+		if npc.get("current_emoji", "") != "":
+			var world_pos = Vector2(float(npc.pos.x) + 1.0, float(npc.pos.y)) * float(grid_scale)
+			# Pintar centrado sobre la cabeza del NPC (Offset ajustado para quedar cerca)
+			draw_string(f, world_pos + Vector2(-40.0 * s, -14.0 * s), npc.current_emoji, HORIZONTAL_ALIGNMENT_CENTER, 80.0 * s, 20 * s)
 
 func _process_tsunami(delta):
 	if tsunami_timer <= 0:
@@ -2652,36 +2647,19 @@ func _place_npc(x, y):
 		"heal_power": randf_range(15.0, 35.0), # Variación en fuerza de las curas médicas
 		"is_fire_variant": randf() < 0.05,
 		
-		# --- SISTEMA EMOCIONAL ---
-		"emoji_node": null,
+		# --- SISTEMA EMOCIONAL (Pintado directo) ---
 		"emoji_timer": 0.0,
 		"current_emoji": "",
 		"idle_emote_timer": randf_range(2.0, 5.0),
 		"has_spotted_enemy": false,
-		"stuck_timer": 0.0, # Track how long the NPC has been unsuccessfully trying to move
-		"last_pos_x": start_x # To detect if actually moving
+		"stuck_timer": 0.0, 
+		"last_pos_x": start_x 
 	}
-	
-	# Crear el Label del Emoji usando la nueva función centralizada
-	var emoji_lab = _create_npc_emoji_label()
-	emoji_layer.add_child(emoji_lab)
-	new_npc["emoji_node"] = emoji_lab
 	
 	new_npc["max_hp"] = new_npc["hp"]
 	active_npcs.append(new_npc)
 	_draw_npc_pixels(new_npc)
 
-# Función auxiliar para crear etiquetas de emoji para NPCs de forma consistente
-func _create_npc_emoji_label() -> Label:
-	var lab = Label.new()
-	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lab.add_theme_font_size_override("font_size", 20)
-	lab.add_theme_font_override("font", _get_safe_font())
-	lab.add_theme_color_override("font_shadow_color", Color.BLACK)
-	lab.add_theme_constant_override("shadow_outline_size", 4)
-	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lab.z_index = 20
-	return lab
 
 func _draw_npc_pixels(npc, override_mat = -1):
 	var sx = npc.pos.x; var sy = npc.pos.y
@@ -2738,6 +2716,9 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	else:
 		_set_cell(sx, sy+2, m_torso); _set_cell(sx+1, sy+2, team_mat) # Mezcla clase/equipo
 		_set_cell(sx, sy+3, team_mat); _set_cell(sx+1, sy+3, m_torso)
+		# Fila 4: Zapatos (Restaurados)
+		_set_cell(sx, sy+4, m_shoes); _set_cell(sx+1, sy+4, m_shoes)
+
 func _update_npc_spatial_hash():
 	for cell in npc_spatial_grid:
 		cell.clear()
@@ -2760,13 +2741,7 @@ func _get_nearby_npcs(px, py, radius) -> Array:
 
 func _process_npcs(delta):
 	# --- VISUALES POR FRAME (Suavidad total y cero lag) ---
-	for i in range(active_npcs.size()):
-		var npc = active_npcs[i]
-		if is_instance_valid(npc.get("emoji_node")):
-			var n_node = npc.emoji_node
-			# Calcular posición con snapping de píxel para evitar borrosidad
-			var world_pos = Vector2(npc.pos.x, npc.pos.y) * grid_scale
-			n_node.position = (world_pos + Vector2(-6, -30)).floor() # Altura reducida a la mitad
+	# queue_redraw() se llama al final para renderizar los emojis
 	
 	# --- LÓGICA DE IA (20 veces por segundo para rendimiento) ---
 	npc_update_timer += delta
@@ -2777,38 +2752,28 @@ func _process_npcs(delta):
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
 		
-		# Procesar timers de emojis y visibilidad (Lógica de Ciclo Emocional)
-		if is_instance_valid(npc.get("emoji_node")):
-			var n_node = npc.emoji_node
-			var emotes = []
-			
-			if npc.hp <= 0: emotes = ["💀"]
+		# Procesar timers de emojis y visibilidad (Lógica de Ciclo Emocional Optimizado)
+		var emotes = []
+		if npc.hp <= 0: emotes = ["💀"]
+		else:
+			if npc.get("is_fleeing", false): emotes.append("😭")
+			if npc.get("has_spotted_enemy", false): emotes.append("❗")
+			if npc.get("mine_state", "") == "saboteur": emotes.append("⭐"); emotes.append("😄")
+			if !npc.get("has_spotted_enemy", false): emotes.append("👀")
+		
+		# Lógica de visualización
+		if npc.emoji_timer > 0:
+			npc.emoji_timer -= 0.05
+		else:
+			if emotes.size() == 1 and emotes[0] == "👀":
+				var t_ms = Time.get_ticks_msec() % 3000
+				npc.current_emoji = "👀" if t_ms < 1000 else ""
+			elif emotes.size() > 0:
+				var time_idx = int(Time.get_ticks_msec() / 1000) % emotes.size()
+				npc.current_emoji = emotes[time_idx]
 			else:
-				if npc.get("is_fleeing", false): emotes.append("😭")
-				if npc.get("has_spotted_enemy", false): emotes.append("❗")
-				if npc.get("mine_state", "") == "saboteur":
-					emotes.append("⭐"); emotes.append("😄")
-				
-				# Si no ha detectado enemigos, siempre debe estar en vigilia (alternando con lo demás)
-				if !npc.get("has_spotted_enemy", false):
-					emotes.append("👀")
-			
-			# Lógica de visualización: Prioridad al emoji temporal (de _set_npc_emoji)
-			if npc.emoji_timer > 0:
-				npc.emoji_timer -= 0.05
-				n_node.text = npc.current_emoji
-			else:
-				# Si no hay emoji temporal, ciclar entre las emociones activas
-				if emotes.size() == 1 and emotes[0] == "👀":
-					# Caso Vigilancia Pura: Ciclo de 3s (1s de Ojos, 2s de Silencio)
-					var t_ms = Time.get_ticks_msec() % 3000
-					n_node.text = "👀" if t_ms < 1000 else ""
-				else:
-					# Multi-emociones: Ciclar 1 segundo cada una
-					var time_idx = int(Time.get_ticks_msec() / 1000) % emotes.size()
-					n_node.text = emotes[time_idx]
-				npc.current_emoji = "" # Resetar para permitir nuevos ciclos
-
+				npc.current_emoji = ""
+		
 		if npc.hit_flash > 0: 
 			npc.hit_flash -= 1
 			if npc.hit_flash == 0: npc.hit_type = "none"
@@ -3136,13 +3101,14 @@ func _process_npcs(delta):
 				for fx in range(-2, 3):
 					var f_idx = np.x + fx
 					if f_idx >= 0 and f_idx < grid_width: _set_cell(f_idx, np.y + 5, 3); _set_cell(f_idx, np.y - 1, 3)
-			if is_instance_valid(npc.emoji_node): npc.emoji_node.queue_free()
+			npc.current_emoji = ""
 			dead_indices.append(i)
 	dead_indices.sort(); dead_indices.reverse()
 	for idx in dead_indices: active_npcs.remove_at(idx)
 	for npc in active_npcs: _draw_npc_pixels(npc)
 
 func _miner_dig(npc, dig_down=false):
+	if npc.hp <= 0: return
 	var now = Time.get_ticks_msec()
 	if now - npc.last_dig_time >= 3000: _play_action_sound("miner_dig"); npc.last_dig_time = now
 	
@@ -3186,6 +3152,7 @@ func _miner_dig(npc, dig_down=false):
 			_set_cell(cx, cy, 0)
 
 func _shoot_arrow(npc, target):
+	if npc.hp <= 0: return
 	if !npc.get("morale_broken", false): _set_npc_emoji(npc, "😡", 0.8)
 	_play_action_sound("archer_shoot"); var dx = float(target.pos.x - npc.pos.x); var dir = 1 if dx > 0 else -1; var aim_dy = float((target.pos.y + 2) - npc.pos.y); var speed_x = clamp(abs(dx) * 1.5, 90.0, 150.0); var vx = dir * speed_x; var t = abs(dx) / speed_x
 	if t < 0.1: t = 0.1
@@ -3231,6 +3198,7 @@ func _find_closest_enemy(me, radar_range):
 	return closest
 
 func _attack_npc(attacker, victim):
+	if attacker.hp <= 0 or victim.hp <= 0: return
 	if !attacker.get("morale_broken", false): _set_npc_emoji(attacker, "😡", 0.8)
 	victim.hp -= (15.0 * attacker.get("atk_dmg", 1.0)); victim.hit_flash = 5; victim.hit_type = "normal"
 	if attacker.get("is_fire_variant", false):
@@ -3282,9 +3250,7 @@ func _check_npc_environment_damage(npc) -> bool:
 	return took_damage
 
 func _set_npc_emoji(npc, emoji_text: String, duration: float = 2.0):
-	if !is_instance_valid(npc.get("emoji_node")): return
 	if npc.current_emoji == emoji_text: return # Avoid spamming same emoji
-	npc.emoji_node.text = emoji_text
 	npc.current_emoji = emoji_text
 	npc.emoji_timer = duration
 
@@ -3625,7 +3591,6 @@ func _clear_all():
 	tags_array.fill(0)
 	surface_cache.fill(0)
 	active_npcs.clear()
-	for c in emoji_layer.get_children(): c.queue_free()
 	active_projectiles.clear()
 	_update_texture()
 	_update_material_highlights()
