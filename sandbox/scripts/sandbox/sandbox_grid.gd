@@ -193,7 +193,7 @@ var translations_map = {
 		"lang": "🌐 Idioma",
 		"brush": "🖌️ Pincel",
 		"weather": "⛈️ Clima",
-		"quake": "🫨 Sismo",
+		"quake": "🏚️ Sismo",
 		"tornado": "🌪️ Tornado",
 		"tsunami": "🌊 Tsunami",
 		"off": "Off",
@@ -247,7 +247,7 @@ var translations_map = {
 		"lang": "🌐 Language",
 		"brush": "🖌️ Brush",
 		"weather": "⛈️ Weather",
-		"quake": "🫨 Quake",
+		"quake": "🏚️ Quake",
 		"tornado": "🌪️ Tornado",
 		"tsunami": "🌊 Tsunami",
 		"off": "Off",
@@ -644,6 +644,16 @@ func _setup_main_ui_containers():
 		if child.name == "ActionScroll" or child.name.begins_with("ActionButtons"):
 			child.get_parent().remove_child(child)
 			child.queue_free()
+			
+	# NUEVO: Limpiar la capa de emojis de NPCs para evitar duplicados al refrescar escala
+	if is_instance_valid(emoji_layer):
+		for child in emoji_layer.get_children():
+			child.queue_free()
+		# Reconectar cada NPC activo a su nueva etiqueta después de limpiar
+		for npc in active_npcs:
+			var lab = _create_npc_emoji_label()
+			emoji_layer.add_child(lab)
+			npc["emoji_node"] = lab
 	
 	# 2. FIND MaterialGrid (Wherever it is)
 	if not material_grid:
@@ -2639,20 +2649,26 @@ func _place_npc(x, y):
 		"has_spotted_enemy": false
 	}
 	
-	# Crear el Label del Emoji con mejor visibilidad
-	var emoji_lab = Label.new()
-	emoji_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	emoji_lab.add_theme_font_size_override("font_size", 20) # Aumentado un 20% (de 16 a 20)
-	emoji_lab.add_theme_font_override("font", _get_safe_font())
-	emoji_lab.add_theme_color_override("font_shadow_color", Color.BLACK)
-	emoji_lab.add_theme_constant_override("shadow_outline_size", 4)
-	emoji_lab.z_index = 20
+	# Crear el Label del Emoji usando la nueva función centralizada
+	var emoji_lab = _create_npc_emoji_label()
 	emoji_layer.add_child(emoji_lab)
 	new_npc["emoji_node"] = emoji_lab
 	
 	new_npc["max_hp"] = new_npc["hp"]
 	active_npcs.append(new_npc)
 	_draw_npc_pixels(new_npc)
+
+# Función auxiliar para crear etiquetas de emoji para NPCs de forma consistente
+func _create_npc_emoji_label() -> Label:
+	var lab = Label.new()
+	lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lab.add_theme_font_size_override("font_size", 20)
+	lab.add_theme_font_override("font", _get_safe_font())
+	lab.add_theme_color_override("font_shadow_color", Color.BLACK)
+	lab.add_theme_constant_override("shadow_outline_size", 4)
+	lab.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lab.z_index = 20
+	return lab
 
 func _draw_npc_pixels(npc, override_mat = -1):
 	var sx = npc.pos.x; var sy = npc.pos.y
