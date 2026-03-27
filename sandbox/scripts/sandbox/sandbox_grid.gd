@@ -59,6 +59,7 @@ var disaster_panel: PanelContainer
 var npc_panel: PanelContainer
 var selected_team: int = 0 
 var mouse_was_pressed: bool = false
+var touch_started_on_ui: bool = false # NEW: Track if the touch session began over UI
 var active_npcs = [] # Array of dicts: { "pos": Vector2i, "team": int, "dir": int, "type": string, "hp": float, etc }
 var active_projectiles = [] # { pos: Vector2, vel: Vector2, team: int, type: string }
 var npc_update_timer: float = 0.0
@@ -615,6 +616,7 @@ func _setup_main_ui_containers():
 	
 	if existing_scroll:
 		material_scroll = existing_scroll
+		material_scroll.scroll_deadzone = 25
 		scroll_vbox = material_scroll.find_child("ScrollVBox", true, false)
 	else:
 		# FIRST TIME WRAPPING
@@ -652,6 +654,9 @@ func _setup_main_ui_containers():
 		parent.move_child(material_scroll, idx)
 		material_scroll.add_child(scroll_vbox)
 		scroll_vbox.add_child(material_grid)
+		
+		# OPTIMIZATION: Use deadzone for smoother mobile scrolling
+		material_scroll.scroll_deadzone = 25
 		
 		material_scroll.mouse_entered.connect(func(): is_mouse_over_ui = true)
 		material_scroll.mouse_exited.connect(func(): is_mouse_over_ui = false)
@@ -714,6 +719,7 @@ func _setup_main_ui_containers():
 	action_scroll.name = "ActionScroll"
 	action_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	action_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	action_scroll.scroll_deadzone = 25
 	main_controls.add_child(action_scroll)
 	
 	action_vbox = VBoxContainer.new()
@@ -1323,10 +1329,14 @@ func _update_highlights():
 					btn.remove_theme_stylebox_override("normal")
 
 func _is_any_ui_blocking() -> bool:
-	if is_mouse_over_ui: return true # Original mouse_entered check
-	
-	# Fallback: Absolute Rect Check (For safety when clicking fast)
-	var m_pos = texture_rect.get_global_mouse_position()
+	# 1. Check if we are over the bottom HUD using grid math (FASTEST)
+	var m_local = get_local_mouse_position()
+	var gy = int(m_local.y / grid_scale)
+	if gy >= dynamic_grid_height:
+		return true
+
+	# 2. Check Floating Panels (Only if they are actually visible)
+	var m_pos = get_global_mouse_position()
 	
 	if tools_panel and tools_panel.visible and tools_panel.get_global_rect().has_point(m_pos):
 		return true
@@ -1334,10 +1344,9 @@ func _is_any_ui_blocking() -> bool:
 		return true
 	if npc_panel and npc_panel.visible and npc_panel.get_global_rect().has_point(m_pos):
 		return true
-	if material_scroll and material_scroll.get_global_rect().has_point(m_pos):
-		return true
-	if action_vbox and action_vbox.get_global_rect().has_point(m_pos):
-		return true
+	
+	# Fallback to signal-based flag
+	if is_mouse_over_ui: return true
 		
 	return false
 
@@ -1422,29 +1431,42 @@ func _play_action_sound(action: String, min_interval: float = 0.08):
 
 func _process(delta):
 	# Handle input with robust UI blocking
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not _is_any_ui_blocking():
-		# 1. AUTOCLOSE MENUS ON WORKSPACE TAP
-		if not mouse_was_pressed:
-			if is_instance_valid(tools_panel) and tools_panel.visible: tools_panel.visible = false
-			if is_instance_valid(disaster_panel) and disaster_panel.visible: disaster_panel.visible = false
-			if is_instance_valid(npc_panel) and npc_panel.visible: npc_panel.visible = false
-			
-		var m_pos = get_local_mouse_position()
-		var gx = int(m_pos.x / grid_scale)
-		var gy = int(m_pos.y / grid_scale)
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		var is_blocking = _is_any_ui_blocking()
 		
-		# NPC Special placement: only place on initial click
-		if (material_tags_raw[selected_material] & SandboxMaterial.Tags.NPC):
-			if not mouse_was_pressed:
-				_place_npc(gx, gy)
-				_play_action_sound("npc_place")
-			_manage_brush_sound(-1) # Stop brush if switching to NPC
+		# 1. INITIAL TOUCH PROTECTION
+		if not mouse_was_pressed:
+			touch_started_on_ui = is_blocking
+			
+			# 2. AUTOCLOSE MENUS ON WORKSPACE TAP (Only if didn't start on UI)
+			if not touch_started_on_ui:
+				if is_instance_valid(tools_panel) and tools_panel.visible: tools_panel.visible = false
+				if is_instance_valid(disaster_panel) and disaster_panel.visible: disaster_panel.visible = false
+				if is_instance_valid(npc_panel) and npc_panel.visible: npc_panel.visible = false
+
+		# DRAW LOGIC (Only if touch session started on Sandbox AND current position is Sandbox)
+		if not touch_started_on_ui and not is_blocking:
+			var m_pos = get_local_mouse_position()
+			var gx = int(m_pos.x / grid_scale)
+			var gy = int(m_pos.y / grid_scale)
+			
+			# NPC Special placement: only place on initial click
+			if (material_tags_raw[selected_material] & SandboxMaterial.Tags.NPC):
+				if not mouse_was_pressed:
+					_place_npc(gx, gy)
+					_play_action_sound("npc_place")
+				_manage_brush_sound(-1) # Stop brush if switching to NPC
+			else:
+				_manage_brush_sound(selected_material)
+				_draw_circle(gx, gy, brush_radius, selected_material)
 		else:
-			_manage_brush_sound(selected_material)
-			_draw_circle(gx, gy, brush_radius, selected_material)
+			# Not drawing, but we might need to stop sound if we were drawing and entered UI
+			_manage_brush_sound(-1)
+			
 		mouse_was_pressed = true
 	else:
 		mouse_was_pressed = false
+		touch_started_on_ui = false
 		_manage_brush_sound(-1) # Stop sound when finger lifted
 
 	# Simulation
