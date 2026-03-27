@@ -834,6 +834,7 @@ func _setup_tools_ui():
 	tools_panel.add_child(scroll)
 	
 	tools_btn.pressed.connect(func(): 
+		_play_action_sound("ui_click")
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		if is_instance_valid(tools_panel): tools_panel.visible = !tools_panel.visible
@@ -864,7 +865,10 @@ func _setup_tools_ui():
 			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			btn.add_theme_font_size_override("font_size", 14 * s)
 			var level = i
-			btn.pressed.connect(func(): callback.call(level))
+			btn.pressed.connect(func(): 
+				_play_action_sound("ui_click")
+				callback.call(level)
+			)
 			flow.add_child(btn)
 			ui_elements[label_key + "_btn_" + str(i)] = btn 
 
@@ -1042,6 +1046,7 @@ func _setup_disaster_ui():
 	disaster_panel.add_child(scroll)
 	
 	disaster_btn.pressed.connect(func(): 
+		_play_action_sound("ui_click")
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = !disaster_panel.visible
@@ -1072,7 +1077,10 @@ func _setup_disaster_ui():
 			btn.text = translations_map[current_language][osk]
 			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			btn.add_theme_font_size_override("font_size", 14 * s)
-			btn.pressed.connect(func(): callback.call(i))
+			btn.pressed.connect(func(): 
+				_play_action_sound("ui_click")
+				callback.call(i)
+			)
 			flow.add_child(btn)
 			ui_elements[label_key + "_btn_" + str(i)] = [btn, osk]
 
@@ -1254,6 +1262,7 @@ func _add_button(key: String, mat_id: int):
 	slot_pnl.gui_input.connect(func(event):
 		if not is_instance_valid(event) or not is_instance_valid(slot_pnl): return
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_play_action_sound("ui_click")
 			selected_material = mat_id
 			_update_material_highlights()
 	)
@@ -2424,6 +2433,7 @@ func _setup_npc_ui():
 	npc_btn.add_theme_stylebox_override("pressed", btn_style)
 	
 	npc_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = !npc_panel.visible
@@ -2451,6 +2461,7 @@ func _setup_npc_ui():
 			btn.text = translations_map[current_language][key]
 			btn.custom_minimum_size = Vector2(100 * s, 45 * s)
 			btn.pressed.connect(func():
+				_play_action_sound("ui_click")
 				selected_material = id # Master Warrior Material
 				_update_material_highlights()
 				_update_menu_highlights()
@@ -2481,6 +2492,7 @@ func _setup_npc_ui():
 			t_btn.add_theme_font_size_override("font_size", 12 * s)
 			var tidx = i
 			t_btn.pressed.connect(func():
+				_play_action_sound("ui_click")
 				selected_team = tidx
 				_update_menu_highlights()
 			)
