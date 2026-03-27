@@ -200,7 +200,8 @@ var translations_map = {
 		"team_yellow": "🟡 Amarillo",
 		"team_green": "🟢 Verde",
 		"ice": "Hielo",
-		"support": "💎 Apoya al Creador (Anuncio)"
+		"support": "💎 Apoya al Creador (Anuncio)",
+		"resume_in": "El juego se reanudará en "
 	},
 	"en": {
 		"disasters": "🌪️ Disasters",
@@ -253,7 +254,8 @@ var translations_map = {
 		"team_yellow": "🟡 Yellow",
 		"team_green": "🟢 Green",
 		"ice": "Ice",
-		"support": "💎 Support Creator (Ad)"
+		"support": "💎 Support Creator (Ad)",
+		"resume_in": "Game resumes in "
 	}
 }
 
@@ -925,14 +927,20 @@ func _setup_tools_ui():
 		_play_action_sound("ui_click")
 		
 		if is_paused:
-			# --- RESUMING: AD FIRST -> 1s DELAY -> RESUME ---
+			# --- RESUMING: AD FIRST -> 3s COUNTDOWN -> RESUME ---
 			var ad_shown = false
 			if Engine.has_singleton("PoingGodotAdMob"):
 				ad_shown = AdMobManager.check_and_show_interstitial("pause")
 			
 			if ad_shown:
 				await AdMobManager.ad_dismissed
-				await get_tree().create_timer(1.0).timeout
+				
+				# COUNTDOWN LOGIC
+				pause_btn.disabled = true # Prevent double triggers
+				for i in range(3, 0, -1):
+					pause_btn.text = translations_map[current_language]["resume_in"] + str(i) + "..."
+					await get_tree().create_timer(1.0).timeout
+				pause_btn.disabled = false
 			
 			is_paused = false
 			pause_btn.text = translations_map[current_language]["pause"]
