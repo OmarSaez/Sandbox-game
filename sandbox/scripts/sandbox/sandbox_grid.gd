@@ -609,7 +609,7 @@ func _setup_materials_within_grid():
 	if scroll_vbox and scroll_vbox.name == "ScrollVBox":
 		var spacer = Control.new()
 		spacer.name = "FinalSpacer"
-		spacer.custom_minimum_size = Vector2(0, 15 * s) # TIGHT PADDING (Enough to see labels)
+		spacer.custom_minimum_size = Vector2(0, 10) # MINIMAL PADDING AT BOTTOM
 		scroll_vbox.add_child(spacer)
 
 
@@ -714,8 +714,8 @@ func _setup_main_ui_containers():
 		material_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	# ALWAYS Refresh Scroll Height for the current scale
-	# NEW: LARGER TALL HUD with logical CAP (max 210px) 
-	var h = min(185 * s, 210)
+	# NEW: LARGER TALL HUD with logical CAP (Fixed at 340px for stability) 
+	var h = 340
 	
 	# UPDATE PHYSICAL BOUNDARY
 	dynamic_grid_height = grid_height - ceil(h / grid_scale)
@@ -867,7 +867,7 @@ func _setup_tools_ui():
 	
 	var panel_width = 530 * s
 	var panel_height = 490 * s
-	var h = 185 * s # Match the Tall HUD height
+	var h = 340 # Match the Fixed Tall HUD height
 	var bottom_gap = h + (5 * s) # Dynamic GAP above HUD floor
 	
 	tools_panel.offset_left = -panel_width / 2
@@ -1088,7 +1088,7 @@ func _setup_disaster_ui():
 	
 	var d_width = 350 * s
 	var d_height = 490 * s
-	var h = 185 * s # Match the Tall HUD height
+	var h = 340 # Match the Fixed Tall HUD height
 	var d_bottom_gap = h + (5 * s)
 	
 	disaster_panel.offset_left = -d_width / 2
@@ -1188,23 +1188,23 @@ func _refresh_ui_text():
 		# Handle direct button nodes (Tools/Disasters)
 		if key == "tools_btn": 
 			node_data.text = translations_map[current_language]["tools"]
-			node_data.custom_minimum_size = Vector2(160 * s, 38 * s)
+			node_data.custom_minimum_size = Vector2(160 * s, 58 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "disaster_btn": 
 			node_data.text = translations_map[current_language]["disasters"]
-			node_data.custom_minimum_size = Vector2(160 * s, 38 * s)
+			node_data.custom_minimum_size = Vector2(160 * s, 58 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "npc_btn": 
 			node_data.text = translations_map[current_language]["npc"]
-			node_data.custom_minimum_size = Vector2(160 * s, 38 * s)
+			node_data.custom_minimum_size = Vector2(160 * s, 58 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "pause_btn": 
 			node_data.text = translations_map[current_language]["play"] if is_paused else translations_map[current_language]["pause"]
-			node_data.custom_minimum_size = Vector2(0, 38 * s)
+			node_data.custom_minimum_size = Vector2(0, 50 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "reset_btn": 
 			node_data.text = translations_map[current_language]["reset"]
-			node_data.custom_minimum_size = Vector2(0, 38 * s)
+			node_data.custom_minimum_size = Vector2(0, 50 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "support_btn":
 			node_data.text = translations_map[current_language]["support"]
@@ -2452,7 +2452,7 @@ func _setup_npc_panel_node():
 	#Tamaño del panel NPC
 	var p_width = 530 * s
 	var p_height = 250 * s
-	var h = 185 * s # Match the Tall HUD height
+	var h = 340 # Match the Fixed Tall HUD height
 	var bottom_gap = h + (5 * s)
 	
 	npc_panel.offset_left = -p_width / 2
