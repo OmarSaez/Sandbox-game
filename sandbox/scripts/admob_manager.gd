@@ -5,8 +5,11 @@ extends Node
 # 2. Inicialización automática al arrancar el juego.
 # 3. Solo logs internos por consola (si se desea).
 
+signal ad_dismissed
+
 var _banner_view : AdView
 var _interstitial_ad : InterstitialAd
+var _active_ad : InterstitialAd # PERSISTENCE: Keeps the ad alive while showing
 var _interstitial_loading : bool = false
 var ad_free_time : float = 0.0 # Segundos restantes sin anuncios
 var first_pause_used : bool = false
@@ -92,33 +95,52 @@ func _load_interstitial():
 	print("ADMOB: Lanzando carga de Intersticial (Modo ultra-limpio 4.6)...")
 	InterstitialAdLoader.new().load(unit_id, request, load_callback)
 
-func show_interstitial():
+func show_interstitial() -> bool:
 	if _interstitial_ad:
-		print("ADMOB: Mostrando anuncio. +5 min de tiempo libre.")
-		_interstitial_ad.show()
+		print("ADMOB: Mostrando anuncio...")
+		
+		# Transfer to persistent variable so it's not GC'ed
+		_active_ad = _interstitial_ad
 		_interstitial_ad = null 
+		
+		var callback := FullScreenContentCallback.new()
+		callback.on_ad_dismissed_full_screen_content = func():
+			print("ADMOB: Anuncio cerrado.")
+			_active_ad = null
+			ad_dismissed.emit()
+		callback.on_ad_failed_to_show_full_screen_content = func(_err):
+			print("ADMOB: Fallo al mostrar.")
+			_active_ad = null
+			ad_dismissed.emit()
+		
+		_active_ad.full_screen_content_callback = callback
+		_active_ad.show()
+		
 		ad_free_time += 300.0 # Sumamos 5 minutos (Acumulable)
 		_load_interstitial() 
+		return true
 	else:
 		print("ADMOB: El anuncio aún no está listo.")
 		_load_interstitial()
+		return false
 
-func check_and_show_interstitial(button_type: String = ""):
+func check_and_show_interstitial(button_type: String = "") -> bool:
 	# PRIMERA VEZ GRACIA: Si es la primera vez que se pulsa un botón específico, NO mostrar.
 	if button_type == "pause" and not first_pause_used:
 		print("ADMOB: Primera pausa gratis.")
 		first_pause_used = true
-		return
+		return false
 	if button_type == "reset" and not first_reset_used:
 		print("ADMOB: Primer reset gratis.")
 		first_reset_used = true
-		return
+		return false
 
 	if ad_free_time <= 0:
 		print("ADMOB: Tiempo agotado. Solicitando anuncio obligatorio.")
-		show_interstitial()
+		return show_interstitial()
 	else:
-		print("ADMOB: Aún queda tiempo libre de anuncios (%.1f s). Saltando." % ad_free_time)
+		print("ADMOB: Saltando anuncio. Tiempo libre: %.1f s" % ad_free_time)
+		return false
 
 func _exit_tree() -> void:
 	if _banner_view:

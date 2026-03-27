@@ -923,11 +923,26 @@ func _setup_tools_ui():
 	pause_btn.add_theme_font_size_override("font_size", 16 * s) # SCALED
 	pause_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
-		if Engine.has_singleton("PoingGodotAdMob"):
-			AdMobManager.check_and_show_interstitial("pause") 
 		
-		is_paused = !is_paused
-		pause_btn.text = translations_map[current_language]["play"] if is_paused else translations_map[current_language]["pause"]
+		if is_paused:
+			# --- RESUMING: AD FIRST -> 1s DELAY -> RESUME ---
+			var ad_shown = false
+			if Engine.has_singleton("PoingGodotAdMob"):
+				ad_shown = AdMobManager.check_and_show_interstitial("pause")
+			
+			if ad_shown:
+				await AdMobManager.ad_dismissed
+				await get_tree().create_timer(1.0).timeout
+			
+			is_paused = false
+			pause_btn.text = translations_map[current_language]["pause"]
+		else:
+			# --- PAUSING: PAUSE FIRST -> THEN SHOW AD ---
+			is_paused = true
+			pause_btn.text = translations_map[current_language]["play"]
+			if Engine.has_singleton("PoingGodotAdMob"):
+				AdMobManager.check_and_show_interstitial("pause")
+		
 		var players = [weather_player, quake_player, tornado_player, tsunami_player, firework_player, ascent_player, volcano_loop_player, fire_loop_player]
 		for p in players:
 			if is_instance_valid(p):
@@ -943,9 +958,11 @@ func _setup_tools_ui():
 	reset_btn_node.add_theme_font_size_override("font_size", 16 * s)
 	reset_btn_node.pressed.connect(func():
 		_play_action_sound("ui_click")
+		# RESET FIRST
+		_clear_all()
+		# THEN AD
 		if Engine.has_singleton("PoingGodotAdMob"):
 			AdMobManager.check_and_show_interstitial("reset")
-		_clear_all()
 	)
 	ui_elements["reset_btn"] = reset_btn_node
 	v_box.add_child(reset_btn_node)
