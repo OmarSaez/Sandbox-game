@@ -99,6 +99,10 @@ func _get_safe_font() -> Font:
 	return _combined_font
 var touch_started_on_ui: bool = false # NEW: Track if the touch session began over UI
 var active_npcs = [] # Array of dicts: { "pos": Vector2i, "team": int, "dir": int, "type": string, "hp": float, etc }
+const SPATIAL_CELL_SIZE = 32
+var npc_spatial_grid = [] 
+var spatial_grid_w = 0
+var spatial_grid_h = 0
 var active_projectiles = [] # { pos: Vector2, vel: Vector2, team: int, type: string }
 var npc_update_timer: float = 0.0
 var sfx_pool: Array[AudioStreamPlayer] = []
@@ -404,10 +408,13 @@ func _ready():
 	mat_colors_3.resize(2048)
 	material_tags_raw.resize(2048)
 	
-	cells.fill(0)
-	charge_array.fill(0)
-	tags_array.fill(0)
-	
+	# === SPATIAL HASH SETUP ===
+	spatial_grid_w = ceil(float(grid_width) / SPATIAL_CELL_SIZE)
+	spatial_grid_h = ceil(float(grid_height) / SPATIAL_CELL_SIZE)
+	npc_spatial_grid.resize(spatial_grid_w * spatial_grid_h)
+	for i in range(npc_spatial_grid.size()):
+		npc_spatial_grid[i] = []
+		
 	# Setup materials (0-255)
 	_register_material(0, Color(0, 0, 0, 0), SandboxMaterial.Tags.NONE)
 	
@@ -1586,6 +1593,7 @@ func _process(delta):
 
 	# Simulation
 	if not is_paused:
+		_update_npc_spatial_hash()
 		_step_simulation()
 		
 		# NPC AI & Physics
@@ -2593,8 +2601,9 @@ func _place_npc(x, y):
 					var test_x = origin_x + dx
 					var test_y = origin_y + dy
 					
+					var nearby = _get_nearby_npcs(test_x, test_y, 10.0)
 					var overlap = false
-					for other in active_npcs:
+					for other in nearby:
 						if test_x < other.pos.x + 2 and test_x + 2 > other.pos.x and test_y < other.pos.y + 5 and test_y + 5 > other.pos.y:
 							overlap = true
 							break
@@ -2729,8 +2738,25 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	else:
 		_set_cell(sx, sy+2, m_torso); _set_cell(sx+1, sy+2, team_mat) # Mezcla clase/equipo
 		_set_cell(sx, sy+3, team_mat); _set_cell(sx+1, sy+3, m_torso)
-	# Fila 4: Zapatos
-	_set_cell(sx, sy+4, m_shoes); _set_cell(sx+1, sy+4, m_shoes)
+func _update_npc_spatial_hash():
+	for cell in npc_spatial_grid:
+		cell.clear()
+	for npc in active_npcs:
+		var cx = clampi(int(npc.pos.x / SPATIAL_CELL_SIZE), 0, spatial_grid_w - 1)
+		var cy = clampi(int(npc.pos.y / SPATIAL_CELL_SIZE), 0, spatial_grid_h - 1)
+		npc_spatial_grid[cy * spatial_grid_w + cx].append(npc)
+
+func _get_nearby_npcs(px, py, radius) -> Array:
+	var results = []
+	if npc_spatial_grid.is_empty(): return results
+	var x_min = clampi(int((px - radius) / SPATIAL_CELL_SIZE), 0, spatial_grid_w - 1)
+	var x_max = clampi(int((px + radius) / SPATIAL_CELL_SIZE), 0, spatial_grid_w - 1)
+	var y_min = clampi(int((py - radius) / SPATIAL_CELL_SIZE), 0, spatial_grid_h - 1)
+	var y_max = clampi(int((py + radius) / SPATIAL_CELL_SIZE), 0, spatial_grid_h - 1)
+	for gy in range(y_min, y_max + 1):
+		for gx in range(x_min, x_max + 1):
+			results.append_array(npc_spatial_grid[gy * spatial_grid_w + gx])
+	return results
 
 func _process_npcs(delta):
 	# --- VISUALES POR FRAME (Suavidad total y cero lag) ---
@@ -2794,7 +2820,8 @@ func _process_npcs(delta):
 			if heal_cd > 0: heal_cd -= 0.05
 			npc["attack_cooldown"] = heal_cd
 			var closest_enemy = _find_closest_enemy(npc, 180.0); var closest_ally = null; var ally_dist = 999.0
-			for other in active_npcs:
+			var nearby = _get_nearby_npcs(npc.pos.x, npc.pos.y, 180.0)
+			for other in nearby:
 				if other.team == npc.team and other != npc and other.hp > 0 and other.type != "medic":
 					var mhp = other.get("max_hp", 100.0)
 					if other.hp < mhp: 
@@ -3059,8 +3086,9 @@ func _process_npcs(delta):
 						var tx_2 = np.x + (npc.dir * 2)
 						var tx_test = tx_1 if (target != null or randf() < 0.5) else tx_2
 						
+						var nearby = _get_nearby_npcs(tx_test, np.y, 10.0)
 						var bumped_ally = false
-						for other in active_npcs:
+						for other in nearby:
 							if other.team == npc.team and other != npc:
 								if tx_test < other.pos.x + 2 and tx_test + 2 > other.pos.x and np.y < other.pos.y + 5 and np.y + 5 > other.pos.y:
 									bumped_ally = true; break
@@ -3172,7 +3200,8 @@ func _process_projectiles(delta):
 		var gx = int(p.pos.x); var gy = int(p.pos.y)
 		if gx < 0 or gx >= grid_width or gy < 0 or gy >= dynamic_grid_height or p.life <= 0: to_remove.append(i); continue
 		var hit_npc = null
-		for other in active_npcs:
+		var nearby = _get_nearby_npcs(gx, gy, 8.0)
+		for other in nearby:
 			if other.team != p.team:
 				if gx >= other.pos.x and gx <= other.pos.x + 1 and gy >= other.pos.y and gy <= other.pos.y + 4: hit_npc = other; break
 		if hit_npc:
@@ -3194,8 +3223,9 @@ func _process_projectiles(delta):
 
 func _find_closest_enemy(me, radar_range):
 	var closest = null; var min_dist = radar_range
-	for other in active_npcs:
-		if other.team != me.team:
+	var nearby = _get_nearby_npcs(me.pos.x, me.pos.y, radar_range)
+	for other in nearby:
+		if other.team != me.team and other.hp > 0:
 			var d = me.pos.distance_to(other.pos)
 			if d < min_dist: min_dist = d; closest = other
 	return closest
@@ -3274,7 +3304,8 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 	# Chequeo de lista de NPCs: Ignorar aliados para evitar atascos de grupo
 	if moving_npc != null:
 		var mx = moving_npc.pos.x; var my = moving_npc.pos.y
-		for other in active_npcs:
+		var nearby = _get_nearby_npcs(gx, gy, 10.0)
+		for other in nearby:
 			if other == moving_npc: continue
 			# Regla de oro: Aliados no se estorban
 			if other.team == moving_npc.team: continue 
@@ -3409,7 +3440,8 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 	var is_heavy_load = explosions_this_frame > 10
 	_set_cell(x, y, 0); _play_action_sound(sfx_action)
 	var center = Vector2i(x, y)
-	for npc in active_npcs:
+	var nearby = _get_nearby_npcs(x, y, radius + 5)
+	for npc in nearby:
 		var dist = Vector2(npc.pos).distance_to(Vector2(center))
 		if dist < radius:
 			var ratio = 1.0 - (dist / radius); npc.hp -= ratio * 120.0; npc.hit_flash = 12; npc.hit_type = "explosive"
