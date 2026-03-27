@@ -2521,6 +2521,7 @@ func _setup_npc_ui():
 			var btn = Button.new()
 			btn.text = translations_map[current_language][key]
 			btn.custom_minimum_size = Vector2(100 * s, 45 * s)
+			btn.add_theme_font_override("font", _get_safe_font())
 			btn.pressed.connect(func():
 				_play_action_sound("ui_click")
 				selected_material = id # Master Warrior Material
@@ -2551,6 +2552,7 @@ func _setup_npc_ui():
 			t_btn.text = translations_map[current_language][team_keys[i]]
 			t_btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			t_btn.add_theme_font_size_override("font_size", 12 * s)
+			t_btn.add_theme_font_override("font", _get_safe_font())
 			var tidx = i
 			t_btn.pressed.connect(func():
 				_play_action_sound("ui_click")
