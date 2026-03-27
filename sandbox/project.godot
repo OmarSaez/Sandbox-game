@@ -42,3 +42,4 @@ enabled=PackedStringArray("res://addons/admob/plugin.cfg")
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="mobile"
 textures/vram_compression/import_etc2_astc=true
+rendering/text/canvas_item/allow_emoji=true

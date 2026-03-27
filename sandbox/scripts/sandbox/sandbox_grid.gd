@@ -59,6 +59,42 @@ var disaster_panel: PanelContainer
 var npc_panel: PanelContainer
 var selected_team: int = 0 
 var mouse_was_pressed: bool = false
+@export var custom_emoji_font: Font 
+
+var _combined_font: FontVariation # La fuente final que combina texto + emojis
+
+func _get_safe_font() -> Font:
+	if not _combined_font:
+		_combined_font = FontVariation.new()
+		
+		# 1. FUENTE BASE (Para números y letras normales)
+		var base_font = SystemFont.new()
+		base_font.font_names = PackedStringArray(["sans-serif", "arial"])
+		_combined_font.base_font = base_font
+		
+		# 2. FUENTE DE EMOJIS (Como respaldo / Fallback)
+		var emoji_f: Font
+		if custom_emoji_font:
+			emoji_f = custom_emoji_font
+		else:
+			var local_path = "res://assets/fonts/NotoColorEmoji.ttf"
+			if ResourceLoader.exists(local_path):
+				emoji_f = load(local_path)
+		
+		# Si no hay local, buscar la de sistema como último recurso
+		if not emoji_f:
+			var sys_emoji = SystemFont.new()
+			sys_emoji.font_names = PackedStringArray(["Emoji", "ColorEmoji", "Noto Color Emoji"])
+			sys_emoji.multichannel_signed_distance_field = false
+			emoji_f = sys_emoji
+			
+		# Asignar la fuente de emojis como respaldo de la fuente base
+		if emoji_f:
+			_combined_font.set_fallbacks([emoji_f])
+			
+		print("DEBUG: Fuente Combinada (Texto + Emojis) configurada con éxito")
+		
+	return _combined_font
 var touch_started_on_ui: bool = false # NEW: Track if the touch session began over UI
 var active_npcs = [] # Array of dicts: { "pos": Vector2i, "team": int, "dir": int, "type": string, "hp": float, etc }
 var active_projectiles = [] # { pos: Vector2, vel: Vector2, team: int, type: string }
@@ -780,6 +816,7 @@ func _setup_tools_ui():
 	tools_btn.add_theme_font_size_override("font_size", 14 * s)
 	tools_btn.text = translations_map[current_language]["tools"]
 	ui_elements["tools_btn"] = tools_btn
+	tools_btn.add_theme_font_override("font", _get_safe_font())
 	tools_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	action_vbox.add_child(tools_btn)
 	
@@ -852,6 +889,7 @@ func _setup_tools_ui():
 		var lbl = Label.new()
 		lbl.text = translations_map[current_language][label_key] + ": "
 		lbl.add_theme_font_size_override("font_size", 14 * s)
+		lbl.add_theme_font_override("font", _get_safe_font())
 		ui_elements[label_key + "_lbl"] = lbl
 		v_box.add_child(lbl)
 		
@@ -864,6 +902,7 @@ func _setup_tools_ui():
 			btn.text = options[i]
 			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			btn.add_theme_font_size_override("font_size", 14 * s)
+			btn.add_theme_font_override("font", _get_safe_font())
 			var level = i
 			btn.pressed.connect(func(): 
 				_play_action_sound("ui_click")
@@ -907,6 +946,7 @@ func _setup_tools_ui():
 	support_btn.text = translations_map[current_language]["support"]
 	support_btn.custom_minimum_size = Vector2(0, 60 * s) 
 	support_btn.add_theme_font_size_override("font_size", 16 * s)
+	support_btn.add_theme_font_override("font", _get_safe_font())
 	
 	var support_style = StyleBoxFlat.new()
 	support_style.bg_color = Color(0.2, 0.4, 0.2, 1.0) # Nice Emerald Green
@@ -936,6 +976,7 @@ func _setup_tools_ui():
 	pause_btn.text = translations_map[current_language]["play"] if is_paused else translations_map[current_language]["pause"]
 	pause_btn.custom_minimum_size = Vector2(0, 50 * s) # SCALED
 	pause_btn.add_theme_font_size_override("font_size", 16 * s) # SCALED
+	pause_btn.add_theme_font_override("font", _get_safe_font())
 	pause_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
 		
@@ -977,6 +1018,7 @@ func _setup_tools_ui():
 	reset_btn_node.text = translations_map[current_language]["reset"]
 	reset_btn_node.custom_minimum_size = Vector2(0, 50 * s)
 	reset_btn_node.add_theme_font_size_override("font_size", 16 * s)
+	reset_btn_node.add_theme_font_override("font", _get_safe_font())
 	reset_btn_node.pressed.connect(func():
 		_play_action_sound("ui_click")
 		# RESET FIRST
@@ -996,6 +1038,7 @@ func _setup_disaster_ui():
 	disaster_btn.add_theme_font_size_override("font_size", 14 * s) # Compact font
 	disaster_btn.text = translations_map[current_language]["disasters"]
 	ui_elements["disaster_btn"] = disaster_btn
+	disaster_btn.add_theme_font_override("font", _get_safe_font())
 	disaster_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	action_vbox.add_child(disaster_btn)
 	
@@ -1071,6 +1114,7 @@ func _setup_disaster_ui():
 		var lbl = Label.new()
 		lbl.text = translations_map[current_language][label_key] + ": "
 		lbl.add_theme_font_size_override("font_size", 14 * s)
+		lbl.add_theme_font_override("font", _get_safe_font())
 		ui_elements[label_key + "_lbl"] = lbl
 		v_box.add_child(lbl)
 		
@@ -1084,6 +1128,7 @@ func _setup_disaster_ui():
 			btn.text = translations_map[current_language][osk]
 			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			btn.add_theme_font_size_override("font_size", 14 * s)
+			btn.add_theme_font_override("font", _get_safe_font())
 			btn.pressed.connect(func(): 
 				_play_action_sound("ui_click")
 				callback.call(i)
@@ -1270,6 +1315,7 @@ func _add_button(key: String, mat_id: int):
 	btn_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	btn_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 	btn_lbl.add_theme_font_size_override("font_size", 18 * s) # EVEN LARGER TEXT
+	btn_lbl.add_theme_font_override("font", _get_safe_font())
 	main_vbox.add_child(btn_lbl)
 	
 	# CENTRALIZED INPUT (Whole slot)
@@ -2432,6 +2478,7 @@ func _setup_npc_ui():
 	npc_btn.add_theme_font_size_override("font_size", 14 * s) # Compact font
 	npc_btn.text = translations_map[current_language]["npc"]
 	ui_elements["npc_btn"] = npc_btn
+	npc_btn.add_theme_font_override("font", _get_safe_font())
 	npc_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	action_vbox.add_child(npc_btn)
 	
@@ -2592,6 +2639,7 @@ func _place_npc(x, y):
 	var emoji_lab = Label.new()
 	emoji_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	emoji_lab.add_theme_font_size_override("font_size", 20) # Aumentado un 20% (de 16 a 20)
+	emoji_lab.add_theme_font_override("font", _get_safe_font())
 	emoji_lab.add_theme_color_override("font_shadow_color", Color.BLACK)
 	emoji_lab.add_theme_constant_override("shadow_outline_size", 4)
 	emoji_lab.z_index = 20
