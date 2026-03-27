@@ -2618,9 +2618,15 @@ func _process_npcs(delta):
 				npc.emoji_timer -= 0.05
 				n_node.text = npc.current_emoji
 			else:
-				# Si no hay emoji temporal, ciclar entre las emociones activas cada segundo
-				var time_idx = int(Time.get_ticks_msec() / 1000) % emotes.size()
-				n_node.text = emotes[time_idx]
+				# Si no hay emoji temporal, ciclar entre las emociones activas
+				if emotes.size() == 1 and emotes[0] == "👀":
+					# Caso Vigilancia Pura: Ciclo de 3s (1s de Ojos, 2s de Silencio)
+					var t_ms = Time.get_ticks_msec() % 3000
+					n_node.text = "👀" if t_ms < 1000 else ""
+				else:
+					# Multi-emociones: Ciclar 1 segundo cada una
+					var time_idx = int(Time.get_ticks_msec() / 1000) % emotes.size()
+					n_node.text = emotes[time_idx]
 				npc.current_emoji = "" # Resetar para permitir nuevos ciclos
 
 		if npc.hit_flash > 0: 
