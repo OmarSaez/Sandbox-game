@@ -50,7 +50,7 @@ var brush_radius: int = 2
 var current_language: String = "es" # "es" or "en"
 var ui_scale_level: int = 1 # Start at 1.2x by default
 func _get_ui_scale() -> float:
-	var scales = [1.0, 1.2, 1.5, 2.0]
+	var scales = [1.0, 1.2, 1.3, 1.5, 1.7, 2.0]
 	return scales[ui_scale_level]
 
 var ui_elements = {} # To track nodes for re-labeling
@@ -881,7 +881,14 @@ func _setup_tools_ui():
 	)
 
 	# UI SCALE ROW (Now 2nd)
-	var scale_labels = [translations_map[current_language]["size"] + " 1.0", translations_map[current_language]["size"] + " 1.2", translations_map[current_language]["size"] + " 1.5", translations_map[current_language]["size"] + " 2.0"]
+	var scale_labels = [
+		translations_map[current_language]["size"] + " 1.0", 
+		translations_map[current_language]["size"] + " 1.2", 
+		translations_map[current_language]["size"] + " 1.3", 
+		translations_map[current_language]["size"] + " 1.5", 
+		translations_map[current_language]["size"] + " 1.7", 
+		translations_map[current_language]["size"] + " 2.0"
+	]
 	create_row.call("ui_size", scale_labels, func(l): 
 		ui_scale_level = l
 		ui_root.set_meta("tools_v", true) # Safe persistence
@@ -1191,7 +1198,14 @@ func _refresh_ui_text():
 				node_data.add_theme_font_size_override("font_size", 14 * s)
 			elif key.begins_with("ui_size_btn_"):
 				var idx = int(key.split("_")[-1])
-				var scale_labels = [translations_map[current_language]["size"] + " 1.0", translations_map[current_language]["size"] + " 1.2", translations_map[current_language]["size"] + " 1.5", translations_map[current_language]["size"] + " 2.0"]
+				var scale_labels = [
+					translations_map[current_language]["size"] + " 1.0", 
+					translations_map[current_language]["size"] + " 1.2", 
+					translations_map[current_language]["size"] + " 1.3", 
+					translations_map[current_language]["size"] + " 1.5", 
+					translations_map[current_language]["size"] + " 1.7", 
+					translations_map[current_language]["size"] + " 2.0"
+				]
 				node_data.text = scale_labels[idx]
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
