@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://b8d3f1g2h3j4k"]
 
 [ext_resource type="Script" uid="uid://dpsjfab0x3gme" path="res://scripts/sandbox/sandbox_grid.gd" id="1_script"]
-[ext_resource type="FontFile" uid="uid://b1p55bhlhmntd" path="res://assets/fonts/NotoColorEmoji.ttf" id="2_ei2sf"]
+[ext_resource type="FontFile" uid="uid://rlblp1o3wr8i" path="res://assets/fonts/Twemoji.Mozilla.ttf" id="2_ei2sf"]
 
 [node name="MainScene" type="Node2D" unique_id=1441274808]
 

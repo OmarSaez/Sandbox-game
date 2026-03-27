@@ -61,39 +61,41 @@ var selected_team: int = 0
 var mouse_was_pressed: bool = false
 @export var custom_emoji_font: Font 
 
-var _combined_font: FontVariation # La fuente final que combina texto + emojis
+var _combined_font: FontVariation 
 
 func _get_safe_font() -> Font:
 	if not _combined_font:
 		_combined_font = FontVariation.new()
 		
-		# 1. FUENTE BASE (Para números y letras normales)
+		# 1. FUENTE BASE (Texto estándar)
 		var base_font = SystemFont.new()
 		base_font.font_names = PackedStringArray(["sans-serif", "arial"])
 		_combined_font.base_font = base_font
 		
-		# 2. FUENTE DE EMOJIS (Como respaldo / Fallback)
-		var emoji_f: Font
-		if custom_emoji_font:
-			emoji_f = custom_emoji_font
-		else:
-			var local_path = "res://assets/fonts/NotoColorEmoji.ttf"
-			if ResourceLoader.exists(local_path):
-				emoji_f = load(local_path)
+		# 2. FUENTE DE ICONOS (La que tú elijas en el Inspector)
+		var emoji_f: Font = custom_emoji_font
 		
-		# Si no hay local, buscar la de sistema como último recurso
+		# Si no has puesto nada en el inspector, intenta buscar la carpeta por defecto
 		if not emoji_f:
-			var sys_emoji = SystemFont.new()
-			sys_emoji.font_names = PackedStringArray(["Emoji", "ColorEmoji", "Noto Color Emoji"])
-			sys_emoji.multichannel_signed_distance_field = false
-			emoji_f = sys_emoji
+			var paths = [
+				"res://assets/fonts/Twemoji.ttf",
+				"res://assets/fonts/NotoColorEmoji.ttf",
+				"res://assets/fonts/FluentEmoji.ttf"
+			]
+			for p in paths:
+				if ResourceLoader.exists(p):
+					emoji_f = load(p)
+					break
+		
+		# 3. ÚLTIMO RECURSO: Sistema
+		if not emoji_f:
+			emoji_f = SystemFont.new()
+			emoji_f.font_names = PackedStringArray(["Emoji", "ColorEmoji", "Noto Color Emoji"])
+			emoji_f.multichannel_signed_distance_field = false
 			
-		# Asignar la fuente de emojis como respaldo de la fuente base
 		if emoji_f:
 			_combined_font.set_fallbacks([emoji_f])
 			
-		print("DEBUG: Fuente Combinada (Texto + Emojis) configurada con éxito")
-		
 	return _combined_font
 var touch_started_on_ui: bool = false # NEW: Track if the touch session began over UI
 var active_npcs = [] # Array of dicts: { "pos": Vector2i, "team": int, "dir": int, "type": string, "hp": float, etc }
