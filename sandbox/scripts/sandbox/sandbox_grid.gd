@@ -2597,22 +2597,31 @@ func _process_npcs(delta):
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
 		
-		# Procesar timers de emojis y visibilidad (Solo lógica, no posición)
+		# Procesar timers de emojis y visibilidad (Lógica de Ciclo Emocional)
 		if is_instance_valid(npc.get("emoji_node")):
-			if npc.hp <= 0:
-				_set_npc_emoji(npc, "💀", -1) 
-			elif npc.get("morale_broken", false) and npc.get("is_fleeing", false) and npc.get("has_spotted_enemy", false):
-				_set_npc_emoji(npc, "😭", -1)
-			elif npc.emoji_timer > 0:
-				npc.emoji_timer -= 0.05
-				if npc.emoji_timer <= 0:
-					npc.emoji_node.text = ""
-					npc.current_emoji = ""
+			var n_node = npc.emoji_node
+			var emotes = []
+			
+			if npc.hp <= 0: emotes = ["💀"]
 			else:
-				npc.idle_emote_timer -= 0.05
-				if npc.idle_emote_timer <= 0 and npc.get("current_emoji", "") == "":
-					_set_npc_emoji(npc, "👀", 2.0)
-					npc.idle_emote_timer = randf_range(8.0, 15.0)
+				if npc.get("is_fleeing", false): emotes.append("😭")
+				if npc.get("has_spotted_enemy", false): emotes.append("❗")
+				if npc.get("mine_state", "") == "saboteur":
+					emotes.append("⭐"); emotes.append("😄")
+				
+				# Si no ha detectado enemigos, siempre debe estar en vigilia (alternando con lo demás)
+				if !npc.get("has_spotted_enemy", false):
+					emotes.append("👀")
+			
+			# Lógica de visualización: Prioridad al emoji temporal (de _set_npc_emoji)
+			if npc.emoji_timer > 0:
+				npc.emoji_timer -= 0.05
+				n_node.text = npc.current_emoji
+			else:
+				# Si no hay emoji temporal, ciclar entre las emociones activas cada segundo
+				var time_idx = int(Time.get_ticks_msec() / 1000) % emotes.size()
+				n_node.text = emotes[time_idx]
+				npc.current_emoji = "" # Resetar para permitir nuevos ciclos
 
 		if npc.hit_flash > 0: 
 			npc.hit_flash -= 1
@@ -2709,12 +2718,6 @@ func _process_npcs(delta):
 						if npc.miss_counter >= 3: npc.miss_counter = -40
 						npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
 		if npc.type == "miner":
-			# Lógica de Sabotaje (Alternar emojis)
-			if npc.get("mine_state", "") == "saboteur":
-				npc.emoji_timer = 0.5 # Forzar visbilidad rápida
-				if Engine.get_frames_drawn() % 40 < 20: _set_npc_emoji(npc, "⭐", 0.5)
-				else: _set_npc_emoji(npc, "😄", 0.5)
-				
 			var dig_speed = 0.15 if npc.hp < 100.0 else 0.05 
 			if npc.hit_flash == 5: npc.dir = -npc.dir
 			npc.dig_timer += dig_speed
