@@ -113,6 +113,7 @@ var ascent_player: AudioStreamPlayer   # Dedicated for rocket flying up
 var volcano_loop_player: AudioStreamPlayer # Dedicated for volcano bubbling loop
 var fire_loop_player: AudioStreamPlayer    # Dedicated for global crackling/burning
 const SFX_POOL_SIZE = 8
+var action_btn_font_size: int = 18 # Unified size for the 3 main ActionButtons
 
 # Mapeo: ID del Material -> Nombre del archivo (SONIDO EN BUCLE / LOOP) MP3
 # Estos sonidos se repiten mientras mantienes el pincel presionado.
@@ -790,8 +791,9 @@ func _setup_main_ui_containers():
 	
 	action_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	action_vbox.custom_minimum_size = Vector2(0, 336) # FILL TOTAL HUD HEIGHT (-4px margin)
 	action_vbox.add_theme_constant_override("separation", 3 * s)
-	action_vbox.alignment = BoxContainer.ALIGNMENT_CENTER # FLOAT IN CENTER OF TALL AREA
+	# Removed alignment center to allow expansion to fill
 	action_scroll.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE DRAG
 	
 	# CLEAN MATERIAL GRID
@@ -825,11 +827,12 @@ func _setup_tools_ui():
 	var tools_btn = Button.new()
 	tools_btn.name = "ToolsBtn"
 	tools_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
-	tools_btn.add_theme_font_size_override("font_size", 14 * s)
+	tools_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
 	tools_btn.text = translations_map[current_language]["tools"]
 	ui_elements["tools_btn"] = tools_btn
 	tools_btn.add_theme_font_override("font", _get_safe_font())
 	tools_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
+	tools_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	action_vbox.add_child(tools_btn)
 	
 	var btn_style = StyleBoxFlat.new()
@@ -1047,11 +1050,12 @@ func _setup_disaster_ui():
 	var disaster_btn = Button.new()
 	disaster_btn.name = "DisasterBtn"
 	disaster_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
-	disaster_btn.add_theme_font_size_override("font_size", 14 * s) # Compact font
+	disaster_btn.add_theme_font_size_override("font_size", action_btn_font_size * s) 
 	disaster_btn.text = translations_map[current_language]["disasters"]
 	ui_elements["disaster_btn"] = disaster_btn
 	disaster_btn.add_theme_font_override("font", _get_safe_font())
 	disaster_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
+	disaster_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	action_vbox.add_child(disaster_btn)
 	
 	var btn_style = StyleBoxFlat.new()
@@ -1186,18 +1190,19 @@ func _refresh_ui_text():
 		var node_data = ui_elements[key]
 		
 		# Handle direct button nodes (Tools/Disasters)
+		var btn_h = (336 - (6 * s)) / 3
 		if key == "tools_btn": 
 			node_data.text = translations_map[current_language]["tools"]
-			node_data.custom_minimum_size = Vector2(160 * s, 58 * s)
-			node_data.add_theme_font_size_override("font_size", 14 * s)
+			node_data.custom_minimum_size = Vector2(160 * s, btn_h)
+			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 		elif key == "disaster_btn": 
 			node_data.text = translations_map[current_language]["disasters"]
-			node_data.custom_minimum_size = Vector2(160 * s, 58 * s)
-			node_data.add_theme_font_size_override("font_size", 14 * s)
+			node_data.custom_minimum_size = Vector2(160 * s, btn_h)
+			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 		elif key == "npc_btn": 
 			node_data.text = translations_map[current_language]["npc"]
-			node_data.custom_minimum_size = Vector2(160 * s, 58 * s)
-			node_data.add_theme_font_size_override("font_size", 14 * s)
+			node_data.custom_minimum_size = Vector2(160 * s, btn_h)
+			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 		elif key == "pause_btn": 
 			node_data.text = translations_map[current_language]["play"] if is_paused else translations_map[current_language]["pause"]
 			node_data.custom_minimum_size = Vector2(0, 50 * s)
@@ -2487,11 +2492,12 @@ func _setup_npc_ui():
 	var npc_btn = Button.new()
 	npc_btn.name = "NPCBtn"
 	npc_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
-	npc_btn.add_theme_font_size_override("font_size", 14 * s) # Compact font
+	npc_btn.add_theme_font_size_override("font_size", action_btn_font_size * s) 
 	npc_btn.text = translations_map[current_language]["npc"]
 	ui_elements["npc_btn"] = npc_btn
 	npc_btn.add_theme_font_override("font", _get_safe_font())
 	npc_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
+	npc_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	action_vbox.add_child(npc_btn)
 	
 	var btn_style = StyleBoxFlat.new()
