@@ -2835,7 +2835,7 @@ func _process_npcs(delta):
 		if npc.hp <= critical_hp and not npc.get("morale_broken", false):
 			npc["morale_broken"] = true
 			if randf() < npc.get("cowardice", 0.30):
-				npc["is_fleeing"] = true; npc["is_tower"] = false
+				npc["is_fleeing"] = true
 				_set_npc_emoji(npc, "😭", 3.0) # Ahora sí, llorar solo si decide huir
 				var start_drop_x = np.x + (1 if npc.dir == -1 else 0)
 				if _get_cell(start_drop_x, np.y) == 0: _set_cell(start_drop_x, np.y, 2)
@@ -2927,14 +2927,7 @@ func _process_npcs(delta):
 						if npc.has("mine_state") and npc.mine_state == "saboteur":
 							if not npc.has("saboteur_bounces"): npc["saboteur_bounces"] = 0
 							if npc.saboteur_bounces < 4: npc.saboteur_bounces += 1
-		if not npc.has("is_tower"): npc["is_tower"] = false
-		if npc.is_tower:
-			var target_is_high = (target != null and target.pos.y < np.y - 8)
-			if target_is_high: npc.dir = 0
-			else:
-				npc.is_tower = false; npc.fall_depth = -30
-				if npc.has("tower_dir") and npc.tower_dir != 0: npc.dir = -npc.tower_dir
-				elif npc.dir == 0: npc.dir = -1 if randf() > 0.5 else 1
+
 		if not npc.has("vx"): npc["vx"] = 0.0
 		if not npc.has("vy"): npc["vy"] = 0.0
 		var moved_by_physics = false
@@ -3100,14 +3093,8 @@ func _process_npcs(delta):
 							npc.vy = -4.5; npc.vx = npc.dir * 2.5; npc["stuck_timer"] = 0.0; moved = true
 							_set_npc_emoji(npc, "🔨", 0.8)
 
-					# 5. SI NADA FUNCIONÓ, GIRAR O SER TORRE (Pilar Humano para alcanzar alturas)
+					# 5. SI NADA FUNCIONÓ, GIRAR
 					if not moved:
-						if target != null and target.pos.y < np.y - 12 and abs(target.pos.x - np.x) < 30:
-							if not _can_npc_fit(np.x, np.y + 1, npc) and _can_npc_fit(np.x, np.y - 10, npc):
-								npc["tower_dir"] = npc.dir; npc.is_tower = true; npc.dir = 0
-								_set_npc_emoji(npc, "🧱", 1.5); moved = true
-						
-						if not moved:
 							if target == null or np.x <= 2 or np.x >= grid_width - 4:
 								npc.dir = -npc.dir
 							elif npc.get("stuck_timer", 0.0) > 2.0: # Si sigue atascado demasiado tiempo persiguiendo
@@ -3284,13 +3271,13 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 				if (tags & SandboxMaterial.Tags.PLANT): continue
 				if !(tags & SandboxMaterial.Tags.NPC): return false
 				
-	# Chequeo de lista de NPCs: Ignorar aliados o torres para evitar atascos de grupo
+	# Chequeo de lista de NPCs: Ignorar aliados para evitar atascos de grupo
 	if moving_npc != null:
 		var mx = moving_npc.pos.x; var my = moving_npc.pos.y
 		for other in active_npcs:
 			if other == moving_npc: continue
-			# Regla de oro: Aliados no se estorban, Torres son ignoradas (para trepar)
-			if other.team == moving_npc.team or other.get("is_tower", false): continue 
+			# Regla de oro: Aliados no se estorban
+			if other.team == moving_npc.team: continue 
 			if gx < other.pos.x + 2 and gx + 2 > other.pos.x and gy < other.pos.y + 5 and gy + 5 > other.pos.y: return false
 	return true
 
