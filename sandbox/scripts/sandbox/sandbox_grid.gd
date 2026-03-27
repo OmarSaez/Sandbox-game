@@ -2509,7 +2509,7 @@ func _place_npc(x, y):
 	# Crear el Label del Emoji con mejor visibilidad
 	var emoji_lab = Label.new()
 	emoji_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	emoji_lab.add_theme_font_size_override("font_size", 16)
+	emoji_lab.add_theme_font_size_override("font_size", 20) # Aumentado un 20% (de 16 a 20)
 	emoji_lab.add_theme_color_override("font_shadow_color", Color.BLACK)
 	emoji_lab.add_theme_constant_override("shadow_outline_size", 4)
 	emoji_lab.z_index = 20
@@ -2579,33 +2579,36 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	_set_cell(sx, sy+4, m_shoes); _set_cell(sx+1, sy+4, m_shoes)
 
 func _process_npcs(delta):
+	# --- VISUALES POR FRAME (Suavidad total y cero lag) ---
+	for i in range(active_npcs.size()):
+		var npc = active_npcs[i]
+		if is_instance_valid(npc.get("emoji_node")):
+			var n_node = npc.emoji_node
+			# Calcular posición con snapping de píxel para evitar borrosidad
+			var world_pos = Vector2(npc.pos.x, npc.pos.y) * grid_scale
+			n_node.position = (world_pos + Vector2(-6, -30)).floor() # Altura reducida a la mitad
+	
+	# --- LÓGICA DE IA (20 veces por segundo para rendimiento) ---
 	npc_update_timer += delta
 	if npc_update_timer < 0.05: return 
 	npc_update_timer = 0.0
+	
 	var dead_indices = []
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
 		
-		# 1. ACTUALIZAR POSICIÓN EMOJI
-		if is_instance_valid(npc.emoji_node):
-			var n_node = npc.emoji_node
-			# Corrección de Escala: Usar grid_scale para posicionar píxeles en pantalla
-			var world_pos = Vector2(npc.pos.x, npc.pos.y) * grid_scale
-			n_node.position = world_pos + Vector2(-4, -28) # Margen arriba de la cabeza
-			
-			# Lógica de visibilidad y timers de emoji
+		# Procesar timers de emojis y visibilidad (Solo lógica, no posición)
+		if is_instance_valid(npc.get("emoji_node")):
 			if npc.hp <= 0:
-				_set_npc_emoji(npc, "💀", -1) # Permanecer hasta morir
+				_set_npc_emoji(npc, "💀", -1) 
 			elif npc.get("morale_broken", false) and npc.get("is_fleeing", false) and npc.get("has_spotted_enemy", false):
-				# Solo llorar si hay pánico ACTIVO (Huyendo + Enemigo a la vista)
 				_set_npc_emoji(npc, "😭", -1)
 			elif npc.emoji_timer > 0:
 				npc.emoji_timer -= 0.05
 				if npc.emoji_timer <= 0:
-					n_node.text = ""
+					npc.emoji_node.text = ""
 					npc.current_emoji = ""
 			else:
-				# Vigilancia o Calma (Si no hay peligro inminente)
 				npc.idle_emote_timer -= 0.05
 				if npc.idle_emote_timer <= 0 and npc.get("current_emoji", "") == "":
 					_set_npc_emoji(npc, "👀", 2.0)
@@ -2662,9 +2665,9 @@ func _process_npcs(delta):
 		var critical_hp = npc.get("max_hp", 100.0) * 0.3
 		if npc.hp <= critical_hp and not npc.get("morale_broken", false):
 			npc["morale_broken"] = true
-			_set_npc_emoji(npc, "😭", 3.0)
 			if randf() < npc.get("cowardice", 0.30):
 				npc["is_fleeing"] = true; npc["is_tower"] = false
+				_set_npc_emoji(npc, "😭", 3.0) # Ahora sí, llorar solo si decide huir
 				var start_drop_x = np.x + (1 if npc.dir == -1 else 0)
 				if _get_cell(start_drop_x, np.y) == 0: _set_cell(start_drop_x, np.y, 2)
 		if npc.type != "miner" and npc.type != "medic":
@@ -2810,6 +2813,7 @@ func _process_npcs(delta):
 							if danger_dist == -1: danger_dist = dx
 						elif danger_dist != -1 and not is_danger: safe_landing_dist = dx; break
 					if danger_dist != -1 and not moved:
+						_set_npc_emoji(npc, "😨", 1.5) # Reacción de susto al detectar peligro (Lava, TNT, Ácido)
 						if danger_dist <= 5: 
 							var hazard_width = safe_landing_dist - danger_dist
 							if safe_landing_dist != -1 and hazard_width <= 20:
