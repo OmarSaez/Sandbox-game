@@ -56,8 +56,7 @@ func _initialize_sdk():
 
 func _create_banner():
 	print("ADMOB: Creando Banner oficial...")
-	# ID de PRUEBA de Google para banners en Android
-	var unit_id = "ca-app-pub-3940256099942544/6300978111"
+	var unit_id = "ca-app-pub-6982275568315854/6392385312"
 	
 	_banner_view = AdView.new(unit_id, AdSize.BANNER, AdPosition.Values.TOP)
 	
@@ -79,8 +78,7 @@ func _load_rewarded():
 	if _rewarded_loading or _rewarded_ad: return
 	_rewarded_loading = true
 	
-	# ID SEGURO DE PRUEBA DE GOOGLE (DE LA IMAGEN)
-	var unit_id = "ca-app-pub-3940256099942544/5224354917"
+	var unit_id = "ca-app-pub-6982275568315854/2842922463"
 	var load_callback := RewardedAdLoadCallback.new()
 	
 	load_callback.on_ad_failed_to_load = func(error : LoadAdError):
@@ -128,8 +126,7 @@ func _load_interstitial():
 	if _interstitial_loading or _interstitial_ad: return
 	_interstitial_loading = true
 	
-	# ID de prueba de Intersticial (Pausa/Limpieza)
-	var unit_id = "ca-app-pub-3940256099942544/1033173712"
+	var unit_id = "ca-app-pub-6982275568315854/5277514113"
 	var load_callback := InterstitialAdLoadCallback.new()
 	
 	load_callback.on_ad_failed_to_load = func(error : LoadAdError):

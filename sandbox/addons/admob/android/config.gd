@@ -22,7 +22,7 @@
 
 const Library := preload("res://addons/admob/internal/exporters/android/library.gd")
 
-const APPLICATION_ID := "ca-app-pub-3940256099942544~3347511713" # Test App ID for Android
+const APPLICATION_ID := "ca-app-pub-6982275568315854~7747631339" # App ID Oficial
 
 var libraries: Array[Library] = [
 	# Main Plugin
