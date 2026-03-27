@@ -966,7 +966,7 @@ func _setup_tools_ui():
 	support_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
 		if Engine.has_singleton("PoingGodotAdMob"):
-			AdMobManager.show_interstitial()
+			AdMobManager.show_rewarded()
 		else:
 			print("DEBUG: Anuncio apoyo (PC)")
 	)

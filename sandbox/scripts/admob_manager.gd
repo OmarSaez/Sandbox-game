@@ -9,8 +9,10 @@ signal ad_dismissed
 
 var _banner_view : AdView
 var _interstitial_ad : InterstitialAd
-var _active_ad : InterstitialAd # PERSISTENCE: Keeps the ad alive while showing
+var _rewarded_ad : RewardedAd
+var _active_ad # Keeps the current ad alive
 var _interstitial_loading : bool = false
+var _rewarded_loading : bool = false
 var ad_free_time : float = 0.0 # Segundos restantes sin anuncios
 var first_pause_used : bool = false
 var first_reset_used : bool = false
@@ -47,7 +49,8 @@ func _initialize_sdk():
 	init_listener.on_initialization_complete = func(_status):
 		print("ADMOB: SDK Inicializado.")
 		_create_banner()
-		_load_interstitial() # Pre-cargar el anuncio de apoyo
+		_load_interstitial() # Pre-cargar el de sistema
+		_load_rewarded()     # Pre-cargar el de apoyo
 	
 	MobileAds.initialize(init_listener)
 
@@ -70,12 +73,62 @@ func _create_banner():
 	_banner_view.ad_listener = ad_listener
 	_banner_view.load_ad(AdRequest.new())
 
-# --- SISTEMA DE INTERSTITIAL (APOYO AL CREADOR) ---
+# --- SISTEMA DE REWARDED (APOYO AL CREADOR) ---
+
+func _load_rewarded():
+	if _rewarded_loading or _rewarded_ad: return
+	_rewarded_loading = true
+	
+	# ID SEGURO DE PRUEBA DE GOOGLE (DE LA IMAGEN)
+	var unit_id = "ca-app-pub-3940256099942544/5224354917"
+	var load_callback := RewardedAdLoadCallback.new()
+	
+	load_callback.on_ad_failed_to_load = func(error : LoadAdError):
+		print("ADMOB: Rewarded falló -> ", error.message)
+		_rewarded_loading = false
+
+	load_callback.on_ad_loaded = func(ad : RewardedAd):
+		print("ADMOB: Rewarded CARGADO.")
+		_rewarded_ad = ad
+		_rewarded_loading = false
+	
+	var request = AdRequest.new()
+	print("ADMOB: Cargando Rewarded (Apoyo)...")
+	RewardedAdLoader.new().load(unit_id, request, load_callback)
+
+func show_rewarded() -> bool:
+	if _rewarded_ad:
+		print("ADMOB: Mostrando Rewarded...")
+		_active_ad = _rewarded_ad
+		_rewarded_ad = null
+		
+		var callback := FullScreenContentCallback.new()
+		callback.on_ad_dismissed_full_screen_content = func():
+			print("ADMOB: Rewarded cerrado.")
+			_active_ad = null
+			_load_rewarded()
+			ad_dismissed.emit()
+		
+		var reward_listener := OnUserEarnedRewardListener.new()
+		reward_listener.on_user_earned_reward = func(rewarded_item):
+			print("ADMOB: ¡RECOMPENSA GANADA! -> ", rewarded_item.amount, " ", rewarded_item.type)
+			ad_free_time += 300.0 # 5 Minutos
+		
+		_active_ad.full_screen_content_callback = callback
+		_active_ad.show(reward_listener)
+		return true
+	else:
+		print("ADMOB: Rewarded no listo.")
+		_load_rewarded()
+		return false
+
+# --- SISTEMA DE INTERSTITIAL (PAUSA / RESET) ---
 
 func _load_interstitial():
 	if _interstitial_loading or _interstitial_ad: return
 	_interstitial_loading = true
 	
+	# ID de prueba de Intersticial (Pausa/Limpieza)
 	var unit_id = "ca-app-pub-3940256099942544/1033173712"
 	var load_callback := InterstitialAdLoadCallback.new()
 	
@@ -88,39 +141,29 @@ func _load_interstitial():
 		_interstitial_ad = ad
 		_interstitial_loading = false
 	
-	# FIX TOTAL PARA GODOT 4.6 (CRASH POR ASIGNACIÓN DE ARRAYS)
-	# No tocamos ninguna propiedad del AdRequest para que Godot no dé error de tipos
 	var request = AdRequest.new()
-	
-	print("ADMOB: Lanzando carga de Intersticial (Modo ultra-limpio 4.6)...")
 	InterstitialAdLoader.new().load(unit_id, request, load_callback)
 
 func show_interstitial() -> bool:
 	if _interstitial_ad:
-		print("ADMOB: Mostrando anuncio...")
-		
-		# Transfer to persistent variable so it's not GC'ed
+		print("ADMOB: Mostrando Intersticial...")
 		_active_ad = _interstitial_ad
 		_interstitial_ad = null 
 		
 		var callback := FullScreenContentCallback.new()
 		callback.on_ad_dismissed_full_screen_content = func():
-			print("ADMOB: Anuncio cerrado.")
+			print("ADMOB: Intersticial cerrado.")
 			_active_ad = null
-			ad_dismissed.emit()
-		callback.on_ad_failed_to_show_full_screen_content = func(_err):
-			print("ADMOB: Fallo al mostrar.")
-			_active_ad = null
+			_load_interstitial()
 			ad_dismissed.emit()
 		
 		_active_ad.full_screen_content_callback = callback
 		_active_ad.show()
 		
-		ad_free_time += 300.0 # Sumamos 5 minutos (Acumulable)
-		_load_interstitial() 
+		# Los obligatorios también dan tiempo libre para no ser tan pesados
+		ad_free_time += 300.0 
 		return true
 	else:
-		print("ADMOB: El anuncio aún no está listo.")
 		_load_interstitial()
 		return false
 
