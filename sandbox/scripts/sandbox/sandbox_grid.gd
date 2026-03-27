@@ -479,12 +479,8 @@ func _ready():
 	_register_material(44, Color("#39FF14"), SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.VOLATILE | SandboxMaterial.Tags.GRAV_STATIC) # Proyectil Acido
 	
 	# --- CONSTRUCTION ---
-	# 25: Cemento Fresco
-	_register_material(25, Color("#E5D3B3"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL) # Cemento Fresco
 	# 26: Cemento Solido
 	_register_material(26, Color("#C2B280"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Cemento Solido
-	
-	# --- SPECIAL SYSTEMS ---
 	# 27: Volcan Bloque
 	_register_material(27, Color("#FF5F1F"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # Volcan Bloque
 	# 28: Proyectil Volcan
@@ -2933,7 +2929,8 @@ func _process_npcs(delta):
 							if npc.saboteur_bounces < 4: npc.saboteur_bounces += 1
 		if not npc.has("is_tower"): npc["is_tower"] = false
 		if npc.is_tower:
-			if target != null: npc.dir = 0
+			var target_is_high = (target != null and target.pos.y < np.y - 8)
+			if target_is_high: npc.dir = 0
 			else:
 				npc.is_tower = false; npc.fall_depth = -30
 				if npc.has("tower_dir") and npc.tower_dir != 0: npc.dir = -npc.tower_dir
@@ -2942,28 +2939,66 @@ func _process_npcs(delta):
 		if not npc.has("vy"): npc["vy"] = 0.0
 		var moved_by_physics = false
 		if abs(npc.vx) > 0.1 or abs(npc.vy) > 0.1:
-			var steps_x = int(round(abs(npc.vx))); var dir_x = sign(npc.vx); var steps_y = int(round(abs(npc.vy))); var dir_y = sign(npc.vy)
+			var steps_x = int(ceil(abs(npc.vx))); var dir_x = sign(npc.vx)
+			var steps_y = int(ceil(abs(npc.vy))); var dir_y = sign(npc.vy)
 			var max_steps = max(steps_x, steps_y)
-			if max_steps > 0:
-				for j in range(max_steps):
-					var next_x = np.x + (dir_x if j < steps_x else 0); var next_y = np.y + (dir_y if j < steps_y else 0)
-					if _can_npc_fit(next_x, next_y, npc): np.x = next_x; np.y = next_y
+			
+			# FISICA DE EJES SEPARADOS: Permite deslizarse por paredes (Slide Physics)
+			for j in range(max_steps):
+				# Paso Horizontal (X)
+				if j < steps_x:
+					var next_x = np.x + int(dir_x)
+					# Bloqueo por límites de pantalla
+					if next_x < 0 or next_x + 1 >= grid_width:
+						npc.vx = 0.0
+					elif _can_npc_fit(next_x, np.y, npc):
+						np.x = next_x
 					else:
-						if dir_x != 0 and not _can_npc_fit(next_x, np.y, npc): npc.vx = 0.0
-						if dir_y != 0 and not _can_npc_fit(np.x, next_y, npc): npc.vy = 0.0
-						break
-			if _can_npc_fit(np.x, np.y + 1, npc): npc.vy += 1.0; npc.fall_depth += 1; npc.vx *= 0.98
-			else:
+						npc.vx = 0.0
+				
+				# Paso Vertical (Y)
+				if j < steps_y:
+					var next_y = np.y + int(dir_y)
+					if _can_npc_fit(np.x, next_y, npc):
+						np.y = next_y
+					else:
+						npc.vy = 0.0
+			if _can_npc_fit(np.x, np.y + 1, npc): # EN EL AIRE
+				npc.vy += 1.0 # Gravedad
+				npc.fall_depth += 1
+				
+				# --- CONTROL AEREO ---
+				# Si el NPC tiene una dirección (dir), intentar mantener/ganar velocidad horizontal en el aire
+				if npc.dir != 0:
+					var air_speed_target = float(npc.dir) * 3.5
+					npc.vx = lerp(npc.vx, air_speed_target, 0.15)
+				
+				npc.vx *= 0.99 # Rozamiento de aire leve
+			else: # EN EL SUELO
 				if npc.vy > 0: 
-					if npc.vy >= 7.0 or npc.fall_depth >= 15: npc.hp -= max(5.0, (npc.fall_depth - 10) * 1.5); npc.hit_flash = 5
+					if npc.vy >= 7.0 or npc.fall_depth >= 15: 
+						npc.hp -= max(5.0, (npc.fall_depth - 10) * 1.5); npc.hit_flash = 5
 					npc.vy = 0.0; npc.fall_depth = 0
-				npc.vx *= 0.6
-			if abs(npc.vx) < 0.5: npc.vx = 0.0
+				npc.vx *= 0.6 # Fricción de suelo
+			
+			if abs(npc.vx) < 0.2: npc.vx = 0.0
 			if npc.vy > 8.0: npc.vy = 8.0
 			moved_by_physics = true
+		
+		# --- 3. MOVIMIENTO IA (SI NO HAY FISICA ACTIVA) ---
 		if not moved_by_physics:
-			# --- NAVIGATION AI v2: Sensibilidad a Relieves y Recuperación de Atascos ---
-			if _can_npc_fit(np.x, np.y + 1, npc):
+			# 1. GRAVEDAD SOBERANA: Chequeo solo bajo los pies para evitar "colgarse" lateralmente
+			var feet_y = np.y + 5
+			var can_fall = true
+			if feet_y >= dynamic_grid_height: can_fall = false
+			else:
+				for ox in range(2):
+					var tid = _get_cell(np.x + ox, feet_y)
+					if tid != 0 and tid != 15 and tid != 3 and tid != 17:
+						if !(material_tags_raw[tid] & (SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.PLANT)):
+							can_fall = false; break
+			
+			if can_fall:
 				np.y += 1; npc.fall_depth += 1
 			elif npc.type != "miner":
 				if npc.fall_depth >= 12: 
@@ -2972,9 +3007,9 @@ func _process_npcs(delta):
 				npc.fall_depth = 0
 				
 				# Detectar si estamos atascados (sin movernos horizontalmente)
-				var is_moving_target = (npc.dir != 0)
+				var is_trying_to_move = (npc.dir != 0 or target != null)
 				var cur_stuck = npc.get("stuck_timer", 0.0)
-				if is_moving_target and abs(np.x - npc.get("last_pos_x", np.x)) < 0.1:
+				if is_trying_to_move and abs(np.x - npc.get("last_pos_x", np.x)) < 0.1:
 					cur_stuck += 0.05
 				else:
 					cur_stuck = 0.0
@@ -2983,11 +3018,14 @@ func _process_npcs(delta):
 				
 				if npc.dir != 0:
 					var moved = false
+					# Asegurar límites de mapa antes de procesar
+					np.x = clampi(np.x, 0, grid_width - 2)
 					var front_edge = np.x + 1 if npc.dir == 1 else np.x
+					var hazard_stop = false
 					
 					# 1. ESCANEO DE PELIGROS (Lava, Ácido, TNT)
 					var danger_dist = -1; var safe_landing_dist = -1
-					for dx in range(1, 15): # Menor rango de escaneo para FPS
+					for dx in range(1, 15):
 						var detect_x = front_edge + (npc.dir * dx)
 						if detect_x < 0 or detect_x >= grid_width: break
 						var is_danger = false
@@ -3001,27 +3039,31 @@ func _process_npcs(delta):
 							safe_landing_dist = dx; break
 					
 					if danger_dist != -1:
-						_set_npc_emoji(npc, "😨", 1.5)
 						if danger_dist <= 5: 
 							var hazard_width = safe_landing_dist - danger_dist
 							if safe_landing_dist != -1 and hazard_width <= 20: # Salto largo para lava
 								if _can_npc_fit(np.x, np.y - 1, npc): npc.vy = -4.8; npc.vx = npc.dir * 3.6; moved = true
-							else: npc.dir = -npc.dir; moved = true
+							else: 
+								_set_npc_emoji(npc, "😨", 1.5)
+								if target == null: npc.dir = -npc.dir; moved = true
+								else: hazard_stop = true # Detenerse ante el peligro si hay target
 					
 					# 2. ESCANEO DE ACANTILADOS (Si no hay enemigo, no suicidarse)
-					if not moved:
+					if not moved and not hazard_stop:
 						var edge_x = np.x + (npc.dir * 2); var drop_depth = 0
 						for dy in range(1, 15):
 							if not _can_npc_fit(edge_x, np.y + dy, npc): break
 							drop_depth += 1
 						if drop_depth >= 12:
-							var ignore_cliff = (target != null and target.pos.y > np.y and abs(target.pos.x - np.x) < 30)
-							if not ignore_cliff: npc.dir = -npc.dir; moved = true
+							var ignore_cliff = (target != null and target.pos.y > np.y and abs(target.pos.x - np.x) < 60)
+							if not ignore_cliff: 
+								if target == null: npc.dir = -npc.dir; moved = true
+								else: hazard_stop = true # Detenerse en el borde si hay target, esperar a stuck_timer
 
 					# 3. COLISIONES CON ALIADOS Y OBSTRUCCIONES
-					if not moved:
-						var tx_1 = np.x + npc.dir # 1 px ahead
-						var tx_2 = np.x + (npc.dir * 2) # 2 px ahead
+					if not moved and not hazard_stop:
+						var tx_1 = np.x + npc.dir
+						var tx_2 = np.x + (npc.dir * 2)
 						var tx_test = tx_1 if (target != null or randf() < 0.5) else tx_2
 						
 						var bumped_ally = false
@@ -3036,31 +3078,40 @@ func _process_npcs(delta):
 								if _can_npc_fit(np.x, np.y - 1, npc): npc.vy = -3.5; npc.vx = npc.dir * 2.0; moved = true
 						
 						if not moved:
-							# --- STEP-UP SISTEMA (Subir relieves pequeños de 1-3px automáticamente) ---
-							# Intentamos movernos 1 pixel adelante con micro-escalada
+							# --- STEP-UP SISTEMA ---
 							for dy in [0, -1, -2, -3]:
 								if _can_npc_fit(tx_1, np.y + dy, npc):
 									np.x = tx_1; np.y += dy; moved = true; break
 							
-							# If blocked by something taller, try the 2-pixel jump/climb
+							# If blocked by something taller, use a physics jump instead of teleporting
 							if not moved:
-								var max_jump = -11
+								var max_jump = -12
 								for dy in range(-4, max_jump - 1, -1):
 									if _can_npc_fit(tx_2, np.y + dy, npc):
-										np.x = tx_2; np.y += dy; moved = true; break
+										# Instead of np.y += dy (teleport), we apply physics
+										# This makes the "climb" look like a real jump and prevents teleport-loops
+										npc.vy = -5.2; npc.vx = npc.dir * 3.4
+										npc["stuck_timer"] = 0.0 # Reset as we are attempting a leap
+										moved = true; break
 					
-					# 4. SISTEMA ANTI-ATASCO: SALTO FORZADO
+					# 4. SISTEMA ANTI-ATASCO: SALTO FORZADO (Solo si no hemos avanzado)
 					if not moved and target != null and npc.get("stuck_timer", 0.0) > 0.8:
 						if _can_npc_fit(np.x, np.y - 1, npc):
 							npc.vy = -4.5; npc.vx = npc.dir * 2.5; npc["stuck_timer"] = 0.0; moved = true
-							_set_npc_emoji(npc, "🔨", 0.8) # Esfuerzo por subir
+							_set_npc_emoji(npc, "🔨", 0.8)
 
-					# 5. SI NADA FUNCIONÓ, GIRAR (Si es neutral)
+					# 5. SI NADA FUNCIONÓ, GIRAR O SER TORRE (Pilar Humano para alcanzar alturas)
 					if not moved:
-						if target == null or np.x <= 2 or np.x >= grid_width - 4:
-							npc.dir = -npc.dir
-						elif npc.get("stuck_timer", 0.0) > 2.0: # Si sigue atascado demasiado tiempo persiguiendo
-							npc.dir = -npc.dir; npc["stuck_timer"] = 0.0 # Intentar buscar otra ruta
+						if target != null and target.pos.y < np.y - 12 and abs(target.pos.x - np.x) < 30:
+							if not _can_npc_fit(np.x, np.y + 1, npc) and _can_npc_fit(np.x, np.y - 10, npc):
+								npc["tower_dir"] = npc.dir; npc.is_tower = true; npc.dir = 0
+								_set_npc_emoji(npc, "🧱", 1.5); moved = true
+						
+						if not moved:
+							if target == null or np.x <= 2 or np.x >= grid_width - 4:
+								npc.dir = -npc.dir
+							elif npc.get("stuck_timer", 0.0) > 2.0: # Si sigue atascado demasiado tiempo persiguiendo
+								npc.dir = -npc.dir; npc["stuck_timer"] = 0.0 # Intentar buscar otra ruta
 		
 		npc.pos = np; _draw_npc_pixels(npc)
 		if npc.hp <= 0 and npc.hit_flash <= 0:
@@ -3222,14 +3273,24 @@ func _set_npc_emoji(npc, emoji_text: String, duration: float = 2.0):
 
 func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 	if gx < 0 or gx + 1 >= grid_width or gy < 0 or gy + 4 >= dynamic_grid_height: return false
+	
+	# Chequeo de píxeles: Ignorar Plantas y NPCs para fluidez
 	for oy in range(5):
 		for ox in range(2):
 			var tid = _get_cell(gx + ox, gy + oy)
 			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
-				if !(material_tags_raw[tid] & SandboxMaterial.Tags.NPC): return false
+				# Si es sólido, pero es una PLANTA, permitimos el paso (los soldados las pisan/atraviesan)
+				var tags = material_tags_raw[tid]
+				if (tags & SandboxMaterial.Tags.PLANT): continue
+				if !(tags & SandboxMaterial.Tags.NPC): return false
+				
+	# Chequeo de lista de NPCs: Ignorar aliados o torres para evitar atascos de grupo
 	if moving_npc != null:
+		var mx = moving_npc.pos.x; var my = moving_npc.pos.y
 		for other in active_npcs:
 			if other == moving_npc: continue
+			# Regla de oro: Aliados no se estorban, Torres son ignoradas (para trepar)
+			if other.team == moving_npc.team or other.get("is_tower", false): continue 
 			if gx < other.pos.x + 2 and gx + 2 > other.pos.x and gy < other.pos.y + 5 and gy + 5 > other.pos.y: return false
 	return true
 
