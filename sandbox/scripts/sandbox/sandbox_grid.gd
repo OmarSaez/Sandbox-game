@@ -520,7 +520,8 @@ func _ready():
 	_register_material(19, Color(1, 0.8, 0.9), SandboxMaterial.Tags.GRAV_STATIC) # Firework Fuse
 
 	# INITIAL HIGHLIGHT
-	_update_highlights()
+	_update_material_highlights()
+	_update_menu_highlights()
 	
 	# FINAL SHADER & PALETTE SYNC (Now 2048x3 for Textures)
 	var palette_img = Image.create(2048, 3, false, Image.FORMAT_RGBA8)
@@ -765,7 +766,8 @@ func _setup_main_ui_containers():
 	_setup_npc_ui()         
 	
 	_setup_materials_within_grid()
-	_update_highlights() # Restore selection marks
+	_update_material_highlights()
+	_update_menu_highlights()
 
 
 func _setup_tools_ui():
@@ -871,7 +873,7 @@ func _setup_tools_ui():
 	create_row.call("lang", lang_options, func(l):
 		current_language = "en" if l == 1 else "es"
 		_refresh_ui_text()
-		_update_highlights()
+		_update_menu_highlights()
 	)
 
 	# UI SCALE ROW (Now 2nd)
@@ -887,7 +889,7 @@ func _setup_tools_ui():
 	var brush_labels = ["1", "3", "5", "10", "15", "25"]
 	create_row.call("brush", brush_labels, func(l): 
 		brush_radius = brush_sizes[l]
-		_update_highlights()
+		_update_menu_highlights()
 	)
 	# 1. SUPPORT CREATOR BUTTON (AD)
 	var support_btn = Button.new()
@@ -1076,7 +1078,7 @@ func _setup_disaster_ui():
 
 	create_row.call("weather", ["off", "light", "med", "storm"], func(l): 
 		current_weather = l
-		_update_highlights()
+		_update_menu_highlights()
 	)
 	create_row.call("quake", ["off", "light", "med", "brutal"], func(l): 
 		earthquake_intensity = l
@@ -1085,7 +1087,7 @@ func _setup_disaster_ui():
 			_play_action_sound("earthquake")
 		else:
 			earthquake_timer = 0 # Reset para apagar sonido e intensidad
-		_update_highlights()
+		_update_menu_highlights()
 	)
 	create_row.call("tornado", ["off", "light", "med", "heavy"], func(l):
 		tornado_intensity = l
@@ -1094,7 +1096,7 @@ func _setup_disaster_ui():
 			_play_action_sound("tornado")
 		else:
 			tornado_timer = 0 # Apagar instantáneamente
-		_update_highlights()
+		_update_menu_highlights()
 	)
 	create_row.call("tsunami", ["off", "light", "med", "storm"], func(l):
 		tsunami_intensity = l
@@ -1103,7 +1105,7 @@ func _setup_disaster_ui():
 			_play_action_sound("tsunami")
 		else:
 			tsunami_timer = 0 # Apagar instantáneamente
-		_update_highlights()
+		_update_menu_highlights()
 	)
 
 func _refresh_ui_text():
@@ -1259,50 +1261,56 @@ func _add_button(key: String, mat_id: int):
 		if not is_instance_valid(event) or not is_instance_valid(slot_pnl): return
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			selected_material = mat_id
-			_update_highlights()
+			_update_material_highlights()
 	)
 	slot_pnl.set_meta("mat_id", mat_id)
 	
 	ui_elements[key + "_icon_pnl"] = selection_overlay # Store overlay for highlight
 	ui_elements[key + "_mat_lbl"] = btn_lbl
 	
+	# OPTIMIZATION: Store shortcut references to avoid get_child loops
+	slot_pnl.set_meta("overlay", selection_overlay)
+	slot_pnl.set_meta("label", btn_lbl)
+	
 	material_grid.add_child(slot_pnl)
 	
 	main_vbox.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
-func _update_highlights():
-	# Update Material Selection (Icons & Labels)
+# --- OPTIMIZED HIGHLIGHT SYSTEM ---
+
+func _update_material_highlights():
+	# Use static pre-configured style for high speed
 	for slot in material_grid.get_children():
 		if not is_instance_valid(slot): continue
 		
 		var mat_id = slot.get_meta("mat_id", -1)
-		var main_vbox = slot.get_child(0)
-		var stack = main_vbox.get_child(0)
-		var overlay = stack.get_child(1) # Selection Overlay
-		var label = main_vbox.get_child(1)
+		var overlay = slot.get_meta("overlay", null)
+		var label = slot.get_meta("label", null)
+		
+		if not overlay or not label: continue
 		
 		if mat_id == selected_material:
 			overlay.visible = true
-			var sel_style = overlay.get_theme_stylebox("panel").duplicate()
+			# Only apply style once, don't duplicate on every click
+			if not overlay.has_theme_stylebox_override("panel"):
+				var sel_style = StyleBoxFlat.new()
+				sel_style.draw_center = false
+				sel_style.border_width_left = 6; sel_style.border_width_top = 6
+				sel_style.border_width_right = 6; sel_style.border_width_bottom = 6
+				sel_style.border_color = Color.WHITE
+				sel_style.shadow_color = Color.BLACK
+				sel_style.shadow_size = 6
+				sel_style.corner_radius_top_left = 8; sel_style.corner_radius_top_right = 8
+				sel_style.corner_radius_bottom_left = 8; sel_style.corner_radius_bottom_right = 8
+				overlay.add_theme_stylebox_override("panel", sel_style)
 			
-			# DOUBLE BORDER ON TOP: Black shadow/outer + White inner
-			sel_style.border_width_left = 6
-			sel_style.border_width_top = 6
-			sel_style.border_width_right = 6
-			sel_style.border_width_bottom = 6
-			sel_style.border_color = Color.WHITE
-			
-			# Draw the 6px BLACK border behind the white via shadow (solid sharp)
-			sel_style.shadow_color = Color.BLACK
-			sel_style.shadow_size = 6
-			
-			overlay.add_theme_stylebox_override("panel", sel_style)
 			label.add_theme_color_override("font_color", Color.YELLOW)
 		else:
 			overlay.visible = false
 			label.remove_theme_color_override("font_color")
 
-	# 2. Update Tool/Disaster/NPC Highlights (Buttons)
+func _update_menu_highlights():
+	# Update Tool/Disaster/NPC Highlights (Buttons)
 	for key in ui_elements:
 		var node_data = ui_elements[key]
 		if key.contains("_btn"):
@@ -1343,15 +1351,17 @@ func _update_highlights():
 					if idx == selected_team: is_active = true
 				
 				if is_active:
-					btn.add_theme_color_override("font_color", Color.YELLOW)
-					var highlight_style = StyleBoxFlat.new()
-					highlight_style.bg_color = Color(0.3, 0.3, 0.4)
-					highlight_style.border_width_bottom = 3
-					highlight_style.border_color = Color.SKY_BLUE
-					btn.add_theme_stylebox_override("normal", highlight_style)
+					if not btn.has_theme_color_override("font_color"):
+						btn.add_theme_color_override("font_color", Color.YELLOW)
+						var highlight_style = StyleBoxFlat.new()
+						highlight_style.bg_color = Color(0.3, 0.3, 0.4)
+						highlight_style.border_width_bottom = 3
+						highlight_style.border_color = Color.SKY_BLUE
+						btn.add_theme_stylebox_override("normal", highlight_style)
 				else:
-					btn.remove_theme_color_override("font_color")
-					btn.remove_theme_stylebox_override("normal")
+					if btn.has_theme_color_override("font_color"):
+						btn.remove_theme_color_override("font_color")
+						btn.remove_theme_stylebox_override("normal")
 
 func _is_any_ui_blocking() -> bool:
 	# 1. Check if we are over the bottom HUD using grid math (FASTEST)
@@ -2444,7 +2454,8 @@ func _setup_npc_ui():
 			btn.custom_minimum_size = Vector2(100 * s, 45 * s)
 			btn.pressed.connect(func():
 				selected_material = id # Master Warrior Material
-				_update_highlights()
+				_update_material_highlights()
+				_update_menu_highlights()
 			)
 			ui_elements[key + "_btn"] = btn
 			npc_flow.add_child(btn)
@@ -2473,7 +2484,7 @@ func _setup_npc_ui():
 			var tidx = i
 			t_btn.pressed.connect(func():
 				selected_team = tidx
-				_update_highlights()
+				_update_menu_highlights()
 			)
 			ui_elements["team_btn_" + str(i)] = t_btn
 			team_flow.add_child(t_btn)
@@ -3393,4 +3404,5 @@ func _clear_all():
 	for c in emoji_layer.get_children(): c.queue_free()
 	active_projectiles.clear()
 	_update_texture()
-	_update_highlights()
+	_update_material_highlights()
+	_update_menu_highlights()
