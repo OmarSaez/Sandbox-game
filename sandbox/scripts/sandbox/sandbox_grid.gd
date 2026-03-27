@@ -3334,6 +3334,7 @@ func _clear_all():
 	tags_array.fill(0)
 	surface_cache.fill(0)
 	active_npcs.clear()
+	for c in emoji_layer.get_children(): c.queue_free()
 	active_projectiles.clear()
 	_update_texture()
 	_update_highlights()
