@@ -380,7 +380,15 @@ var surface_cache = PackedInt32Array()
 
 # Fireworks tracking
 var active_fireworks = [] 
-var visual_sparks = []
+# Optimization #3: High-Performance Particle Pool (Packed Data)
+const MAX_VISUAL_SPARKS = 1500
+var vs_x := PackedFloat32Array()
+var vs_y := PackedFloat32Array()
+var vs_vx := PackedFloat32Array()
+var vs_vy := PackedFloat32Array()
+var vs_color := PackedColorArray()
+var vs_life := PackedFloat32Array()
+var vs_ptr := 0
 
 # Display
 @onready var texture_rect: TextureRect = $Display
@@ -398,6 +406,12 @@ func _ready():
 	global_bg.offset_right = 0
 	global_bg.offset_bottom = 0
 	get_parent().add_child.call_deferred(global_bg)
+	
+	# Init Particle Pool
+	vs_x.resize(MAX_VISUAL_SPARKS); vs_y.resize(MAX_VISUAL_SPARKS)
+	vs_vx.resize(MAX_VISUAL_SPARKS); vs_vy.resize(MAX_VISUAL_SPARKS)
+	vs_color.resize(MAX_VISUAL_SPARKS); vs_life.resize(MAX_VISUAL_SPARKS)
+	vs_life.fill(0.0)
 	get_parent().move_child.call_deferred(global_bg, 0) # Background Layer
 	
 	# Setup SFX Pool
@@ -2573,8 +2587,8 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				_draw_circle(x, y, 6, 11) 
 				_draw_circle(x, y, 5, 15) 
 				_explode(x, y, 12, "volcan_burst")
-				for j in range(50):
-					visual_sparks.append({"x": float(x), "y": float(y),"vx": randf_range(-120, 120), "vy": randf_range(-150, 50),"color": [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(),"life": randf_range(0.4, 0.8)})
+				for _j in range(50):
+					_add_spark(float(x), float(y), randf_range(-120, 120), randf_range(-150, 50), [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(), randf_range(0.4, 0.8))
 				return
 			var next_y = y - 1
 			if next_y < 5: _set_cell(x, y, 11); _explode(x, y, 6); return
@@ -2587,11 +2601,11 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					var lx = x + randi_range(-2, 2); var ly = y + randi_range(-1, 1)
 					if _get_cell(lx, ly) == 0 or _get_cell(lx, ly) == 15: _set_cell(lx, ly, 11)
 				y = next_y; idx = y * grid_width + x; current_fuel -= 1; charge_array[idx] = current_fuel
-				for j in range(12): visual_sparks.append({"x": float(x) + randf_range(-6, 6),"y": float(y) + randf_range(0, 10),"vx": randf_range(-60, 60),"vy": randi_range(40, 100),"color": [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(),"life": randf_range(0.2, 0.5)})
+				for _j in range(12): _add_spark(float(x) + randf_range(-6, 6), float(y) + randf_range(0, 10), randf_range(-60, 60), randi_range(40, 100), [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(), randf_range(0.2, 0.5))
 			else: current_fuel = 0; break
 		if randf() < 0.8:
 			var e_colors = [Color.YELLOW, Color.CYAN, Color.WHITE, Color("#FFFF33")]
-			for i in range(4): visual_sparks.append({"x": float(x) + randf_range(-3, 3),"y": float(y + 1),"vx": randf_range(-50, 50),"vy": randf_range(20, 80),"color": e_colors[randi() % e_colors.size()],"life": randf_range(0.1, 0.4)})
+			for _i in range(4): _add_spark(float(x) + randf_range(-3, 3), float(y + 1), randf_range(-50, 50), randf_range(20, 80), e_colors[randi() % e_colors.size()], randf_range(0.1, 0.4))
 	
 	# 7. FRESH CEMENT HARDENING 
 	if pure_id == 25:
@@ -3003,7 +3017,7 @@ func _process_npcs(delta):
 								if closest_ally.hp > closest_ally.get("max_hp", 100.0) * 0.3:
 									closest_ally["morale_broken"] = false; closest_ally["is_fleeing"] = false
 								_set_npc_emoji(closest_ally, "😊", 1.5)
-								for f in range(6): visual_sparks.append({"x":float(closest_ally.pos.x+randf_range(-3,3)),"y":float(closest_ally.pos.y+randf_range(-5,0)),"vx":0.0,"vy":randf_range(-35.0,-15.0),"color":Color.GREEN,"life":0.6})
+								for _f in range(6): _add_spark(float(closest_ally.pos.x+randf_range(-3,3)),float(closest_ally.pos.y+randf_range(-5,0)),0.0,randf_range(-35.0,-15.0),Color.GREEN,0.6)
 						else: npc.dir = 1 if closest_ally.pos.x > np.x else -1
 					else:
 						if randf() < 0.02: npc.dir = 1 if randf() > 0.5 else -1
@@ -3369,7 +3383,7 @@ func _process_projectiles(delta):
 			if p.get("is_fire", false):
 				if _get_cell(gx, gy) == 0: _set_cell(gx, gy, 3)
 			_play_action_sound("npc_hit")
-			for j in range(5): visual_sparks.append({"x":float(gx),"y":float(gy),"vx":randf_range(-40,40),"vy":randf_range(-40,0),"color":Color.WHITE,"life":0.3})
+			for _j in range(5): _add_spark(float(gx),float(gy),randf_range(-40,40),randf_range(-40,0),Color.WHITE,0.3)
 			to_remove.append(i); continue
 		var tid = _get_cell(gx, gy)
 		if tid != 0 and tid != 15 and tid != 3 and tid != 17:
@@ -3400,7 +3414,7 @@ func _attack_npc(attacker, victim):
 			if _get_cell(fx, fy) == 0: _set_cell(fx, fy, 3)
 	_play_action_sound("npc_hit"); _play_action_sound("warrior_attack")
 	var t_colors = [Color.RED, Color("1E90FF"), Color.YELLOW, Color.GREEN]; var bleed_color = t_colors[victim.team] if victim.team < t_colors.size() else Color.WHITE
-	for i in range(10): visual_sparks.append({ "x": float(victim.pos.x) + randf_range(0, 2), "y": float(victim.pos.y) + randf_range(0, 5), "vx": randf_range(-80, 80), "vy": randf_range(-120, -30), "color": bleed_color if randf() > 0.4 else Color.WHITE, "life": randf_range(0.3, 0.7) })
+	for _i in range(10): _add_spark(float(victim.pos.x) + randf_range(0, 2), float(victim.pos.y) + randf_range(0, 5), randf_range(-80, 80), randf_range(-120, -30), bleed_color if randf() > 0.4 else Color.WHITE, randf_range(0.3, 0.7))
 	var ldir = 1 if attacker.pos.x < victim.pos.x else -1
 	for d in range(3, 0, -1):
 		var lx = attacker.pos.x + ldir * d; var ly = attacker.pos.y - 1
@@ -3420,15 +3434,15 @@ func _check_npc_environment_damage(npc) -> bool:
 		var t_tags = material_tags_raw[tid]
 		if (t_tags & SandboxMaterial.Tags.ACID):
 			npc.hp -= 3.5; npc.hit_flash = 5; npc.hit_type = "acid"; took_damage = true
-			if randf() < 0.4: visual_sparks.append({"x":float(pt.x)+randf_range(-2,2),"y":float(pt.y),"vx":randf_range(-10,10),"vy":randf_range(-40,-20),"color":Color("#39FF14"),"life":0.6})
+			if randf() < 0.4: _add_spark(float(pt.x)+randf_range(-2,2),float(pt.y),randf_range(-10,10),randf_range(-40,-20),Color("#39FF14"),0.6)
 		elif (t_tags & SandboxMaterial.Tags.INCENDIARY):
 			npc.hp -= 1.2; took_damage = true; if npc.hit_type != "acid": npc.hit_flash = 5; npc.hit_type = "fire"
-			if randf() < 0.3: visual_sparks.append({"x":float(pt.x),"y":float(pt.y),"vx":randf_range(-15,15),"vy":randf_range(-35,-15),"color":Color("#FF8200"),"life":0.5})
+			if randf() < 0.3: _add_spark(float(pt.x),float(pt.y),randf_range(-15,15),randf_range(-35,-15),Color("#FF8200"),0.5)
 		
 		# Electricity Damage
 		if charge_array[pt.y * grid_width + pt.x] > 50:
 			npc.hp -= 2.5; took_damage = true; npc.hit_flash = 5; npc.hit_type = "electric"
-			if randf() < 0.4: visual_sparks.append({"x":float(pt.x),"y":float(pt.y),"vx":randf_range(-20,20),"vy":randf_range(-40,-10),"color":Color.CYAN,"life":0.4})
+			if randf() < 0.4: _add_spark(float(pt.x),float(pt.y),randf_range(-20,20),randf_range(-40,-10),Color.CYAN,0.4)
 	var air_found = false
 	for oy in range(-1, 6):
 		for ox in range(-1, 3):
@@ -3606,7 +3620,7 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 			var blast_dir = (Vector2(npc.pos) - Vector2(center)).normalized()
 			if blast_dir.length() < 0.1: blast_dir = Vector2.UP
 			npc.vx = blast_dir.x * ratio * 15.0; npc.vy = blast_dir.y * ratio * 15.0 - 6.0
-			for s in range(5): visual_sparks.append({"x":float(npc.pos.x),"y":float(npc.pos.y),"vx":randf_range(-50,50),"vy":randf_range(-80,0),"color":Color.DARK_GRAY,"life":0.6})
+			for _s in range(5): _add_spark(float(npc.pos.x),float(npc.pos.y),randf_range(-50,50),randf_range(-80,0),Color.DARK_GRAY,0.6)
 	for ry in range(-radius, radius):
 		for rx in range(-radius, radius):
 			var dist_sq = rx*rx + ry*ry
@@ -3673,12 +3687,14 @@ func _update_texture():
 	img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cells.to_byte_array())
 	
 	# 3. VISUAL OVERLAY (Paint sparks over the physical grid)
-	for spark in visual_sparks:
-		var sx = int(spark.x); var sy = int(spark.y)
+	for i in range(MAX_VISUAL_SPARKS):
+		var life = vs_life[i]
+		if life <= 0.2: continue # Marker for active
+		
+		var sx = int(vs_x[i]); var sy = int(vs_y[i])
 		if sx >= 0 and sx < grid_width and sy >= 0 and sy < grid_height:
-			var sc = spark.color; sc.a = spark.life
-			# Marker: Ensure B > 0.01 to bypass ID lookup and keep actual color
-			sc.b = max(0.02, sc.b) # Using blue channel as the exclusive shader marker for visual effects
+			var sc = vs_color[i]; sc.a = life
+			sc.b = max(0.02, sc.b) # Visual Marker
 			img.set_pixel(sx, sy, sc)
 			
 	for fw in active_fireworks:
@@ -3721,15 +3737,7 @@ func _update_active_fireworks(delta):
 		# Sutil trail (Visual Sparks instead of physical Smoke)
 		if randf() < 0.6:
 			var trail_colors = [Color.GRAY, Color.YELLOW, Color.WHITE, Color.GOLD]
-			var spark = {
-				"x": float(fw.x) + randf_range(-1.2, 1.2),
-				"y": float(fw.y + 1),
-				"vx": randf_range(-10, 10),
-				"vy": randf_range(20, 50), # Falling slightly
-				"color": trail_colors[randi() % trail_colors.size()],
-				"life": randf_range(0.2, 0.6) # Very short life for the trail
-			}
-			visual_sparks.append(spark)
+			_add_spark(float(fw.x) + randf_range(-1.2, 1.2), float(fw.y + 1), randf_range(-10, 10), randf_range(20, 50), trail_colors[randi() % trail_colors.size()], randf_range(0.2, 0.6))
 			
 		# Check if reached altitude or safe boundary
 		if fw.y <= fw.target_y or fw.y < 15:
@@ -3740,22 +3748,18 @@ func _update_active_fireworks(delta):
 	for i in to_remove:
 		active_fireworks.remove_at(i)
 
+func _add_spark(px, py, p_vx, p_vy, p_color, p_life):
+	vs_x[vs_ptr] = px; vs_y[vs_ptr] = py; vs_vx[vs_ptr] = p_vx; vs_vy[vs_ptr] = p_vy
+	vs_color[vs_ptr] = p_color; vs_life[vs_ptr] = p_life
+	vs_ptr = (vs_ptr + 1) % MAX_VISUAL_SPARKS
+
 func _update_visual_sparks(delta):
-	var to_remove = []
-	for i in range(visual_sparks.size()):
-		var s = visual_sparks[i]
-		s.x += s.vx * delta
-		s.y += s.vy * delta
-		s.vy += 30.0 * delta # Visual gravity
-		s.life -= 1.3 * delta # Slightly faster decay
-		
-		# Snap off if too dim to avoid 'noise'
-		if s.life <= 0.2:
-			to_remove.append(i)
-	
-	to_remove.reverse()
-	for i in to_remove:
-		visual_sparks.remove_at(i)
+	for i in range(MAX_VISUAL_SPARKS):
+		if vs_life[i] <= 0: continue
+		vs_x[i] += vs_vx[i] * delta
+		vs_y[i] += vs_vy[i] * delta
+		vs_vy[i] += 30.0 * delta
+		vs_life[i] -= 1.3 * delta
 
 func _explode_firework(ex, ey, p_color):
 	_play_action_sound("firework_burst")
@@ -3767,15 +3771,7 @@ func _explode_firework(ex, ey, p_color):
 	for i in range(spark_count):
 		var ang = randf() * TAU
 		var force = randf_range(20, 60) * size_mult # Slower, compact expansion
-		var spark = {
-			"x": float(ex),
-			"y": float(ey),
-			"vx": cos(ang) * force,
-			"vy": sin(ang) * force,
-			"color": p_color, 
-			"life": randf_range(1.0, 1.8) # Snappier life
-		}
-		visual_sparks.append(spark)
+		_add_spark(float(ex), float(ey), cos(ang) * force, sin(ang) * force, p_color, randf_range(1.0, 1.8))
 
 func _clear_all():
 	cells.fill(0)
@@ -3784,6 +3780,7 @@ func _clear_all():
 	surface_cache.fill(0)
 	active_npcs.clear()
 	active_projectiles.clear()
+	vs_life.fill(0.0)
 	_update_texture()
 	_update_material_highlights()
 	_update_menu_highlights()
