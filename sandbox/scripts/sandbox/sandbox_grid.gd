@@ -682,7 +682,7 @@ func _setup_materials_within_grid():
 	if scroll_vbox and scroll_vbox.name == "ScrollVBox":
 		var spacer = Control.new()
 		spacer.name = "FinalSpacer"
-		spacer.custom_minimum_size = Vector2(0, 10) # MINIMAL PADDING AT BOTTOM
+		spacer.custom_minimum_size = Vector2(0, 10.0 * s) # MINIMAL PADDING AT BOTTOM
 		scroll_vbox.add_child(spacer)
 
 
@@ -782,7 +782,7 @@ func _setup_main_ui_containers():
 	var h = 340
 	
 	# UPDATE PHYSICAL BOUNDARY
-	dynamic_grid_height = grid_height - ceil(h / grid_scale)
+	dynamic_grid_height = grid_height - ceil(float(h) / grid_scale)
 	
 	material_scroll.custom_minimum_size = Vector2(0, h)
 	material_scroll.anchor_top = 1.0
@@ -966,7 +966,7 @@ func _setup_tools_ui():
 	var create_row = func(label_key: String, options: Array, callback: Callable, is_upcoming: bool = false):
 		var lbl = Label.new()
 		lbl.text = translations_map[current_language].get(label_key, label_key) + ": "
-		lbl.add_theme_font_size_override("font_size", 14 * s)
+		lbl.add_theme_font_size_override("font_size", 14.0 * s)
 		lbl.add_theme_font_override("font", _get_safe_font())
 		ui_elements[label_key + "_lbl"] = lbl
 		v_box.add_child(lbl)
@@ -982,8 +982,8 @@ func _setup_tools_ui():
 		for i in range(options.size()):
 			var btn = Button.new()
 			btn.text = str(options[i])
-			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
-			btn.add_theme_font_size_override("font_size", 14 * s)
+			btn.custom_minimum_size = Vector2(80.0 * s, 45.0 * s)
+			btn.add_theme_font_size_override("font_size", 14.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
 			
 			if is_upcoming:
@@ -1119,14 +1119,14 @@ func _setup_tools_ui():
 	
 	_add_ui_header(v_box, "coming_soon")
 	
-	create_row.call("speed", ["x0.2", "x0.5", "x0.8", "x1", "x2", "x4"], func(l): pass, true)
-	create_row.call("eraser", [translations_map[current_language]["eraser"]], func(l): pass, true)
+	create_row.call("speed", ["x0.2", "x0.5", "x0.8", "x1", "x2", "x4"], func(_l): pass, true)
+	create_row.call("eraser", [translations_map[current_language]["eraser"]], func(_l): pass, true)
 	create_row.call("shapes", [
 		translations_map[current_language]["line"],
 		translations_map[current_language]["rect"],
 		translations_map[current_language]["circ"],
 		translations_map[current_language]["tria"]
-	], func(l): pass, true)
+	], func(_l): pass, true)
 
 func _setup_disaster_ui():
 	var s = _get_ui_scale()
@@ -1212,7 +1212,7 @@ func _setup_disaster_ui():
 	var create_row = func(label_key: String, options: Array, callback: Callable, is_upcoming: bool = false):
 		var lbl = Label.new()
 		lbl.text = translations_map[current_language].get(label_key, label_key) + ": "
-		lbl.add_theme_font_size_override("font_size", 14 * s)
+		lbl.add_theme_font_size_override("font_size", 14.0 * s)
 		lbl.add_theme_font_override("font", _get_safe_font())
 		ui_elements[label_key + "_lbl"] = lbl
 		v_box.add_child(lbl)
@@ -1230,8 +1230,8 @@ func _setup_disaster_ui():
 			var btn = Button.new()
 			# Try to translate if it's a key, otherwise use as string
 			btn.text = translations_map[current_language].get(osk, str(osk))
-			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
-			btn.add_theme_font_size_override("font_size", 14 * s)
+			btn.custom_minimum_size = Vector2(80.0 * s, 45.0 * s)
+			btn.add_theme_font_size_override("font_size", 14.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
 			
 			if is_upcoming:
@@ -1281,12 +1281,12 @@ func _setup_disaster_ui():
 	_add_ui_header(v_box, "coming_soon")
 	
 	var int_keys = ["off", "light", "med", "heavy"]
-	create_row.call("acid_rain", int_keys, func(l): pass, true)
-	create_row.call("lava_rain", int_keys, func(l): pass, true)
-	create_row.call("met_storm", ["off", "light", "med", "storm"], func(l): pass, true)
-	create_row.call("black_hole", ["off", "light", "med", "heavy"], func(l): pass, true)
-	create_row.call("sinkhole", ["off", "light", "med", "heavy"], func(l): pass, true)
-	create_row.call("sand_storm", ["off", "light", "med", "storm"], func(l): pass, true)
+	create_row.call("acid_rain", int_keys, func(_l): pass, true)
+	create_row.call("lava_rain", int_keys, func(_l): pass, true)
+	create_row.call("met_storm", ["off", "light", "med", "storm"], func(_l): pass, true)
+	create_row.call("black_hole", ["off", "light", "med", "heavy"], func(_l): pass, true)
+	create_row.call("sinkhole", ["off", "light", "med", "heavy"], func(_l): pass, true)
+	create_row.call("sand_storm", ["off", "light", "med", "storm"], func(_l): pass, true)
 
 func _refresh_ui_text():
 	var s = _get_ui_scale()
@@ -1294,18 +1294,18 @@ func _refresh_ui_text():
 		var node_data = ui_elements[key]
 		
 		# Handle direct button nodes (Tools/Disasters)
-		var btn_h = (336 - (6 * s)) / 3
+		var btn_h = (336.0 - (6.0 * s)) / 3.0
 		if key == "tools_btn": 
 			node_data.text = translations_map[current_language]["tools"]
-			node_data.custom_minimum_size = Vector2(160 * s, btn_h)
+			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
 			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 		elif key == "disaster_btn": 
 			node_data.text = translations_map[current_language]["disasters"]
-			node_data.custom_minimum_size = Vector2(160 * s, btn_h)
+			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
 			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 		elif key == "npc_btn": 
 			node_data.text = translations_map[current_language]["npc"]
-			node_data.custom_minimum_size = Vector2(160 * s, btn_h)
+			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
 			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 		elif key == "pause_btn": 
 			node_data.text = translations_map[current_language]["play"] if is_paused else translations_map[current_language]["pause"]
@@ -1515,6 +1515,9 @@ func _update_material_highlights():
 	# Use static pre-configured style for high speed
 	for slot in material_grid.get_children():
 		if not is_instance_valid(slot): continue
+		
+		# SKIP HEADERS OR OTHER NON-BUTTON NODES
+		if not slot.has_meta("mat_id"): continue
 		
 		var mat_id = slot.get_meta("mat_id", -1)
 		var overlay = slot.get_meta("overlay", null)
@@ -2230,7 +2233,7 @@ func _process_electricity():
 		# 2. SPREAD LOGIC (Only if full 100)
 		if charge == 100:
 			var x = i % grid_width
-			var y = int(i / grid_width)
+			var y = int(float(i) / grid_width)
 			var my_tags = material_tags_raw[mid]
 			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
 				# Scan neighbors for 0-charge conductors
@@ -2252,11 +2255,11 @@ func _process_electricity():
 			charge_array[i] -= 5
 			if charge_array[i] > 100: charge_array[i] = 100
 			if charge_array[i] > 0:
-				_activate_chunk(i % grid_width, int(i / grid_width))
+				_activate_chunk(i % grid_width, int(float(i) / grid_width))
 		elif mid == 7: # TNT logic
 			charge_array[i] -= 5
 			if charge_array[i] > 0:
-				_activate_chunk(i % grid_width, int(i / grid_width))
+				_activate_chunk(i % grid_width, int(float(i) / grid_width))
 
 
 
@@ -2755,9 +2758,9 @@ func _setup_npc_ui():
 		var create_fut_npc = func(key: String):
 			var btn = Button.new()
 			btn.text = translations_map[current_language].get(key, key)
-			btn.custom_minimum_size = Vector2(100 * s, 45 * s)
+			btn.custom_minimum_size = Vector2(100.0 * s, 45.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
-			btn.add_theme_font_size_override("font_size", 14 * s)
+			btn.add_theme_font_size_override("font_size", 14.0 * s)
 			btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			npc_flow_fut.add_child(btn)
 			ui_elements[key + "_btn"] = btn # Support refresh
@@ -2960,7 +2963,7 @@ func _process_npcs(delta):
 				var t_ms = Time.get_ticks_msec() % 3000
 				npc.current_emoji = "👀" if t_ms < 1000 else ""
 			elif emotes.size() > 0:
-				var time_idx = int(Time.get_ticks_msec() / 1000) % emotes.size()
+				var time_idx = int(Time.get_ticks_msec() / 1000.0) % emotes.size()
 				npc.current_emoji = emotes[time_idx]
 			else:
 				npc.current_emoji = ""
@@ -2970,7 +2973,7 @@ func _process_npcs(delta):
 			if npc.hit_flash == 0: npc.hit_type = "none"
 		_draw_npc_pixels(npc, 0)
 		_check_npc_environment_damage(npc)
-		var np = npc.pos; var target = null; var is_attacking = false
+		var np = npc.pos; var target = null
 		if npc.hp > 0:
 			if npc.type == "medic":
 				var heal_cd = npc.get("attack_cooldown", 0.0)
@@ -3041,7 +3044,6 @@ func _process_npcs(delta):
 							if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
 						else: npc.dir = 1 if dist_x > 0 else -1
 						if dx_abs < 6 and dy_abs < 6:
-							is_attacking = true
 							if npc.attack_cooldown <= 0: _attack_npc(npc, target); npc.attack_cooldown = 0.6
 						if dx_abs < 4 and !target_below: npc.dir = 0 
 					elif npc.type == "archer":
@@ -3056,7 +3058,6 @@ func _process_npcs(delta):
 								if target_below:
 									if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
 								else: npc.dir = 0
-						is_attacking = true
 						if npc.attack_cooldown <= 0:
 							_shoot_arrow(npc, target); npc.miss_counter += 1
 							if npc.miss_counter >= 3: npc.miss_counter = -40
@@ -3461,7 +3462,6 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 				
 	# Chequeo de lista de NPCs: Ignorar aliados para evitar atascos de grupo
 	if moving_npc != null:
-		var mx = moving_npc.pos.x; var my = moving_npc.pos.y
 		var nearby = _get_nearby_npcs(gx, gy, 10.0)
 		for other in nearby:
 			if other == moving_npc: continue
