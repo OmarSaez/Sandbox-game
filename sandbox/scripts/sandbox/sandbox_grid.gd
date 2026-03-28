@@ -243,7 +243,18 @@ var translations_map = {
 		"team_green": "🟢 Verde",
 		"ice": "Hielo",
 		"support": "💎 Apoya al Creador (Anuncio)",
-		"resume_in": "El juego se reanudará en "
+		"resume_in": "El juego se reanudará en ",
+		"coming_soon": "⏳ PROXIMAMENTE",
+		"toxic_gas": "Gas Tóxico",
+		"void": "Vacío",
+		"battery": "Batería",
+		"npc_act": "Activador NPC",
+		"door": "Puerta",
+		"flam_gas": "Gas Flam.",
+		"coal_item": "Carbón",
+		"bacteria": "Bacteria",
+		"cure": "Cura",
+		"and_more": "Y más..."
 	},
 	"en": {
 		"disasters": "🌪️ Disasters",
@@ -297,7 +308,18 @@ var translations_map = {
 		"team_green": "🟢 Green",
 		"ice": "Ice",
 		"support": "💎 Support Creator (Ad)",
-		"resume_in": "Game resumes in "
+		"resume_in": "Game resumes in ",
+		"coming_soon": "⏳ COMING SOON",
+		"toxic_gas": "Toxic Gas",
+		"void": "Void",
+		"battery": "Battery",
+		"npc_act": "NPC Act.",
+		"door": "Door",
+		"flam_gas": "Flam. Gas",
+		"coal_item": "Coal",
+		"bacteria": "Bacteria",
+		"cure": "Cure",
+		"and_more": "And more..."
 	}
 }
 
@@ -602,6 +624,19 @@ func _setup_materials_within_grid():
 	_add_button("cement", 26)
 	_add_button("volcan", 27)
 	_add_button("ice", 70)
+	
+	# --- SECCIÓN PROXIMAMENTE ---
+	_add_ui_header(material_grid, "coming_soon")
+	_add_button("toxic_gas", 0, true)
+	_add_button("void", 0, true)
+	_add_button("battery", 0, true)
+	_add_button("npc_act", 0, true)
+	_add_button("door", 0, true)
+	_add_button("flam_gas", 0, true)
+	_add_button("coal_item", 0, true)
+	_add_button("bacteria", 0, true)
+	_add_button("cure", 0, true)
+	_add_button("and_more", 0, true)
 	
 	# FIND the scroll vbox to add the final spacer
 	var s = _get_ui_scale()
@@ -1034,6 +1069,8 @@ func _setup_tools_ui():
 	)
 	ui_elements["reset_btn"] = reset_btn_node
 	v_box.add_child(reset_btn_node)
+	
+	_add_ui_header(v_box, "coming_soon")
 
 func _setup_disaster_ui():
 	var s = _get_ui_scale()
@@ -1173,6 +1210,8 @@ func _setup_disaster_ui():
 			tsunami_timer = 0 # Apagar instantáneamente
 		_update_menu_highlights()
 	)
+	
+	_add_ui_header(v_box, "coming_soon")
 
 func _refresh_ui_text():
 	var s = _get_ui_scale()
@@ -1268,7 +1307,7 @@ func _refresh_ui_text():
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 12 * s)
 
-func _add_button(key: String, mat_id: int):
+func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	var s = _get_ui_scale()
 	
 	# The master container for the whole slot (Clickable area)
@@ -1285,6 +1324,10 @@ func _add_button(key: String, mat_id: int):
 	main_vbox.mouse_filter = Control.MOUSE_FILTER_PASS # Pass to slot_pnl
 	slot_pnl.add_child(main_vbox)
 	
+	if is_upcoming:
+		slot_pnl.modulate = Color(0.4, 0.4, 0.4, 0.8) # OSCURECIDO
+		slot_pnl.mouse_filter = Control.MOUSE_FILTER_IGNORE # NO CLICABLE
+	
 	# The Stack Container (Icon base + Selection overlays)
 	var stack = Control.new()
 	var icon_w = 90 * s
@@ -1296,7 +1339,7 @@ func _add_button(key: String, mat_id: int):
 	# 1. ICON LAYER (Always visible material color)
 	var icon_panel = PanelContainer.new()
 	var icon_style = StyleBoxFlat.new()
-	icon_style.bg_color = mat_colors_1[mat_id]
+	icon_style.bg_color = Color.BLACK if is_upcoming else (mat_colors_1[mat_id] if mat_id >= 0 else Color(0.1, 0.1, 0.1))
 	var radius = int(8 * s)
 	icon_style.corner_radius_top_left = radius
 	icon_style.corner_radius_top_right = radius
@@ -1326,13 +1369,14 @@ func _add_button(key: String, mat_id: int):
 	main_vbox.add_child(btn_lbl)
 	
 	# CENTRALIZED INPUT (Whole slot)
-	slot_pnl.gui_input.connect(func(event):
-		if not is_instance_valid(event) or not is_instance_valid(slot_pnl): return
-		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			_play_action_sound("ui_click")
-			selected_material = mat_id
-			_update_material_highlights()
-	)
+	if not is_upcoming:
+		slot_pnl.gui_input.connect(func(event):
+			if not is_instance_valid(event) or not is_instance_valid(slot_pnl): return
+			if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+				_play_action_sound("ui_click")
+				selected_material = mat_id
+				_update_material_highlights()
+		)
 	slot_pnl.set_meta("mat_id", mat_id)
 	
 	ui_elements[key + "_icon_pnl"] = selection_overlay # Store overlay for highlight
@@ -1345,6 +1389,25 @@ func _add_button(key: String, mat_id: int):
 	material_grid.add_child(slot_pnl)
 	
 	main_vbox.mouse_exited.connect(func(): is_mouse_over_ui = false)
+
+func _add_ui_header(container, key: String):
+	var s = _get_ui_scale()
+	var header_pnl = Control.new()
+	# Use a reasonable height and ensure it spans enough width
+	header_pnl.custom_minimum_size = Vector2(250 * s, 60 * s)
+	header_pnl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var lbl = Label.new()
+	lbl.text = "\n\n" + translations_map[current_language].get(key, key) + "\n"
+	lbl.add_theme_font_size_override("font_size", 20 * s)
+	lbl.add_theme_font_override("font", _get_safe_font())
+	lbl.add_theme_color_override("font_color", Color(0.9, 0.9, 0.1)) # Gold/Yellowish
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	
+	header_pnl.add_child(lbl)
+	container.add_child(header_pnl)
 
 # --- OPTIMIZED HIGHLIGHT SYSTEM ---
 
@@ -2581,6 +2644,8 @@ func _setup_npc_ui():
 			)
 			ui_elements["team_btn_" + str(i)] = t_btn
 			team_flow.add_child(t_btn)
+		
+		_add_ui_header(v_box, "coming_soon")
 
 func _place_npc(x, y):
 	var origin_x = x - 1
