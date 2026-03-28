@@ -254,7 +254,14 @@ var translations_map = {
 		"coal_item": "Carbón",
 		"bacteria": "Bacteria",
 		"cure": "Cura",
-		"and_more": "Y más..."
+		"and_more": "Y más...",
+		"speed": "Velocidad",
+		"eraser": "Borrador",
+		"shapes": "Formas",
+		"line": "Línea Recta",
+		"rect": "Cuadrados",
+		"circ": "Círculos",
+		"tria": "Triángulos"
 	},
 	"en": {
 		"disasters": "🌪️ Disasters",
@@ -319,7 +326,14 @@ var translations_map = {
 		"coal_item": "Coal",
 		"bacteria": "Bacteria",
 		"cure": "Cure",
-		"and_more": "And more..."
+		"and_more": "And more...",
+		"speed": "Game Speed",
+		"eraser": "Eraser",
+		"shapes": "Shapes",
+		"line": "Straight Line",
+		"rect": "Squares",
+		"circ": "Circles",
+		"tria": "Triangles"
 	}
 }
 
@@ -925,9 +939,9 @@ func _setup_tools_ui():
 	v_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(v_box)
 	
-	var create_row = func(label_key: String, options: Array, callback: Callable):
+	var create_row = func(label_key: String, options: Array, callback: Callable, is_upcoming: bool = false):
 		var lbl = Label.new()
-		lbl.text = translations_map[current_language][label_key] + ": "
+		lbl.text = translations_map[current_language].get(label_key, label_key) + ": "
 		lbl.add_theme_font_size_override("font_size", 14 * s)
 		lbl.add_theme_font_override("font", _get_safe_font())
 		ui_elements[label_key + "_lbl"] = lbl
@@ -937,17 +951,26 @@ func _setup_tools_ui():
 		flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v_box.add_child(flow)
 		
+		if is_upcoming:
+			lbl.modulate = Color(0.5, 0.5, 0.5, 0.7)
+			flow.modulate = Color(0.5, 0.5, 0.5, 0.7)
+		
 		for i in range(options.size()):
 			var btn = Button.new()
-			btn.text = options[i]
+			btn.text = str(options[i])
 			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			btn.add_theme_font_size_override("font_size", 14 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
-			var level = i
-			btn.pressed.connect(func(): 
-				_play_action_sound("ui_click")
-				callback.call(level)
-			)
+			
+			if is_upcoming:
+				btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				btn.modulate = Color(0.6, 0.6, 0.6)
+			else:
+				var level = i
+				btn.pressed.connect(func(): 
+					_play_action_sound("ui_click")
+					callback.call(level)
+				)
 			flow.add_child(btn)
 			ui_elements[label_key + "_btn_" + str(i)] = btn 
 
@@ -1071,6 +1094,15 @@ func _setup_tools_ui():
 	v_box.add_child(reset_btn_node)
 	
 	_add_ui_header(v_box, "coming_soon")
+	
+	create_row.call("speed", ["x0.2", "x0.5", "x0.8", "x1", "x2", "x4"], func(l): pass, true)
+	create_row.call("eraser", [translations_map[current_language]["eraser"]], func(l): pass, true)
+	create_row.call("shapes", [
+		translations_map[current_language]["line"],
+		translations_map[current_language]["rect"],
+		translations_map[current_language]["circ"],
+		translations_map[current_language]["tria"]
+	], func(l): pass, true)
 
 func _setup_disaster_ui():
 	var s = _get_ui_scale()
