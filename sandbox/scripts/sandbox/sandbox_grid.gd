@@ -479,6 +479,8 @@ func _ready():
 	_register_material(44, Color("#39FF14"), SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.VOLATILE | SandboxMaterial.Tags.GRAV_STATIC) # Proyectil Acido
 	
 	# --- CONSTRUCTION ---
+	# 25: Cemento Fresco
+	_register_material(25, Color("#d3c1a9ff"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.MIX_LOW, Color("#757570")) 
 	# 26: Cemento Solido
 	_register_material(26, Color("#C2B280"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Cemento Solido
 	# 27: Volcan Bloque
@@ -543,6 +545,7 @@ func _ready():
 	texture_rect.anchor_bottom = 1.0
 	texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE 
 	texture_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	texture_rect.show_behind_parent = true # Emojis are drawn in SandboxGrid._draw(), so Display MUST be behind it
 	charge_tex = ImageTexture.create_from_image(charge_img)
 
 	_setup_main_ui_containers()
@@ -2716,8 +2719,9 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	else:
 		_set_cell(sx, sy+2, m_torso); _set_cell(sx+1, sy+2, team_mat) # Mezcla clase/equipo
 		_set_cell(sx, sy+3, team_mat); _set_cell(sx+1, sy+3, m_torso)
-		# Fila 4: Zapatos (Restaurados)
-		_set_cell(sx, sy+4, m_shoes); _set_cell(sx+1, sy+4, m_shoes)
+	
+	# Fila 4: Zapatos (Restaurados para TODOS los tipos)
+	_set_cell(sx, sy+4, m_shoes); _set_cell(sx+1, sy+4, m_shoes)
 
 func _update_npc_spatial_hash():
 	for cell in npc_spatial_grid:
