@@ -267,7 +267,13 @@ var translations_map = {
 		"met_storm": "Meteoritos",
 		"black_hole": "Agujero Negro",
 		"sinkhole": "Hundimiento",
-		"sand_storm": "Tormenta de Arena"
+		"sand_storm": "Tormenta de Arena",
+		"zombie": "Zombie",
+		"summoner": "Invocador",
+		"bomber": "Bombardero",
+		"mage": "Mago",
+		"kamikaze": "Kamikaze",
+		"builder": "Constructor"
 	},
 	"en": {
 		"disasters": "🌪️ Disasters",
@@ -345,7 +351,13 @@ var translations_map = {
 		"met_storm": "Meteorites",
 		"black_hole": "Black Hole",
 		"sinkhole": "Sinkhole",
-		"sand_storm": "Sandstorm"
+		"sand_storm": "Sandstorm",
+		"zombie": "Zombie",
+		"summoner": "Summoner",
+		"bomber": "Bomber",
+		"mage": "Mage",
+		"kamikaze": "Kamikaze",
+		"builder": "Builder"
 	}
 }
 
@@ -1322,6 +1334,12 @@ func _refresh_ui_text():
 		elif key == "medic_btn":
 			node_data.text = translations_map[current_language]["medic"]
 			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
+			node_data.add_theme_font_size_override("font_size", 14 * s)
+		elif key.ends_with("_btn") and not key.ends_with("_mat_btn"): # Generic NPC/Tool handler
+			var pure_key = key.replace("_btn", "")
+			if translations_map[current_language].has(pure_key):
+				node_data.text = translations_map[current_language][pure_key]
+			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		
 		# Handle Labels (Main labels for rows and material names)
@@ -2728,6 +2746,28 @@ func _setup_npc_ui():
 			team_flow.add_child(t_btn)
 		
 		_add_ui_header(v_box, "coming_soon")
+		
+		var npc_flow_fut = HFlowContainer.new()
+		npc_flow_fut.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		npc_flow_fut.modulate = Color(0.6, 0.6, 0.6, 0.7)
+		v_box.add_child(npc_flow_fut)
+		
+		var create_fut_npc = func(key: String):
+			var btn = Button.new()
+			btn.text = translations_map[current_language].get(key, key)
+			btn.custom_minimum_size = Vector2(100 * s, 45 * s)
+			btn.add_theme_font_override("font", _get_safe_font())
+			btn.add_theme_font_size_override("font_size", 14 * s)
+			btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			npc_flow_fut.add_child(btn)
+			ui_elements[key + "_btn"] = btn # Support refresh
+		
+		create_fut_npc.call("zombie")
+		create_fut_npc.call("summoner")
+		create_fut_npc.call("bomber")
+		create_fut_npc.call("mage")
+		create_fut_npc.call("kamikaze")
+		create_fut_npc.call("builder")
 
 func _place_npc(x, y):
 	var origin_x = x - 1
