@@ -390,6 +390,11 @@ var vs_color := PackedColorArray()
 var vs_life := PackedFloat32Array()
 var vs_ptr := 0
 
+# Optimization #4: Sparse Electricity/Charge System
+var active_charge_indices := PackedInt32Array()
+var next_charge_indices := PackedInt32Array()
+var charge_queued_frame := PackedInt32Array()
+
 # Display
 @onready var texture_rect: TextureRect = $Display
 var img: Image
@@ -412,6 +417,7 @@ func _ready():
 	vs_vx.resize(MAX_VISUAL_SPARKS); vs_vy.resize(MAX_VISUAL_SPARKS)
 	vs_color.resize(MAX_VISUAL_SPARKS); vs_life.resize(MAX_VISUAL_SPARKS)
 	vs_life.fill(0.0)
+	
 	get_parent().move_child.call_deferred(global_bg, 0) # Background Layer
 	
 	# Setup SFX Pool
@@ -443,12 +449,17 @@ func _ready():
 	grid_height = floor(viewport_size.y / grid_scale)
 	dynamic_grid_height = grid_height # Full initial
 	
+	charge_queued_frame.resize(grid_width * grid_height)
+	charge_queued_frame.fill(-1)
+	
 	# Update Display node size to match the grid exactly
 	$Display.custom_minimum_size = Vector2(grid_width * grid_scale, grid_height * grid_scale)
 	$Display.size = $Display.custom_minimum_size
 	
 	# Init arrays
 	cells.resize(grid_width * grid_height)
+	tags_array.resize(grid_width * grid_height)
+	charge_array.resize(grid_width * grid_height)
 	img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8)
 	color_buffer.resize(grid_width * grid_height * 4)
 	surface_cache.resize(grid_width)
@@ -2079,8 +2090,11 @@ func _set_cell(x, y, mat_id):
 		tags_array[idx] = tags
 		_activate_chunk(x, y)
 		
-		if (tags & SandboxMaterial.Tags.ELECTRICITY): charge_array[idx] = 101
-		else: charge_array[idx] = 0
+		if (tags & SandboxMaterial.Tags.ELECTRICITY): 
+			charge_array[idx] = 101
+			_register_charge(idx)
+		else: 
+			charge_array[idx] = 0
 
 func _activate_chunk(gx, gy):
 	var cx = int(gx / CHUNK_SIZE)
@@ -2115,8 +2129,12 @@ func _step_simulation():
 		if next_chunks_active[i] > 0:
 			next_chunks_active[i] -= 1
 	
-	# Pass 1: Electricity Pulse Processing (GLOBAL)
+	# Pass 1: Electricity Pulse Processing (SPARSE)
 	_process_electricity()
+	
+	# Transition Active Charges to Next Frame
+	active_charge_indices = next_charge_indices
+	next_charge_indices = PackedInt32Array()
 	
 	# Pass 2 & 3: Movement and Interactions (Calculated)
 	# ... after main loops conclude, manage the persistent sounds once ...
@@ -2226,31 +2244,29 @@ func _step_simulation():
 		if fire_loop_player.playing: fire_loop_player.stop()
 
 func _process_electricity():
-	# Sequential processing (Beat Machine Pulse)
-	for i in range(cells.size()):
-		var charge = charge_array[i]
+	for idx in active_charge_indices:
+		var charge = charge_array[idx]
 		if charge == 0: continue
 		
-		# Skip Priming Explosives (Timer handled in Interaction pass)
-		var mid = cells[i] & 0xFFFF
+		var mid = cells[idx] & 0xFFFF
 		if mid == 7 or mid == 77 or mid == 71 or mid == 72:
+			_register_charge(idx) # Keep timer alive
 			continue
 		
 		if (mid == 5 or mid == 20) and charge < 101: 
+			_register_charge(idx)
 			continue
 		
-		# 1. SYNCHRONIZE NEW PULSE (Fix for propagation death)
 		if charge == 101:
-			charge_array[i] = 100
+			charge_array[idx] = 100
+			_register_charge(idx)
 			continue
 		
-		# 2. SPREAD LOGIC (Only if full 100)
 		if charge == 100:
-			var x = i % grid_width
-			var y = int(float(i) / grid_width)
+			var x = idx % grid_width
+			var y = int(float(idx) / grid_width)
 			var my_tags = material_tags_raw[mid]
 			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
-				# Scan neighbors for 0-charge conductors
 				for ny in range(y - 1, y + 2):
 					if ny < 0 or ny >= grid_height: continue
 					for nx in range(x - 1, x + 2):
@@ -2261,19 +2277,21 @@ func _process_electricity():
 						if n_pid <= 0: continue
 						var n_tags = tags_array[n_idx]
 						if (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)) and charge_array[n_idx] == 0:
-							charge_array[n_idx] = 101 # NEW PULSE (Wait 1 frame)
+							charge_array[n_idx] = 101
+							_register_charge(n_idx)
 							_activate_chunk(nx, ny)
 		
-		# 3. DECAY LOGIC (-5 per frame)
 		if (material_tags_raw[mid] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
-			charge_array[i] -= 5
-			if charge_array[i] > 100: charge_array[i] = 100
-			if charge_array[i] > 0:
-				_activate_chunk(i % grid_width, int(float(i) / grid_width))
+			charge_array[idx] -= 5
+			if charge_array[idx] > 100: charge_array[idx] = 100
+			if charge_array[idx] > 0:
+				_register_charge(idx)
+				_activate_chunk(idx % grid_width, int(float(idx) / grid_width))
 		elif mid == 7: # TNT logic
-			charge_array[i] -= 5
-			if charge_array[i] > 0:
-				_activate_chunk(i % grid_width, int(float(i) / grid_width))
+			charge_array[idx] -= 5
+			if charge_array[idx] > 0:
+				_register_charge(idx)
+				_activate_chunk(idx % grid_width, int(float(idx) / grid_width))
 
 
 
@@ -2315,15 +2333,25 @@ func _swap_cells(x1, y1, x2, y2):
 	tags_array[idx2] = material_tags_raw[m1 & 0xFFFF]
 	charge_array[idx2] = c1
 	
+	if c1 > 0: _register_charge(idx2)
+	if c2 > 0: _register_charge(idx1)
+	
 	# Wake up chunks
 	_activate_chunk(x1, y1)
 	_activate_chunk(x2, y2)
+
+func _register_charge(idx):
+	var frame = Engine.get_frames_drawn()
+	if charge_queued_frame[idx] != frame:
+		charge_queued_frame[idx] = frame
+		next_charge_indices.append(idx)
 
 func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 	# PULSANT ELECTRICAL SOURCE
 	if pure_id == 9:
 		if charge_array[idx] == 0:
 			charge_array[idx] = 101
+			_register_charge(idx)
 		
 	# FIRE AND HEAT REACTIONS
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
@@ -2358,10 +2386,12 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			elif pure_id == 18:
 				_set_cell(x, y, 19)
 				charge_array[idx] = randi_range(20, 70)
+				_register_charge(idx)
 				_play_action_sound("fuse_burning", 0.1)
 	
 	if pure_id == 19: 
 		charge_array[idx] -= 1
+		if charge_array[idx] > 0: _register_charge(idx)
 		if Engine.get_frames_drawn() % 4 == 0: _set_cell(x, y, 18)
 		elif Engine.get_frames_drawn() % 4 == 2: _set_cell(x, y, 19)
 		if charge_array[idx] <= 0: _launch_firework(x, y)
@@ -2380,6 +2410,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			return
 		
 		charge_array[idx] = flags | timer
+		_register_charge(idx)
 		if Engine.get_frames_drawn() % 10 < 5: cells[idx] = (cells[idx] & 0xFFFF0000) | prime_id
 		else: cells[idx] = (cells[idx] & 0xFFFF0000) | base_id
 		_activate_chunk(x, y)
@@ -2453,6 +2484,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			var new_energy = energy
 			if Engine.get_frames_drawn() % 2 == 0: new_energy -= 1
 			charge_array[idx] = (new_energy << 3) | dir_idx
+			_register_charge(idx)
 			_swap_cells(x, y, nx, ny)
 		else:
 			# IMPACT: Turn into real liquid acid if it's an acid spark, otherwise vanish
@@ -3629,7 +3661,11 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 				if t_id <= 0: continue
 				var t_idx = ty * grid_width + tx; var t_tags = tags_array[t_idx]
 				if (t_tags & SandboxMaterial.Tags.EXPLOSIVE):
-					if t_id == 27: _set_cell(tx, ty, 29); charge_array[tx + ty * grid_width] = randi_range(80, 120)
+					if t_id == 27: 
+						_set_cell(tx, ty, 29)
+						var ci = tx + ty * grid_width
+						charge_array[ci] = randi_range(80, 120)
+						_register_charge(ci)
 					else: _prime_explosive(tx, ty, t_id, ignition_flags)
 					continue
 				if (t_tags & SandboxMaterial.Tags.ANTI_EXPLOSIVE): continue
@@ -3645,7 +3681,9 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 					_set_cell(sx, sy, 43); _activate_chunk(sx, sy)
 					var deg = rad_to_deg(ang); if deg < 0: deg += 360
 					var dir_idx = int((deg + 22.5 + 90) / 45) % 8
-					charge_array[sy * grid_width + sx] = (31 << 3) | dir_idx
+					var c_idx = sy * grid_width + sx
+					charge_array[c_idx] = (31 << 3) | dir_idx
+					_register_charge(c_idx)
 	
 	# 2. CORROSIVE DROPS EFFECT (If ACID BIT 64 is set)
 	if ignition_flags & 64:
@@ -3781,6 +3819,9 @@ func _clear_all():
 	active_npcs.clear()
 	active_projectiles.clear()
 	vs_life.fill(0.0)
+	active_charge_indices.clear()
+	next_charge_indices.clear()
+	charge_queued_frame.fill(-1)
 	_update_texture()
 	_update_material_highlights()
 	_update_menu_highlights()
