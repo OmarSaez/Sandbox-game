@@ -261,7 +261,13 @@ var translations_map = {
 		"line": "Línea Recta",
 		"rect": "Cuadrados",
 		"circ": "Círculos",
-		"tria": "Triángulos"
+		"tria": "Triángulos",
+		"acid_rain": "Lluvia Ácida",
+		"lava_rain": "Lluvia de Lava",
+		"met_storm": "Meteoritos",
+		"black_hole": "Agujero Negro",
+		"sinkhole": "Hundimiento",
+		"sand_storm": "Tormenta de Arena"
 	},
 	"en": {
 		"disasters": "🌪️ Disasters",
@@ -333,7 +339,13 @@ var translations_map = {
 		"line": "Straight Line",
 		"rect": "Squares",
 		"circ": "Circles",
-		"tria": "Triangles"
+		"tria": "Triangles",
+		"acid_rain": "Acid Rain",
+		"lava_rain": "Lava Rain",
+		"met_storm": "Meteorites",
+		"black_hole": "Black Hole",
+		"sinkhole": "Sinkhole",
+		"sand_storm": "Sandstorm"
 	}
 }
 
@@ -1185,9 +1197,9 @@ func _setup_disaster_ui():
 	v_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(v_box)
 	
-	var create_row = func(label_key: String, options_keys: Array, callback: Callable):
+	var create_row = func(label_key: String, options: Array, callback: Callable, is_upcoming: bool = false):
 		var lbl = Label.new()
-		lbl.text = translations_map[current_language][label_key] + ": "
+		lbl.text = translations_map[current_language].get(label_key, label_key) + ": "
 		lbl.add_theme_font_size_override("font_size", 14 * s)
 		lbl.add_theme_font_override("font", _get_safe_font())
 		ui_elements[label_key + "_lbl"] = lbl
@@ -1197,17 +1209,28 @@ func _setup_disaster_ui():
 		flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v_box.add_child(flow)
 		
-		for i in range(options_keys.size()):
-			var osk = options_keys[i]
+		if is_upcoming:
+			lbl.modulate = Color(0.5, 0.5, 0.5, 0.7)
+			flow.modulate = Color(0.5, 0.5, 0.5, 0.7)
+		
+		for i in range(options.size()):
+			var osk = options[i]
 			var btn = Button.new()
-			btn.text = translations_map[current_language][osk]
+			# Try to translate if it's a key, otherwise use as string
+			btn.text = translations_map[current_language].get(osk, str(osk))
 			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			btn.add_theme_font_size_override("font_size", 14 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
-			btn.pressed.connect(func(): 
-				_play_action_sound("ui_click")
-				callback.call(i)
-			)
+			
+			if is_upcoming:
+				btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				btn.modulate = Color(0.6, 0.6, 0.6)
+			else:
+				var level = i
+				btn.pressed.connect(func(): 
+					_play_action_sound("ui_click")
+					callback.call(level)
+				)
 			flow.add_child(btn)
 			ui_elements[label_key + "_btn_" + str(i)] = [btn, osk]
 
@@ -1244,6 +1267,14 @@ func _setup_disaster_ui():
 	)
 	
 	_add_ui_header(v_box, "coming_soon")
+	
+	var int_keys = ["off", "light", "med", "heavy"]
+	create_row.call("acid_rain", int_keys, func(l): pass, true)
+	create_row.call("lava_rain", int_keys, func(l): pass, true)
+	create_row.call("met_storm", ["off", "light", "med", "storm"], func(l): pass, true)
+	create_row.call("black_hole", ["off", "light", "med", "heavy"], func(l): pass, true)
+	create_row.call("sinkhole", ["off", "light", "med", "heavy"], func(l): pass, true)
+	create_row.call("sand_storm", ["off", "light", "med", "storm"], func(l): pass, true)
 
 func _refresh_ui_text():
 	var s = _get_ui_scale()
@@ -1338,6 +1369,25 @@ func _refresh_ui_text():
 				node_data.text = translations_map[current_language][team_keys[idx]]
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 12 * s)
+			elif key.ends_with("_btn_0"):
+				var pure_key = key.replace("_btn_0", "")
+				if translations_map[current_language].has(pure_key):
+					node_data.text = translations_map[current_language][pure_key]
+				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
+				node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key == "eraser_btn_0": # Special override if needed
+				node_data.text = translations_map[current_language]["eraser"]
+			elif key.begins_with("shapes_btn_"):
+				var idx = int(key.split("_")[-1])
+				var shape_keys = ["line", "rect", "circ", "tria"]
+				if idx < shape_keys.size():
+					node_data.text = translations_map[current_language][shape_keys[idx]]
+				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
+				node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key.begins_with("speed_btn_"):
+				# These are just "x1", "x2" strings, no need to translate normally
+				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
+				node_data.add_theme_font_size_override("font_size", 14 * s)
 
 func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	var s = _get_ui_scale()
