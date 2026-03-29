@@ -47,7 +47,7 @@ var is_paused: bool = false
 # UI State
 var is_mouse_over_ui: bool = false
 var brush_radius: int = 2 
-var current_language: String = "es" # "es" or "en"
+var current_language: String = "es" # Controlled by TranslationServer
 var ui_scale_level: int = 1 # Start at 1.2x by default
 func _get_ui_scale() -> float:
 	var scales = [1.0, 1.2, 1.3, 1.5, 1.7, 2.0]
@@ -190,502 +190,7 @@ var is_fire_active = false
 
 var sfx_cache = {} # Cache for loaded AudioStreams
 
-var translations_map = {
-	"es": {
-		"disasters": "🌪️ Desastres",
-		"tools": "🛠️ Herramientas",
-		"lang": "🌐 Idioma",
-		"brush": "🖌️ Pincel",
-		"weather": "⛈️ Clima",
-		"quake": "🏚️ Sismo",
-		"tornado": "🌪️ Tornado",
-		"tsunami": "🌊 Tsunami",
-		"off": "Off",
-		"light": "Ligero",
-		"med": "Medio",
-		"storm": "Tormenta",
-		"brutal": "¡BRUTAL!",
-		"heavy": "Fuerte",
-		# Materials
-		"sand": "Arena",
-		"water": "Agua",
-		"fire": "Fuego",
-		"tnt": "TNT",
-		"earth": "Tierra",
-		"metal": "Metal",
-		"elec": "Elect.",
-		"gravel": "Grava",
-		"lava": "Lava",
-		"obisid": "Obsidiana",
-		"acid": "Ácido",
-		"wood": "Madera",
-		"petro": "Petróleo",
-		"fireworks": "Cohetes",
-		"powd": "Pólvora",
-		"grass": "Pasto",
-		"vine": "Pasto Alto",
-		"cem_fresh": "Cem. Fresco",
-		"cement": "Cemento",
-		"volcan": "Volcán",
-		"ui_size": "Tamaño UI",
-		"size": "Escala",
-		"reset": "Limpiar Todo",
-		"pause": "⏸️ Pausar",
-		"play": "▶️ Reanudar",
-		"npc": "👥 NPCs",
-		"warrior": "⚔️ Guerrero",
-		"archer": "🏹 Arquero",
-		"miner": "⛏️ Minero",
-		"medic": "💊 Médico",
-		"team_red": "🔴 Rojo",
-		"team_blue": "🔵 Azul",
-		"team_yellow": "🟡 Amarillo",
-		"team_green": "🟢 Verde",
-		"team": "Equipo",
-		"ice": "Hielo",
-		"support": "💎 Apoya al Creador (Anuncio)",
-		"resume_in": "El juego se reanudará en ",
-		"coming_soon": "⏳ PROXIMAMENTE",
-		"toxic_gas": "Gas Tóxico",
-		"void": "Vacío",
-		"battery": "Batería",
-		"npc_act": "Activador NPC",
-		"door": "Puerta",
-		"flam_gas": "Gas Flam.",
-		"coal_item": "Carbón",
-		"bacteria": "Bacteria",
-		"cure": "Cura",
-		"and_more": "Y más...",
-		"speed": "Velocidad",
-		"eraser": "Borrador",
-		"shapes": "Formas",
-		"line": "Línea Recta",
-		"rect": "Cuadrados",
-		"circ": "Círculos",
-		"tria": "Triángulos",
-		"acid_rain": "Lluvia Ácida",
-		"lava_rain": "Lluvia de Lava",
-		"met_storm": "Meteoritos",
-		"black_hole": "Agujero Negro",
-		"sinkhole": "Hundimiento",
-		"sand_storm": "Tormenta de Arena",
-		"zombie": "Zombie",
-		"summoner": "Invocador",
-		"bomber": "Bombardero",
-		"mage": "Mago",
-		"kamikaze": "Kamikaze",
-		"builder": "Constructor"
-	},
-	"en": {
-		"disasters": "🌪️ Disasters",
-		"tools": "🛠️ Tools",
-		"lang": "🌐 Language",
-		"brush": "🖌️ Brush",
-		"weather": "⛈️ Weather",
-		"quake": "🏚️ Quake",
-		"tornado": "🌪️ Tornado",
-		"tsunami": "🌊 Tsunami",
-		"off": "Off",
-		"light": "Light",
-		"med": "Medium",
-		"storm": "Storm",
-		"brutal": "BRUTAL!",
-		"heavy": "Heavy",
-		# Materials
-		"sand": "Sand",
-		"water": "Water",
-		"fire": "Fire",
-		"tnt": "TNT",
-		"earth": "Earth",
-		"metal": "Metal",
-		"elec": "Elec",
-		"gravel": "Gravel",
-		"lava": "Lava",
-		"obisid": "Obsidian",
-		"acid": "Acid",
-		"wood": "Wood",
-		"petro": "Oil",
-		"fireworks": "Fireworks",
-		"powd": "Gunpowder",
-		"grass": "Grass",
-		"vine": "Vine",
-		"cem_fresh": "Fresh Cem.",
-		"cement": "Cement",
-		"volcan": "Volcano",
-		"ui_size": "UI Size",
-		"size": "Scale",
-		"reset": "Clear All",
-		"pause": "⏸️ Pause",
-		"play": "▶️ Resume",
-		"npc": "👥 NPCs",
-		"warrior": "⚔️ Warrior",
-		"archer": "🏹 Archer",
-		"miner": "⛏️ Miner",
-		"medic": "💊 Medic",
-		"team_red": "🔴 Red",
-		"team_blue": "🔵 Blue",
-		"team_yellow": "🟡 Yellow",
-		"team_green": "🟢 Green",
-		"team": "Team",
-		"ice": "Ice",
-		"support": "💎 Support Creator (Ad)",
-		"resume_in": "Game resumes in ",
-		"coming_soon": "⏳ COMING SOON",
-		"toxic_gas": "Toxic Gas",
-		"void": "Void",
-		"battery": "Battery",
-		"npc_act": "NPC Act.",
-		"door": "Door",
-		"flam_gas": "Flam. Gas",
-		"coal_item": "Coal",
-		"bacteria": "Bacteria",
-		"cure": "Cure",
-		"and_more": "And more...",
-		"speed": "Game Speed",
-		"eraser": "Eraser",
-		"shapes": "Shapes",
-		"line": "Straight Line",
-		"rect": "Squares",
-		"circ": "Circles",
-		"tria": "Triangles",
-		"acid_rain": "Acid Rain",
-		"lava_rain": "Lava Rain",
-		"met_storm": "Meteorites",
-		"black_hole": "Black Hole",
-		"sinkhole": "Sinkhole",
-		"sand_storm": "Sandstorm",
-		"zombie": "Zombie",
-		"summoner": "Summoner",
-		"bomber": "Bomber",
-		"mage": "Mage",
-		"kamikaze": "Kamikaze",
-		"builder": "Builder"
-	},
-	"it": {
-		"disasters": "🌪️ Disastri", "tools": "🛠️ Strumenti", "lang": "🌐 Lingua", "brush": "🖌️ Pennello",
-		"weather": "⛈️ Meteo", "quake": "🏚️ Sisma", "tornado": "🌪️ Tornado", "tsunami": "🌊 Tsunami", "off": "Off", "light": "Leggero", "med": "Medio", "storm": "Tempesta", "brutal": "BRUTALE!", "heavy": "Pesante",
-		"sand": "Sabbia",
-		"water": "Acqua",
-		"fire": "Fuoco",
-		"tnt": "TNT",
-		"earth": "Terra",
-		"metal": "Metallo",
-		"elec": "Elec.",
-		"gravel": "Ghiaia",
-		"lava": "Lava",
-		"obisid": "Ossidiana",
-		"acid": "Acido",
-		"wood": "Legno",
-		"petro": "Petrolio",
-		"fireworks": "Razzi",
-		"powd": "Polvere",
-		"grass": "Erba",
-		"vine": "Erba Alta",
-		"cem_fresh": "Cem. Fresco",
-		"cement": "Cemento",
-		"volcan": "Vulcano",
-		"ui_size": "Dim. UI",
-		"size": "Scala",
-		"reset": "Pulisci Tutto",
-		"pause": "⏸️ Pausa",
-		"play": "▶️ Ripristina",
-		"npc": "👥 NPCs",
-		"warrior": "⚔️ Guerriero",
-		"archer": "🏹 Arciere",
-		"miner": "⛏️ Minatore",
-		"medic": "💊 Medico",
-		"team_red": "🔴 Rosso",
-		"team_blue": "🔵 Blu",
-		"team_yellow": "🟡 Giallo",
-		"team_green": "🟢 Verde",
-		"ice": "Ghiaccio",
-		"support": "💎 Sostieni il Creatore (Annuncio)",
-		"resume_in": "Il gioco riprenderà tra ",
-		"coming_soon": "⏳ PROSSIMAMENTE",
-		"toxic_gas": "Gas Tossico",
-		"void": "Vuoto",
-		"battery": "Batteria",
-		"npc_act": "Attivatore NPC",
-		"door": "Puerta",
-		"flam_gas": "Gas Infiam.",
-		"coal_item": "Carbone",
-		"bacteria": "Batteri",
-		"cure": "Cura",
-		"and_more": "E altro...",
-		"speed": "Velocità",
-		"eraser": "Gomma",
-		"shapes": "Forme",
-		"line": "Linea Retta",
-		"rect": "Quadrati",
-		"circ": "Cerchi",
-		"tria": "Triangoli",
-		"acid_rain": "Pioggia Acida",
-		"lava_rain": "Pioggia di Lava",
-		"met_storm": "Meteoriti",
-		"black_hole": "Buco Nero",
-		"sinkhole": "Sprofondamento",
-		"sand_storm": "Tempesta di Sabbia",
-		"zombie": "Zombie",
-		"summoner": "Evocatore",
-		"bomber": "Bombarolo",
-		"mage": "Mago",
-		"kamikaze": "Kamikaze",
-		"builder": "Costruttore",
-		"team": "Squadra"
-	},
-	"fr": {
-		"disasters": "🌪️ Catastrophes",
-		"tools": "🛠️ Outils",
-		"lang": "🌐 Langue",
-		"brush": "🖌️ Pinceau",
-		"weather": "⛈️ Météo",
-		"quake": "🏚️ Séisme",
-		"tornado": "🌪️ Tornade",
-		"tsunami": "🌊 Tsunami",
-		"off": "Désactivé",
-		"light": "Léger",
-		"med": "Moyen",
-		"storm": "Tempête",
-		"brutal": "BRUTAL !",
-		"heavy": "Fort",
-		"sand": "Sable",
-		"water": "Eau",
-		"fire": "Feu",
-		"tnt": "TNT",
-		"earth": "Terre",
-		"metal": "Métal",
-		"elec": "Élec.",
-		"gravel": "Gravier",
-		"lava": "Lave",
-		"obisid": "Obsidienne",
-		"acid": "Acide",
-		"wood": "Bois",
-		"petro": "Pétrole",
-		"fireworks": "Fusées",
-		"powd": "Poudre",
-		"grass": "Herbe",
-		"vine": "Hautes Herbes",
-		"cem_fresh": "Cim. Frais",
-		"cement": "Ciment",
-		"volcan": "Volcan",
-		"ui_size": "Taille UI",
-		"size": "Échelle",
-		"reset": "Tout effacer",
-		"pause": "⏸️ Pause",
-		"play": "▶️ Reprendre",
-		"npc": "👥 NPCs",
-		"warrior": "⚔️ Guerrier",
-		"archer": "🏹 Archer",
-		"miner": "⛏️ Mineur",
-		"medic": "💊 Médecin",
-		"team_red": "🔴 Rouge",
-		"team_blue": "🔵 Bleu",
-		"team_yellow": "🟡 Jaune",
-		"team_green": "🟢 Vert",
-		"ice": "Glace",
-		"support": "💎 Soutenir le créateur (Pub)",
-		"resume_in": "Le jeu reprendra dans ",
-		"coming_soon": "⏳ BIENTÔT",
-		"toxic_gas": "Gaz Toxique",
-		"void": "Vide",
-		"battery": "Batterie",
-		"npc_act": "Activateur NPC",
-		"door": "Porte",
-		"flam_gas": "Gaz Inflam.",
-		"coal_item": "Charbon",
-		"bacteria": "Bactérie",
-		"cure": "Cure",
-		"and_more": "Et plus...",
-		"speed": "Vitesse",
-		"eraser": "Gomme",
-		"shapes": "Formes",
-		"line": "Ligne Droite",
-		"rect": "Carrés",
-		"circ": "Cercles",
-		"tria": "Triangles",
-		"acid_rain": "Pluie Acide",
-		"lava_rain": "Pluie de Lave",
-		"met_storm": "Météorites",
-		"black_hole": "Trou Noir",
-		"sinkhole": "Affaissement",
-		"sand_storm": "Tempête de Sable",
-		"zombie": "Zombie",
-		"summoner": "Invocateur",
-		"bomber": "Bombardier",
-		"mage": "Mage",
-		"kamikaze": "Kamikaze",
-		"builder": "Constructeur",
-		"team": "Équipe"
-	},
-	"de": {
-		"disasters": "🌪️ Katastrophen",
-		"tools": "🛠️ Werkzeuge",
-		"lang": "🌐 Sprache",
-		"brush": "🖌️ Pinsel",
-		"weather": "⛈️ Wetter",
-		"quake": "🏚️ Beben",
-		"tornado": "🌪️ Tornado",
-		"tsunami": "🌊 Tsunami",
-		"off": "Aus",
-		"light": "Leicht",
-		"med": "Mittel",
-		"storm": "Sturm",
-		"brutal": "BRUTAL!",
-		"heavy": "Stark",
-		"sand": "Sand",
-		"water": "Wasser",
-		"fire": "Feuer",
-		"tnt": "TNT",
-		"earth": "Erde",
-		"metal": "Metall",
-		"elec": "Elek.",
-		"gravel": "Kies",
-		"lava": "Lava",
-		"obisid": "Obsidian",
-		"acid": "Säure",
-		"wood": "Holz",
-		"petro": "Öl",
-		"fireworks": "Raketen",
-		"powd": "Pulver",
-		"grass": "Gras",
-		"vine": "Hohes Gras",
-		"cem_fresh": "Fr. Zement",
-		"cement": "Zement",
-		"volcan": "Vulkan",
-		"ui_size": "UI-Größe",
-		"size": "Maßstab",
-		"reset": "Alles löschen",
-		"pause": "⏸️ Pause",
-		"play": "▶️ Weiter",
-		"npc": "👥 NPCs",
-		"warrior": "⚔️ Krieger",
-		"archer": "🏹 Bogenschütze",
-		"miner": "⛏️ Minenarbeiter",
-		"medic": "💊 Sanitäter",
-		"team_red": "🔴 Rot",
-		"team_blue": "🔵 Blau",
-		"team_yellow": "🟡 Gelb",
-		"team_green": "🟢 Grün",
-		"ice": "Eis",
-		"support": "💎 Schöpfer unterstützen (Anzeige)",
-		"resume_in": "Das Spiel wird fortgesetzt in ",
-		"coming_soon": "⏳ DEMNÄCHST",
-		"toxic_gas": "Giftiges Gas",
-		"void": "Leere",
-		"battery": "Batterie",
-		"npc_act": "NPC-Aktivator",
-		"door": "Tür",
-		"flam_gas": "Brennb. Gas",
-		"coal_item": "Kohle",
-		"bacteria": "Bakterien",
-		"cure": "Heilung",
-		"and_more": "Und mehr...",
-		"speed": "Geschwindigkeit",
-		"eraser": "Radierer",
-		"shapes": "Formen",
-		"line": "Gerade Linie",
-		"rect": "Quadrate",
-		"circ": "Kreise",
-		"tria": "Dreiecke",
-		"acid_rain": "Saurer Regen",
-		"lava_rain": "Lavaregen",
-		"met_storm": "Meteoriten",
-		"black_hole": "Schwarzes Loch",
-		"sinkhole": "Erdfall",
-		"sand_storm": "Sandsturm",
-		"zombie": "Zombie",
-		"summoner": "Beschwörer",
-		"bomber": "Bomber",
-		"mage": "Magier",
-		"kamikaze": "Kamikaze",
-		"builder": "Baumeister",
-		"team": "Team"
-	},
-	"pt": {
-		"disasters": "🌪️ Desastres",
-		"tools": "🛠️ Ferramentas",
-		"lang": "🌐 Idioma",
-		"brush": "🖌️ Pincel",
-		"weather": "⛈️ Clima",
-		"quake": "🏚️ Sismo",
-		"tornado": "🌪️ Tornado",
-		"tsunami": "🌊 Tsunami",
-		"off": "Desligado",
-		"light": "Leve",
-		"med": "Médio",
-		"storm": "Tempestade",
-		"brutal": "BRUTAL!",
-		"heavy": "Forte",
-		"sand": "Areia",
-		"water": "Água",
-		"fire": "Fogo",
-		"tnt": "TNT",
-		"earth": "Terra",
-		"metal": "Metal",
-		"elec": "Eletr.",
-		"gravel": "Cascalho",
-		"lava": "Lava",
-		"obisid": "Obsidiana",
-		"acid": "Ácido",
-		"wood": "Madeira",
-		"petro": "Petróleo",
-		"fireworks": "Fogos de Artifício",
-		"powd": "Pólvora",
-		"grass": "Grama",
-		"vine": "Grama Alta",
-		"cem_fresh": "Cim. Fresco",
-		"cement": "Cimento",
-		"volcan": "Vulcão",
-		"ui_size": "Tam. UI",
-		"size": "Escala",
-		"reset": "Limpar Tudo",
-		"pause": "⏸️ Pausar",
-		"play": "▶️ Retomar",
-		"npc": "👥 NPCs",
-		"warrior": "⚔️ Guerreiro",
-		"archer": "🏹 Arqueiro",
-		"miner": "⛏️ Minerador",
-		"medic": "💊 Médico",
-		"team_red": "🔴 Vermelho",
-		"team_blue": "🔵 Azul",
-		"team_yellow": "🟡 Amarelo",
-		"team_green": "🟢 Verde",
-		"team": "Equipe",
-		"ice": "Gelo",
-		"support": "💎 Apoie o Criador (Anúncio)",
-		"resume_in": "O jogo será retomado em ",
-		"coming_soon": "⏳ EM BREVE",
-		"toxic_gas": "Gás Tóxico",
-		"void": "Vazio",
-		"battery": "Bateria",
-		"npc_act": "Ativador NPC",
-		"door": "Porta",
-		"flam_gas": "Gás Flam.",
-		"coal_item": "Carvão",
-		"bacteria": "Bactéria",
-		"cure": "Cura",
-		"and_more": "E muito mais...",
-		"speed": "Velocidade",
-		"eraser": "Borracha",
-		"shapes": "Formas",
-		"line": "Linha Reta",
-		"rect": "Quadrados",
-		"circ": "Círculos",
-		"tria": "Triângulos",
-		"acid_rain": "Chuva Ácida",
-		"lava_rain": "Chuva de Lava",
-		"met_storm": "Meteoritos",
-		"black_hole": "Buraco Negro",
-		"sinkhole": "Dolina",
-		"sand_storm": "Tempestade de Areia",
-		"zombie": "Zumbi",
-		"summoner": "Invocador",
-		"bomber": "Bombardeiro",
-		"mage": "Mago",
-		"kamikaze": "Kamikaze",
-		"builder": "Construtor"
-	}
-}
+# Localization system (Standard tr() calls)
 
 # Earthquake settings
 var earthquake_intensity: int = 0
@@ -738,6 +243,14 @@ func _ready():
 	# 0. GLOBAL VISUAL STABILITY (Fixes grey margins on Tablets/Modern Devices)
 	RenderingServer.set_default_clear_color(Color(0.04, 0.04, 0.04, 1.0))
 	
+	# AUTO-DETECT LANGUAGE
+	var os_lang = TranslationServer.get_locale().split("_")[0]
+	var supported = ["es", "en", "it", "fr", "de", "pt"]
+	if supported.has(os_lang):
+		TranslationServer.set_locale(os_lang)
+	else:
+		TranslationServer.set_locale("en") # Fallback
+	current_language = TranslationServer.get_locale()
 	var global_bg = ColorRect.new()
 	global_bg.name = "GlobalBG"
 	global_bg.color = Color(0.1, 0.1, 0.12, 1.0) # Dynamic Dark Theme
@@ -1251,7 +764,7 @@ func _setup_tools_ui():
 	tools_btn.name = "ToolsBtn"
 	tools_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
 	tools_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
-	tools_btn.text = translations_map[current_language]["tools"]
+	tools_btn.text = tr("tools")
 	ui_elements["tools_btn"] = tools_btn
 	tools_btn.add_theme_font_override("font", _get_safe_font())
 	tools_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
@@ -1325,7 +838,7 @@ func _setup_tools_ui():
 	
 	var create_row = func(label_key: String, options: Array, callback: Callable, is_upcoming: bool = false):
 		var lbl = Label.new()
-		lbl.text = translations_map[current_language].get(label_key, label_key) + ": "
+		lbl.text = tr(label_key) + ": "
 		lbl.add_theme_font_size_override("font_size", 14.0 * s)
 		lbl.add_theme_font_override("font", _get_safe_font())
 		ui_elements[label_key + "_lbl"] = lbl
@@ -1369,12 +882,12 @@ func _setup_tools_ui():
 
 	# UI SCALE ROW (Now 2nd)
 	var scale_labels = [
-		translations_map[current_language]["size"] + " 1.0", 
-		translations_map[current_language]["size"] + " 1.2", 
-		translations_map[current_language]["size"] + " 1.3", 
-		translations_map[current_language]["size"] + " 1.5", 
-		translations_map[current_language]["size"] + " 1.7", 
-		translations_map[current_language]["size"] + " 2.0"
+		tr("size") + " 1.0", 
+		tr("size") + " 1.2", 
+		tr("size") + " 1.3", 
+		tr("size") + " 1.5", 
+		tr("size") + " 1.7", 
+		tr("size") + " 2.0"
 	]
 	create_row.call("ui_size", scale_labels, func(l): 
 		ui_scale_level = l
@@ -1391,7 +904,7 @@ func _setup_tools_ui():
 	)
 	# 1. SUPPORT CREATOR BUTTON (AD)
 	var support_btn = Button.new()
-	support_btn.text = translations_map[current_language]["support"]
+	support_btn.text = tr("support")
 	support_btn.custom_minimum_size = Vector2(0, 60 * s) 
 	support_btn.add_theme_font_size_override("font_size", 16 * s) 
 	support_btn.add_theme_font_override("font", _get_safe_font())
@@ -1421,7 +934,7 @@ func _setup_tools_ui():
 
 	# 2. PAUSE BUTTON
 	var pause_btn = Button.new()
-	pause_btn.text = translations_map[current_language]["play"] if is_paused else translations_map[current_language]["pause"]
+	pause_btn.text = tr("play") if is_paused else tr("pause")
 	pause_btn.custom_minimum_size = Vector2(0, 50 * s) # SCALED
 	pause_btn.add_theme_font_size_override("font_size", 16 * s) # SCALED
 	pause_btn.add_theme_font_override("font", _get_safe_font())
@@ -1440,16 +953,16 @@ func _setup_tools_ui():
 				# COUNTDOWN LOGIC
 				pause_btn.disabled = true # Prevent double triggers
 				for i in range(3, 0, -1):
-					pause_btn.text = translations_map[current_language]["resume_in"] + str(i) + "..."
+					pause_btn.text = tr("resume_in") + str(i) + "..."
 					await get_tree().create_timer(1.0).timeout
 				pause_btn.disabled = false
 			
 			is_paused = false
-			pause_btn.text = translations_map[current_language]["pause"]
+			pause_btn.text = tr("pause")
 		else:
 			# --- PAUSING: PAUSE FIRST -> THEN SHOW AD ---
 			is_paused = true
-			pause_btn.text = translations_map[current_language]["play"]
+			pause_btn.text = tr("play")
 			if Engine.has_singleton("PoingGodotAdMob"):
 				AdMobManager.check_and_show_interstitial("pause")
 		
@@ -1463,7 +976,7 @@ func _setup_tools_ui():
 
 	# 3. DIRECT RESET BUTTON (Bottom of Tools)
 	var reset_btn_node = Button.new() # Named local variable to avoid conflict with field
-	reset_btn_node.text = translations_map[current_language]["reset"]
+	reset_btn_node.text = tr("reset")
 	reset_btn_node.custom_minimum_size = Vector2(0, 50 * s)
 	reset_btn_node.add_theme_font_size_override("font_size", 16 * s)
 	reset_btn_node.add_theme_font_override("font", _get_safe_font())
@@ -1481,12 +994,12 @@ func _setup_tools_ui():
 	_add_ui_header(v_box, "coming_soon")
 	
 	create_row.call("speed", ["x0.2", "x0.5", "x0.8", "x1", "x2", "x4"], func(_l): pass, true)
-	create_row.call("eraser", [translations_map[current_language]["eraser"]], func(_l): pass, true)
+	create_row.call("eraser", [tr("eraser")], func(_l): pass, true)
 	create_row.call("shapes", [
-		translations_map[current_language]["line"],
-		translations_map[current_language]["rect"],
-		translations_map[current_language]["circ"],
-		translations_map[current_language]["tria"]
+		tr("line"),
+		tr("rect"),
+		tr("circ"),
+		tr("tria")
 	], func(_l): pass, true)
 
 func _setup_disaster_ui():
@@ -1495,7 +1008,7 @@ func _setup_disaster_ui():
 	disaster_btn.name = "DisasterBtn"
 	disaster_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
 	disaster_btn.add_theme_font_size_override("font_size", action_btn_font_size * s) 
-	disaster_btn.text = translations_map[current_language]["disasters"]
+	disaster_btn.text = tr("disasters")
 	ui_elements["disaster_btn"] = disaster_btn
 	disaster_btn.add_theme_font_override("font", _get_safe_font())
 	disaster_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
@@ -1572,7 +1085,7 @@ func _setup_disaster_ui():
 	
 	var create_row = func(label_key: String, options: Array, callback: Callable, is_upcoming: bool = false):
 		var lbl = Label.new()
-		lbl.text = translations_map[current_language].get(label_key, label_key) + ": "
+		lbl.text = tr(label_key) + ": "
 		lbl.add_theme_font_size_override("font_size", 14.0 * s)
 		lbl.add_theme_font_override("font", _get_safe_font())
 		ui_elements[label_key + "_lbl"] = lbl
@@ -1590,7 +1103,7 @@ func _setup_disaster_ui():
 			var osk = options[i]
 			var btn = Button.new()
 			# Try to translate if it's a key, otherwise use as string
-			btn.text = translations_map[current_language].get(osk, str(osk))
+			btn.text = tr(osk)
 			btn.custom_minimum_size = Vector2(80.0 * s, 45.0 * s)
 			btn.add_theme_font_size_override("font_size", 14.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
@@ -1650,6 +1163,7 @@ func _setup_disaster_ui():
 	create_row.call("sand_storm", ["off", "light", "med", "storm"], func(l): sand_storm_intensity = l; _update_menu_highlights(), true)
 
 func _refresh_ui_text():
+	TranslationServer.set_locale(current_language)
 	var s = _get_ui_scale()
 	for key in ui_elements:
 		var node_data = ui_elements[key]
@@ -1657,49 +1171,48 @@ func _refresh_ui_text():
 		# Handle direct button nodes (Tools/Disasters)
 		var btn_h = (336.0 - (6.0 * s)) / 3.0
 		if key == "tools_btn": 
-			node_data.text = translations_map[current_language]["tools"]
+			node_data.text = tr("tools")
 			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
 			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 		elif key == "disaster_btn": 
-			node_data.text = translations_map[current_language]["disasters"]
+			node_data.text = tr("disasters")
 			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
 			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 		elif key == "npc_btn": 
-			node_data.text = translations_map[current_language]["npc"]
+			node_data.text = tr("npc")
 			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
 			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 		elif key == "pause_btn": 
-			node_data.text = translations_map[current_language]["play"] if is_paused else translations_map[current_language]["pause"]
+			node_data.text = tr("play") if is_paused else tr("pause")
 			node_data.custom_minimum_size = Vector2(0, 50 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "reset_btn": 
-			node_data.text = translations_map[current_language]["reset"]
+			node_data.text = tr("reset")
 			node_data.custom_minimum_size = Vector2(0, 50 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "support_btn":
-			node_data.text = translations_map[current_language]["support"]
+			node_data.text = tr("support")
 			node_data.custom_minimum_size = Vector2(0, 60 * s)
 			node_data.add_theme_font_size_override("font_size", 16 * s)
 		elif key == "warrior_btn":
-			node_data.text = translations_map[current_language]["warrior"]
+			node_data.text = tr("warrior")
 			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "archer_btn":
-			node_data.text = translations_map[current_language]["archer"]
+			node_data.text = tr("archer")
 			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "miner_btn":
-			node_data.text = translations_map[current_language]["miner"]
+			node_data.text = tr("miner")
 			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "medic_btn":
-			node_data.text = translations_map[current_language]["medic"]
+			node_data.text = tr("medic")
 			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key.ends_with("_btn") and not key.ends_with("_mat_btn"): # Generic NPC/Tool handler
 			var pure_key = key.replace("_btn", "")
-			if translations_map[current_language].has(pure_key):
-				node_data.text = translations_map[current_language][pure_key]
+			node_data.text = tr(pure_key)
 			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		
@@ -1707,29 +1220,26 @@ func _refresh_ui_text():
 		elif node_data is Label:
 			if key.ends_with("_mat_lbl"):
 				var pure_key = key.replace("_mat_lbl", "")
-				if translations_map[current_language].has(pure_key):
-					node_data.text = translations_map[current_language][pure_key]
-					node_data.add_theme_font_size_override("font_size", 18 * s) # PRECISE 18px matching creation
+				node_data.text = tr(pure_key)
+				node_data.add_theme_font_size_override("font_size", 18 * s) # PRECISE 18px matching creation
 			elif key.ends_with("_lbl"):
 				var pure_key = key.replace("_lbl", "")
-				if translations_map[current_language].has(pure_key):
-					node_data.text = translations_map[current_language][pure_key] + ": "
-					node_data.custom_minimum_size = Vector2(120 * s, 0)
-					node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.text = tr(pure_key) + ": "
+				node_data.custom_minimum_size = Vector2(120 * s, 0)
+				node_data.add_theme_font_size_override("font_size", 14 * s)
 			elif key == "team_lbl":
-				node_data.text = translations_map[current_language].get("team", "Team") + ": "
+				node_data.text = tr("team") + ": "
 				node_data.add_theme_font_size_override("font_size", 14 * s)
 			elif "_hdr" in key:
 				var pure_key = key.split("_hdr")[0]
-				if translations_map[current_language].has(pure_key):
-					node_data.text = "\n\n" + translations_map[current_language][pure_key] + "\n"
-					node_data.add_theme_font_size_override("font_size", 20 * s)
+				node_data.text = "\n\n" + tr(pure_key) + "\n"
+				node_data.add_theme_font_size_override("font_size", 20 * s)
 		
 		# Handle Intensity Buttons (Stored as Array [Btn, Key])
 		elif node_data is Array:
 			var btn = node_data[0]
 			var osk = node_data[1]
-			btn.text = translations_map[current_language][osk]
+			btn.text = tr(osk)
 			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			btn.add_theme_font_size_override("font_size", 14 * s)
 		# Handle other buttons in rows (lang, brush, ui_size)
@@ -1740,40 +1250,32 @@ func _refresh_ui_text():
 			elif key.begins_with("team_btn_"):
 				var idx = int(key.split("_")[-1])
 				var team_keys = ["team_red", "team_blue", "team_yellow", "team_green"]
-				node_data.text = translations_map[current_language][team_keys[idx]]
+				node_data.text = tr(team_keys[idx])
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 12 * s)
 			elif key.begins_with("ui_size_btn_"):
 				var idx = int(key.split("_")[-1])
-				var scale_labels = [
-					translations_map[current_language]["size"] + " 1.0", 
-					translations_map[current_language]["size"] + " 1.2", 
-					translations_map[current_language]["size"] + " 1.3", 
-					translations_map[current_language]["size"] + " 1.5", 
-					translations_map[current_language]["size"] + " 1.7", 
-					translations_map[current_language]["size"] + " 2.0"
-				]
-				node_data.text = scale_labels[idx]
+				var scales = ["1.0", "1.2", "1.3", "1.5", "1.7", "2.0"]
+				node_data.text = tr("size") + " " + scales[idx]
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
 			elif key.begins_with("shapes_btn_"):
 				var idx = int(key.split("_")[-1])
 				var shape_keys = ["line", "rect", "circ", "tria"]
 				if idx < shape_keys.size():
-					node_data.text = translations_map[current_language][shape_keys[idx]]
+					node_data.text = tr(shape_keys[idx])
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
 			elif key.begins_with("speed_btn_"):
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
 			elif key == "eraser_btn_0":
-				node_data.text = translations_map[current_language]["eraser"]
+				node_data.text = tr("eraser")
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
 			elif key.ends_with("_btn_0"):
 				var pure_key = key.replace("_btn_0", "")
-				if translations_map[current_language].has(pure_key):
-					node_data.text = translations_map[current_language][pure_key]
+				node_data.text = tr(pure_key)
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
 
@@ -1831,7 +1333,7 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	
 	var btn_lbl = Label.new()
 	btn_lbl.name = "MatLabel"
-	btn_lbl.text = translations_map[current_language][key]
+	btn_lbl.text = tr(key)
 	btn_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	btn_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 	btn_lbl.add_theme_font_size_override("font_size", 18 * s) # EVEN LARGER TEXT
@@ -1869,7 +1371,7 @@ func _add_ui_header(container, key: String):
 	header_pnl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	
 	var lbl = Label.new()
-	lbl.text = "\n\n" + translations_map[current_language].get(key, key) + "\n"
+	lbl.text = "\n\n" + tr(key) + "\n"
 	lbl.add_theme_font_size_override("font_size", 20 * s)
 	lbl.add_theme_font_override("font", _get_safe_font())
 	lbl.add_theme_color_override("font_color", Color(0.9, 0.9, 0.1)) # Gold/Yellowish
@@ -3055,7 +2557,7 @@ func _setup_npc_ui():
 	npc_btn.name = "NPCBtn"
 	npc_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
 	npc_btn.add_theme_font_size_override("font_size", action_btn_font_size * s) 
-	npc_btn.text = translations_map[current_language]["npc"]
+	npc_btn.text = tr("npc")
 	ui_elements["npc_btn"] = npc_btn
 	npc_btn.add_theme_font_override("font", _get_safe_font())
 	npc_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
@@ -3089,7 +2591,7 @@ func _setup_npc_ui():
 		
 		# NPC Selection (NOW RESPONSIVE)
 		var npc_lbl = Label.new()
-		npc_lbl.text = translations_map[current_language]["npc"] + ": "
+		npc_lbl.text = tr("npc") + ": "
 		npc_lbl.add_theme_font_size_override("font_size", 14 * s)
 		v_box.add_child(npc_lbl)
 		
@@ -3099,7 +2601,7 @@ func _setup_npc_ui():
 		
 		var create_npc_btn = func(key: String, id: int):
 			var btn = Button.new()
-			btn.text = translations_map[current_language][key]
+			btn.text = tr(key)
 			btn.custom_minimum_size = Vector2(100 * s, 45 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
 			btn.pressed.connect(func():
@@ -3118,7 +2620,7 @@ func _setup_npc_ui():
 		
 		# Teams Row (NOW RESPONSIVE)
 		var team_lbl = Label.new()
-		team_lbl.text = translations_map[current_language].get("team", "Team") + ": "
+		team_lbl.text = tr("team") + ": "
 		team_lbl.add_theme_font_size_override("font_size", 14 * s)
 		ui_elements["team_lbl"] = team_lbl
 		v_box.add_child(team_lbl)
@@ -3130,7 +2632,7 @@ func _setup_npc_ui():
 		var team_keys = ["team_red", "team_blue", "team_yellow", "team_green"]
 		for i in range(4):
 			var t_btn = Button.new()
-			t_btn.text = translations_map[current_language][team_keys[i]]
+			t_btn.text = tr(team_keys[i])
 			t_btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			t_btn.add_theme_font_size_override("font_size", 12 * s)
 			t_btn.add_theme_font_override("font", _get_safe_font())
@@ -3152,7 +2654,7 @@ func _setup_npc_ui():
 		
 		var create_fut_npc = func(key: String):
 			var btn = Button.new()
-			btn.text = translations_map[current_language].get(key, key)
+			btn.text = tr(key)
 			btn.custom_minimum_size = Vector2(100.0 * s, 45.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
 			btn.add_theme_font_size_override("font_size", 14.0 * s)

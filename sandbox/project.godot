@@ -37,6 +37,10 @@ window/handheld/orientation=1
 
 enabled=PackedStringArray("res://addons/admob/plugin.cfg")
 
+[internationalization]
+
+locale/translations=PackedStringArray("res://translations.de.translation", "res://translations.en.translation", "res://translations.es.translation", "res://translations.fr.translation", "res://translations.it.translation", "res://translations.pt.translation")
+
 [rendering]
 
 rendering_device/driver.windows="d3d12"

@@ -1,0 +1,83 @@
+id,es,en,it,fr,de,pt
+disasters,🌪️ Desastres,🌪️ Disasters,🌪️ Disastri,🌪️ Catastrophes,🌪️ Katastrophen,🌪️ Desastres
+tools,🛠️ Herramientas,🛠️ Tools,🛠️ Strumenti,🛠️ Outils,🛠️ Werkzeuge,🛠️ Ferramentas
+lang,🌐 Idioma,🌐 Language,🌐 Lingua,🌐 Langue,🌐 Sprache,🌐 Idioma
+brush,🖌️ Pincel,🖌️ Brush,🖌️ Pennello,🖌️ Pinceau,🖌️ Pinsel,🖌️ Pincel
+weather,⛈️ Clima,⛈️ Weather,⛈️ Meteo,⛈️ Météo,⛈️ Wetter,⛈️ Clima
+quake,🏚️ Sismo,🏚️ Quake,🏚️ Sisma,🏚️ Séisme,🏚️ Beben,🏚️ Sismo
+tornado,🌪️ Tornado,🌪️ Tornado,🌪️ Tornado,🌪️ Tornade,🌪️ Tornado,🌪️ Tornado
+tsunami,🌊 Tsunami,🌊 Tsunami,🌊 Tsunami,🌊 Tsunami,🌊 Tsunami,🌊 Tsunami
+off,Off,Off,Off,Désactivé,Aus,Desligado
+light,Ligero,Light,Leggero,Léger,Leicht,Leve
+med,Medio,Medium,Medio,Moyen,Mittel,Médio
+storm,Tormenta,Storm,Tempesta,Tempête,Sturm,Tempestade
+brutal,¡BRUTAL!,BRUTAL!,BRUTALE!,BRUTAL !,BRUTAL!,BRUTAL!
+heavy,Fuerte,Heavy,Pesante,Fort,Stark,Forte
+sand,Arena,Sand,Sabbia,Sable,Sand,Areia
+water,Agua,Water,Acqua,Eau,Wasser,Água
+fire,Fuego,Fire,Fuoco,Feu,Feuer,Fogo
+tnt,TNT,TNT,TNT,TNT,TNT,TNT
+earth,Tierra,Earth,Terra,Terre,Erde,Terra
+metal,Metal,Metal,Metallo,Métal,Metall,Metal
+elec,Elect.,Elec,Elec.,Élec.,Elek.,Eletr.
+gravel,Grava,Gravel,Ghiaia,Gravier,Kies,Cascalho
+lava,Lava,Lava,Lava,Lave,Lava,Lava
+obisid,Obsidiana,Obsidian,Ossidiana,Obsidienne,Obsidian,Obsidiana
+acid,Ácido,Acid,Acido,Acide,Säure,Ácido
+wood,Madera,Wood,Legno,Bois,Holz,Madeira
+petro,Petróleo,Oil,Petrolio,Pétrole,Öl,Petróleo
+fireworks,Cohetes,Fireworks,Razzi,Fusées,Raketen,Fogos de Artifício
+powd,Pólvora,Gunpowder,Polvere,Poudre,Pulver,Pólvora
+grass,Pasto,Grass,Erba,Herbe,Gras,Grama
+vine,Pasto Alto,Vine,Erba Alta,Hautes Herbes,Hohes Gras,Grama Alta
+cem_fresh,Cem. Fresco,Fresh Cem.,Cem. Fresco,Cim. Frais,Fr. Zement,Cim. Fresco
+cement,Cemento,Cement,Cemento,Ciment,Zement,Cimento
+volcan,Volcán,Volcano,Vulcano,Volcan,Vulkan,Vulcão
+ui_size,Tamaño UI,UI Size,Dim. UI,Taille UI,UI-Größe,Tam. UI
+size,Escala,Scale,Scala,Échelle,Maßstab,Escala
+reset,Limpar Todo,Clear All,Pulisci Tutto,Tout effacer,Alles löschen,Limpar Tudo
+pause,⏸️ Pausar,⏸️ Pause,⏸️ Pausa,⏸️ Pause,⏸️ Pause,⏸️ Pausar
+play,▶️ Reanudar,▶️ Resume,▶️ Ripristina,▶️ Reprendre,▶️ Weiter,▶️ Retomar
+npc,👥 NPCs,👥 NPCs,👥 NPCs,👥 NPCs,👥 NPCs,👥 NPCs
+warrior,⚔️ Guerrero,⚔️ Warrior,⚔️ Guerriero,⚔️ Guerrier,⚔️ Krieger,⚔️ Guerreiro
+archer,🏹 Arquero,🏹 Archer,🏹 Arciere,🏹 Archer,🏹 Bogenschütze,🏹 Arqueiro
+miner,⛏️ Minero,⛏️ Miner,⛏️ Minatore,⛏️ Mineur,⛏️ Minenarbeiter,⛏️ Minerador
+medic,💊 Médico,💊 Medic,💊 Medico,💊 Médecin,💊 Sanitär,💊 Médico
+team_red,🔴 Rojo,🔴 Red,🔴 Rosso,🔴 Rouge,🔴 Rot,🔴 Vermelho
+team_blue,🔵 Azul,🔵 Blue,🔵 Blu,🔵 Bleu,🔵 Blau,🔵 Azul
+team_yellow,🟡 Amarillo,🟡 Yellow,🟡 Giallo,🟡 Jaune,🟡 Gelb,🟡 Amarelo
+team_green,🟢 Verde,🟢 Green,🟢 Verde,🟢 Vert,🟢 Grün,🟢 Verde
+team,Equipo,Team,Squadra,Équipe,Team,Equipe
+ice,Hielo,Ice,Ghiaccio,Glace,Eis,Gelo
+support,💎 Apoya al Creador (Anuncio),💎 Support Creator (Ad),💎 Sostieni el Creatore (Annuncio),💎 Soutenir le créateur (Pub),💎 Schöpfer unterstützen (Anzeige),💎 Apoie o Criador (Anúncio)
+resume_in,El juego se reanudará en ,Game resumes in ,Il juego riprenderá tra ,Le juego reprendra dans ,Das Spiel wird fortgesetzt in ,O juego será retomado em 
+coming_soon,⏳ PROXIMAMENTE,⏳ COMING SOON,⏳ PROSSIMAMENTE,⏳ BIENTÔT,⏳ DEMNÄCHST,⏳ EM BREVE
+toxic_gas,Gas Tóxico,Toxic Gas,Gas Tossico,Gaz Toxique,Giftiges Gas,Gás Tóxico
+void,Vacío,Void,Vuoto,Vide,Leere,Vazio
+battery,Batería,Battery,Batteria,Batterie,Batterie,Bateria
+npc_act,Activador NPC,NPC Act.,Attivatore NPC,Activateur NPC,NPC-Aktivator,Ativador NPC
+door,Puerta,Door,Puerta,Porte,Tür,Porta
+flam_gas,Gas Flam.,Flam. Gas,Gas Infiam.,Gaz Inflam.,Brennb. Gas,Gás Flam.
+coal_item,Carbón,Coal,Carbone,Charbon,Kohle,Carvão
+bacteria,Bacteria,Bacteria,Batteri,Bactérie,Bakterien,Bactéria
+cure,Cura,Cure,Cura,Cure,Heilung,Cura
+and_more,Y más...,And more...,E altro...,Et plus...,Und más...,E muito más...
+speed,Velocidad,Game Speed,Velocità,Vitesse,Geschwindigkeit,Velocidade
+eraser,Borrador,Eraser,Gomma,Gomma,Radierer,Borracha
+shapes,Formas,Shapes,Forme,Formes,Formen,Formas
+line,Línea Recta,Straight Line,Linea Retta,Ligne Droite,Gerade Linie,Linha Reta
+rect,Cuadrados,Squares,Quadrati,Carrés,Quadrate,Quadrados
+circ,Círculos,Circles,Cerchi,Cercles,Kreise,Círculos
+tria,Triángulos,Triangles,Triangoli,Triangles,Dreiecke,Triângulos
+acid_rain,Lluvia Ácida,Acid Rain,Pioggia Acida,Pluie Acide,Saurer Regen,Chuva Ácida
+lava_rain,Lluvia de Lava,Lava Rain,Pioggia di Lava,Pluie de Lave,Lavaregen,Chuva de Lava
+met_storm,Meteoritos,Meteorites,Meteoriti,Météorites,Meteoriten,Meteoritos
+black_hole,Agujero Negro,Black Hole,Buco Nero,Trou Noir,Schwarzes Loch,Buraco Negro
+sinkhole,Hundimiento,Sinkhole,Sprofondamento,Affaissement,Erdfall,Dolina
+sand_storm,Tormenta de Arena,Sandstorm,Tempesta di Sabbia,Tempête de Sable,Sandsturm,Tempestade de Areia
+zombie,Zombie,Zombie,Zombie,Zombie,Zombie,Zumbi
+summoner,Invocador,Summoner,Evocatore,Invocateur,Beschwörer,Invocador
+bomber,Bombardero,Bomber,Bombarolo,Bombardier,Bomber,Bombardeiro
+mage,Mago,Mage,Mago,Mage,Magier,Mago
+kamikaze,Kamikaze,Kamikaze,Kamikaze,Kamikaze,Kamikaze,Kamikaze
+builder,Constructor,Builder,Costruttore,Constructeur,Baumeister,Construtor
