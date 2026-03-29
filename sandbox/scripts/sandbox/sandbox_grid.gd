@@ -241,6 +241,7 @@ var translations_map = {
 		"team_blue": "🔵 Azul",
 		"team_yellow": "🟡 Amarillo",
 		"team_green": "🟢 Verde",
+		"team": "Equipo",
 		"ice": "Hielo",
 		"support": "💎 Apoya al Creador (Anuncio)",
 		"resume_in": "El juego se reanudará en ",
@@ -325,6 +326,7 @@ var translations_map = {
 		"team_blue": "🔵 Blue",
 		"team_yellow": "🟡 Yellow",
 		"team_green": "🟢 Green",
+		"team": "Team",
 		"ice": "Ice",
 		"support": "💎 Support Creator (Ad)",
 		"resume_in": "Game resumes in ",
@@ -358,6 +360,246 @@ var translations_map = {
 		"mage": "Mage",
 		"kamikaze": "Kamikaze",
 		"builder": "Builder"
+	},
+	"it": {
+		"disasters": "🌪️ Disastri", "tools": "🛠️ Strumenti", "lang": "🌐 Lingua", "brush": "🖌️ Pennello",
+		"weather": "⛈️ Meteo", "quake": "🏚️ Sisma", "tornado": "🌪️ Tornado", "tsunami": "🌊 Tsunami", "off": "Off", "light": "Leggero", "med": "Medio", "storm": "Tempesta", "brutal": "BRUTALE!", "heavy": "Pesante",
+		"sand": "Sabbia",
+		"water": "Acqua",
+		"fire": "Fuoco",
+		"tnt": "TNT",
+		"earth": "Terra",
+		"metal": "Metallo",
+		"elec": "Elec.",
+		"gravel": "Ghiaia",
+		"lava": "Lava",
+		"obisid": "Ossidiana",
+		"acid": "Acido",
+		"wood": "Legno",
+		"petro": "Petrolio",
+		"fireworks": "Razzi",
+		"powd": "Polvere",
+		"grass": "Erba",
+		"vine": "Erba Alta",
+		"cem_fresh": "Cem. Fresco",
+		"cement": "Cemento",
+		"volcan": "Vulcano",
+		"ui_size": "Dim. UI",
+		"size": "Scala",
+		"reset": "Pulisci Tutto",
+		"pause": "⏸️ Pausa",
+		"play": "▶️ Ripristina",
+		"npc": "👥 NPCs",
+		"warrior": "⚔️ Guerriero",
+		"archer": "🏹 Arciere",
+		"miner": "⛏️ Minatore",
+		"medic": "💊 Medico",
+		"team_red": "🔴 Rosso",
+		"team_blue": "🔵 Blu",
+		"team_yellow": "🟡 Giallo",
+		"team_green": "🟢 Verde",
+		"ice": "Ghiaccio",
+		"support": "💎 Sostieni il Creatore (Annuncio)",
+		"resume_in": "Il gioco riprenderà tra ",
+		"coming_soon": "⏳ PROSSIMAMENTE",
+		"toxic_gas": "Gas Tossico",
+		"void": "Vuoto",
+		"battery": "Batteria",
+		"npc_act": "Attivatore NPC",
+		"door": "Puerta",
+		"flam_gas": "Gas Infiam.",
+		"coal_item": "Carbone",
+		"bacteria": "Batteri",
+		"cure": "Cura",
+		"and_more": "E altro...",
+		"speed": "Velocità",
+		"eraser": "Gomma",
+		"shapes": "Forme",
+		"line": "Linea Retta",
+		"rect": "Quadrati",
+		"circ": "Cerchi",
+		"tria": "Triangoli",
+		"acid_rain": "Pioggia Acida",
+		"lava_rain": "Pioggia di Lava",
+		"met_storm": "Meteoriti",
+		"black_hole": "Buco Nero",
+		"sinkhole": "Sprofondamento",
+		"sand_storm": "Tempesta di Sabbia",
+		"zombie": "Zombie",
+		"summoner": "Evocatore",
+		"bomber": "Bombarolo",
+		"mage": "Mago",
+		"kamikaze": "Kamikaze",
+		"builder": "Costruttore",
+		"team": "Squadra"
+	},
+	"fr": {
+		"disasters": "🌪️ Catastrophes",
+		"tools": "🛠️ Outils",
+		"lang": "🌐 Langue",
+		"brush": "🖌️ Pinceau",
+		"weather": "⛈️ Météo",
+		"quake": "🏚️ Séisme",
+		"tornado": "🌪️ Tornade",
+		"tsunami": "🌊 Tsunami",
+		"off": "Désactivé",
+		"light": "Léger",
+		"med": "Moyen",
+		"storm": "Tempête",
+		"brutal": "BRUTAL !",
+		"heavy": "Fort",
+		"sand": "Sable",
+		"water": "Eau",
+		"fire": "Feu",
+		"tnt": "TNT",
+		"earth": "Terre",
+		"metal": "Métal",
+		"elec": "Élec.",
+		"gravel": "Gravier",
+		"lava": "Lave",
+		"obisid": "Obsidienne",
+		"acid": "Acide",
+		"wood": "Bois",
+		"petro": "Pétrole",
+		"fireworks": "Fusées",
+		"powd": "Poudre",
+		"grass": "Herbe",
+		"vine": "Hautes Herbes",
+		"cem_fresh": "Cim. Frais",
+		"cement": "Ciment",
+		"volcan": "Volcan",
+		"ui_size": "Taille UI",
+		"size": "Échelle",
+		"reset": "Tout effacer",
+		"pause": "⏸️ Pause",
+		"play": "▶️ Reprendre",
+		"npc": "👥 NPCs",
+		"warrior": "⚔️ Guerrier",
+		"archer": "🏹 Archer",
+		"miner": "⛏️ Mineur",
+		"medic": "💊 Médecin",
+		"team_red": "🔴 Rouge",
+		"team_blue": "🔵 Bleu",
+		"team_yellow": "🟡 Jaune",
+		"team_green": "🟢 Vert",
+		"ice": "Glace",
+		"support": "💎 Soutenir le créateur (Pub)",
+		"resume_in": "Le jeu reprendra dans ",
+		"coming_soon": "⏳ BIENTÔT",
+		"toxic_gas": "Gaz Toxique",
+		"void": "Vide",
+		"battery": "Batterie",
+		"npc_act": "Activateur NPC",
+		"door": "Porte",
+		"flam_gas": "Gaz Inflam.",
+		"coal_item": "Charbon",
+		"bacteria": "Bactérie",
+		"cure": "Cure",
+		"and_more": "Et plus...",
+		"speed": "Vitesse",
+		"eraser": "Gomme",
+		"shapes": "Formes",
+		"line": "Ligne Droite",
+		"rect": "Carrés",
+		"circ": "Cercles",
+		"tria": "Triangles",
+		"acid_rain": "Pluie Acide",
+		"lava_rain": "Pluie de Lave",
+		"met_storm": "Météorites",
+		"black_hole": "Trou Noir",
+		"sinkhole": "Affaissement",
+		"sand_storm": "Tempête de Sable",
+		"zombie": "Zombie",
+		"summoner": "Invocateur",
+		"bomber": "Bombardier",
+		"mage": "Mage",
+		"kamikaze": "Kamikaze",
+		"builder": "Constructeur",
+		"team": "Équipe"
+	},
+	"de": {
+		"disasters": "🌪️ Katastrophen",
+		"tools": "🛠️ Werkzeuge",
+		"lang": "🌐 Sprache",
+		"brush": "🖌️ Pinsel",
+		"weather": "⛈️ Wetter",
+		"quake": "🏚️ Beben",
+		"tornado": "🌪️ Tornado",
+		"tsunami": "🌊 Tsunami",
+		"off": "Aus",
+		"light": "Leicht",
+		"med": "Mittel",
+		"storm": "Sturm",
+		"brutal": "BRUTAL!",
+		"heavy": "Stark",
+		"sand": "Sand",
+		"water": "Wasser",
+		"fire": "Feuer",
+		"tnt": "TNT",
+		"earth": "Erde",
+		"metal": "Metall",
+		"elec": "Elek.",
+		"gravel": "Kies",
+		"lava": "Lava",
+		"obisid": "Obsidian",
+		"acid": "Säure",
+		"wood": "Holz",
+		"petro": "Öl",
+		"fireworks": "Raketen",
+		"powd": "Pulver",
+		"grass": "Gras",
+		"vine": "Hohes Gras",
+		"cem_fresh": "Fr. Zement",
+		"cement": "Zement",
+		"volcan": "Vulkan",
+		"ui_size": "UI-Größe",
+		"size": "Maßstab",
+		"reset": "Alles löschen",
+		"pause": "⏸️ Pause",
+		"play": "▶️ Weiter",
+		"npc": "👥 NPCs",
+		"warrior": "⚔️ Krieger",
+		"archer": "🏹 Bogenschütze",
+		"miner": "⛏️ Minenarbeiter",
+		"medic": "💊 Sanitäter",
+		"team_red": "🔴 Rot",
+		"team_blue": "🔵 Blau",
+		"team_yellow": "🟡 Gelb",
+		"team_green": "🟢 Grün",
+		"ice": "Eis",
+		"support": "💎 Schöpfer unterstützen (Anzeige)",
+		"resume_in": "Das Spiel wird fortgesetzt in ",
+		"coming_soon": "⏳ DEMNÄCHST",
+		"toxic_gas": "Giftiges Gas",
+		"void": "Leere",
+		"battery": "Batterie",
+		"npc_act": "NPC-Aktivator",
+		"door": "Tür",
+		"flam_gas": "Brennb. Gas",
+		"coal_item": "Kohle",
+		"bacteria": "Bakterien",
+		"cure": "Heilung",
+		"and_more": "Und mehr...",
+		"speed": "Geschwindigkeit",
+		"eraser": "Radierer",
+		"shapes": "Formen",
+		"line": "Gerade Linie",
+		"rect": "Quadrate",
+		"circ": "Kreise",
+		"tria": "Dreiecke",
+		"acid_rain": "Saurer Regen",
+		"lava_rain": "Lavaregen",
+		"met_storm": "Meteoriten",
+		"black_hole": "Schwarzes Loch",
+		"sinkhole": "Erdfall",
+		"sand_storm": "Sandsturm",
+		"zombie": "Zombie",
+		"summoner": "Beschwörer",
+		"bomber": "Bomber",
+		"mage": "Magier",
+		"kamikaze": "Kamikaze",
+		"builder": "Baumeister",
+		"team": "Team"
 	}
 }
 
@@ -1024,9 +1266,10 @@ func _setup_tools_ui():
 			ui_elements[label_key + "_btn_" + str(i)] = btn 
 
 	# Language Row (First Tool)
-	var lang_options = ["Español", "English"]
+	var lang_options = ["Español", "English", "Italiano", "Français", "Deutsch"]
+	var lang_codes = ["es", "en", "it", "fr", "de"]
 	create_row.call("lang", lang_options, func(l):
-		current_language = "en" if l == 1 else "es"
+		current_language = lang_codes[l]
 		_refresh_ui_text()
 		_update_menu_highlights()
 	)
@@ -1380,6 +1623,14 @@ func _refresh_ui_text():
 					node_data.text = translations_map[current_language][pure_key] + ": "
 					node_data.custom_minimum_size = Vector2(120 * s, 0)
 					node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key == "team_lbl":
+				node_data.text = translations_map[current_language].get("team", "Team") + ": "
+				node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key.ends_with("_hdr"):
+				var pure_key = key.replace("_hdr", "")
+				if translations_map[current_language].has(pure_key):
+					node_data.text = "\n\n" + translations_map[current_language][pure_key] + "\n"
+					node_data.add_theme_font_size_override("font_size", 20 * s)
 		
 		# Handle Intensity Buttons (Stored as Array [Btn, Key])
 		elif node_data is Array:
@@ -1393,6 +1644,12 @@ func _refresh_ui_text():
 			if key.begins_with("lang_btn_") or key.begins_with("brush_btn_"):
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key.begins_with("team_btn_"):
+				var idx = int(key.split("_")[-1])
+				var team_keys = ["team_red", "team_blue", "team_yellow", "team_green"]
+				node_data.text = translations_map[current_language][team_keys[idx]]
+				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
+				node_data.add_theme_font_size_override("font_size", 12 * s)
 			elif key.begins_with("ui_size_btn_"):
 				var idx = int(key.split("_")[-1])
 				var scale_labels = [
@@ -1532,6 +1789,7 @@ func _add_ui_header(container, key: String):
 	lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	
 	header_pnl.add_child(lbl)
+	ui_elements[key + "_hdr"] = lbl
 	container.add_child(header_pnl)
 
 # --- OPTIMIZED HIGHLIGHT SYSTEM ---
@@ -2770,8 +3028,9 @@ func _setup_npc_ui():
 		
 		# Teams Row (NOW RESPONSIVE)
 		var team_lbl = Label.new()
-		team_lbl.text = "Team: "
+		team_lbl.text = translations_map[current_language].get("team", "Team") + ": "
 		team_lbl.add_theme_font_size_override("font_size", 14 * s)
+		ui_elements["team_lbl"] = team_lbl
 		v_box.add_child(team_lbl)
 		
 		var team_flow = HFlowContainer.new()
