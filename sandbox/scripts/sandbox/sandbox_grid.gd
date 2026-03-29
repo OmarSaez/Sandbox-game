@@ -704,6 +704,15 @@ var tsunami_timer: float = 0.0
 var tsunami_wave_x: float = 0.0
 var surface_cache = PackedInt32Array()
 
+# Future Disaster settings (Scalability)
+# Future Disaster settings (Scalability)
+var acid_rain_intensity: int = 0
+var lava_rain_intensity: int = 0
+var meteor_storm_intensity: int = 0
+var black_hole_intensity: int = 0
+var sinkhole_intensity: int = 0
+var sand_storm_intensity: int = 0
+
 # Fireworks tracking
 var active_fireworks = [] 
 # Optimization #3: High-Performance Particle Pool (Packed Data)
@@ -1633,12 +1642,12 @@ func _setup_disaster_ui():
 	_add_ui_header(v_box, "coming_soon")
 	
 	var int_keys = ["off", "light", "med", "heavy"]
-	create_row.call("acid_rain", int_keys, func(_l): pass, true)
-	create_row.call("lava_rain", int_keys, func(_l): pass, true)
-	create_row.call("met_storm", ["off", "light", "med", "storm"], func(_l): pass, true)
-	create_row.call("black_hole", ["off", "light", "med", "heavy"], func(_l): pass, true)
-	create_row.call("sinkhole", ["off", "light", "med", "heavy"], func(_l): pass, true)
-	create_row.call("sand_storm", ["off", "light", "med", "storm"], func(_l): pass, true)
+	create_row.call("acid_rain", int_keys, func(l): acid_rain_intensity = l; _update_menu_highlights(), true)
+	create_row.call("lava_rain", int_keys, func(l): lava_rain_intensity = l; _update_menu_highlights(), true)
+	create_row.call("met_storm", ["off", "light", "med", "storm"], func(l): meteor_storm_intensity = l; _update_menu_highlights(), true)
+	create_row.call("black_hole", ["off", "light", "med", "heavy"], func(l): black_hole_intensity = l; _update_menu_highlights(), true)
+	create_row.call("sinkhole", ["off", "light", "med", "heavy"], func(l): sinkhole_intensity = l; _update_menu_highlights(), true)
+	create_row.call("sand_storm", ["off", "light", "med", "storm"], func(l): sand_storm_intensity = l; _update_menu_highlights(), true)
 
 func _refresh_ui_text():
 	var s = _get_ui_scale()
@@ -4162,6 +4171,30 @@ func _clear_all():
 	active_charge_indices.clear()
 	next_charge_indices.clear()
 	charge_queued_frame.fill(-1)
+	
+	_reset_all_disasters() # Optimized & Scalable reset
+	
 	_update_texture()
 	_update_material_highlights()
 	_update_menu_highlights()
+
+func _reset_all_disasters():
+	current_weather = 0
+	earthquake_intensity = 0; earthquake_timer = 0.0
+	tornado_intensity = 0; tornado_timer = 0.0
+	tsunami_intensity = 0; tsunami_timer = 0.0
+	
+	# Future/Upcoming Resets
+	acid_rain_intensity = 0
+	lava_rain_intensity = 0
+	meteor_storm_intensity = 0
+	black_hole_intensity = 0
+	sinkhole_intensity = 0
+	sand_storm_intensity = 0
+	
+	# Stop all looping players
+	if is_instance_valid(weather_player) and weather_player.playing: weather_player.stop()
+	if is_instance_valid(quake_player) and quake_player.playing: quake_player.stop()
+	if is_instance_valid(tornado_player) and tornado_player.playing: tornado_player.stop()
+	if is_instance_valid(tsunami_player) and tsunami_player.playing: tsunami_player.stop()
+	if is_instance_valid(volcano_loop_player) and volcano_loop_player.playing: volcano_loop_player.stop()
