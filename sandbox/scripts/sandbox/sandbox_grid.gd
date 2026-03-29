@@ -600,6 +600,90 @@ var translations_map = {
 		"kamikaze": "Kamikaze",
 		"builder": "Baumeister",
 		"team": "Team"
+	},
+	"pt": {
+		"disasters": "🌪️ Desastres",
+		"tools": "🛠️ Ferramentas",
+		"lang": "🌐 Idioma",
+		"brush": "🖌️ Pincel",
+		"weather": "⛈️ Clima",
+		"quake": "🏚️ Sismo",
+		"tornado": "🌪️ Tornado",
+		"tsunami": "🌊 Tsunami",
+		"off": "Desligado",
+		"light": "Leve",
+		"med": "Médio",
+		"storm": "Tempestade",
+		"brutal": "BRUTAL!",
+		"heavy": "Forte",
+		"sand": "Areia",
+		"water": "Água",
+		"fire": "Fogo",
+		"tnt": "TNT",
+		"earth": "Terra",
+		"metal": "Metal",
+		"elec": "Eletr.",
+		"gravel": "Cascalho",
+		"lava": "Lava",
+		"obisid": "Obsidiana",
+		"acid": "Ácido",
+		"wood": "Madeira",
+		"petro": "Petróleo",
+		"fireworks": "Fogos de Artifício",
+		"powd": "Pólvora",
+		"grass": "Grama",
+		"vine": "Grama Alta",
+		"cem_fresh": "Cim. Fresco",
+		"cement": "Cimento",
+		"volcan": "Vulcão",
+		"ui_size": "Tam. UI",
+		"size": "Escala",
+		"reset": "Limpar Tudo",
+		"pause": "⏸️ Pausar",
+		"play": "▶️ Retomar",
+		"npc": "👥 NPCs",
+		"warrior": "⚔️ Guerreiro",
+		"archer": "🏹 Arqueiro",
+		"miner": "⛏️ Minerador",
+		"medic": "💊 Médico",
+		"team_red": "🔴 Vermelho",
+		"team_blue": "🔵 Azul",
+		"team_yellow": "🟡 Amarelo",
+		"team_green": "🟢 Verde",
+		"team": "Equipe",
+		"ice": "Gelo",
+		"support": "💎 Apoie o Criador (Anúncio)",
+		"resume_in": "O jogo será retomado em ",
+		"coming_soon": "⏳ EM BREVE",
+		"toxic_gas": "Gás Tóxico",
+		"void": "Vazio",
+		"battery": "Bateria",
+		"npc_act": "Ativador NPC",
+		"door": "Porta",
+		"flam_gas": "Gás Flam.",
+		"coal_item": "Carvão",
+		"bacteria": "Bactéria",
+		"cure": "Cura",
+		"and_more": "E muito mais...",
+		"speed": "Velocidade",
+		"eraser": "Borracha",
+		"shapes": "Formas",
+		"line": "Linha Reta",
+		"rect": "Quadrados",
+		"circ": "Círculos",
+		"tria": "Triângulos",
+		"acid_rain": "Chuva Ácida",
+		"lava_rain": "Chuva de Lava",
+		"met_storm": "Meteoritos",
+		"black_hole": "Buraco Negro",
+		"sinkhole": "Dolina",
+		"sand_storm": "Tempestade de Areia",
+		"zombie": "Zumbi",
+		"summoner": "Invocador",
+		"bomber": "Bombardeiro",
+		"mage": "Mago",
+		"kamikaze": "Kamikaze",
+		"builder": "Construtor"
 	}
 }
 
@@ -1266,8 +1350,8 @@ func _setup_tools_ui():
 			ui_elements[label_key + "_btn_" + str(i)] = btn 
 
 	# Language Row (First Tool)
-	var lang_options = ["Español", "English", "Italiano", "Français", "Deutsch"]
-	var lang_codes = ["es", "en", "it", "fr", "de"]
+	var lang_options = ["Español", "English", "Italiano", "Français", "Deutsch", "Português"]
+	var lang_codes = ["es", "en", "it", "fr", "de", "pt"]
 	create_row.call("lang", lang_options, func(l):
 		current_language = lang_codes[l]
 		_refresh_ui_text()
@@ -1616,7 +1700,7 @@ func _refresh_ui_text():
 				var pure_key = key.replace("_mat_lbl", "")
 				if translations_map[current_language].has(pure_key):
 					node_data.text = translations_map[current_language][pure_key]
-					node_data.add_theme_font_size_override("font_size", 12 * s) # Scale material label font
+					node_data.add_theme_font_size_override("font_size", 18 * s) # PRECISE 18px matching creation
 			elif key.ends_with("_lbl"):
 				var pure_key = key.replace("_lbl", "")
 				if translations_map[current_language].has(pure_key):
@@ -1626,8 +1710,8 @@ func _refresh_ui_text():
 			elif key == "team_lbl":
 				node_data.text = translations_map[current_language].get("team", "Team") + ": "
 				node_data.add_theme_font_size_override("font_size", 14 * s)
-			elif key.ends_with("_hdr"):
-				var pure_key = key.replace("_hdr", "")
+			elif "_hdr" in key:
+				var pure_key = key.split("_hdr")[0]
 				if translations_map[current_language].has(pure_key):
 					node_data.text = "\n\n" + translations_map[current_language][pure_key] + "\n"
 					node_data.add_theme_font_size_override("font_size", 20 * s)
@@ -1749,6 +1833,7 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	btn_lbl.add_theme_font_size_override("font_size", 18 * s) # EVEN LARGER TEXT
 	btn_lbl.add_theme_font_override("font", _get_safe_font())
 	main_vbox.add_child(btn_lbl)
+	ui_elements[key + "_mat_lbl"] = btn_lbl
 	
 	# CENTRALIZED INPUT (Whole slot)
 	if not is_upcoming:
@@ -1789,7 +1874,7 @@ func _add_ui_header(container, key: String):
 	lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	
 	header_pnl.add_child(lbl)
-	ui_elements[key + "_hdr"] = lbl
+	ui_elements[key + "_hdr_" + str(lbl.get_instance_id())] = lbl
 	container.add_child(header_pnl)
 
 # --- OPTIMIZED HIGHLIGHT SYSTEM ---
@@ -1849,7 +1934,8 @@ func _update_menu_highlights():
 					if brush_sizes[idx] == brush_radius: is_active = true
 				elif key.begins_with("lang_btn_"):
 					var idx = int(key.split("_")[-1])
-					if (idx == 1 and current_language == "en") or (idx == 0 and current_language == "es"): is_active = true
+					var codes = ["es", "en", "it", "fr", "de", "pt"]
+					if idx < codes.size() and current_language == codes[idx]: is_active = true
 				elif key.begins_with("ui_size_btn_"):
 					var idx = int(key.split("_")[-1])
 					if idx == ui_scale_level: is_active = true
