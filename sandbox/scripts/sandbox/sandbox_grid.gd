@@ -1747,20 +1747,6 @@ func _refresh_ui_text():
 				node_data.text = scale_labels[idx]
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
-			elif key.begins_with("team_btn_"):
-				var idx = int(key.split("_")[-1])
-				var team_keys = ["team_red", "team_blue", "team_yellow", "team_green"]
-				node_data.text = translations_map[current_language][team_keys[idx]]
-				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 12 * s)
-			elif key.ends_with("_btn_0"):
-				var pure_key = key.replace("_btn_0", "")
-				if translations_map[current_language].has(pure_key):
-					node_data.text = translations_map[current_language][pure_key]
-				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 14 * s)
-			elif key == "eraser_btn_0": # Special override if needed
-				node_data.text = translations_map[current_language]["eraser"]
 			elif key.begins_with("shapes_btn_"):
 				var idx = int(key.split("_")[-1])
 				var shape_keys = ["line", "rect", "circ", "tria"]
@@ -1769,7 +1755,16 @@ func _refresh_ui_text():
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
 			elif key.begins_with("speed_btn_"):
-				# These are just "x1", "x2" strings, no need to translate normally
+				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
+				node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key == "eraser_btn_0":
+				node_data.text = translations_map[current_language]["eraser"]
+				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
+				node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key.ends_with("_btn_0"):
+				var pure_key = key.replace("_btn_0", "")
+				if translations_map[current_language].has(pure_key):
+					node_data.text = translations_map[current_language][pure_key]
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
 
