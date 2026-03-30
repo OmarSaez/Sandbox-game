@@ -990,6 +990,7 @@ func _setup_tools_ui():
 			btn.custom_minimum_size = Vector2(80.0 * s, 45.0 * s)
 			btn.add_theme_font_size_override("font_size", 14.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
+			btn.mouse_filter = Control.MOUSE_FILTER_PASS
 			
 			if is_upcoming:
 				btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1053,6 +1054,7 @@ func _setup_tools_ui():
 	support_btn.add_theme_stylebox_override("hover", support_style)
 	support_btn.add_theme_stylebox_override("pressed", support_style)
 	support_btn.add_theme_color_override("font_color", Color.GOLD)
+	support_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 
 	support_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
@@ -1070,6 +1072,7 @@ func _setup_tools_ui():
 	pause_btn.custom_minimum_size = Vector2(0, 50 * s) # SCALED
 	pause_btn.add_theme_font_size_override("font_size", 16 * s) # SCALED
 	pause_btn.add_theme_font_override("font", _get_safe_font())
+	pause_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	pause_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
 		
@@ -1112,6 +1115,7 @@ func _setup_tools_ui():
 	reset_btn_node.custom_minimum_size = Vector2(0, 50 * s)
 	reset_btn_node.add_theme_font_size_override("font_size", 16 * s)
 	reset_btn_node.add_theme_font_override("font", _get_safe_font())
+	reset_btn_node.mouse_filter = Control.MOUSE_FILTER_PASS
 	reset_btn_node.pressed.connect(func():
 		_play_action_sound("ui_click")
 		# RESET FIRST
@@ -1239,6 +1243,7 @@ func _setup_disaster_ui():
 			btn.custom_minimum_size = Vector2(80.0 * s, 45.0 * s)
 			btn.add_theme_font_size_override("font_size", 14.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
+			btn.mouse_filter = Control.MOUSE_FILTER_PASS
 			
 			if is_upcoming:
 				btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2736,6 +2741,7 @@ func _setup_npc_ui():
 			btn.text = tr(key)
 			btn.custom_minimum_size = Vector2(100 * s, 45 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
+			btn.mouse_filter = Control.MOUSE_FILTER_PASS
 			btn.pressed.connect(func():
 				_play_action_sound("ui_click")
 				selected_material = id # Master Warrior Material
@@ -2768,6 +2774,7 @@ func _setup_npc_ui():
 			t_btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 			t_btn.add_theme_font_size_override("font_size", 12 * s)
 			t_btn.add_theme_font_override("font", _get_safe_font())
+			t_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 			var tidx = i
 			t_btn.pressed.connect(func():
 				_play_action_sound("ui_click")
