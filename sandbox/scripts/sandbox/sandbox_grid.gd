@@ -2045,7 +2045,7 @@ func _register_material(id: int, color1: Color, tags: int, color2 = null, color3
 	material_tags_raw[id] = tags
 
 func _set_cell(x, y, mat_id):
-	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
+	if x >= 0 and x < grid_width and y >= 0 and y < dynamic_grid_height:
 		var idx = y * grid_width + x
 		
 		# CRITICAL PERFORMANCE OPTIMIZATION: Early Exit for Air
@@ -2098,7 +2098,7 @@ func _activate_chunk(gx, gy):
 					next_chunks_active[ncy * chunks_x + ncx] = 60
 
 func _get_cell(x, y):
-	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
+	if x >= 0 and x < grid_width and y >= 0 and y < dynamic_grid_height:
 		return cells[y * grid_width + x] & 0xFFFF
 	return -1
 
@@ -2135,7 +2135,7 @@ func _step_simulation():
 			var x_start = cx * CHUNK_SIZE
 			var y_start = cy * CHUNK_SIZE
 			var x_end = min(x_start + CHUNK_SIZE, grid_width)
-			var y_end = min(y_start + CHUNK_SIZE, grid_height)
+			var y_end = min(y_start + CHUNK_SIZE, dynamic_grid_height)
 			
 			for y in range(y_start, y_end):
 				var sweep = range(x_start, x_end)
@@ -2166,7 +2166,7 @@ func _step_simulation():
 			var x_start = cx * CHUNK_SIZE
 			var y_start = cy * CHUNK_SIZE
 			var x_end = min(x_start + CHUNK_SIZE, grid_width)
-			var y_end = min(y_start + CHUNK_SIZE, grid_height)
+			var y_end = min(y_start + CHUNK_SIZE, dynamic_grid_height)
 			
 			var y = y_end - 1
 			while y >= y_start:
@@ -2284,7 +2284,7 @@ func _process_electricity():
 
 func _move_particle(x, y, _mat_id, tags, v_dir):
 	var next_y = y + v_dir
-	if next_y < 0 or next_y >= grid_height: return
+	if next_y < 0 or next_y >= dynamic_grid_height: return
 	
 	# Try directly moving
 	if _get_cell(x, next_y) == 0:
@@ -2305,6 +2305,9 @@ func _move_particle(x, y, _mat_id, tags, v_dir):
 				_swap_cells(x, y, x - side, y)
 
 func _swap_cells(x1, y1, x2, y2):
+	if y1 < 0 or y1 >= dynamic_grid_height or y2 < 0 or y2 >= dynamic_grid_height: return
+	if x1 < 0 or x1 >= grid_width or x2 < 0 or x2 >= grid_width: return
+	
 	var idx1 = y1 * grid_width + x1
 	var idx2 = y2 * grid_width + x2
 	var m1 = cells[idx1]
