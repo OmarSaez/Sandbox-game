@@ -579,17 +579,15 @@ func _show_welcome_message():
 	margin.add_child(vbox)
 	
 	var title = Label.new()
-	title.text = "Bienvenido a Sandbox Ultra"
+	title.text = tr("welcome_title")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_override("font", _get_safe_font())
 	title.add_theme_font_size_override("font_size", 34 * s)
 	title.add_theme_color_override("font_color", Color(1, 0.9, 0.4))
 	vbox.add_child(title)
 	
-	var msg = "Aca puedes dar rienda suelta a tu imaginacion y curiosidad creando, destruyendo, peleando o explotando cosas.\n\nSiente libre de hacerlo que quieras, explorar todos los menus y opciones que tenemos para ti.\n\nFeliz experimentación!"
-	
 	var label = Label.new()
-	label.text = msg
+	label.text = tr("welcome_msg").replace("\\n", "\n")
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_font_override("font", _get_safe_font())
@@ -598,7 +596,7 @@ func _show_welcome_message():
 	vbox.add_child(label)
 	
 	var btn = Button.new()
-	btn.text = "Cerrar"
+	btn.text = tr("welcome_close")
 	btn.add_theme_font_override("font", _get_safe_font())
 	btn.add_theme_font_size_override("font_size", 30 * s)
 	btn.custom_minimum_size = Vector2(250 * s, 60 * s)
