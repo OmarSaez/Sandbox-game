@@ -509,6 +509,128 @@ func _ready():
 	s_mat.set_shader_parameter("palette_tex", palette_tex)
 	s_mat.set_shader_parameter("charge_tex", charge_tex) # Dedicated link
 	texture_rect.material = s_mat
+	
+	_show_welcome_message()
+
+func _show_welcome_message():
+	var save_path = "user://welcome_shown.save"
+	if FileAccess.file_exists(save_path):
+		return
+		
+	var file = FileAccess.open(save_path, FileAccess.WRITE)
+	if file:
+		file.store_string("shown")
+		file.close()
+
+	var s = _get_ui_scale()
+	var ui_root = get_parent().get_node_or_null("UI")
+	if not ui_root:
+		return
+		
+	var overlay = ColorRect.new()
+	overlay.name = "WelcomeOverlay"
+	overlay.color = Color(0, 0, 0, 0.7)
+	overlay.anchor_right = 1.0
+	overlay.anchor_bottom = 1.0
+	# Bloquear clics mientras está el panel
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(overlay)
+	
+	var panel = PanelContainer.new()
+	panel.anchor_left = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -320 * s
+	panel.offset_top = -300 * s
+	panel.offset_right = 320 * s
+	panel.offset_bottom = 300 * s
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
+	var bw = int(4 * s)
+	p_style.border_width_left = bw
+	p_style.border_width_top = bw
+	p_style.border_width_right = bw
+	p_style.border_width_bottom = bw
+	p_style.border_color = Color(0.4, 0.4, 0.5)
+	p_style.corner_radius_top_left = 20 * s
+	p_style.corner_radius_top_right = 20 * s
+	p_style.corner_radius_bottom_left = 20 * s
+	p_style.corner_radius_bottom_right = 20 * s
+	p_style.shadow_color = Color(0, 0, 0, 0.5)
+	p_style.shadow_size = 10 * s
+	panel.add_theme_stylebox_override("panel", p_style)
+	
+	overlay.add_child(panel)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_top", 30 * s)
+	margin.add_theme_constant_override("margin_bottom", 30 * s)
+	margin.add_theme_constant_override("margin_left", 30 * s)
+	margin.add_theme_constant_override("margin_right", 30 * s)
+	panel.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 25 * s)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	margin.add_child(vbox)
+	
+	var title = Label.new()
+	title.text = "Bienvenido a Sandbox Ultra"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", _get_safe_font())
+	title.add_theme_font_size_override("font_size", 34 * s)
+	title.add_theme_color_override("font_color", Color(1, 0.9, 0.4))
+	vbox.add_child(title)
+	
+	var msg = "Aca puedes dar rienda suelta a tu imaginacion y curiosidad creando, destruyendo, peleando o explotando cosas.\n\nSiente libre de hacerlo que quieras, explorar todos los menus y opciones que tenemos para ti.\n\nFeliz experimentación!"
+	
+	var label = Label.new()
+	label.text = msg
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_override("font", _get_safe_font())
+	label.add_theme_font_size_override("font_size", 24 * s)
+	label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(label)
+	
+	var btn = Button.new()
+	btn.text = "Cerrar"
+	btn.add_theme_font_override("font", _get_safe_font())
+	btn.add_theme_font_size_override("font_size", 30 * s)
+	btn.custom_minimum_size = Vector2(250 * s, 60 * s)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	vbox.add_child(btn)
+	
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.2, 0.6, 0.3)
+	var bbw = int(2 * s)
+	btn_style.border_width_left = bbw
+	btn_style.border_width_top = bbw
+	btn_style.border_width_right = bbw
+	btn_style.border_width_bottom = bbw
+	btn_style.border_color = Color(0.3, 0.8, 0.4)
+	btn_style.corner_radius_top_left = 12 * s
+	btn_style.corner_radius_top_right = 12 * s
+	btn_style.corner_radius_bottom_left = 12 * s
+	btn_style.corner_radius_bottom_right = 12 * s
+	btn.add_theme_stylebox_override("normal", btn_style)
+	
+	var btn_hover = btn_style.duplicate()
+	btn_hover.bg_color = Color(0.3, 0.7, 0.4)
+	btn.add_theme_stylebox_override("hover", btn_hover)
+	btn.add_theme_stylebox_override("pressed", btn_hover)
+	
+	btn.pressed.connect(func():
+		if has_method("_play_action_sfx"):
+			call("_play_action_sfx", "ui_click")
+		overlay.queue_free()
+	)
+
 
 func _setup_materials_within_grid():
 	if material_grid.get_child_count() > 0: return # Already setup physically?
