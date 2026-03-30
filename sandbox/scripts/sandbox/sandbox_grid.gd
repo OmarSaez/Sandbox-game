@@ -626,9 +626,21 @@ func _show_welcome_message():
 	btn.add_theme_stylebox_override("pressed", btn_hover)
 	
 	btn.pressed.connect(func():
-		if has_method("_play_action_sfx"):
-			call("_play_action_sfx", "ui_click")
+		if has_method("_play_action_sound"):
+			call("_play_action_sound", "ui_click")
 		overlay.queue_free()
+		
+		# Spawneo de fuegos artificiales de bienvenida directos
+		var spawn_fireworks = func():
+			var left_x = int(grid_width * 0.25)
+			var right_x = int(grid_width * 0.75)
+			var base_y = int(dynamic_grid_height * 0.8)
+			for i in range(3):
+				_launch_firework(left_x + randi_range(-20, 20), base_y + randi_range(-10, 10))
+				_launch_firework(right_x + randi_range(-20, 20), base_y + randi_range(-10, 10))
+				await get_tree().create_timer(0.3).timeout
+				
+		spawn_fireworks.call()
 	)
 
 
