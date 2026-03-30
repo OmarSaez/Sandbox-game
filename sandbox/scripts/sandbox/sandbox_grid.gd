@@ -30,6 +30,8 @@ var charge_img: Image
 const CHUNK_SIZE = 16
 var chunks_active: PackedByteArray 
 var next_chunks_active: PackedByteArray
+var chunks_dirty_rows: PackedInt32Array # Mapa de 16 bits por chunk indicando filas activas
+var next_dirty_rows: PackedInt32Array
 var chunks_x: int
 var chunks_y: int
 
@@ -321,6 +323,8 @@ func _ready():
 	chunks_active.fill(60) # 1s settle for absolute visual stability
 	next_chunks_active.resize(chunks_x * chunks_y)
 	next_chunks_active.fill(60)
+	chunks_dirty_rows.resize(chunks_x * chunks_y)
+	next_dirty_rows.resize(chunks_x * chunks_y)
 	
 	tags_array.resize(grid_width * grid_height)
 	charge_array.resize(grid_width * grid_height)
@@ -1917,7 +1921,7 @@ func _set_cell(x, y, mat_id):
 			cells[idx] = 0
 			tags_array[idx] = 0
 			charge_array[idx] = 0
-			_activate_chunk(x, y)
+			_activate_row(x, y)
 			return
 
 		var tags = material_tags_raw[mat_id]
@@ -1938,7 +1942,7 @@ func _set_cell(x, y, mat_id):
 		# Bits 16-23 (Blue) are kept zero for Material ID - used to flag Visual Effects (Sparks) in shader
 		cells[idx] = (mat_id & 0xFFFF) | (variant << 24)
 		tags_array[idx] = tags
-		_activate_chunk(x, y)
+		_activate_row(x, y)
 		
 		if (tags & SandboxMaterial.Tags.ELECTRICITY): 
 			charge_array[idx] = 101
@@ -1951,14 +1955,35 @@ func _activate_chunk(gx, gy):
 	var cy = int(gy / CHUNK_SIZE)
 	if cx >= 0 and cx < chunks_x and cy >= 0 and cy < chunks_y:
 		var c_idx = cy * chunks_x + cx
-		if next_chunks_active[c_idx] >= 60: return
-		next_chunks_active[c_idx] = 60
+		if next_chunks_active[c_idx] >= 61: return
+		next_chunks_active[c_idx] = 61
+		
+		# Activar vecinos para el "wake wave"
 		for oy in range(-1, 2):
 			for ox in range(-1, 2):
 				var ncx = cx + ox
 				var ncy = cy + oy
 				if ncx >= 0 and ncx < chunks_x and ncy >= 0 and ncy < chunks_y:
-					next_chunks_active[ncy * chunks_x + ncx] = 60
+					var ni = ncy * chunks_x + ncx
+					next_chunks_active[ni] = 61
+					# Al activar un chunk vecino, marcamos todas sus filas como "sucias" inicialmente
+					# para asegurar que la transición de bordes sea suave
+					next_dirty_rows[ni] = 0xFFFF
+
+func _activate_row(gx, gy):
+	var cx = int(gx / CHUNK_SIZE)
+	var cy = int(gy / CHUNK_SIZE)
+	if cx >= 0 and cx < chunks_x and cy >= 0 and cy < chunks_y:
+		var c_idx = cy * chunks_x + cx
+		# Activar el chunk
+		_activate_chunk(gx, gy)
+		# Activar el bit de la fila (gy % 16) y sus vecinas para detectar caídas
+		var row_bit = gy % CHUNK_SIZE
+		var mask = (1 << row_bit)
+		if row_bit > 0: mask |= (1 << (row_bit - 1))
+		if row_bit < 15: mask |= (1 << (row_bit + 1))
+		
+		next_dirty_rows[c_idx] |= mask
 
 func _get_cell(x, y):
 	if x >= 0 and x < grid_width and y >= 0 and y < grid_height:
@@ -1975,9 +2000,11 @@ func _step_simulation():
 	
 	# Update active chunk countdowns
 	chunks_active = next_chunks_active.duplicate()
+	chunks_dirty_rows = next_dirty_rows.duplicate()
 	for i in range(next_chunks_active.size()):
 		if next_chunks_active[i] > 0:
 			next_chunks_active[i] -= 1
+	next_dirty_rows.fill(0)
 	
 	# Pass 1: Electricity Pulse Processing (SPARSE)
 	_process_electricity()
@@ -2000,7 +2027,12 @@ func _step_simulation():
 			var x_end = min(x_start + CHUNK_SIZE, grid_width)
 			var y_end = min(y_start + CHUNK_SIZE, grid_height)
 			
+			var row_mask = chunks_dirty_rows[c_idx]
+			if row_mask == 0: continue # Salto de chunk completo por filas inactivas
+			
 			for y in range(y_start, y_end):
+				if not (row_mask & (1 << (y % CHUNK_SIZE))): continue # SALTO DE FILA
+				
 				var sweep = range(x_start, x_end)
 				if Engine.get_frames_drawn() % 2 == 0: sweep = range(x_end - 1, x_start - 1, -1)
 				for x in sweep:
@@ -2031,8 +2063,15 @@ func _step_simulation():
 			var x_end = min(x_start + CHUNK_SIZE, grid_width)
 			var y_end = min(y_start + CHUNK_SIZE, grid_height)
 			
+			var row_mask = chunks_dirty_rows[c_idx]
+			if row_mask == 0: continue
+			
 			var y = y_end - 1
 			while y >= y_start:
+				if not (row_mask & (1 << (y % CHUNK_SIZE))): 
+					y -= 1
+					continue # SALTO DE FILA
+				
 				var x_start_row = x_start
 				var x_dir = 1
 				if Engine.get_frames_drawn() % 2 == 0:
@@ -2186,9 +2225,9 @@ func _swap_cells(x1, y1, x2, y2):
 	if c1 > 0: _register_charge(idx2)
 	if c2 > 0: _register_charge(idx1)
 	
-	# Wake up chunks
-	_activate_chunk(x1, y1)
-	_activate_chunk(x2, y2)
+	# Wake up rows & chunks
+	_activate_row(x1, y1)
+	_activate_row(x2, y2)
 
 func _register_charge(idx):
 	var frame = Engine.get_frames_drawn()
@@ -3673,6 +3712,8 @@ func _clear_all():
 	active_charge_indices.clear()
 	next_charge_indices.clear()
 	charge_queued_frame.fill(-1)
+	chunks_dirty_rows.fill(0)
+	next_dirty_rows.fill(0)
 	
 	_reset_all_disasters() # Optimized & Scalable reset
 	
