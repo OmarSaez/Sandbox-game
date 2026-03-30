@@ -670,6 +670,7 @@ func _setup_materials_within_grid():
 	
 	# --- SECCIÓN PROXIMAMENTE ---
 	_add_ui_header(material_grid, "coming_soon")
+	_add_button("custom_mat", 0, true)
 	_add_button("toxic_gas", 0, true)
 	_add_button("void", 0, true)
 	_add_button("battery", 0, true)
@@ -679,6 +680,7 @@ func _setup_materials_within_grid():
 	_add_button("coal_item", 0, true)
 	_add_button("bacteria", 0, true)
 	_add_button("cure", 0, true)
+	_add_button("lightning", 0, true)
 	_add_button("and_more", 0, true)
 	
 	# FIND the scroll vbox to add the final spacer
