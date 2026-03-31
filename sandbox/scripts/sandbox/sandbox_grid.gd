@@ -1751,6 +1751,21 @@ func _play_action_sound(action: String, min_interval: float = 0.08):
 		_play_sfx(action_sfx[action])
 
 func _process(delta):
+	# Increment SFX timer and reset every 1 second
+	explosions_sfx_timer += delta
+	if explosions_sfx_timer >= 1.0:
+		explosions_sfx_timer = 0.0
+		explosions_sfx_budget = 0
+	
+	# Explosion Budgeting Reset & Queue Processing
+	explosions_this_frame = 0
+	if _explosion_queue.size() > 0:
+		# Process up to 50% of the budget from the queue each frame
+		var q_limit = int(MAX_EXPLOSIONS_PER_FRAME * 0.5)
+		for i in range(min(q_limit, _explosion_queue.size())):
+			var e = _explosion_queue.pop_front()
+			_explode(e[0], e[1], e[2], e[3], e[4], true) # Bypass check
+	
 	# Handle input with robust UI blocking
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		var is_blocking = _is_any_ui_blocking()
@@ -3706,11 +3721,32 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 							var f = 64 if (my_tags & SandboxMaterial.Tags.ACID) else 128
 							_prime_explosive(nx, ny, n_id, f)
 
+# Optimization #6: Explosion Budgeting (Prevents CPU choking during chain reactions)
+const MAX_EXPLOSIONS_PER_FRAME = 20 # SANE default for smooth experience
 var explosions_this_frame = 0
-func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0):
+var _explosion_queue = [] # Queue of [x, y, radius, sfx, flags]
+
+# Audio Optimization: SFX Budgeting (Max 30 explosion sounds per second)
+var explosions_sfx_budget = 0
+var explosions_sfx_timer = 0.0
+
+func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0, ignore_budget = false):
+	# BUDGET CHECK: If we exceed limit, queue for next frame
+	if not ignore_budget and explosions_this_frame >= MAX_EXPLOSIONS_PER_FRAME:
+		_explosion_queue.append([x, y, radius, sfx_action, ignition_flags])
+		_set_cell(x, y, 0) # Clear the trigger pixel immediately to prevent double-triggering
+		return
+		
 	explosions_this_frame += 1
 	var is_heavy_load = explosions_this_frame > 10
-	_set_cell(x, y, 0); _play_action_sound(sfx_action)
+	
+	# CLEAR the trigger cell immediately
+	_set_cell(x, y, 0)
+	
+	# Limit sound spam: Only play sound if budget allows (max 30 per second)
+	if explosions_sfx_budget < 30:
+		_play_action_sound(sfx_action)
+		explosions_sfx_budget += 1
 	var center = Vector2i(x, y)
 	var nearby = _get_nearby_npcs(x, y, radius + 5)
 	for npc in nearby:
