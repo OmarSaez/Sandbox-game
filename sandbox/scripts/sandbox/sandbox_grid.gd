@@ -48,7 +48,7 @@ var is_paused: bool = false
 var is_mouse_over_ui: bool = false
 var brush_radius: int = 2 
 var current_language: String = "es" # Controlled by TranslationServer
-var ui_scale_level: int = 1 # Start at 1.2x by default
+var ui_scale_level: int = 2 # Start at 1.2x by default
 func _get_ui_scale() -> float:
 	var scales = [1.0, 1.2, 1.3, 1.5, 1.7, 2.0]
 	return scales[ui_scale_level]
@@ -1643,6 +1643,10 @@ func _update_menu_highlights():
 				elif key.begins_with("team_btn_"):
 					var idx = int(key.split("_")[-1])
 					if idx == selected_team: is_active = true
+				elif key == "control_active_btn":
+					if is_selecting_npc_to_control or is_instance_valid(controlled_npc): is_active = true
+				elif key == "control_disabled_btn":
+					if not is_selecting_npc_to_control and not is_instance_valid(controlled_npc): is_active = true
 				
 				if is_active:
 					if not btn.has_theme_color_override("font_color"):
@@ -2891,22 +2895,21 @@ func _setup_npc_control_gui():
 	npc_control_gui.add_child(action_btn)
 
 func _stop_controlling_npc():
+	if not is_selecting_npc_to_control and not is_instance_valid(controlled_npc): return # No-op if already stopped
+	
 	_play_action_sound("ui_click")
 	controlled_npc = null
 	is_selecting_npc_to_control = false
-	var ui_root = get_parent().get_node("UI")
-	if ui_root.has_meta("npc_control_btn_ref"):
-		var source_btn = ui_root.get_meta("npc_control_btn_ref")
-		if is_instance_valid(source_btn):
-			source_btn.text = tr("control_npc")
-			source_btn.modulate = Color.WHITE
 	
 	if npc_control_gui:
 		npc_control_gui.visible = false
 	
+	var ui_root = get_parent().get_node("UI")
 	var main_controls = ui_root.get_node("Controls")
 	main_controls.visible = true
 	is_mouse_over_ui = false
+	
+	_update_menu_highlights() # Re-draw selection states
 
 func _handle_controlled_npc_input(delta):
 	if not controlled_npc or not is_instance_valid(npc_control_gui) or not npc_control_gui.visible: return
@@ -3070,43 +3073,55 @@ func _setup_npc_ui():
 		for child in v_box.get_children(): 
 			if is_instance_valid(child): child.queue_free()
 		
-		# NPC Control Button
-		var control_btn = Button.new()
+		# ----------------------------------------------------
+		# NPC CONTROL SECTION (NEW PHILOSOPHY)
+		var control_lbl = Label.new()
+		control_lbl.text = tr("npc_controller_title") + ": "
+		control_lbl.add_theme_font_size_override("font_size", 14 * s)
+		control_lbl.add_theme_font_override("font", _get_safe_font())
+		v_box.add_child(control_lbl)
+		ui_elements["control_npc_lbl"] = control_lbl
+		
+		var control_flow = HFlowContainer.new()
+		control_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v_box.add_child(control_flow)
+		
 		var ui_root = get_parent().get_node("UI")
-		ui_root.set_meta("npc_control_btn_ref", control_btn)
-		control_btn.text = tr("control_npc")
-		control_btn.custom_minimum_size = Vector2(0, 50 * s)
-		control_btn.add_theme_font_override("font", _get_safe_font())
-		control_btn.add_theme_font_size_override("font_size", 16 * s)
 		
-		var control_style = StyleBoxFlat.new()
-		control_style.bg_color = Color(0.3, 0.2, 0.5) # Purple-ish
-		
-		# Proporción para que se vea bien
-		control_style.corner_radius_top_left = 10 * s
-		control_style.corner_radius_top_right = 10 * s
-		control_style.corner_radius_bottom_left = 10 * s
-		control_style.corner_radius_bottom_right = 10 * s
-		control_btn.add_theme_stylebox_override("normal", control_style)
-		control_btn.add_theme_stylebox_override("hover", control_style)
-		control_btn.add_theme_stylebox_override("pressed", control_style)
-		
-		control_btn.pressed.connect(func():
+		# Button: ACTIVE
+		var active_btn = Button.new()
+		active_btn.text = tr("active")
+		active_btn.custom_minimum_size = Vector2(100 * s, 45 * s)
+		active_btn.add_theme_font_override("font", _get_safe_font())
+		active_btn.add_theme_font_size_override("font_size", 12 * s)
+		active_btn.pressed.connect(func():
 			_play_action_sound("ui_click")
-			is_selecting_npc_to_control = !is_selecting_npc_to_control
-			if is_selecting_npc_to_control:
-				selected_material = 0 # Deseleccionar herramienta/NPC actual
+			if not is_selecting_npc_to_control and not is_instance_valid(controlled_npc):
+				is_selecting_npc_to_control = true
+				selected_material = 0 
 				_update_material_highlights()
-				_update_menu_highlights() # Remove visual highlights from NPC panel
-				control_btn.text = tr("selecting_npc")
-				control_btn.modulate = Color(1.5, 1.5, 1.5)
-			else:
-				_update_menu_highlights() # Restore highlights
-				control_btn.text = tr("control_npc")
-				control_btn.modulate = Color.WHITE
+			_update_menu_highlights()
 		)
-		v_box.add_child(control_btn)
-		ui_elements["control_npc_btn"] = control_btn
+		control_flow.add_child(active_btn)
+		ui_elements["control_active_btn"] = active_btn
+		ui_root.set_meta("npc_control_active_btn_ref", active_btn)
+		
+		# Button: DISABLED
+		var disabled_btn = Button.new()
+		disabled_btn.text = tr("inactive")
+		disabled_btn.custom_minimum_size = Vector2(120 * s, 45 * s)
+		disabled_btn.add_theme_font_override("font", _get_safe_font())
+		disabled_btn.add_theme_font_size_override("font_size", 12 * s)
+		disabled_btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			_stop_controlling_npc()
+			_update_menu_highlights()
+		)
+		control_flow.add_child(disabled_btn)
+		ui_elements["control_disabled_btn"] = disabled_btn
+		ui_root.set_meta("npc_control_disabled_btn_ref", disabled_btn)
+		
+		# ----------------------------------------------------
 
 		# NPC Selection (NOW RESPONSIVE)
 		var npc_lbl = Label.new()

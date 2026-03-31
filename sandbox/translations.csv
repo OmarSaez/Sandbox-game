@@ -89,3 +89,6 @@ custom_mat,Personalizable,Custom,Personalizzato,Personnalisé,Benutzerdefiniert,
 action,ACCIÓN,ACTION,AZIONE,ACTION,AKTION,AÇÃO
 control_npc,🎮 Controlar NPC,🎮 Control NPC,🎮 Controlla NPC,🎮 Contrôler NPC,🎮 NPC steuern,🎮 Controlar NPC
 selecting_npc,🔍 Seleccionando...,🔍 Selecting...,🔍 Selezionando...,🔍 Sélection...,🔍 Auswahl...,🔍 Selecionando...
+npc_controller_title,🎮 Controlador de NPC,🎮 NPC Controller,🎮 Controller NPC,🎮 Contrôleur NPC,🎮 NPC-Controller,🎮 Controlador de NPC
+active,Activo,Active,Attivo,Actif,Aktiv,Ativo
+inactive,Desactivado,Disabled,Disattivato,Désactivé,Deaktiviert,Desativado
