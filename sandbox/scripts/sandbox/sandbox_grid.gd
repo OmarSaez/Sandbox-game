@@ -628,15 +628,23 @@ func _show_welcome_message():
 			call("_play_action_sound", "ui_click")
 		overlay.queue_free()
 		
-		# Spawneo de fuegos artificiales de bienvenida directos
+		# Spawneo de fuegos artificiales de bienvenida directos (con retraso y tandas)
 		var spawn_fireworks = func():
+			# 1. Esperar 2 segundos como pidió el usuario
+			await get_tree().create_timer(2.0).timeout
+			
 			var left_x = int(grid_width * 0.25)
 			var right_x = int(grid_width * 0.75)
 			var base_y = int(dynamic_grid_height * 0.8)
-			for i in range(3):
-				_launch_firework(left_x + randi_range(-20, 20), base_y + randi_range(-10, 10))
-				_launch_firework(right_x + randi_range(-20, 20), base_y + randi_range(-10, 10))
-				await get_tree().create_timer(0.3).timeout
+			
+			# 2. 3 tandas de 6 fuegos
+			for round_idx in range(3):
+				for i in range(3):
+					_launch_firework(left_x + randi_range(-20, 20), base_y + randi_range(-10, 10))
+					_launch_firework(right_x + randi_range(-20, 20), base_y + randi_range(-10, 10))
+					await get_tree().create_timer(0.3).timeout
+				# Pequeña pausa entre tandas para que se sienta espectacular
+				await get_tree().create_timer(1.0).timeout
 				
 		spawn_fireworks.call()
 	)
