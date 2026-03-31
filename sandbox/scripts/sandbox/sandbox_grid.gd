@@ -2936,23 +2936,32 @@ func _draw_npc_pixels(npc, override_mat = -1):
 		m_head = f_mat; m_skin = f_mat; m_torso = f_mat; m_shoes = f_mat; team_mat = f_mat
 		
 	# 3. SET PIXELS (2x5 Grid)
+	var face_dir = npc.get("dir", 1)
+	if face_dir == 0:
+		face_dir = npc.get("last_dir", 1)
+	else:
+		npc["last_dir"] = face_dir
+		
+	var px0 = sx if face_dir > 0 else sx + 1
+	var px1 = sx + 1 if face_dir > 0 else sx
+
 	# Fila 0: Cabeza x2 (Casco cubriendo la parte superior)
-	_set_cell(sx, sy, m_head); _set_cell(sx+1, sy, m_head)
+	_set_cell(px0, sy, m_head); _set_cell(px1, sy, m_head)
 	# Fila 1: Cabeza + Piel
-	_set_cell(sx, sy+1, m_head); _set_cell(sx+1, sy+1, m_skin)
+	_set_cell(px0, sy+1, m_head); _set_cell(px1, sy+1, m_skin)
 	# Fila 2 & 3: Torso (Mezcla de Color de Clase y Color de Equipo)
 	if npc.type == "medic" and override_mat == -1 and !is_flashing:
-		_set_cell(sx, sy+2, 1041); _set_cell(sx+1, sy+2, 1041)       # Torso arriba: Franja Médica (ID 1041)
-		_set_cell(sx, sy+3, team_mat); _set_cell(sx+1, sy+3, team_mat) # Torso abajo: Color Equipo
+		_set_cell(px0, sy+2, 1041); _set_cell(px1, sy+2, 1041)       # Torso arriba: Franja Médica (ID 1041)
+		_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, team_mat) # Torso abajo: Color Equipo
 	elif npc.type == "archer" and override_mat == -1 and !is_flashing:
-		_set_cell(sx, sy+2, team_mat); _set_cell(sx+1, sy+2, team_mat) # Torso arriba: Equipo Completo
-		_set_cell(sx, sy+3, team_mat); _set_cell(sx+1, sy+3, team_mat) # Torso abajo: Equipo Completo
+		_set_cell(px0, sy+2, team_mat); _set_cell(px1, sy+2, team_mat) # Torso arriba: Equipo Completo
+		_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, team_mat) # Torso abajo: Equipo Completo
 	else:
-		_set_cell(sx, sy+2, m_torso); _set_cell(sx+1, sy+2, team_mat) # Mezcla clase/equipo
-		_set_cell(sx, sy+3, team_mat); _set_cell(sx+1, sy+3, m_torso)
+		_set_cell(px0, sy+2, m_torso); _set_cell(px1, sy+2, team_mat) # Mezcla clase/equipo
+		_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, m_torso)
 	
 	# Fila 4: Zapatos (Restaurados para TODOS los tipos)
-	_set_cell(sx, sy+4, m_shoes); _set_cell(sx+1, sy+4, m_shoes)
+	_set_cell(px0, sy+4, m_shoes); _set_cell(px1, sy+4, m_shoes)
 
 func _update_npc_spatial_hash():
 	for cell in npc_spatial_grid:
@@ -2983,6 +2992,26 @@ func _process_npcs(delta):
 	if npc_update_timer < 0.05: return 
 	npc_update_timer = 0.0
 	
+	# CALCULAR DOMINANCIA DE EQUIPOS
+	var t_counts = {}
+	var total_alive = 0
+	for npc in active_npcs:
+		if npc.hp > 0:
+			t_counts[npc.team] = t_counts.get(npc.team, 0) + 1
+			total_alive += 1
+			
+	var win_team = -1
+	var show_dom = false
+	if t_counts.size() > 1 and total_alive > 0:
+		for t in t_counts:
+			if t_counts[t] >= total_alive * 0.7:
+				win_team = t
+		if win_team != -1:
+			show_dom = true
+			for t in t_counts:
+				if t != win_team and t_counts[t] > 10: # Si ALGÚN equipo perdedor tiene > 10 NPCs, se anula
+					show_dom = false; break
+	
 	var dead_indices = []
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
@@ -2992,9 +3021,21 @@ func _process_npcs(delta):
 		if npc.hp <= 0: emotes = ["💀"]
 		else:
 			if npc.get("is_fleeing", false): emotes.append("😭")
-			if npc.get("has_spotted_enemy", false): emotes.append("❗")
+			
+			var is_winning = show_dom and npc.team == win_team
+			var is_losing = show_dom and npc.team != win_team
+			
+			if is_losing:
+				emotes.append("😱")
+			elif npc.get("has_spotted_enemy", false):
+				emotes.append("😡")
+				if is_winning: emotes.append("😎")
+			
 			if npc.get("mine_state", "") == "saboteur": emotes.append("⭐"); emotes.append("😄")
-			if !npc.get("has_spotted_enemy", false): emotes.append("👀")
+			
+			if !npc.get("has_spotted_enemy", false) and !is_losing:
+				emotes.append("👀")
+				if is_winning: emotes.append("😎")
 		
 		# Lógica de visualización
 		if npc.emoji_timer > 0:
@@ -3387,9 +3428,9 @@ func _miner_dig(npc, dig_down=false):
 
 func _shoot_arrow(npc, target):
 	if npc.hp <= 0: return
-	if !npc.get("morale_broken", false): _set_npc_emoji(npc, "😡", 0.8)
 	_play_action_sound("archer_shoot"); var dx = float(target.pos.x - npc.pos.x); var dir = 1 if dx > 0 else -1; var aim_dy = float((target.pos.y + 2) - npc.pos.y); var speed_x = clamp(abs(dx) * 1.5, 90.0, 150.0); var vx = dir * speed_x; var t = abs(dx) / speed_x
 	if t < 0.1: t = 0.1
+	if !npc.get("morale_broken", false): _set_npc_emoji(npc, "🏹", clamp(t + 0.2, 0.5, 1.5))
 	var arrow_gravity = 200.0; var vy = (aim_dy / t) - (0.5 * arrow_gravity * t); vy += npc.get("precision", 0.0) * 15.0; vy = clamp(vy, -280.0, 40.0)
 	active_projectiles.append({ "pos": Vector2(npc.pos.x + dir*2, npc.pos.y + 1), "vel": Vector2(vx, vy), "team": npc.team, "type": "arrow", "life": 2.5, "atk_dmg": npc.get("atk_dmg", 1.0), "is_fire": npc.get("is_fire_variant", false) })
 
@@ -3433,7 +3474,7 @@ func _find_closest_enemy(me, radar_range):
 
 func _attack_npc(attacker, victim):
 	if attacker.hp <= 0 or victim.hp <= 0: return
-	if !attacker.get("morale_broken", false): _set_npc_emoji(attacker, "😡", 0.8)
+	if !attacker.get("morale_broken", false): _set_npc_emoji(attacker, "⚔️", 0.5)
 	victim.hp -= (15.0 * attacker.get("atk_dmg", 1.0)); victim.hit_flash = 5; victim.hit_type = "normal"
 	if attacker.get("is_fire_variant", false):
 		var fx = victim.pos.x + randi_range(0, 1); var fy = victim.pos.y + randi_range(2, 4)
