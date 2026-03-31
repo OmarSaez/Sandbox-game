@@ -2866,8 +2866,8 @@ func _setup_npc_control_gui():
 	exit_btn.add_theme_font_override("font", _get_safe_font())
 	exit_btn.add_theme_font_size_override("font_size", 34 * s)
 	exit_btn.add_theme_constant_override("outline_size", 6 * s)
+	exit_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	exit_btn.pressed.connect(func():
-		is_mouse_over_ui = false 
 		_stop_controlling_npc()
 	)
 	npc_control_gui.add_child(exit_btn)
@@ -2895,8 +2895,7 @@ func _setup_npc_control_gui():
 	npc_control_gui.add_child(action_btn)
 
 func _stop_controlling_npc():
-	if not is_selecting_npc_to_control and not is_instance_valid(controlled_npc): return # No-op if already stopped
-	
+	# No guard here, let it run to ensure UI reset even if NPC/Selecting state is weird
 	_play_action_sound("ui_click")
 	controlled_npc = null
 	is_selecting_npc_to_control = false
