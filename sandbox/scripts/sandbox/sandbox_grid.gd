@@ -58,6 +58,9 @@ var tools_panel: PanelContainer
 var disaster_panel: PanelContainer
 var npc_panel: PanelContainer
 var selected_team: int = 0 
+var controlled_npc = null
+var is_selecting_npc_to_control: bool = false
+var npc_control_gui: Control
 var mouse_was_pressed: bool = false
 @export var custom_emoji_font: Font 
 
@@ -916,6 +919,7 @@ func _setup_main_ui_containers():
 	_setup_disaster_ui()
 	_setup_npc_panel_node()
 	_setup_npc_ui()         
+	_setup_npc_control_gui() # Fresh build of the control overlay
 	
 	_setup_materials_within_grid()
 	_update_material_highlights()
@@ -1774,6 +1778,39 @@ func _process(delta):
 		if not mouse_was_pressed:
 			touch_started_on_ui = is_blocking
 			
+			# NPC CONTROL SELECTION
+			if is_selecting_npc_to_control and not touch_started_on_ui:
+				var m_pos = get_local_mouse_position()
+				var gx = int(m_pos.x / grid_scale)
+				var gy = int(m_pos.y / grid_scale)
+				var nearby = _get_nearby_npcs(gx, gy, 12.0)
+				if nearby.size() > 0:
+					controlled_npc = nearby[0]
+					controlled_npc.dir = 0 # Detener movimiento autónomo
+					controlled_npc["is_fleeing"] = false # Quitar miedo si lo tenía
+					is_selecting_npc_to_control = false
+					_play_action_sound("ui_click")
+					
+					# Update UI
+					if is_instance_valid(npc_panel): npc_panel.visible = false
+					var ui_root = get_parent().get_node("UI")
+					var main_controls = ui_root.get_node("Controls")
+					main_controls.visible = false
+					
+					if is_instance_valid(npc_control_gui):
+						npc_control_gui.visible = true
+						# Update action button text/color based on NPC type
+						var action_btn = npc_control_gui.find_child("ActionBtn", true, false)
+						if action_btn:
+							match controlled_npc.type:
+								"warrior": action_btn.text = tr("warrior_action") if tr("warrior_action") != "warrior_action" else "Atacar"
+								"archer": action_btn.text = tr("archer_action") if tr("archer_action") != "archer_action" else "Disparar"
+								"medic": action_btn.text = tr("medic_action") if tr("medic_action") != "medic_action" else "Curar"
+								"miner": action_btn.text = tr("miner_action") if tr("miner_action") != "miner_action" else "TNT"
+					
+					mouse_was_pressed = true
+					return # Stop processing
+			
 			# 2. AUTOCLOSE MENUS ON WORKSPACE TAP (Only if didn't start on UI)
 			if not touch_started_on_ui:
 				if is_instance_valid(tools_panel) and tools_panel.visible: tools_panel.visible = false
@@ -1807,6 +1844,7 @@ func _process(delta):
 
 	# Simulation
 	if not is_paused:
+		_handle_controlled_npc_input(delta) # Handle player control
 		_update_npc_spatial_hash()
 		_step_simulation()
 		
@@ -2740,6 +2778,206 @@ func _setup_npc_panel_node():
 	npc_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	npc_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
+func _setup_npc_control_gui():
+	var s = _get_ui_scale()
+	var ui_root = get_parent().get_node("UI")
+	
+	if is_instance_valid(npc_control_gui):
+		# Avoid duplicate connections or nodes
+		npc_control_gui.get_parent().remove_child(npc_control_gui)
+		npc_control_gui.queue_free()
+		
+	npc_control_gui = Control.new()
+	npc_control_gui.name = "NPCControlGUI"
+	npc_control_gui.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	npc_control_gui.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	npc_control_gui.visible = false
+	ui_root.add_child(npc_control_gui)
+	
+	# Left: Virtual PAD (Area)
+	var pad = Panel.new()
+	npc_control_gui.set_meta("pad_node", pad)
+	pad.custom_minimum_size = Vector2(240 * s, 240 * s)
+	pad.anchor_top = 1.0; pad.anchor_bottom = 1.0
+	pad.offset_left = 60 * s; pad.offset_bottom = -100 * s; pad.offset_top = -340 * s
+	var pad_style = StyleBoxFlat.new()
+	pad_style.bg_color = Color(0.1, 0.1, 0.1, 0.5)
+	pad_style.corner_radius_top_left = 120 * s
+	pad_style.corner_radius_top_right = 120 * s
+	pad_style.corner_radius_bottom_left = 120 * s
+	pad_style.corner_radius_bottom_right = 120 * s
+	pad.add_theme_stylebox_override("panel", pad_style)
+	npc_control_gui.add_child(pad)
+	
+	var pad_label = Label.new()
+	pad_label.text = "PAD"
+	pad_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pad_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pad_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	pad_label.add_theme_font_override("font", _get_safe_font())
+	pad_label.add_theme_font_size_override("font_size", 20 * s)
+	pad.add_child(pad_label)
+
+	# Center: "X" button
+	var exit_btn = Button.new()
+	exit_btn.text = "X"
+	exit_btn.custom_minimum_size = Vector2(80 * s, 80 * s)
+	exit_btn.anchor_left = 0.5; exit_btn.anchor_right = 0.5; exit_btn.anchor_top = 1.0; exit_btn.anchor_bottom = 1.0
+	exit_btn.offset_left = -40 * s; exit_btn.offset_right = 40 * s; exit_btn.offset_bottom = -100 * s; exit_btn.offset_top = -180 * s
+	var exit_style = StyleBoxFlat.new()
+	exit_style.bg_color = Color(0.8, 0.2, 0.2, 0.9)
+	exit_style.corner_radius_top_left = 40 * s
+	exit_style.corner_radius_top_right = 40 * s
+	exit_style.corner_radius_bottom_left = 40 * s
+	exit_style.corner_radius_bottom_right = 40 * s
+	exit_btn.add_theme_stylebox_override("normal", exit_style)
+	exit_btn.add_theme_stylebox_override("hover", exit_style)
+	exit_btn.add_theme_stylebox_override("pressed", exit_style)
+	exit_btn.add_theme_font_override("font", _get_safe_font())
+	exit_btn.add_theme_font_size_override("font_size", 30 * s)
+	exit_btn.pressed.connect(func():
+		_stop_controlling_npc()
+	)
+	npc_control_gui.add_child(exit_btn)
+
+	# Right: Action & Jump
+	var v_box = VBoxContainer.new()
+	v_box.anchor_left = 1.0; v_box.anchor_right = 1.0; v_box.anchor_top = 1.0; v_box.anchor_bottom = 1.0
+	v_box.offset_left = -220 * s; v_box.offset_bottom = -100 * s; v_box.offset_top = -340 * s
+	v_box.add_theme_constant_override("separation", 20 * s)
+	npc_control_gui.add_child(v_box)
+
+	var action_btn = Button.new()
+	action_btn.name = "ActionBtn"
+	npc_control_gui.set_meta("action_btn", action_btn)
+	action_btn.text = tr("action")
+	action_btn.custom_minimum_size = Vector2(160 * s, 100 * s)
+	var action_style = StyleBoxFlat.new()
+	action_style.bg_color = Color(0.2, 0.5, 0.8, 0.9)
+	action_style.corner_radius_top_left = 15 * s
+	action_style.corner_radius_top_right = 15 * s
+	action_style.corner_radius_bottom_left = 15 * s
+	action_style.corner_radius_bottom_right = 15 * s
+	action_btn.add_theme_stylebox_override("normal", action_style)
+	action_btn.add_theme_font_override("font", _get_safe_font())
+	action_btn.add_theme_font_size_override("font_size", 22 * s)
+	v_box.add_child(action_btn)
+
+	var jump_btn = Button.new()
+	jump_btn.text = tr("jump")
+	npc_control_gui.set_meta("jump_btn", jump_btn)
+	jump_btn.custom_minimum_size = Vector2(160 * s, 100 * s)
+	var jump_style = StyleBoxFlat.new()
+	jump_style.bg_color = Color(0.4, 0.4, 0.4, 0.9)
+	jump_style.corner_radius_top_left = 15 * s
+	jump_style.corner_radius_top_right = 15 * s
+	jump_style.corner_radius_bottom_left = 15 * s
+	jump_style.corner_radius_bottom_right = 15 * s
+	jump_btn.add_theme_stylebox_override("normal", jump_style)
+	jump_btn.add_theme_font_override("font", _get_safe_font())
+	jump_btn.add_theme_font_size_override("font_size", 22 * s)
+	v_box.add_child(jump_btn)
+
+func _stop_controlling_npc():
+	_play_action_sound("ui_click")
+	controlled_npc = null
+	if npc_control_gui:
+		npc_control_gui.visible = false
+	var ui_root = get_parent().get_node("UI")
+	var main_controls = ui_root.get_node("Controls")
+	main_controls.visible = true
+	is_mouse_over_ui = false
+
+func _handle_controlled_npc_input(delta):
+	if not controlled_npc or not is_instance_valid(npc_control_gui) or not npc_control_gui.visible: return
+	
+	# Detect if dead
+	if controlled_npc.hp <= 0:
+		_stop_controlling_npc()
+		return
+	
+	var s = _get_ui_scale()
+	var pad = npc_control_gui.get_meta("pad_node")
+	var jump_btn = npc_control_gui.get_meta("jump_btn")
+	var action_btn = npc_control_gui.get_meta("action_btn")
+	
+	# --- HORIZONTAL MOVEMENT (PAD) ---
+	var move_dir = 0
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		var m_pos = get_viewport().get_mouse_position()
+		if is_instance_valid(pad) and pad.get_global_rect().has_point(m_pos):
+			# Calculate direction relative to center
+			var pad_center = pad.get_global_rect().get_center()
+			if m_pos.x < pad_center.x - (15 * s): move_dir = -1
+			elif m_pos.x > pad_center.x + (15 * s): move_dir = 1
+	
+	controlled_npc.dir = move_dir
+	if move_dir != 0:
+		controlled_npc["last_dir"] = move_dir
+	
+	# --- JUMP ---
+	if is_instance_valid(jump_btn) and jump_btn.is_pressed():
+		# Only jump if on ground
+		var np = controlled_npc.pos
+		if not _can_npc_fit(np.x, np.y + 1, controlled_npc):
+			controlled_npc.vy = -12.0
+	
+	# --- ACTION ---
+	if is_instance_valid(action_btn) and action_btn.is_pressed() and controlled_npc.attack_cooldown <= 0:
+		_trigger_controlled_npc_action()
+
+func _trigger_controlled_npc_action():
+	if not controlled_npc: return
+	
+	match controlled_npc.type:
+		"warrior":
+			# Find closest enemy to attack
+			var target = _find_closest_enemy(controlled_npc, 30.0)
+			if target:
+				_attack_npc(controlled_npc, target)
+				controlled_npc.attack_cooldown = 0.6
+			else:
+				# Swing at air
+				_play_action_sound("warrior_attack")
+				controlled_npc.attack_cooldown = 0.4
+		"archer":
+			# Shoot arrow in current face direction
+			var face_dir = controlled_npc.get("last_dir", 1)
+			# Create a dummy target in the direction of focus
+			var dummy_target = {"pos": Vector2i(controlled_npc.pos.x + face_dir * 100, controlled_npc.pos.y)}
+			_shoot_arrow(controlled_npc, dummy_target)
+			controlled_npc.attack_cooldown = 1.0
+		"medic":
+			# Simple AOE heal
+			var nearby = _get_nearby_npcs(controlled_npc.pos.x, controlled_npc.pos.y, 60.0)
+			var healed_somebody = false
+			for other in nearby:
+				if other.team == controlled_npc.team and other != controlled_npc and other.hp > 0:
+					var mhp = other.get("max_hp", 100.0)
+					if other.hp < mhp:
+						other.hp = min(other.hp + controlled_npc.get("heal_power", 25.0), mhp)
+						healed_somebody = true
+						_set_npc_emoji(other, "😊", 1.0)
+						for _f in range(4): _add_spark(float(other.pos.x), float(other.pos.y-2), 0.0, -20.0, Color.GREEN, 0.5)
+			
+			if healed_somebody:
+				_play_action_sound("medic_heal")
+				_set_npc_emoji(controlled_npc, "💚", 1.0)
+				controlled_npc.attack_cooldown = 0.8
+		"miner":
+			# Place TNT in front
+			var face_dir = controlled_npc.get("last_dir", 1)
+			var tx = controlled_npc.pos.x + (face_dir * 3)
+			var ty = controlled_npc.pos.y + 2
+			# Boundary check
+			if tx >= 1 and tx < grid_width - 1 and ty >= 1 and ty < dynamic_grid_height - 1:
+				_set_cell(tx, ty, 5) # 5 = TNT
+				_set_cell(tx+1, ty, 5)
+				_set_cell(tx, ty+1, 5)
+				_set_cell(tx+1, ty+1, 5)
+				_play_action_sound("npc_place")
+				controlled_npc.attack_cooldown = 1.5
+
 func _setup_npc_ui():
 	var s = _get_ui_scale()
 	var npc_btn = Button.new()
@@ -2778,6 +3016,40 @@ func _setup_npc_ui():
 		for child in v_box.get_children(): 
 			if is_instance_valid(child): child.queue_free()
 		
+		# NPC Control Button
+		var control_btn = Button.new()
+		control_btn.text = tr("control_npc")
+		control_btn.custom_minimum_size = Vector2(0, 50 * s)
+		control_btn.add_theme_font_override("font", _get_safe_font())
+		control_btn.add_theme_font_size_override("font_size", 16 * s)
+		
+		var control_style = StyleBoxFlat.new()
+		control_style.bg_color = Color(0.3, 0.2, 0.5) # Purple-ish
+		
+		# Proporción para que se vea bien
+		control_style.corner_radius_top_left = 10 * s
+		control_style.corner_radius_top_right = 10 * s
+		control_style.corner_radius_bottom_left = 10 * s
+		control_style.corner_radius_bottom_right = 10 * s
+		control_btn.add_theme_stylebox_override("normal", control_style)
+		control_btn.add_theme_stylebox_override("hover", control_style)
+		control_btn.add_theme_stylebox_override("pressed", control_style)
+		
+		control_btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			is_selecting_npc_to_control = !is_selecting_npc_to_control
+			if is_selecting_npc_to_control:
+				selected_material = 0 # Deseleccionar herramienta actual
+				_update_material_highlights()
+				control_btn.text = tr("selecting_npc")
+				control_btn.modulate = Color(1.5, 1.5, 1.5)
+			else:
+				control_btn.text = tr("control_npc")
+				control_btn.modulate = Color.WHITE
+		)
+		v_box.add_child(control_btn)
+		ui_elements["control_npc_btn"] = control_btn
+
 		# NPC Selection (NOW RESPONSIVE)
 		var npc_lbl = Label.new()
 		npc_lbl.text = tr("npc") + ": "
@@ -3104,143 +3376,146 @@ func _process_npcs(delta):
 		_check_npc_environment_damage(npc)
 		var np = npc.pos; var target = null
 		if npc.hp > 0:
-			if npc.type == "medic":
-				var heal_cd = npc.get("attack_cooldown", 0.0)
-				if heal_cd > 0: heal_cd -= 0.05
-				npc["attack_cooldown"] = heal_cd
-				var closest_enemy = _find_closest_enemy(npc, 180.0); var closest_ally = null; var ally_dist = 999.0
-				var nearby = _get_nearby_npcs(npc.pos.x, npc.pos.y, 180.0)
-				for other in nearby:
-					if other.team == npc.team and other != npc and other.hp > 0 and other.type != "medic":
-						var mhp = other.get("max_hp", 100.0)
-						if other.hp < mhp: 
-							var d = npc.pos.distance_to(other.pos)
-							if d < ally_dist: ally_dist = d; closest_ally = other
-				var medic_critical = npc.hp < (npc.get("max_hp", 100.0) * 0.5)
-				var enemy_very_close = closest_enemy and npc.pos.distance_to(closest_enemy.pos) < 120.0
-				if (medic_critical and enemy_very_close) or (enemy_very_close and not closest_ally):
-					npc.dir = 1 if closest_enemy.pos.x < np.x else -1; npc["is_fleeing"] = true
-				else:
-					npc["is_fleeing"] = false
-					if closest_ally:
-						if ally_dist < 25.0:
-							npc.dir = 0
-							if heal_cd <= 0:
-								closest_ally.hp = min(closest_ally.hp + npc.get("heal_power", 20.0), closest_ally.get("max_hp", 100.0))
-								npc["attack_cooldown"] = 1.0; _play_action_sound("medic_heal")
-								_set_npc_emoji(npc, "💚", 1.0) # El médico muestra que está curando
-								if closest_ally.hp > closest_ally.get("max_hp", 100.0) * 0.3:
-									closest_ally["morale_broken"] = false; closest_ally["is_fleeing"] = false
-								_set_npc_emoji(closest_ally, "😊", 1.5)
-								for _f in range(6): _add_spark(float(closest_ally.pos.x+randf_range(-3,3)),float(closest_ally.pos.y+randf_range(-5,0)),0.0,randf_range(-35.0,-15.0),Color.GREEN,0.6)
-						else: npc.dir = 1 if closest_ally.pos.x > np.x else -1
+			# Update common timers
+			if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
+			
+			# AUTONOMOUS AI LOGIC (Skip if controlled)
+			if npc != controlled_npc:
+				if npc.type == "medic":
+					var heal_cd = npc.attack_cooldown
+					var closest_enemy = _find_closest_enemy(npc, 180.0); var closest_ally = null; var ally_dist = 999.0
+					var nearby = _get_nearby_npcs(npc.pos.x, npc.pos.y, 180.0)
+					for other in nearby:
+						if other.team == npc.team and other != npc and other.hp > 0 and other.type != "medic":
+							var mhp = other.get("max_hp", 100.0)
+							if other.hp < mhp: 
+								var d = npc.pos.distance_to(other.pos)
+								if d < ally_dist: ally_dist = d; closest_ally = other
+					var medic_critical = npc.hp < (npc.get("max_hp", 100.0) * 0.5)
+					var enemy_very_close = closest_enemy and npc.pos.distance_to(closest_enemy.pos) < 120.0
+					if (medic_critical and enemy_very_close) or (enemy_very_close and not closest_ally):
+						npc.dir = 1 if closest_enemy.pos.x < np.x else -1; npc["is_fleeing"] = true
 					else:
+						npc["is_fleeing"] = false
+						if closest_ally:
+							if ally_dist < 25.0:
+								npc.dir = 0
+								if heal_cd <= 0:
+									closest_ally.hp = min(closest_ally.hp + npc.get("heal_power", 20.0), closest_ally.get("max_hp", 100.0))
+									npc["attack_cooldown"] = 1.0; _play_action_sound("medic_heal")
+									_set_npc_emoji(npc, "💚", 1.0) 
+									if closest_ally.hp > closest_ally.get("max_hp", 100.0) * 0.3:
+										closest_ally["morale_broken"] = false; closest_ally["is_fleeing"] = false
+									_set_npc_emoji(closest_ally, "😊", 1.5)
+									for _f in range(6): _add_spark(float(closest_ally.pos.x+randf_range(-3,3)),float(closest_ally.pos.y+randf_range(-5,0)),0.0,randf_range(-35.0,-15.0),Color.GREEN,0.6)
+							else: npc.dir = 1 if closest_ally.pos.x > np.x else -1
+						else:
+							if randf() < 0.02: npc.dir = 1 if randf() > 0.5 else -1
+							if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+				elif npc.type != "miner":
+					target = _find_closest_enemy(npc, 250.0)
+					if target and !npc.get("morale_broken", false):
+						if !npc.get("has_spotted_enemy", false):
+							_set_npc_emoji(npc, "❗", 1.2)
+							npc["has_spotted_enemy"] = true
+					elif !target:
+						npc["has_spotted_enemy"] = false
+				
+				var critical_hp = npc.get("max_hp", 100.0) * 0.3
+				if npc.hp <= critical_hp and not npc.get("morale_broken", false):
+					npc["morale_broken"] = true
+					if randf() < npc.get("cowardice", 0.30):
+						npc["is_fleeing"] = true
+						_set_npc_emoji(npc, "😭", 3.0) 
+						var start_drop_x = np.x + (1 if npc.dir == -1 else 0)
+						if _get_cell(start_drop_x, np.y) == 0: _set_cell(start_drop_x, np.y, 2)
+				
+				if npc.type != "miner" and npc.type != "medic":
+					if npc.get("is_fleeing", false):
+						if target: npc.dir = 1 if target.pos.x < np.x else -1
+						if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+						if randf() < 0.10:
+							var drop_x = np.x + (1 if npc.dir == -1 else 0)
+							if _get_cell(drop_x, np.y) == 0: _set_cell(drop_x, np.y, 2)
+					elif !target:
 						if randf() < 0.02: npc.dir = 1 if randf() > 0.5 else -1
 						if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-			elif npc.type != "miner":
-				target = _find_closest_enemy(npc, 250.0)
-				if target and !npc.get("morale_broken", false):
-					if !npc.get("has_spotted_enemy", false):
-						_set_npc_emoji(npc, "❗", 1.2)
-						npc["has_spotted_enemy"] = true
-				elif !target:
-					npc["has_spotted_enemy"] = false
-					
-				if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
-			var critical_hp = npc.get("max_hp", 100.0) * 0.3
-			if npc.hp <= critical_hp and not npc.get("morale_broken", false):
-				npc["morale_broken"] = true
-				if randf() < npc.get("cowardice", 0.30):
-					npc["is_fleeing"] = true
-					_set_npc_emoji(npc, "😭", 3.0) 
-					var start_drop_x = np.x + (1 if npc.dir == -1 else 0)
-					if _get_cell(start_drop_x, np.y) == 0: _set_cell(start_drop_x, np.y, 2)
-			if npc.type != "miner" and npc.type != "medic":
-				if npc.get("is_fleeing", false):
-					if target: npc.dir = 1 if target.pos.x < np.x else -1
-					if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-					if randf() < 0.10:
-						var drop_x = np.x + (1 if npc.dir == -1 else 0)
-						if _get_cell(drop_x, np.y) == 0: _set_cell(drop_x, np.y, 2)
-				elif !target:
-					if randf() < 0.02: npc.dir = 1 if randf() > 0.5 else -1
-					if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-				elif target:
-					var dist_x = target.pos.x - np.x; var dx_abs = abs(dist_x); var dy_abs = abs(target.pos.y - np.y)
-					if npc.type == "warrior":
-						var target_below = target.pos.y > np.y + 8
-						if target_below:
-							if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-						else: npc.dir = 1 if dist_x > 0 else -1
-						if dx_abs < 6 and dy_abs < 6:
-							if npc.attack_cooldown <= 0: _attack_npc(npc, target); npc.attack_cooldown = 0.6
-						if dx_abs < 4 and !target_below: npc.dir = 0 
-					elif npc.type == "archer":
-						var target_below = target.pos.y > np.y + 12
-						if npc.miss_counter < 0:
-							npc.miss_counter += 1
-							if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-						else:
-							if dx_abs > 120: npc.dir = 1 if dist_x > 0 else -1
-							elif dx_abs < 50: npc.dir = -1 if dist_x > 0 else 1
+					elif target:
+						var dist_x = target.pos.x - np.x; var dx_abs = abs(dist_x); var dy_abs = abs(target.pos.y - np.y)
+						if npc.type == "warrior":
+							var target_below = target.pos.y > np.y + 8
+							if target_below:
+								if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+							else: npc.dir = 1 if dist_x > 0 else -1
+							if dx_abs < 6 and dy_abs < 6:
+								if npc.attack_cooldown <= 0: _attack_npc(npc, target); npc.attack_cooldown = 0.6
+							if dx_abs < 4 and !target_below: npc.dir = 0 
+						elif npc.type == "archer":
+							var target_below = target.pos.y > np.y + 12
+							if npc.miss_counter < 0:
+								npc.miss_counter += 1
+								if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
 							else:
-								if target_below:
-									if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
-								else: npc.dir = 0
-						if npc.attack_cooldown <= 0:
-							_shoot_arrow(npc, target); npc.miss_counter += 1
-							if npc.miss_counter >= 3: npc.miss_counter = -40
-							npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
-			if npc.type == "miner":
-				var dig_speed = 0.15 if npc.hp < 100.0 else 0.05 
-				if npc.hit_flash == 5: npc.dir = -npc.dir
-				npc.dig_timer += dig_speed
-				if npc.dig_timer >= 0.15:
-					npc.dig_timer = 0.0
-					if !_can_npc_fit(np.x, np.y + 1, npc):
-						if not (npc.has("mine_state") and npc.mine_state == "saboteur"): npc.state_steps -= 1
-						if !(_get_cell(np.x, np.y - 4) != 0) and npc.mine_state == "gallery":
-							npc.mine_state = "ramp"; npc.state_steps = 25
-						if npc.state_steps <= 0:
-							if npc.mine_state == "saboteur":
-								_set_cell(np.x, np.y + 5, 3); npc.hp = 0; npc.hit_flash = 10
-							elif npc.mine_state == "ramp": npc.mine_state = "gallery"; npc.state_steps = randi_range(60, 100)
-							else: npc.mine_state = "ramp"; npc.state_steps = randi_range(15, 25)
-						
-						if npc.hp > 0:
-							var dig_down = (npc.mine_state == "ramp")
-							_miner_dig(npc, dig_down)
-							var next_x = np.x + npc.dir; var next_y = np.y + (1 if dig_down else 0); var hit_wall = false
-							if next_y >= dynamic_grid_height - 15:
-								if npc.mine_state != "saboteur":
-									npc.mine_state = "saboteur"; npc["saboteur_start_x"] = np.x; npc["saboteur_bounces"] = 0; npc.dir = 1 if randf() > 0.5 else -1
-								next_y = np.y; next_x = np.x + npc.dir
+								if dx_abs > 120: npc.dir = 1 if dist_x > 0 else -1
+								elif dx_abs < 50: npc.dir = -1 if dist_x > 0 else 1
+								else:
+									if target_below:
+										if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
+									else: npc.dir = 0
+							if npc.attack_cooldown <= 0:
+								_shoot_arrow(npc, target); npc.miss_counter += 1
+								if npc.miss_counter >= 3: npc.miss_counter = -40
+								npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
+				
+				if npc.type == "miner":
+					var dig_speed = 0.15 if npc.hp < 100.0 else 0.05 
+					if npc.hit_flash == 5: npc.dir = -npc.dir
+					npc.dig_timer += dig_speed
+					if npc.dig_timer >= 0.15:
+						npc.dig_timer = 0.0
+						if !_can_npc_fit(np.x, np.y + 1, npc):
+							if not (npc.has("mine_state") and npc.mine_state == "saboteur"): npc.state_steps -= 1
+							if !(_get_cell(np.x, np.y - 4) != 0) and npc.mine_state == "gallery":
+								npc.mine_state = "ramp"; npc.state_steps = 25
+							if npc.state_steps <= 0:
+								if npc.mine_state == "saboteur":
+									_set_cell(np.x, np.y + 5, 3); npc.hp = 0; npc.hit_flash = 10
+								elif npc.mine_state == "ramp": npc.mine_state = "gallery"; npc.state_steps = randi_range(60, 100)
+								else: npc.mine_state = "ramp"; npc.state_steps = randi_range(15, 25)
 							
-							# PRIORITY SABOTAGE MISSION: If bounces >= 3, always explode regardless of height
-							if npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 3:
-								for fx in range(-2, 3):
-									var f_idx = np.x + fx
-									if f_idx >= 0 and f_idx < grid_width: 
-										_set_cell(f_idx, np.y + 5, 3) 
-										_set_cell(f_idx, np.y - 1, 3)
-								npc.hp = 0; npc.hit_flash = 10
-							else:
-								var old_dir = npc.dir
-								if next_x < 5 or next_x > grid_width - 5: hit_wall = true; npc.dir = -npc.dir
-								elif _can_npc_fit(next_x, next_y, npc): np.x = next_x ; np.y = next_y
-								elif !dig_down and _can_npc_fit(next_x, np.y - 1, npc): np.x = next_x ; np.y -= 1
-								else: hit_wall = true; npc.dir = -npc.dir
-								if hit_wall:
-									if not (npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2) and (next_x <= 5 or next_x >= grid_width - 5):
-										var wall_x1 = np.x + 2 if old_dir == 1 else np.x - 1
-										var wall_x2 = np.x + 3 if old_dir == 1 else np.x - 2
-										for wy in range(np.y - 1, np.y + 6):
-											if wy >= 0 and wy < dynamic_grid_height:
-												if wall_x1 >= 0 and wall_x1 < grid_width: _set_cell(wall_x1, wy, 16)
-												if wall_x2 >= 0 and wall_x2 < grid_width: _set_cell(wall_x2, wy, 16)
-									if npc.has("mine_state") and npc.mine_state == "saboteur":
-										if not npc.has("saboteur_bounces"): npc["saboteur_bounces"] = 0
-										if npc.saboteur_bounces < 4: npc.saboteur_bounces += 1
+							if npc.hp > 0:
+								var dig_down = (npc.mine_state == "ramp")
+								_miner_dig(npc, dig_down)
+								var next_x = np.x + npc.dir; var next_y = np.y + (1 if dig_down else 0); var hit_wall = false
+								if next_y >= dynamic_grid_height - 15:
+									if npc.mine_state != "saboteur":
+										npc.mine_state = "saboteur"; npc["saboteur_start_x"] = np.x; npc["saboteur_bounces"] = 0; npc.dir = 1 if randf() > 0.5 else -1
+									next_y = np.y; next_x = np.x + npc.dir
+								
+								if npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 3:
+									for fx in range(-2, 3):
+										var f_idx = np.x + fx
+										if f_idx >= 0 and f_idx < grid_width: 
+											_set_cell(f_idx, np.y + 5, 3) 
+											_set_cell(f_idx, np.y - 1, 3)
+									npc.hp = 0; npc.hit_flash = 10
+								else:
+									var old_dir = npc.dir
+									if next_x < 5 or next_x > grid_width - 5: hit_wall = true; npc.dir = -npc.dir
+									elif _can_npc_fit(next_x, next_y, npc): np.x = next_x ; np.y = next_y
+									elif !dig_down and _can_npc_fit(next_x, np.y - 1, npc): np.x = next_x ; np.y -= 1
+									else: hit_wall = true; npc.dir = -npc.dir
+									if hit_wall:
+										if not (npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2) and (next_x <= 5 or next_x >= grid_width - 5):
+											var wall_x1 = np.x + 2 if old_dir == 1 else np.x - 1
+											var wall_x2 = np.x + 3 if old_dir == 1 else np.x - 2
+											for wy in range(np.y - 1, np.y + 6):
+												if wy >= 0 and wy < dynamic_grid_height:
+													if wall_x1 >= 0 and wall_x1 < grid_width: _set_cell(wall_x1, wy, 16)
+													if wall_x2 >= 0 and wall_x2 < grid_width: _set_cell(wall_x2, wy, 16)
+										if npc.has("mine_state") and npc.mine_state == "saboteur":
+											if not npc.has("saboteur_bounces"): npc["saboteur_bounces"] = 0
+											if npc.saboteur_bounces < 4: npc.saboteur_bounces += 1
 
 		if not npc.has("vx"): npc["vx"] = 0.0
 		if not npc.has("vy"): npc["vy"] = 0.0
