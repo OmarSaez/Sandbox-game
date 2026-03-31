@@ -1037,6 +1037,7 @@ func _setup_tools_ui():
 				var level = i
 				btn.pressed.connect(func(): 
 					_play_action_sound("ui_click")
+					if is_selecting_npc_to_control or is_instance_valid(controlled_npc): _stop_controlling_npc()
 					callback.call(level)
 				)
 			flow.add_child(btn)
@@ -1290,6 +1291,7 @@ func _setup_disaster_ui():
 				var level = i
 				btn.pressed.connect(func(): 
 					_play_action_sound("ui_click")
+					if is_selecting_npc_to_control or is_instance_valid(controlled_npc): _stop_controlling_npc()
 					callback.call(level)
 				)
 			flow.add_child(btn)
@@ -1522,8 +1524,10 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 			if not is_instance_valid(event) or not is_instance_valid(slot_pnl): return
 			if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 				_play_action_sound("ui_click")
+				if is_selecting_npc_to_control or is_instance_valid(controlled_npc): _stop_controlling_npc()
 				selected_material = mat_id
 				_update_material_highlights()
+				_update_menu_highlights()
 		)
 	slot_pnl.set_meta("mat_id", mat_id)
 	
@@ -1621,21 +1625,21 @@ func _update_menu_highlights():
 					var idx = int(key.split("_")[-1])
 					if idx == ui_scale_level: is_active = true
 				elif key.begins_with("weather_btn_"):
-					if int(key.split("_")[-1]) == current_weather: is_active = true
+					if int(key.split("_")[-1]) == current_weather and not is_selecting_npc_to_control: is_active = true
 				elif key.begins_with("quake_btn_"):
-					if int(key.split("_")[-1]) == earthquake_intensity: is_active = true
+					if int(key.split("_")[-1]) == earthquake_intensity and not is_selecting_npc_to_control: is_active = true
 				elif key.begins_with("tornado_btn_"):
-					if int(key.split("_")[-1]) == tornado_intensity: is_active = true
+					if int(key.split("_")[-1]) == tornado_intensity and not is_selecting_npc_to_control: is_active = true
 				elif key.begins_with("tsunami_btn_"):
-					if int(key.split("_")[-1]) == tsunami_intensity: is_active = true
+					if int(key.split("_")[-1]) == tsunami_intensity and not is_selecting_npc_to_control: is_active = true
 				elif key == "warrior_btn":
-					if selected_material == 1000: is_active = true
+					if selected_material == 1000 and not is_selecting_npc_to_control: is_active = true
 				elif key == "archer_btn":
-					if selected_material == 1010: is_active = true
+					if selected_material == 1010 and not is_selecting_npc_to_control: is_active = true
 				elif key == "miner_btn":
-					if selected_material == 1020: is_active = true
+					if selected_material == 1020 and not is_selecting_npc_to_control: is_active = true
 				elif key == "medic_btn":
-					if selected_material == 1040: is_active = true
+					if selected_material == 1040 and not is_selecting_npc_to_control: is_active = true
 				elif key.begins_with("team_btn_"):
 					var idx = int(key.split("_")[-1])
 					if idx == selected_team: is_active = true
@@ -1799,16 +1803,12 @@ func _process(delta):
 					
 					if is_instance_valid(npc_control_gui):
 						npc_control_gui.visible = true
-						# Update action button text/color based on NPC type
 						var action_btn = npc_control_gui.find_child("ActionBtn", true, false)
 						if action_btn:
-							match controlled_npc.type:
-								"warrior": action_btn.text = tr("warrior_action") if tr("warrior_action") != "warrior_action" else "Atacar"
-								"archer": action_btn.text = tr("archer_action") if tr("archer_action") != "archer_action" else "Disparar"
-								"medic": action_btn.text = tr("medic_action") if tr("medic_action") != "medic_action" else "Curar"
-								"miner": action_btn.text = tr("miner_action") if tr("miner_action") != "miner_action" else "TNT"
+							action_btn.text = tr("action") # Siempre "ACCIÓN" (Genérico)
 					
 					mouse_was_pressed = true
+					touch_started_on_ui = true # BLOCK drawing for the rest of this touch session
 					return # Stop processing
 			
 			# 2. AUTOCLOSE MENUS ON WORKSPACE TAP (Only if didn't start on UI)
@@ -1817,8 +1817,8 @@ func _process(delta):
 				if is_instance_valid(disaster_panel) and disaster_panel.visible: disaster_panel.visible = false
 				if is_instance_valid(npc_panel) and npc_panel.visible: npc_panel.visible = false
 
-		# DRAW LOGIC (Only if touch session started on Sandbox AND current position is Sandbox)
-		if not touch_started_on_ui and not is_blocking:
+		# DRAW LOGIC (Only if touch session started on Sandbox, current position is Sandbox, and NOT in selection mode)
+		if not touch_started_on_ui and not is_blocking and not is_selecting_npc_to_control:
 			var m_pos = get_local_mouse_position()
 			var gx = int(m_pos.x / grid_scale)
 			var gy = int(m_pos.y / grid_scale)
@@ -2789,101 +2789,121 @@ func _setup_npc_control_gui():
 		
 	npc_control_gui = Control.new()
 	npc_control_gui.name = "NPCControlGUI"
-	npc_control_gui.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	npc_control_gui.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Limit height to match main menu (340px)
+	npc_control_gui.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	npc_control_gui.offset_top = -340
+	npc_control_gui.mouse_filter = Control.MOUSE_FILTER_PASS 
 	npc_control_gui.visible = false
 	ui_root.add_child(npc_control_gui)
 	
-	# Left: Virtual PAD (Area)
+	# Block interaction with game world below UI
+	npc_control_gui.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	npc_control_gui.mouse_exited.connect(func(): is_mouse_over_ui = false)
+	
+	# Translucent background for the bar
+	var bg = Panel.new()
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var bg_style = StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.08, 0.08, 0.08, 0.6)
+	bg.add_theme_stylebox_override("panel", bg_style)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP # IMPORTANT: Block clicks
+	npc_control_gui.add_child(bg)
+	
+	# Left: Virtual PAD (Arcade Style - Circular)
 	var pad = Panel.new()
 	npc_control_gui.set_meta("pad_node", pad)
 	pad.custom_minimum_size = Vector2(240 * s, 240 * s)
-	pad.anchor_top = 1.0; pad.anchor_bottom = 1.0
-	pad.offset_left = 60 * s; pad.offset_bottom = -100 * s; pad.offset_top = -340 * s
+	pad.anchor_top = 0.5; pad.anchor_bottom = 0.5
+	pad.offset_left = 60 * s; pad.offset_right = 300 * s
+	pad.offset_top = -120 * s; pad.offset_bottom = 120 * s
 	var pad_style = StyleBoxFlat.new()
-	pad_style.bg_color = Color(0.1, 0.1, 0.1, 0.5)
-	pad_style.corner_radius_top_left = 120 * s
-	pad_style.corner_radius_top_right = 120 * s
-	pad_style.corner_radius_bottom_left = 120 * s
-	pad_style.corner_radius_bottom_right = 120 * s
+	pad_style.bg_color = Color("#141313")
+	pad_style.set_corner_radius_all(120 * s)
+	pad_style.border_width_left = 4 * s; pad_style.border_width_right = 4 * s
+	pad_style.border_width_top = 4 * s; pad_style.border_width_bottom = 4 * s
+	pad_style.border_color = Color("#222222")
 	pad.add_theme_stylebox_override("panel", pad_style)
 	npc_control_gui.add_child(pad)
 	
-	var pad_label = Label.new()
-	pad_label.text = "PAD"
-	pad_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	pad_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	pad_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	pad_label.add_theme_font_override("font", _get_safe_font())
-	pad_label.add_theme_font_size_override("font_size", 20 * s)
-	pad.add_child(pad_label)
+	# Visual Cross inside PAD (Thicker)
+	var cross_color = Color("#706A6A")
+	var v_bar = ColorRect.new()
+	v_bar.color = cross_color
+	v_bar.custom_minimum_size = Vector2(60 * s, 160 * s)
+	v_bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	v_bar.offset_left = -30 * s; v_bar.offset_right = 30 * s
+	v_bar.offset_top = -80 * s; v_bar.offset_bottom = 80 * s
+	pad.add_child(v_bar)
+	
+	var h_bar = ColorRect.new()
+	h_bar.color = cross_color
+	h_bar.custom_minimum_size = Vector2(160 * s, 60 * s)
+	h_bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	h_bar.offset_left = -80 * s; h_bar.offset_right = 80 * s
+	h_bar.offset_top = -30 * s; h_bar.offset_bottom = 30 * s
+	pad.add_child(h_bar)
 
 	# Center: "X" button
 	var exit_btn = Button.new()
 	exit_btn.text = "X"
-	exit_btn.custom_minimum_size = Vector2(80 * s, 80 * s)
-	exit_btn.anchor_left = 0.5; exit_btn.anchor_right = 0.5; exit_btn.anchor_top = 1.0; exit_btn.anchor_bottom = 1.0
-	exit_btn.offset_left = -40 * s; exit_btn.offset_right = 40 * s; exit_btn.offset_bottom = -100 * s; exit_btn.offset_top = -180 * s
+	exit_btn.custom_minimum_size = Vector2(100 * s, 100 * s)
+	exit_btn.anchor_left = 0.5; exit_btn.anchor_right = 0.5; exit_btn.anchor_top = 0.5; exit_btn.anchor_bottom = 0.5
+	exit_btn.offset_left = -50 * s; exit_btn.offset_right = 50 * s
+	exit_btn.offset_top = -50 * s; exit_btn.offset_bottom = 50 * s
 	var exit_style = StyleBoxFlat.new()
-	exit_style.bg_color = Color(0.8, 0.2, 0.2, 0.9)
-	exit_style.corner_radius_top_left = 40 * s
-	exit_style.corner_radius_top_right = 40 * s
-	exit_style.corner_radius_bottom_left = 40 * s
-	exit_style.corner_radius_bottom_right = 40 * s
+	exit_style.bg_color = Color(0.8, 0.15, 0.15, 1.0)
+	exit_style.set_corner_radius_all(50 * s)
+	exit_style.border_width_left = 15 * s; exit_style.border_width_right = 15 * s
+	exit_style.border_width_top = 15 * s; exit_style.border_width_bottom = 15 * s
+	exit_style.border_color = Color(0.4, 0.05, 0.05) # Much darker red border
 	exit_btn.add_theme_stylebox_override("normal", exit_style)
 	exit_btn.add_theme_stylebox_override("hover", exit_style)
 	exit_btn.add_theme_stylebox_override("pressed", exit_style)
 	exit_btn.add_theme_font_override("font", _get_safe_font())
-	exit_btn.add_theme_font_size_override("font_size", 30 * s)
+	exit_btn.add_theme_font_size_override("font_size", 34 * s)
+	exit_btn.add_theme_constant_override("outline_size", 6 * s)
 	exit_btn.pressed.connect(func():
+		is_mouse_over_ui = false 
 		_stop_controlling_npc()
 	)
 	npc_control_gui.add_child(exit_btn)
 
-	# Right: Action & Jump
-	var v_box = VBoxContainer.new()
-	v_box.anchor_left = 1.0; v_box.anchor_right = 1.0; v_box.anchor_top = 1.0; v_box.anchor_bottom = 1.0
-	v_box.offset_left = -220 * s; v_box.offset_bottom = -100 * s; v_box.offset_top = -340 * s
-	v_box.add_theme_constant_override("separation", 20 * s)
-	npc_control_gui.add_child(v_box)
-
+	# Right: Action Button
 	var action_btn = Button.new()
 	action_btn.name = "ActionBtn"
-	npc_control_gui.set_meta("action_btn", action_btn)
 	action_btn.text = tr("action")
-	action_btn.custom_minimum_size = Vector2(160 * s, 100 * s)
+	action_btn.custom_minimum_size = Vector2(200 * s, 200 * s)
+	action_btn.anchor_left = 1.0; action_btn.anchor_right = 1.0
+	action_btn.anchor_top = 0.5; action_btn.anchor_bottom = 0.5
+	action_btn.offset_left = -280 * s; action_btn.offset_right = -80 * s
+	action_btn.offset_top = -100 * s; action_btn.offset_bottom = 100 * s
+	npc_control_gui.set_meta("action_btn", action_btn)
 	var action_style = StyleBoxFlat.new()
-	action_style.bg_color = Color(0.2, 0.5, 0.8, 0.9)
-	action_style.corner_radius_top_left = 15 * s
-	action_style.corner_radius_top_right = 15 * s
-	action_style.corner_radius_bottom_left = 15 * s
-	action_style.corner_radius_bottom_right = 15 * s
+	action_style.bg_color = Color(0.1, 0.4, 0.8, 1.0)
+	action_style.set_corner_radius_all(100 * s)
+	action_style.border_width_left = 18 * s; action_style.border_width_right = 18 * s
+	action_style.border_width_top = 18 * s; action_style.border_width_bottom = 18 * s
+	action_style.border_color = Color(0.04, 0.15, 0.4) # Much darker blue border
 	action_btn.add_theme_stylebox_override("normal", action_style)
 	action_btn.add_theme_font_override("font", _get_safe_font())
-	action_btn.add_theme_font_size_override("font_size", 22 * s)
-	v_box.add_child(action_btn)
-
-	var jump_btn = Button.new()
-	jump_btn.text = tr("jump")
-	npc_control_gui.set_meta("jump_btn", jump_btn)
-	jump_btn.custom_minimum_size = Vector2(160 * s, 100 * s)
-	var jump_style = StyleBoxFlat.new()
-	jump_style.bg_color = Color(0.4, 0.4, 0.4, 0.9)
-	jump_style.corner_radius_top_left = 15 * s
-	jump_style.corner_radius_top_right = 15 * s
-	jump_style.corner_radius_bottom_left = 15 * s
-	jump_style.corner_radius_bottom_right = 15 * s
-	jump_btn.add_theme_stylebox_override("normal", jump_style)
-	jump_btn.add_theme_font_override("font", _get_safe_font())
-	jump_btn.add_theme_font_size_override("font_size", 22 * s)
-	v_box.add_child(jump_btn)
+	action_btn.add_theme_font_size_override("font_size", 32 * s)
+	action_btn.add_theme_constant_override("outline_size", 7 * s)
+	npc_control_gui.add_child(action_btn)
 
 func _stop_controlling_npc():
 	_play_action_sound("ui_click")
 	controlled_npc = null
+	is_selecting_npc_to_control = false
+	var ui_root = get_parent().get_node("UI")
+	if ui_root.has_meta("npc_control_btn_ref"):
+		var source_btn = ui_root.get_meta("npc_control_btn_ref")
+		if is_instance_valid(source_btn):
+			source_btn.text = tr("control_npc")
+			source_btn.modulate = Color.WHITE
+	
 	if npc_control_gui:
 		npc_control_gui.visible = false
-	var ui_root = get_parent().get_node("UI")
+	
 	var main_controls = ui_root.get_node("Controls")
 	main_controls.visible = true
 	is_mouse_over_ui = false
@@ -2898,29 +2918,63 @@ func _handle_controlled_npc_input(delta):
 	
 	var s = _get_ui_scale()
 	var pad = npc_control_gui.get_meta("pad_node")
-	var jump_btn = npc_control_gui.get_meta("jump_btn")
 	var action_btn = npc_control_gui.get_meta("action_btn")
 	
-	# --- HORIZONTAL MOVEMENT (PAD) ---
+	# Detect ground state
+	var is_on_ground = !_can_npc_fit(controlled_npc.pos.x, controlled_npc.pos.y + 1, controlled_npc)
+	
+	# --- MOVEMENT (PAD) ---
 	var move_dir = 0
+	var want_jump = false
+	var want_down = false
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		var m_pos = get_viewport().get_mouse_position()
 		if is_instance_valid(pad) and pad.get_global_rect().has_point(m_pos):
-			# Calculate direction relative to center
 			var pad_center = pad.get_global_rect().get_center()
-			if m_pos.x < pad_center.x - (15 * s): move_dir = -1
-			elif m_pos.x > pad_center.x + (15 * s): move_dir = 1
+			# Horizontal
+			if m_pos.x < pad_center.x - (25 * s): move_dir = -1
+			elif m_pos.x > pad_center.x + (25 * s): move_dir = 1
+			# Vertical
+			if m_pos.y < pad_center.y - (40 * s): want_jump = true
+			elif m_pos.y > pad_center.y + (40 * s): want_down = true
 	
-	controlled_npc.dir = move_dir
+	# Apply physics movement (Inertia)
+	var target_vel = float(move_dir) * 2.1 # Reduced speed to half
+	var accel = 0.5 if is_on_ground else 0.15 # Air control is lower
+	controlled_npc.vx = lerp(controlled_npc.vx, target_vel, accel)
+	
 	if move_dir != 0:
+		controlled_npc.dir = move_dir
 		controlled_npc["last_dir"] = move_dir
+		
+		# --- MINER SPECIAL TUNNELING ---
+		if controlled_npc.type == "miner":
+			var tx = controlled_npc.pos.x + move_dir
+			var blocked = !_can_npc_fit(tx, controlled_npc.pos.y, controlled_npc)
+			
+			if want_down or blocked:
+				# Use a timer to limit dig speed
+				var dig_timer = controlled_npc.get("manual_dig_timer", 0.0)
+				dig_timer += delta
+				if dig_timer >= 0.14:
+					dig_timer = 0.0
+					_miner_dig(controlled_npc, want_down)
+					
+					# Smoothly advance into the tunnel
+					var next_x = controlled_npc.pos.x + move_dir
+					var next_y = controlled_npc.pos.y + (1 if want_down else 0)
+					if _can_npc_fit(next_x, next_y, controlled_npc):
+						controlled_npc.pos = Vector2i(next_x, next_y)
+						controlled_npc.vx = 0.0 
+						controlled_npc.vy = 0.0
+				controlled_npc["manual_dig_timer"] = dig_timer
+	else:
+		controlled_npc.dir = 0 # No autonomous movement
 	
 	# --- JUMP ---
-	if is_instance_valid(jump_btn) and jump_btn.is_pressed():
-		# Only jump if on ground
-		var np = controlled_npc.pos
-		if not _can_npc_fit(np.x, np.y + 1, controlled_npc):
-			controlled_npc.vy = -12.0
+	if want_jump and is_on_ground:
+		controlled_npc.vy = -5.5 # Reduced jump height (approx half of previous)
+		_play_action_sound("ui_click") # Subtle feedback
 	
 	# --- ACTION ---
 	if is_instance_valid(action_btn) and action_btn.is_pressed() and controlled_npc.attack_cooldown <= 0:
@@ -3018,6 +3072,8 @@ func _setup_npc_ui():
 		
 		# NPC Control Button
 		var control_btn = Button.new()
+		var ui_root = get_parent().get_node("UI")
+		ui_root.set_meta("npc_control_btn_ref", control_btn)
 		control_btn.text = tr("control_npc")
 		control_btn.custom_minimum_size = Vector2(0, 50 * s)
 		control_btn.add_theme_font_override("font", _get_safe_font())
@@ -3039,11 +3095,13 @@ func _setup_npc_ui():
 			_play_action_sound("ui_click")
 			is_selecting_npc_to_control = !is_selecting_npc_to_control
 			if is_selecting_npc_to_control:
-				selected_material = 0 # Deseleccionar herramienta actual
+				selected_material = 0 # Deseleccionar herramienta/NPC actual
 				_update_material_highlights()
+				_update_menu_highlights() # Remove visual highlights from NPC panel
 				control_btn.text = tr("selecting_npc")
 				control_btn.modulate = Color(1.5, 1.5, 1.5)
 			else:
+				_update_menu_highlights() # Restore highlights
 				control_btn.text = tr("control_npc")
 				control_btn.modulate = Color.WHITE
 		)
@@ -3068,6 +3126,7 @@ func _setup_npc_ui():
 			btn.mouse_filter = Control.MOUSE_FILTER_PASS
 			btn.pressed.connect(func():
 				_play_action_sound("ui_click")
+				if is_selecting_npc_to_control: _stop_controlling_npc()
 				selected_material = id # Master Warrior Material
 				_update_material_highlights()
 				_update_menu_highlights()
@@ -3102,6 +3161,7 @@ func _setup_npc_ui():
 			var tidx = i
 			t_btn.pressed.connect(func():
 				_play_action_sound("ui_click")
+				if is_selecting_npc_to_control: _stop_controlling_npc()
 				selected_team = tidx
 				_update_menu_highlights()
 			)
@@ -3519,6 +3579,11 @@ func _process_npcs(delta):
 
 		if not npc.has("vx"): npc["vx"] = 0.0
 		if not npc.has("vy"): npc["vy"] = 0.0
+		
+		# Forzar físicas para el NPC controlado si está en el aire (Gravedad)
+		if npc == controlled_npc and _can_npc_fit(np.x, np.y + 1, npc):
+			if abs(npc.vy) < 0.1: npc.vy = 0.1
+			
 		var moved_by_physics = false
 		if abs(npc.vx) > 0.1 or abs(npc.vy) > 0.1:
 			var steps_x = int(ceil(abs(npc.vx))); var dir_x = sign(npc.vx)
@@ -3567,8 +3632,8 @@ func _process_npcs(delta):
 			if npc.vy > 8.0: npc.vy = 8.0
 			moved_by_physics = true
 		
-		# --- 3. MOVIMIENTO IA (SI NO HAY FISICA ACTIVA) ---
-		if not moved_by_physics:
+		# --- 3. MOVIMIENTO IA (SI NO HAY FISICA ACTIVA Y NO ESTÁ POSEÍDO) ---
+		if not moved_by_physics and npc != controlled_npc:
 			# 1. GRAVEDAD SOBERANA: Chequeo solo bajo los pies para evitar "colgarse" lateralmente
 			var feet_y = np.y + 5
 			var can_fall = true
