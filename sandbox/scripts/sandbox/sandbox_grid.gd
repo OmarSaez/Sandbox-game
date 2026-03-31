@@ -230,6 +230,20 @@ var vs_color := PackedColorArray()
 var vs_life := PackedFloat32Array()
 var vs_ptr := 0
 
+# Optimization #5: Random & Trig Look-Up Table (LUT)
+const LUT_SIZE = 4096 # Larger for better variety
+var random_lut := PackedFloat32Array()
+var cos_lut := PackedFloat32Array()
+var sin_lut := PackedFloat32Array()
+var lut_ptr := 0
+
+func _get_lut_rand() -> float:
+	lut_ptr = (lut_ptr + 1) % LUT_SIZE
+	return random_lut[lut_ptr]
+
+func _get_lut_rand_range(from: float, to: float) -> float:
+	return from + (to - from) * _get_lut_rand()
+
 # Optimization #4: Sparse Electricity/Charge System
 var active_charge_indices := PackedInt32Array()
 var next_charge_indices := PackedInt32Array()
@@ -265,6 +279,16 @@ func _ready():
 	vs_vx.resize(MAX_VISUAL_SPARKS); vs_vy.resize(MAX_VISUAL_SPARKS)
 	vs_color.resize(MAX_VISUAL_SPARKS); vs_life.resize(MAX_VISUAL_SPARKS)
 	vs_life.fill(0.0)
+	
+	# Optimization: Pre-generate Random & Trig LUT
+	random_lut.resize(LUT_SIZE)
+	cos_lut.resize(LUT_SIZE)
+	sin_lut.resize(LUT_SIZE)
+	for i in range(LUT_SIZE):
+		var r = randf()
+		random_lut[i] = r
+		cos_lut[i] = cos(r * TAU)
+		sin_lut[i] = sin(r * TAU)
 	
 	get_parent().move_child.call_deferred(global_bg, 0) # Background Layer
 	
@@ -3817,9 +3841,18 @@ func _update_active_fireworks(delta):
 		fw.y -= 125.0 * delta # Half speed (125 instead of 250)
 		
 		# Sutil trail (Visual Sparks instead of physical Smoke)
-		if randf() < 0.6:
+		if _get_lut_rand() < 0.6:
+			var ptr = lut_ptr
 			var trail_colors = [Color.GRAY, Color.YELLOW, Color.WHITE, Color.GOLD]
-			_add_spark(float(fw.x) + randf_range(-1.2, 1.2), float(fw.y + 1), randf_range(-10, 10), randf_range(20, 50), trail_colors[randi() % trail_colors.size()], randf_range(0.2, 0.6))
+			_add_spark(
+				float(fw.x) + _get_lut_rand_range(-1.2, 1.2), 
+				float(fw.y + 1), 
+				(random_lut[(ptr+1)%LUT_SIZE] - 0.5) * 20.0, # -10 to 10
+				20.0 + random_lut[(ptr+2)%LUT_SIZE] * 30.0,  # 20 to 50
+				trail_colors[randi() % trail_colors.size()], 
+				0.2 + random_lut[(ptr+3)%LUT_SIZE] * 0.4    # 0.2 to 0.6
+			)
+			lut_ptr = (lut_ptr + 4) % LUT_SIZE
 			
 		# Check if reached altitude or safe boundary
 		if fw.y <= fw.target_y or fw.y < 15:
@@ -3851,9 +3884,18 @@ func _explode_firework(ex, ey, p_color):
 	
 	# Create GHOST particles (Visual only) 
 	for i in range(spark_count):
-		var ang = randf() * TAU
-		var force = randf_range(20, 60) * size_mult # Slower, compact expansion
-		_add_spark(float(ex), float(ey), cos(ang) * force, sin(ang) * force, p_color, randf_range(1.0, 1.8))
+		# Decouple indices to avoid spiral shapes (Cardioids)
+		var angle_idx = (lut_ptr + i) % LUT_SIZE
+		var force_idx = (lut_ptr + i + 500) % LUT_SIZE
+		var life_idx = (lut_ptr + i + 1000) % LUT_SIZE
+		
+		var f_cos = cos_lut[angle_idx]
+		var f_sin = sin_lut[angle_idx]
+		var force = (20.0 + random_lut[force_idx] * 40.0) * size_mult 
+		var spark_life = 1.0 + random_lut[life_idx] * 0.8
+		_add_spark(float(ex), float(ey), f_cos * force, f_sin * force, p_color, spark_life)
+		
+	lut_ptr = (lut_ptr + spark_count) % LUT_SIZE
 
 func _clear_all():
 	cells.fill(0)
