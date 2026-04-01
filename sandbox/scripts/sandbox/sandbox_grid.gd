@@ -58,10 +58,12 @@ var tools_panel: PanelContainer
 var disaster_panel: PanelContainer
 var npc_panel: PanelContainer
 var selected_team: int = 0 
+var mat_id_to_key = {} # ID -> Translation Key
 var controlled_npc = null
 var is_selecting_npc_to_control: bool = false
 var npc_control_gui: Control
 var main_controls: Control
+var ui_root: CanvasLayer
 var mouse_was_pressed: bool = false
 @export var custom_emoji_font: Font 
 
@@ -742,7 +744,7 @@ var material_scroll: ScrollContainer
 
 func _setup_main_ui_containers():
 	var s = _get_ui_scale()
-	var ui_root = get_parent().get_node("UI")
+	ui_root = get_parent().get_node("UI")
 	main_controls = ui_root.get_node("Controls")
 	
 	# 1. CAPTURE VISIBILITY (Fixes auto-open and lost state bugs)
@@ -1460,7 +1462,9 @@ func _refresh_ui_text():
 
 func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	var s = _get_ui_scale()
-	
+	if not is_upcoming:
+		mat_id_to_key[mat_id] = key
+		
 	# The master container for the whole slot (Clickable area)
 	var slot_pnl = PanelContainer.new()
 	var slot_style = StyleBoxEmpty.new() # Invisible but stops mouse
@@ -1664,6 +1668,9 @@ func _update_menu_highlights():
 						btn.remove_theme_stylebox_override("normal")
 
 func _is_any_ui_blocking() -> bool:
+	if is_mouse_over_ui: return true
+	if is_npc_mode_menu_open: return true # GLOBAL PROTECTOR: Block all workspace edits while arcade menu is up
+	
 	# 1. Check if we are over the bottom HUD using grid math (FASTEST)
 	var m_local = get_local_mouse_position()
 	var gy = int(m_local.y / grid_scale)
@@ -1786,7 +1793,7 @@ func _process(delta):
 		
 		# 1. INITIAL TOUCH PROTECTION
 		if not mouse_was_pressed:
-			touch_started_on_ui = is_blocking
+			touch_started_on_ui = touch_started_on_ui or is_blocking
 			
 			# NPC CONTROL SELECTION
 			if is_selecting_npc_to_control and not touch_started_on_ui:
@@ -2956,7 +2963,7 @@ func _stop_controlling_npc():
 	_update_menu_highlights() # Re-draw selection states
 
 func _toggle_npc_mode_menu(show: bool):
-	if not is_instance_valid(main_controls): return
+	if not is_instance_valid(main_controls) or not is_instance_valid(ui_root): return
 	_play_action_sound("ui_click")
 	is_npc_mode_menu_open = show
 	main_controls.visible = show
@@ -2966,10 +2973,33 @@ func _toggle_npc_mode_menu(show: bool):
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
+		
+		# PROTECTOR: Ensure that the touch that closes the menu DOES NOT draw on the world
+		touch_started_on_ui = true 
+		
+		# Remove Full-screen protector
+		var blocker = ui_root.get_node_or_null("ArcadeMenuBlocker")
+		if blocker: blocker.queue_free()
+		
 		# Restore original position
 		main_controls.offset_bottom = 0
 		main_controls.offset_top = -340
 	else:
+		# Create Full-screen protector (Block all workspace clicks)
+		var blocker = ui_root.get_node_or_null("ArcadeMenuBlocker")
+		if not blocker:
+			blocker = Control.new()
+			blocker.name = "ArcadeMenuBlocker"
+			blocker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			blocker.mouse_filter = Control.MOUSE_FILTER_STOP
+			ui_root.add_child(blocker)
+			# Ensure it's behind the panels but above the world
+			ui_root.move_child(blocker, 0)
+			blocker.gui_input.connect(func(event):
+				if event is InputEventMouseButton and event.pressed:
+					_toggle_npc_mode_menu(false) # Close if touching outside
+			)
+		
 		# Shift the whole HUD 340px up to avoid the arcade bar
 		main_controls.offset_bottom = -340
 		main_controls.offset_top = -680
@@ -3030,6 +3060,8 @@ func _handle_controlled_npc_input(delta):
 					var next_x = controlled_npc.pos.x + move_dir
 					var next_y = controlled_npc.pos.y + (1 if want_down else 0)
 					if _can_npc_fit(next_x, next_y, controlled_npc):
+						# MANDATORY CLEANUP: Pre-erase old position at 60Hz before snap
+						_draw_npc_pixels(controlled_npc, 0)
 						controlled_npc.pos = Vector2i(next_x, next_y)
 						controlled_npc.vx = 0.0 
 						controlled_npc.vy = 0.0
@@ -3355,22 +3387,30 @@ func _place_npc(x, y):
 
 
 func _draw_npc_pixels(npc, override_mat = -1):
-	var sx = npc.pos.x; var sy = npc.pos.y
+	var is_dead = npc.hp <= 0; var is_flashing = npc.hit_flash > 0
+	
 	if override_mat == 0:
-		for oy in range(-1, 7):
-			for ox in range(-1, 3):
-				var tx = sx + ox; var ty = sy + oy
-				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-					var tid = cells[ty * grid_width + tx] & 0xFFFF
-					if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC): _set_cell(tx, ty, 0)
+		# DUAL-ZONE CLEANUP: Wipe both current physics pos AND the last jittered render pos
+		var zones = [npc.pos, Vector2i(int(npc.get("last_render_x", npc.pos.x)), int(npc.get("last_render_y", npc.pos.y)))]
+		for p in zones:
+			for oy in range(-1, 6):
+				for ox in range(-1, 3):
+					var tx = p.x + ox; var ty = p.y + oy
+					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+						var tid = cells[ty * grid_width + tx] & 0xFFFF
+						if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC): _set_cell(tx, ty, 0)
 		return
 		
-	var is_dead = npc.hp <= 0; var is_flashing = npc.hit_flash > 0
+	var sx = npc.pos.x; var sy = npc.pos.y
 	if is_flashing and not is_dead:
 		sx += randi_range(-1, 1); sy += randi_range(-1, 1)
 	elif is_dead:
 		sy += 2; sx += 1 if (npc.dir > 0) else -1
 		if (npc.hit_flash % 2 == 0): override_mat = 0
+		
+	# Store this exact render position for the next erasure pass
+	npc["last_render_x"] = sx
+	npc["last_render_y"] = sy
 		
 	# 1. Definir materiales por Clase (Dedicados para personalización)
 	var m_head = 1001; var m_skin = 1003; var m_torso = 1002; var m_shoes = 1008
@@ -4436,7 +4476,10 @@ func _update_arcade_dynamic_button():
 		active_val = "T." + str(selected_team + 1)
 	# Check Material
 	elif selected_material > 0:
-		active_name = "Mat." + str(selected_material)
+		if mat_id_to_key.has(selected_material):
+			active_name = tr(mat_id_to_key[selected_material])
+		else:
+			active_name = "Mat." + str(selected_material)
 		active_val = "S." + str(brush_radius)
 		active_color = mat_colors_1[selected_material]
 	
