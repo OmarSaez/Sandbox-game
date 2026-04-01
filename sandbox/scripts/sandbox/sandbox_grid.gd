@@ -3317,7 +3317,7 @@ func _setup_npc_ui():
 				_play_action_sound("ui_click")
 				selected_team = tidx
 				_update_menu_highlights()
-				if is_instance_valid(npc_control_gui) and npc_control_gui.visible: _on_arcade_selection_made(true)
+				_on_arcade_selection_made(true) # Real-time update for Arcade HUD (stay in menu)
 			)
 			ui_elements["team_btn_" + str(i)] = t_btn
 			team_flow.add_child(t_btn)
