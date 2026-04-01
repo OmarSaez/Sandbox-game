@@ -2870,7 +2870,14 @@ func _setup_npc_control_gui():
 	pad_style.border_color = Color("#222222")
 	pad.add_theme_stylebox_override("panel", pad_style)
 	pad.mouse_filter = Control.MOUSE_FILTER_STOP
-	pad.gui_input.connect(arcade_closer)
+	pad.gui_input.connect(func(event):
+		if event is InputEventMouseButton:
+			npc_control_gui.set_meta("is_pad_active", event.pressed)
+		elif event is InputEventScreenTouch:
+			npc_control_gui.set_meta("is_pad_active", event.pressed)
+		arcade_closer.call(event)
+	)
+	npc_control_gui.set_meta("is_pad_active", false) # Initial state
 	npc_control_gui.add_child(pad)
 	
 	# Visual Cross inside PAD (Thicker)
@@ -2881,6 +2888,7 @@ func _setup_npc_control_gui():
 	v_bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	v_bar.offset_left = -30 * s; v_bar.offset_right = 30 * s
 	v_bar.offset_top = -80 * s; v_bar.offset_bottom = 80 * s
+	v_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pad.add_child(v_bar)
 	
 	var h_bar = ColorRect.new()
@@ -2889,6 +2897,7 @@ func _setup_npc_control_gui():
 	h_bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	h_bar.offset_left = -80 * s; h_bar.offset_right = 80 * s
 	h_bar.offset_top = -30 * s; h_bar.offset_bottom = 30 * s
+	h_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pad.add_child(h_bar)
 
 	# Center buttons (Vertically stacked)
@@ -3061,9 +3070,11 @@ func _handle_controlled_npc_input(delta):
 	var move_dir = 0
 	var want_jump = false
 	var want_down = false
-	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+	var pad_active = npc_control_gui.get_meta("is_pad_active") if npc_control_gui.has_meta("is_pad_active") else false
+	
+	if pad_active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		var m_pos = get_viewport().get_mouse_position()
-		if is_instance_valid(pad) and pad.get_global_rect().has_point(m_pos):
+		if is_instance_valid(pad):
 			var pad_center = pad.get_global_rect().get_center()
 			# Horizontal
 			if m_pos.x < pad_center.x - (25 * s): move_dir = -1
@@ -3071,6 +3082,8 @@ func _handle_controlled_npc_input(delta):
 			# Vertical
 			if m_pos.y < pad_center.y - (40 * s): want_jump = true
 			elif m_pos.y > pad_center.y + (40 * s): want_down = true
+	elif not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		npc_control_gui.set_meta("is_pad_active", false) # Safety: ensure release reset
 	
 	# Apply physics movement (Inertia)
 	var target_vel = float(move_dir) * 2.1 # Reduced speed to half
@@ -4545,6 +4558,7 @@ func _update_arcade_dynamic_button():
 		# --- LEFT SIDE ---
 		var left_side = CenterContainer.new()
 		left_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		left_side.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hbox.add_child(left_side)
 		
 		if is_disaster:
@@ -4553,28 +4567,33 @@ func _update_arcade_dynamic_button():
 			name_lbl.text = active_name
 			name_lbl.add_theme_font_override("font", _get_safe_font())
 			name_lbl.add_theme_font_size_override("font_size", 22 * s) # LARGE
+			name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			left_side.add_child(name_lbl)
 		else:
 			# Material Color
 			var color_box = ColorRect.new()
 			color_box.custom_minimum_size = Vector2(50 * s, 30 * s)
 			color_box.color = active_color
+			color_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			left_side.add_child(color_box)
 		
 		# Divider
 		var div = ColorRect.new()
 		div.custom_minimum_size = Vector2(4 * s, 0)
 		div.color = Color(1, 1, 1, 0.2)
+		div.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hbox.add_child(div)
 		
 		# --- RIGHT SIDE ---
 		var right_side = CenterContainer.new()
 		right_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		right_side.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hbox.add_child(right_side)
 		
 		var val_lbl = Label.new()
 		val_lbl.text = active_val
 		val_lbl.add_theme_font_override("font", _get_safe_font())
+		val_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		
 		if is_disaster:
 			val_lbl.add_theme_font_size_override("font_size", 28 * s) # LARGE
