@@ -61,6 +61,7 @@ var selected_team: int = 0
 var controlled_npc = null
 var is_selecting_npc_to_control: bool = false
 var npc_control_gui: Control
+var main_controls: Control
 var mouse_was_pressed: bool = false
 @export var custom_emoji_font: Font 
 
@@ -190,6 +191,7 @@ var action_sfx = {
 var last_action_times = {} # Para controlar la saturación de sonidos
 var is_volcano_active = false 
 var is_fire_active = false 
+var is_npc_mode_menu_open: bool = false
 
 var sfx_cache = {} # Cache for loaded AudioStreams
 
@@ -741,7 +743,7 @@ var material_scroll: ScrollContainer
 func _setup_main_ui_containers():
 	var s = _get_ui_scale()
 	var ui_root = get_parent().get_node("UI")
-	var main_controls = ui_root.get_node("Controls")
+	main_controls = ui_root.get_node("Controls")
 	
 	# 1. CAPTURE VISIBILITY (Fixes auto-open and lost state bugs)
 	var tools_v = is_instance_valid(tools_panel) and tools_panel.visible
@@ -1291,8 +1293,8 @@ func _setup_disaster_ui():
 				var level = i
 				btn.pressed.connect(func(): 
 					_play_action_sound("ui_click")
-					if is_selecting_npc_to_control or is_instance_valid(controlled_npc): _stop_controlling_npc()
 					callback.call(level)
+					if is_instance_valid(npc_control_gui) and npc_control_gui.visible: _on_arcade_selection_made(false)
 				)
 			flow.add_child(btn)
 			ui_elements[label_key + "_btn_" + str(i)] = [btn, osk]
@@ -1524,10 +1526,10 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 			if not is_instance_valid(event) or not is_instance_valid(slot_pnl): return
 			if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 				_play_action_sound("ui_click")
-				if is_selecting_npc_to_control or is_instance_valid(controlled_npc): _stop_controlling_npc()
 				selected_material = mat_id
 				_update_material_highlights()
 				_update_menu_highlights()
+				if is_instance_valid(npc_control_gui) and npc_control_gui.visible: _on_arcade_selection_made(false)
 		)
 	slot_pnl.set_meta("mat_id", mat_id)
 	
@@ -2813,6 +2815,13 @@ func _setup_npc_control_gui():
 	bg.mouse_filter = Control.MOUSE_FILTER_STOP # IMPORTANT: Block clicks
 	npc_control_gui.add_child(bg)
 	
+	# Common Auto-Closer for any arcade control touch
+	var arcade_closer = func(event: InputEvent):
+		if event is InputEventMouseButton and event.pressed and is_npc_mode_menu_open:
+			_toggle_npc_mode_menu(false)
+	
+	bg.gui_input.connect(arcade_closer)
+	
 	# Left: Virtual PAD (Arcade Style - Circular)
 	var pad = Panel.new()
 	npc_control_gui.set_meta("pad_node", pad)
@@ -2827,6 +2836,8 @@ func _setup_npc_control_gui():
 	pad_style.border_width_top = 4 * s; pad_style.border_width_bottom = 4 * s
 	pad_style.border_color = Color("#222222")
 	pad.add_theme_stylebox_override("panel", pad_style)
+	pad.mouse_filter = Control.MOUSE_FILTER_STOP
+	pad.gui_input.connect(arcade_closer)
 	npc_control_gui.add_child(pad)
 	
 	# Visual Cross inside PAD (Thicker)
@@ -2847,19 +2858,43 @@ func _setup_npc_control_gui():
 	h_bar.offset_top = -30 * s; h_bar.offset_bottom = 30 * s
 	pad.add_child(h_bar)
 
-	# Center: "X" button
+	# Center buttons (Vertically stacked)
+	# 1. MENU Button (Toggle HUD)
+	var menu_btn = Button.new()
+	menu_btn.name = "MenuBtn"
+	menu_btn.text = tr("menu")
+	menu_btn.custom_minimum_size = Vector2(200 * s, 65 * s)
+	menu_btn.anchor_left = 0.5; menu_btn.anchor_right = 0.5; menu_btn.anchor_top = 0.5; menu_btn.anchor_bottom = 0.5
+	menu_btn.offset_left = -100 * s; menu_btn.offset_right = 100 * s
+	menu_btn.offset_top = -120 * s; menu_btn.offset_bottom = -55 * s
+	var menu_style = StyleBoxFlat.new()
+	menu_style.bg_color = Color(0.2, 0.2, 0.2, 0.8)
+	menu_style.border_width_left = 4 * s; menu_style.border_width_top = 4 * s
+	menu_style.border_width_right = 4 * s; menu_style.border_width_bottom = 4 * s
+	menu_style.border_color = Color(0.4, 0.4, 0.4)
+	menu_btn.add_theme_stylebox_override("normal", menu_style)
+	menu_btn.add_theme_stylebox_override("hover", menu_style)
+	menu_btn.add_theme_stylebox_override("pressed", menu_style)
+	menu_btn.add_theme_font_override("font", _get_safe_font())
+	menu_btn.add_theme_font_size_override("font_size", 22 * s)
+	menu_btn.pressed.connect(func():
+		_toggle_npc_mode_menu(!is_npc_mode_menu_open)
+	)
+	npc_control_gui.add_child(menu_btn)
+
+	# 2. EXIT Button (Circle, shifted down)
 	var exit_btn = Button.new()
 	exit_btn.text = "X"
 	exit_btn.custom_minimum_size = Vector2(100 * s, 100 * s)
 	exit_btn.anchor_left = 0.5; exit_btn.anchor_right = 0.5; exit_btn.anchor_top = 0.5; exit_btn.anchor_bottom = 0.5
 	exit_btn.offset_left = -50 * s; exit_btn.offset_right = 50 * s
-	exit_btn.offset_top = -50 * s; exit_btn.offset_bottom = 50 * s
+	exit_btn.offset_top = 20 * s; exit_btn.offset_bottom = 120 * s
 	var exit_style = StyleBoxFlat.new()
 	exit_style.bg_color = Color(0.8, 0.15, 0.15, 1.0)
 	exit_style.set_corner_radius_all(50 * s)
 	exit_style.border_width_left = 15 * s; exit_style.border_width_right = 15 * s
 	exit_style.border_width_top = 15 * s; exit_style.border_width_bottom = 15 * s
-	exit_style.border_color = Color(0.4, 0.05, 0.05) # Much darker red border
+	exit_style.border_color = Color(0.4, 0.05, 0.05)
 	exit_btn.add_theme_stylebox_override("normal", exit_style)
 	exit_btn.add_theme_stylebox_override("hover", exit_style)
 	exit_btn.add_theme_stylebox_override("pressed", exit_style)
@@ -2892,6 +2927,11 @@ func _setup_npc_control_gui():
 	action_btn.add_theme_font_override("font", _get_safe_font())
 	action_btn.add_theme_font_size_override("font_size", 32 * s)
 	action_btn.add_theme_constant_override("outline_size", 7 * s)
+	action_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	action_btn.gui_input.connect(arcade_closer)
+	action_btn.pressed.connect(func():
+		_trigger_controlled_npc_action()
+	)
 	npc_control_gui.add_child(action_btn)
 
 func _stop_controlling_npc():
@@ -2900,15 +2940,39 @@ func _stop_controlling_npc():
 	controlled_npc = null
 	is_selecting_npc_to_control = false
 	
+	_toggle_npc_mode_menu(false) # Close shifted menu if open
+	
 	if npc_control_gui:
 		npc_control_gui.visible = false
 	
 	var ui_root = get_parent().get_node("UI")
 	var main_controls = ui_root.get_node("Controls")
 	main_controls.visible = true
+	# Reset position in case it was shifted
+	main_controls.offset_bottom = 0
+	main_controls.offset_top = -340
 	is_mouse_over_ui = false
 	
 	_update_menu_highlights() # Re-draw selection states
+
+func _toggle_npc_mode_menu(show: bool):
+	if not is_instance_valid(main_controls): return
+	_play_action_sound("ui_click")
+	is_npc_mode_menu_open = show
+	main_controls.visible = show
+	
+	if !show:
+		# EXPLICITLY close any floating sub-panels
+		if is_instance_valid(tools_panel): tools_panel.visible = false
+		if is_instance_valid(disaster_panel): disaster_panel.visible = false
+		if is_instance_valid(npc_panel): npc_panel.visible = false
+		# Restore original position
+		main_controls.offset_bottom = 0
+		main_controls.offset_top = -340
+	else:
+		# Shift the whole HUD 340px up to avoid the arcade bar
+		main_controls.offset_bottom = -340
+		main_controls.offset_top = -680
 
 func _handle_controlled_npc_input(delta):
 	if not controlled_npc or not is_instance_valid(npc_control_gui) or not npc_control_gui.visible: return
@@ -3100,6 +3164,7 @@ func _setup_npc_ui():
 				selected_material = 0 
 				_update_material_highlights()
 			_update_menu_highlights()
+			_on_arcade_selection_made(true) # Update button but don't close
 		)
 		control_flow.add_child(active_btn)
 		ui_elements["control_active_btn"] = active_btn
@@ -3115,6 +3180,7 @@ func _setup_npc_ui():
 			_play_action_sound("ui_click")
 			_stop_controlling_npc()
 			_update_menu_highlights()
+			_on_arcade_selection_made(false)
 		)
 		control_flow.add_child(disabled_btn)
 		ui_elements["control_disabled_btn"] = disabled_btn
@@ -3140,10 +3206,10 @@ func _setup_npc_ui():
 			btn.mouse_filter = Control.MOUSE_FILTER_PASS
 			btn.pressed.connect(func():
 				_play_action_sound("ui_click")
-				if is_selecting_npc_to_control: _stop_controlling_npc()
 				selected_material = id # Master Warrior Material
 				_update_material_highlights()
 				_update_menu_highlights()
+				if is_instance_valid(npc_control_gui) and npc_control_gui.visible: _on_arcade_selection_made(false)
 			)
 			ui_elements[key + "_btn"] = btn
 			npc_flow.add_child(btn)
@@ -3175,9 +3241,9 @@ func _setup_npc_ui():
 			var tidx = i
 			t_btn.pressed.connect(func():
 				_play_action_sound("ui_click")
-				if is_selecting_npc_to_control: _stop_controlling_npc()
 				selected_team = tidx
 				_update_menu_highlights()
+				if is_instance_valid(npc_control_gui) and npc_control_gui.visible: _on_arcade_selection_made(true)
 			)
 			ui_elements["team_btn_" + str(i)] = t_btn
 			team_flow.add_child(t_btn)
@@ -4325,3 +4391,99 @@ func _reset_all_disasters():
 	if is_instance_valid(tornado_player) and tornado_player.playing: tornado_player.stop()
 	if is_instance_valid(tsunami_player) and tsunami_player.playing: tsunami_player.stop()
 	if is_instance_valid(volcano_loop_player) and volcano_loop_player.playing: volcano_loop_player.stop()
+func _on_arcade_selection_made(is_team_change = false):
+	if is_instance_valid(npc_control_gui) and npc_control_gui.visible:
+		if not is_team_change:
+			_toggle_npc_mode_menu(false)
+		_update_arcade_dynamic_button()
+
+func _update_arcade_dynamic_button():
+	if not is_instance_valid(npc_control_gui): return
+	var menu_btn = npc_control_gui.find_child("MenuBtn", true, false)
+	if not is_instance_valid(menu_btn): return
+	var s = _get_ui_scale()
+	
+	# Clear children of the menu button's container
+	for child in menu_btn.get_children(): 
+		if is_instance_valid(child): child.queue_free()
+	
+	menu_btn.text = tr("menu")
+	menu_btn.modulate = Color.WHITE
+	
+	# Determine if something is "Selected"
+	var active_name = ""
+	var active_val = ""
+	var active_color = Color.WHITE
+	
+	# Check Disasters (Priority)
+	if current_weather > 0:
+		active_name = tr("weather"); active_val = "LV " + str(current_weather); active_color = Color.SKY_BLUE
+	elif earthquake_intensity > 0:
+		active_name = tr("quake"); active_val = "LV " + str(earthquake_intensity); active_color = Color.DARK_ORANGE
+	elif tornado_intensity > 0:
+		active_name = tr("tornado"); active_val = "LV " + str(tornado_intensity); active_color = Color.GRAY
+	elif tsunami_intensity > 0:
+		active_name = tr("tsunami"); active_val = "LV " + str(tsunami_intensity); active_color = Color.ROYAL_BLUE
+	# Check NPCs
+	elif selected_material >= 1000:
+		if selected_material == 1000 or selected_material == 1001: active_name = tr("warrior")
+		elif selected_material == 1010 or selected_material == 1011: active_name = tr("archer")
+		elif selected_material == 1020 or selected_material == 1021: active_name = tr("miner")
+		elif selected_material == 1040 or selected_material == 1041: active_name = tr("medic")
+		
+		var t_colors = [Color.RED, Color.CORNFLOWER_BLUE, Color.GOLD, Color.GREEN]
+		active_color = t_colors[selected_team] if selected_team < 4 else Color.WHITE
+		active_val = "T." + str(selected_team + 1)
+	# Check Material
+	elif selected_material > 0:
+		active_name = "Mat." + str(selected_material)
+		active_val = "S." + str(brush_radius)
+		active_color = mat_colors_1[selected_material]
+	
+	if active_name != "":
+		menu_btn.text = "" # Hide base text
+		
+		var hbox = HBoxContainer.new()
+		hbox.name = "DynamicContent"
+		hbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hbox.add_theme_constant_override("separation", 0)
+		menu_btn.add_child(hbox)
+		
+		# Left side: Name + Color Box
+		var left_side = CenterContainer.new()
+		left_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hbox.add_child(left_side)
+		
+		var left_hbox = HBoxContainer.new()
+		left_hbox.add_theme_constant_override("separation", 8 * s)
+		left_side.add_child(left_hbox)
+		
+		var color_box = ColorRect.new()
+		color_box.custom_minimum_size = Vector2(18 * s, 18 * s)
+		color_box.color = active_color
+		left_hbox.add_child(color_box)
+		
+		var name_lbl = Label.new()
+		name_lbl.text = active_name
+		name_lbl.add_theme_font_override("font", _get_safe_font())
+		name_lbl.add_theme_font_size_override("font_size", 14 * s)
+		left_hbox.add_child(name_lbl)
+		
+		# Vertical Divider
+		var div = ColorRect.new()
+		div.custom_minimum_size = Vector2(2 * s, 0)
+		div.color = Color(1, 1, 1, 0.2)
+		hbox.add_child(div)
+		
+		# Right side: Level/Size
+		var right_side = CenterContainer.new()
+		right_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hbox.add_child(right_side)
+		
+		var val_lbl = Label.new()
+		val_lbl.text = active_val
+		val_lbl.add_theme_font_override("font", _get_safe_font())
+		val_lbl.add_theme_font_size_override("font_size", 18 * s)
+		val_lbl.add_theme_color_override("font_color", Color.YELLOW)
+		right_side.add_child(val_lbl)
