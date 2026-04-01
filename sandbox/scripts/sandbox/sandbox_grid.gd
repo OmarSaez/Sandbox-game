@@ -2886,14 +2886,14 @@ func _setup_npc_control_gui():
 	var menu_btn = Button.new()
 	menu_btn.name = "MenuBtn"
 	menu_btn.text = tr("menu")
-	menu_btn.custom_minimum_size = Vector2(200 * s, 65 * s)
+	menu_btn.custom_minimum_size = Vector2(230 * s, 72 * s)
 	menu_btn.anchor_left = 0.5; menu_btn.anchor_right = 0.5; menu_btn.anchor_top = 0.5; menu_btn.anchor_bottom = 0.5
-	menu_btn.offset_left = -100 * s; menu_btn.offset_right = 100 * s
-	menu_btn.offset_top = -120 * s; menu_btn.offset_bottom = -55 * s
+	menu_btn.offset_left = -115 * s; menu_btn.offset_right = 115 * s
+	menu_btn.offset_top = -120 * s; menu_btn.offset_bottom = -48 * s
 	var menu_style = StyleBoxFlat.new()
 	menu_style.bg_color = Color(0.2, 0.2, 0.2, 0.8)
-	menu_style.border_width_left = 4 * s; menu_style.border_width_top = 4 * s
-	menu_style.border_width_right = 4 * s; menu_style.border_width_bottom = 4 * s
+	menu_style.border_width_left = 8 * s; menu_style.border_width_top = 8 * s
+	menu_style.border_width_right = 8 * s; menu_style.border_width_bottom = 8 * s
 	menu_style.border_color = Color(0.4, 0.4, 0.4)
 	menu_btn.add_theme_stylebox_override("normal", menu_style)
 	menu_btn.add_theme_stylebox_override("hover", menu_style)
@@ -2904,6 +2904,17 @@ func _setup_npc_control_gui():
 		_toggle_npc_mode_menu(!is_npc_mode_menu_open)
 	)
 	npc_control_gui.add_child(menu_btn)
+	
+	# 1b. EXTERNAL LABELS (Below the Menu Button)
+	var arcade_labels = HBoxContainer.new()
+	arcade_labels.name = "ArcadeLabels"
+	arcade_labels.custom_minimum_size = Vector2(230 * s, 40 * s)
+	arcade_labels.anchor_left = 0.5; arcade_labels.anchor_right = 0.5; arcade_labels.anchor_top = 0.5; arcade_labels.anchor_bottom = 0.5
+	arcade_labels.offset_left = -115 * s; arcade_labels.offset_right = 115 * s
+	arcade_labels.offset_top = -60 * s; arcade_labels.offset_bottom = 12 * s # TOUCHING: No gap below MenuBtn bottom (-48)
+	arcade_labels.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	arcade_labels.add_theme_constant_override("separation", 0)
+	npc_control_gui.add_child(arcade_labels)
 
 	# 2. EXIT Button (Circle, shifted down)
 	var exit_btn = Button.new()
@@ -4508,6 +4519,7 @@ func _update_arcade_dynamic_button():
 	if active_name != "":
 		menu_btn.text = "" # Hide base text
 		
+		# 1. INTERNAL CONTENT (Color & Size)
 		var hbox = HBoxContainer.new()
 		hbox.name = "DynamicContent"
 		hbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -4515,40 +4527,54 @@ func _update_arcade_dynamic_button():
 		hbox.add_theme_constant_override("separation", 0)
 		menu_btn.add_child(hbox)
 		
-		# Left side: Name + Color Box
+		# Internal Color (Left)
 		var left_side = CenterContainer.new()
 		left_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		hbox.add_child(left_side)
 		
-		var left_hbox = HBoxContainer.new()
-		left_hbox.add_theme_constant_override("separation", 8 * s)
-		left_side.add_child(left_hbox)
-		
 		var color_box = ColorRect.new()
-		color_box.custom_minimum_size = Vector2(18 * s, 18 * s)
+		color_box.custom_minimum_size = Vector2(50 * s, 30 * s)
 		color_box.color = active_color
-		left_hbox.add_child(color_box)
+		left_side.add_child(color_box)
 		
-		var name_lbl = Label.new()
-		name_lbl.text = active_name
-		name_lbl.add_theme_font_override("font", _get_safe_font())
-		name_lbl.add_theme_font_size_override("font_size", 14 * s)
-		left_hbox.add_child(name_lbl)
-		
-		# Vertical Divider
+		# Divider
 		var div = ColorRect.new()
-		div.custom_minimum_size = Vector2(2 * s, 0)
+		div.custom_minimum_size = Vector2(4 * s, 0)
 		div.color = Color(1, 1, 1, 0.2)
 		hbox.add_child(div)
 		
-		# Right side: Level/Size
+		# Internal Number (Right)
 		var right_side = CenterContainer.new()
 		right_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		hbox.add_child(right_side)
 		
-		var val_lbl = Label.new()
-		val_lbl.text = active_val
-		val_lbl.add_theme_font_override("font", _get_safe_font())
-		val_lbl.add_theme_font_size_override("font_size", 18 * s)
-		val_lbl.add_theme_color_override("font_color", Color.YELLOW)
-		right_side.add_child(val_lbl)
+		var brush_sizes = [0, 1, 2, 5, 7, 12]
+		var brush_labels = ["1", "3", "5", "10", "15", "25"]
+		var brush_idx = brush_sizes.find(brush_radius)
+		var display_val = brush_labels[brush_idx] if brush_idx != -1 else str(brush_radius)
+		
+		var num_lbl = Label.new()
+		num_lbl.text = "🖌️:" + display_val
+		num_lbl.add_theme_font_override("font", _get_safe_font())
+		num_lbl.add_theme_font_size_override("font_size", 28 * s) # Slightly smaller to fit emoji + number
+		num_lbl.add_theme_color_override("font_color", Color.YELLOW)
+		right_side.add_child(num_lbl)
+		
+		# 2. EXTERNAL LABELS (Below the button)
+		var ext_labels = npc_control_gui.get_node_or_null("ArcadeLabels")
+		if ext_labels:
+			for child in ext_labels.get_children(): child.queue_free()
+			
+			# MATERIAL NAME (Centers in the whole row)
+			var name_lbl = Label.new()
+			name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			name_lbl.text = active_name
+			name_lbl.add_theme_font_override("font", _get_safe_font())
+			name_lbl.add_theme_font_size_override("font_size", 30 * s) # Large and readable
+			name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			ext_labels.add_child(name_lbl)
+	else:
+		# CLEAR external labels when in "MENU" mode
+		var ext_labels = npc_control_gui.get_node_or_null("ArcadeLabels")
+		if ext_labels:
+			for child in ext_labels.get_children(): child.queue_free()
