@@ -1295,8 +1295,8 @@ func _setup_disaster_ui():
 				var level = i
 				btn.pressed.connect(func(): 
 					_play_action_sound("ui_click")
+					_on_arcade_selection_made(false)
 					callback.call(level)
-					if is_instance_valid(npc_control_gui) and npc_control_gui.visible: _on_arcade_selection_made(false)
 				)
 			flow.add_child(btn)
 			ui_elements[label_key + "_btn_" + str(i)] = [btn, osk]
@@ -1397,6 +1397,13 @@ func _refresh_ui_text():
 			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		
+		elif key == "control_active_btn":
+			node_data.text = tr("active")
+		elif key == "control_disabled_btn":
+			node_data.text = tr("inactive")
+		elif key == "control_npc_lbl":
+			node_data.text = tr("npc_controller_title") + ": "
+			
 		# Handle Labels (Main labels for rows and material names)
 		elif node_data is Label:
 			if key.ends_with("_mat_lbl"):
@@ -1524,7 +1531,7 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	main_vbox.add_child(btn_lbl)
 	ui_elements[key + "_mat_lbl"] = btn_lbl
 	
-	# CENTRALIZED INPUT (Whole slot)
+	# CENTRALIZED INPUT (Whole slot - MOUSE DOWN TRUMPS SCROLL DELAY)
 	if not is_upcoming:
 		slot_pnl.gui_input.connect(func(event):
 			if not is_instance_valid(event) or not is_instance_valid(slot_pnl): return
@@ -1533,8 +1540,11 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 				selected_material = mat_id
 				_update_material_highlights()
 				_update_menu_highlights()
-				if is_instance_valid(npc_control_gui) and npc_control_gui.visible: _on_arcade_selection_made(false)
+				# FORCE SWAP BACK TO ARCADE CONTROLS
+				if is_npc_mode_menu_open or is_instance_valid(controlled_npc):
+					_on_arcade_selection_made(false)
 		)
+	
 	slot_pnl.set_meta("mat_id", mat_id)
 	
 	ui_elements[key + "_icon_pnl"] = selection_overlay # Store overlay for highlight
@@ -1650,9 +1660,9 @@ func _update_menu_highlights():
 					var idx = int(key.split("_")[-1])
 					if idx == selected_team: is_active = true
 				elif key == "control_active_btn":
-					if is_selecting_npc_to_control or is_instance_valid(controlled_npc): is_active = true
+					is_active = is_selecting_npc_to_control or is_instance_valid(controlled_npc)
 				elif key == "control_disabled_btn":
-					if not is_selecting_npc_to_control and not is_instance_valid(controlled_npc): is_active = true
+					is_active = not is_selecting_npc_to_control and not is_instance_valid(controlled_npc)
 				
 				if is_active:
 					if not btn.has_theme_color_override("font_color"):
@@ -2792,8 +2802,9 @@ func _setup_npc_panel_node():
 	npc_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
 func _setup_npc_control_gui():
-	var s = _get_ui_scale()
+	var s = 1.1 # FIXED SCALE: Unified size for movement/action pads
 	var ui_root = get_parent().get_node("UI")
+	var main_controls = ui_root.get_node("Controls")
 	
 	if is_instance_valid(npc_control_gui):
 		# Avoid duplicate connections or nodes
@@ -2802,11 +2813,16 @@ func _setup_npc_control_gui():
 		
 	npc_control_gui = Control.new()
 	npc_control_gui.name = "NPCControlGUI"
-	# Limit height to match main menu (340px)
 	npc_control_gui.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	npc_control_gui.offset_top = -340
 	npc_control_gui.mouse_filter = Control.MOUSE_FILTER_PASS 
-	npc_control_gui.visible = false
+	
+	# Visibility based on Control State + Menu Toggle
+	var in_control = is_instance_valid(controlled_npc)
+	npc_control_gui.visible = in_control and not is_npc_mode_menu_open
+	if is_instance_valid(main_controls):
+		main_controls.visible = not in_control or is_npc_mode_menu_open
+		
 	ui_root.add_child(npc_control_gui)
 	
 	# Block interaction with game world below UI
@@ -2942,48 +2958,51 @@ func _setup_npc_control_gui():
 	npc_control_gui.add_child(action_btn)
 
 func _stop_controlling_npc():
-	# No guard here, let it run to ensure UI reset even if NPC/Selecting state is weird
 	_play_action_sound("ui_click")
 	controlled_npc = null
 	is_selecting_npc_to_control = false
+	is_npc_mode_menu_open = false
 	
-	_toggle_npc_mode_menu(false) # Close shifted menu if open
-	
-	if npc_control_gui:
+	if is_instance_valid(npc_control_gui):
 		npc_control_gui.visible = false
 	
 	var ui_root = get_parent().get_node("UI")
 	var main_controls = ui_root.get_node("Controls")
-	main_controls.visible = true
-	# Reset position in case it was shifted
-	main_controls.offset_bottom = 0
-	main_controls.offset_top = -340
-	is_mouse_over_ui = false
+	if is_instance_valid(main_controls):
+		main_controls.visible = true
+		main_controls.offset_top = -340
+		main_controls.offset_bottom = 0
 	
-	_update_menu_highlights() # Re-draw selection states
+	# Close all floating menus
+	if is_instance_valid(tools_panel): tools_panel.visible = false
+	if is_instance_valid(disaster_panel): disaster_panel.visible = false
+	if is_instance_valid(npc_panel): npc_panel.visible = false
+	
+	is_mouse_over_ui = false
+	_update_menu_highlights() 
 
 func _toggle_npc_mode_menu(show: bool):
 	if not is_instance_valid(main_controls) or not is_instance_valid(ui_root): return
 	_play_action_sound("ui_click")
 	is_npc_mode_menu_open = show
+	
+	# SWAP VISIBILITY: Building Menu vs Arcade HUD
 	main_controls.visible = show
+	if is_instance_valid(npc_control_gui):
+		npc_control_gui.visible = !show
 	
 	if !show:
-		# EXPLICITLY close any floating sub-panels
+		# Close floating sub-panels
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		
-		# PROTECTOR: Ensure that the touch that closes the menu DOES NOT draw on the world
+		# PROTECTOR
 		touch_started_on_ui = true 
 		
 		# Remove Full-screen protector
 		var blocker = ui_root.get_node_or_null("ArcadeMenuBlocker")
 		if blocker: blocker.queue_free()
-		
-		# Restore original position
-		main_controls.offset_bottom = 0
-		main_controls.offset_top = -340
 	else:
 		# Create Full-screen protector (Block all workspace clicks)
 		var blocker = ui_root.get_node_or_null("ArcadeMenuBlocker")
@@ -2999,10 +3018,6 @@ func _toggle_npc_mode_menu(show: bool):
 				if event is InputEventMouseButton and event.pressed:
 					_toggle_npc_mode_menu(false) # Close if touching outside
 			)
-		
-		# Shift the whole HUD 340px up to avoid the arcade bar
-		main_controls.offset_bottom = -340
-		main_controls.offset_top = -680
 
 func _handle_controlled_npc_input(delta):
 	if not controlled_npc or not is_instance_valid(npc_control_gui) or not npc_control_gui.visible: return
@@ -3239,9 +3254,13 @@ func _setup_npc_ui():
 			btn.pressed.connect(func():
 				_play_action_sound("ui_click")
 				selected_material = id # Master Warrior Material
+				# CANCEL possession mode ONLY IF we haven't started controlling yet
+				if not is_instance_valid(controlled_npc):
+					is_selecting_npc_to_control = false
 				_update_material_highlights()
 				_update_menu_highlights()
-				if is_instance_valid(npc_control_gui) and npc_control_gui.visible: _on_arcade_selection_made(false)
+				# FORCE SWAP BACK TO ARCADE
+				_on_arcade_selection_made(false)
 			)
 			ui_elements[key + "_btn"] = btn
 			npc_flow.add_child(btn)
@@ -4431,9 +4450,12 @@ func _reset_all_disasters():
 	if is_instance_valid(tornado_player) and tornado_player.playing: tornado_player.stop()
 	if is_instance_valid(tsunami_player) and tsunami_player.playing: tsunami_player.stop()
 	if is_instance_valid(volcano_loop_player) and volcano_loop_player.playing: volcano_loop_player.stop()
+
 func _on_arcade_selection_made(is_team_change = false):
-	if is_instance_valid(npc_control_gui) and npc_control_gui.visible:
-		if not is_team_change:
+	# Removed "npc_control_gui.visible" AND "controlled_npc" guards.
+	# If the Arcade menu is open at all, selecting an item MUST force it to close and update!
+	if is_instance_valid(npc_control_gui):
+		if not is_team_change and is_npc_mode_menu_open:
 			_toggle_npc_mode_menu(false)
 		_update_arcade_dynamic_button()
 
@@ -4441,7 +4463,7 @@ func _update_arcade_dynamic_button():
 	if not is_instance_valid(npc_control_gui): return
 	var menu_btn = npc_control_gui.find_child("MenuBtn", true, false)
 	if not is_instance_valid(menu_btn): return
-	var s = _get_ui_scale()
+	var s = 1.1 # FIXED SCALE: Must match the Arcade UI scale for alignment
 	
 	# Clear children of the menu button's container
 	for child in menu_btn.get_children(): 
