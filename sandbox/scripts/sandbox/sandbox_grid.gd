@@ -1077,6 +1077,7 @@ func _setup_tools_ui():
 	create_row.call("brush", brush_labels, func(l): 
 		brush_radius = brush_sizes[l]
 		_update_menu_highlights()
+		_on_arcade_selection_made(true) # Real-time update for Arcade HUD (don't close menu)
 	)
 	# 1. SUPPORT CREATOR BUTTON (AD)
 	var support_btn = Button.new()
@@ -1304,6 +1305,7 @@ func _setup_disaster_ui():
 	create_row.call("weather", ["off", "light", "med", "storm"], func(l): 
 		current_weather = l
 		_update_menu_highlights()
+		_on_arcade_selection_made(true)
 	)
 	create_row.call("quake", ["off", "light", "med", "brutal"], func(l): 
 		earthquake_intensity = l
@@ -1313,6 +1315,7 @@ func _setup_disaster_ui():
 		else:
 			earthquake_timer = 0 # Reset para apagar sonido e intensidad
 		_update_menu_highlights()
+		_on_arcade_selection_made(true)
 	)
 	create_row.call("tornado", ["off", "light", "med", "heavy"], func(l):
 		tornado_intensity = l
@@ -1322,6 +1325,7 @@ func _setup_disaster_ui():
 		else:
 			tornado_timer = 0 # Apagar instantáneamente
 		_update_menu_highlights()
+		_on_arcade_selection_made(true)
 	)
 	create_row.call("tsunami", ["off", "light", "med", "storm"], func(l):
 		tsunami_intensity = l
@@ -1331,6 +1335,7 @@ func _setup_disaster_ui():
 		else:
 			tsunami_timer = 0 # Apagar instantáneamente
 		_update_menu_highlights()
+		_on_arcade_selection_made(true)
 	)
 	
 	_add_ui_header(v_box, "coming_soon")
@@ -1391,18 +1396,21 @@ func _refresh_ui_text():
 			node_data.text = tr("medic")
 			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
-		elif key.ends_with("_btn") and not key.ends_with("_mat_btn"): # Generic NPC/Tool handler
-			var pure_key = key.replace("_btn", "")
-			node_data.text = tr(pure_key)
-			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
-			node_data.add_theme_font_size_override("font_size", 14 * s)
-		
+		elif key == "arcade_menu_btn":
+			node_data.text = tr("menu")
+		elif key == "arcade_action_btn":
+			node_data.text = tr("action")
 		elif key == "control_active_btn":
 			node_data.text = tr("active")
 		elif key == "control_disabled_btn":
 			node_data.text = tr("inactive")
 		elif key == "control_npc_lbl":
 			node_data.text = tr("npc_controller_title") + ": "
+		elif key.ends_with("_btn") and not key.ends_with("_mat_btn"): # Generic NPC/Tool handler
+			var pure_key = key.replace("_btn", "")
+			node_data.text = tr(pure_key)
+			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
+			node_data.add_theme_font_size_override("font_size", 14 * s)
 			
 		# Handle Labels (Main labels for rows and material names)
 		elif node_data is Label:
@@ -1466,6 +1474,8 @@ func _refresh_ui_text():
 				node_data.text = tr(pure_key)
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
+	
+	_update_arcade_dynamic_button() # Sync HUD to new language
 
 func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	var s = _get_ui_scale()
@@ -2886,9 +2896,9 @@ func _setup_npc_control_gui():
 	var menu_btn = Button.new()
 	menu_btn.name = "MenuBtn"
 	menu_btn.text = tr("menu")
-	menu_btn.custom_minimum_size = Vector2(230 * s, 72 * s)
+	menu_btn.custom_minimum_size = Vector2(300 * s, 72 * s)
 	menu_btn.anchor_left = 0.5; menu_btn.anchor_right = 0.5; menu_btn.anchor_top = 0.5; menu_btn.anchor_bottom = 0.5
-	menu_btn.offset_left = -115 * s; menu_btn.offset_right = 115 * s
+	menu_btn.offset_left = -150 * s; menu_btn.offset_right = 150 * s
 	menu_btn.offset_top = -120 * s; menu_btn.offset_bottom = -48 * s
 	var menu_style = StyleBoxFlat.new()
 	menu_style.bg_color = Color(0.2, 0.2, 0.2, 0.8)
@@ -2904,14 +2914,15 @@ func _setup_npc_control_gui():
 		_toggle_npc_mode_menu(!is_npc_mode_menu_open)
 	)
 	npc_control_gui.add_child(menu_btn)
+	ui_elements["arcade_menu_btn"] = menu_btn
 	
 	# 1b. EXTERNAL LABELS (Below the Menu Button)
 	var arcade_labels = HBoxContainer.new()
 	arcade_labels.name = "ArcadeLabels"
-	arcade_labels.custom_minimum_size = Vector2(230 * s, 40 * s)
+	arcade_labels.custom_minimum_size = Vector2(300 * s, 40 * s)
 	arcade_labels.anchor_left = 0.5; arcade_labels.anchor_right = 0.5; arcade_labels.anchor_top = 0.5; arcade_labels.anchor_bottom = 0.5
-	arcade_labels.offset_left = -115 * s; arcade_labels.offset_right = 115 * s
-	arcade_labels.offset_top = -60 * s; arcade_labels.offset_bottom = 12 * s # TOUCHING: No gap below MenuBtn bottom (-48)
+	arcade_labels.offset_left = -150 * s; arcade_labels.offset_right = 150 * s
+	arcade_labels.offset_top = -60 * s; arcade_labels.offset_bottom = 12 * s # Positioned starting at MenuBtn bottom
 	arcade_labels.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	arcade_labels.add_theme_constant_override("separation", 0)
 	npc_control_gui.add_child(arcade_labels)
@@ -2967,6 +2978,7 @@ func _setup_npc_control_gui():
 		_trigger_controlled_npc_action()
 	)
 	npc_control_gui.add_child(action_btn)
+	ui_elements["arcade_action_btn"] = action_btn
 
 func _stop_controlling_npc():
 	_play_action_sound("ui_click")
@@ -4487,16 +4499,19 @@ func _update_arcade_dynamic_button():
 	var active_name = ""
 	var active_val = ""
 	var active_color = Color.WHITE
+	var is_disaster = false
+	
+	var intensity_labels = ["off", "light", "med", "heavy", "violent"]
 	
 	# Check Disasters (Priority)
 	if current_weather > 0:
-		active_name = tr("weather"); active_val = "LV " + str(current_weather); active_color = Color.SKY_BLUE
+		active_name = tr("weather"); active_val = tr(intensity_labels[current_weather]); active_color = Color.SKY_BLUE; is_disaster = true
 	elif earthquake_intensity > 0:
-		active_name = tr("quake"); active_val = "LV " + str(earthquake_intensity); active_color = Color.DARK_ORANGE
+		active_name = tr("quake"); active_val = tr(intensity_labels[earthquake_intensity]); active_color = Color.GOLD; is_disaster = true
 	elif tornado_intensity > 0:
-		active_name = tr("tornado"); active_val = "LV " + str(tornado_intensity); active_color = Color.GRAY
+		active_name = tr("tornado"); active_val = tr(intensity_labels[tornado_intensity]); active_color = Color.GRAY; is_disaster = true
 	elif tsunami_intensity > 0:
-		active_name = tr("tsunami"); active_val = "LV " + str(tsunami_intensity); active_color = Color.ROYAL_BLUE
+		active_name = tr("tsunami"); active_val = tr(intensity_labels[tsunami_intensity]); active_color = Color.ROYAL_BLUE; is_disaster = true
 	# Check NPCs
 	elif selected_material >= 1000:
 		if selected_material == 1000 or selected_material == 1001: active_name = tr("warrior")
@@ -4519,7 +4534,7 @@ func _update_arcade_dynamic_button():
 	if active_name != "":
 		menu_btn.text = "" # Hide base text
 		
-		# 1. INTERNAL CONTENT (Color & Size)
+		# 1. INTERNAL CONTENT
 		var hbox = HBoxContainer.new()
 		hbox.name = "DynamicContent"
 		hbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -4527,15 +4542,24 @@ func _update_arcade_dynamic_button():
 		hbox.add_theme_constant_override("separation", 0)
 		menu_btn.add_child(hbox)
 		
-		# Internal Color (Left)
+		# --- LEFT SIDE ---
 		var left_side = CenterContainer.new()
 		left_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		hbox.add_child(left_side)
 		
-		var color_box = ColorRect.new()
-		color_box.custom_minimum_size = Vector2(50 * s, 30 * s)
-		color_box.color = active_color
-		left_side.add_child(color_box)
+		if is_disaster:
+			# Disaster Name
+			var name_lbl = Label.new()
+			name_lbl.text = active_name
+			name_lbl.add_theme_font_override("font", _get_safe_font())
+			name_lbl.add_theme_font_size_override("font_size", 22 * s) # LARGE
+			left_side.add_child(name_lbl)
+		else:
+			# Material Color
+			var color_box = ColorRect.new()
+			color_box.custom_minimum_size = Vector2(50 * s, 30 * s)
+			color_box.color = active_color
+			left_side.add_child(color_box)
 		
 		# Divider
 		var div = ColorRect.new()
@@ -4543,36 +4567,44 @@ func _update_arcade_dynamic_button():
 		div.color = Color(1, 1, 1, 0.2)
 		hbox.add_child(div)
 		
-		# Internal Number (Right)
+		# --- RIGHT SIDE ---
 		var right_side = CenterContainer.new()
 		right_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		hbox.add_child(right_side)
 		
-		var brush_sizes = [0, 1, 2, 5, 7, 12]
-		var brush_labels = ["1", "3", "5", "10", "15", "25"]
-		var brush_idx = brush_sizes.find(brush_radius)
-		var display_val = brush_labels[brush_idx] if brush_idx != -1 else str(brush_radius)
+		var val_lbl = Label.new()
+		val_lbl.text = active_val
+		val_lbl.add_theme_font_override("font", _get_safe_font())
 		
-		var num_lbl = Label.new()
-		num_lbl.text = "🖌️:" + display_val
-		num_lbl.add_theme_font_override("font", _get_safe_font())
-		num_lbl.add_theme_font_size_override("font_size", 28 * s) # Slightly smaller to fit emoji + number
-		num_lbl.add_theme_color_override("font_color", Color.YELLOW)
-		right_side.add_child(num_lbl)
+		if is_disaster:
+			val_lbl.add_theme_font_size_override("font_size", 28 * s) # LARGE
+			val_lbl.add_theme_color_override("font_color", Color.WHITE) # More legible
+		else:
+			# Material Size (with Brush Emoji)
+			var brush_sizes = [0, 1, 2, 5, 7, 12]
+			var brush_labels = ["1", "3", "5", "10", "15", "25"]
+			var brush_idx = brush_sizes.find(brush_radius)
+			var display_val = brush_labels[brush_idx] if brush_idx != -1 else str(brush_radius)
+			val_lbl.text = "🖌️:" + display_val
+			val_lbl.add_theme_font_size_override("font_size", 28 * s)
+			val_lbl.add_theme_color_override("font_color", Color.YELLOW)
+		
+		right_side.add_child(val_lbl)
 		
 		# 2. EXTERNAL LABELS (Below the button)
 		var ext_labels = npc_control_gui.get_node_or_null("ArcadeLabels")
 		if ext_labels:
 			for child in ext_labels.get_children(): child.queue_free()
 			
-			# MATERIAL NAME (Centers in the whole row)
-			var name_lbl = Label.new()
-			name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			name_lbl.text = active_name
-			name_lbl.add_theme_font_override("font", _get_safe_font())
-			name_lbl.add_theme_font_size_override("font_size", 30 * s) # Large and readable
-			name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			ext_labels.add_child(name_lbl)
+			# ONLY add external labels if NOT a disaster (to avoid redundant names)
+			if not is_disaster:
+				var name_lbl = Label.new()
+				name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				name_lbl.text = active_name
+				name_lbl.add_theme_font_override("font", _get_safe_font())
+				name_lbl.add_theme_font_size_override("font_size", 30 * s)
+				name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				ext_labels.add_child(name_lbl)
 	else:
 		# CLEAR external labels when in "MENU" mode
 		var ext_labels = npc_control_gui.get_node_or_null("ArcadeLabels")
