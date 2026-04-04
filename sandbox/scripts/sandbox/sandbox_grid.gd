@@ -68,6 +68,15 @@ var mouse_was_pressed: bool = false
 var music_tempo_frames: int = 30
 var is_blocking: bool = false
 
+# History / Undo System
+var history_buffer = [] # Array of PackedInt32Array
+var history_max_steps: int = 5
+var history_current_index: int = -1
+
+# Save / Load System
+var save_panel: PanelContainer
+var save_slots_data = {} # slot_index -> { "name": string, "date": string, "thumbnail": ImageTexture }
+
 # --- MUSIC SYSTEM (NEW) ---
 var selected_music_instrument: int = 0
 var selected_music_note: int = 0
@@ -585,6 +594,8 @@ func _ready():
 	s_mat.set_shader_parameter("palette_tex", palette_tex)
 	s_mat.set_shader_parameter("charge_tex", charge_tex) # Dedicated link
 	texture_rect.material = s_mat
+	
+	save_history_state() # Initialize first history step
 	
 	_show_welcome_message()
 
@@ -1126,6 +1137,51 @@ func _setup_tools_ui():
 		_update_menu_highlights()
 		_on_arcade_selection_made(true) # Real-time update for Arcade HUD (don't close menu)
 	)
+
+	# NEW: ACTION ROW (Undo, Redo, Eraser, Save)
+	var action_row = HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", 10 * s)
+	action_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v_box.add_child(action_row)
+
+	var create_action_btn = func(text_key: String, color: Color, callback: Callable):
+		var btn = Button.new()
+		btn.text = tr(text_key)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.custom_minimum_size = Vector2(0, 50 * s)
+		btn.add_theme_font_override("font", _get_safe_font())
+		btn.add_theme_font_size_override("font_size", 14 * s)
+		
+		var style = StyleBoxFlat.new()
+		style.bg_color = color.darkened(0.6)
+		style.border_width_left = 2; style.border_width_top = 2
+		style.border_width_right = 2; style.border_width_bottom = 2
+		style.border_color = color.lightened(0.2)
+		style.set_corner_radius_all(10 * s)
+		btn.add_theme_stylebox_override("normal", style)
+		
+		var hover = style.duplicate()
+		hover.bg_color = color.darkened(0.4)
+		btn.add_theme_stylebox_override("hover", hover)
+		
+		btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			callback.call()
+		)
+		action_row.add_child(btn)
+		return btn
+
+	create_action_btn.call("undo", Color.ORANGE, func(): undo_history())
+	create_action_btn.call("redo", Color.SKY_BLUE, func(): redo_history())
+	create_action_btn.call("eraser", Color.GRAY, func(): 
+		selected_material = 0
+		brush_radius = 3 # Special 3px radius as requested
+		_update_material_highlights()
+		_update_menu_highlights()
+		_on_arcade_selection_made(true)
+	)
+	create_action_btn.call("save", Color.GOLD, func(): _setup_save_ui())
+
 	# 1. SUPPORT CREATOR BUTTON (AD)
 	var support_btn = Button.new()
 	support_btn.text = tr("support")
@@ -1972,6 +2028,9 @@ func _process(delta):
 			
 		mouse_was_pressed = true
 	else:
+		if mouse_was_pressed:
+			save_history_state() # Save state when finger is lifted after drawing
+			
 		mouse_was_pressed = false
 		touch_started_on_ui = false
 		_manage_brush_sound(-1) # Stop sound when finger lifted
@@ -2007,6 +2066,35 @@ func _process(delta):
 	# Render
 	_update_texture()
 	queue_redraw()
+
+# --- HISTORY SYSTEM ---
+func save_history_state():
+	# If we're not at the head of the buffer (we undid something), clear the "future"
+	if history_current_index < history_buffer.size() - 1:
+		history_buffer.resize(history_current_index + 1)
+		
+	# Store a copy of the current grid state
+	history_buffer.append(cells.duplicate())
+	
+	# Keep only the last N states
+	if history_buffer.size() > history_max_steps:
+		history_buffer.pop_front()
+	else:
+		history_current_index += 1
+
+func undo_history():
+	if history_current_index > 0:
+		history_current_index -= 1
+		cells = history_buffer[history_current_index].duplicate()
+		_update_texture()
+		queue_redraw()
+
+func redo_history():
+	if history_current_index < history_buffer.size() - 1:
+		history_current_index += 1
+		cells = history_buffer[history_current_index].duplicate()
+		_update_texture()
+		queue_redraw()
 
 func _draw():
 	var f = _get_safe_font()
@@ -5078,3 +5166,257 @@ func _is_music_active() -> bool:
 	if is_instance_valid(music_panel) and music_panel.visible:
 		return true
 	return (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC) != 0
+
+# --- SAVE / LOAD SYSTEM ---
+
+func _setup_save_ui():
+	var s = _get_ui_scale()
+	var ui_root = get_parent().get_node("UI")
+	
+	if is_instance_valid(save_panel):
+		save_panel.queue_free()
+		
+	save_panel = PanelContainer.new()
+	save_panel.name = "SavePanel"
+	ui_root.add_child(save_panel)
+	
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.08, 0.08, 0.1, 0.98)
+	panel_style.border_width_left = 3; panel_style.border_width_top = 3
+	panel_style.border_width_right = 3; panel_style.border_width_bottom = 3
+	panel_style.border_color = Color(0.6, 0.5, 0.2)
+	panel_style.corner_radius_top_left = 15; panel_style.corner_radius_top_right = 15
+	save_panel.add_theme_stylebox_override("panel", panel_style)
+	save_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	
+	var m_width = 800 * s
+	var m_height = 800 * s
+	save_panel.custom_minimum_size = Vector2(m_width, m_height)
+	save_panel.anchor_left = 0.5; save_panel.anchor_right = 0.5
+	save_panel.anchor_top = 0.5; save_panel.anchor_bottom = 0.5
+	save_panel.offset_left = -m_width / 2.0
+	save_panel.offset_right = m_width / 2.0
+	save_panel.offset_top = -m_height / 2.0
+	save_panel.offset_bottom = m_height / 2.0
+	
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 20 * s)
+	save_panel.add_child(main_vbox)
+	
+	var title_hbox = HBoxContainer.new()
+	main_vbox.add_child(title_hbox)
+	
+	var title = Label.new()
+	title.text = "💾 " + tr("save")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.add_theme_font_override("font", _get_safe_font())
+	title.add_theme_font_size_override("font_size", 36 * s)
+	title_hbox.add_child(title)
+	
+	var close_btn = Button.new()
+	close_btn.text = "X"
+	close_btn.custom_minimum_size = Vector2(60 * s, 60 * s)
+	close_btn.pressed.connect(func(): save_panel.queue_free())
+	title_hbox.add_child(close_btn)
+	
+	var scroll = ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_vbox.add_child(scroll)
+	
+	var grid = GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 20 * s)
+	grid.add_theme_constant_override("v_separation", 20 * s)
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(grid)
+	
+	for i in range(1, 11):
+		_add_save_slot_ui(grid, i)
+
+func _add_save_slot_ui(container, slot_idx):
+	var s = _get_ui_scale()
+	var slot_data = _get_slot_data(slot_idx)
+	
+	var slot_panel = PanelContainer.new()
+	slot_panel.custom_minimum_size = Vector2(360 * s, 220 * s)
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.15, 0.15, 0.18)
+	style.set_corner_radius_all(10 * s)
+	style.border_width_left = 2; style.border_width_top = 2
+	style.border_width_right = 2; style.border_width_bottom = 2
+	style.border_color = Color(0.3, 0.3, 0.3)
+	slot_panel.add_theme_stylebox_override("panel", style)
+	container.add_child(slot_panel)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 5 * s)
+	slot_panel.add_child(vbox)
+	
+	var header = HBoxContainer.new()
+	vbox.add_child(header)
+	
+	var lbl_idx = Label.new()
+	lbl_idx.text = "#" + str(slot_idx)
+	lbl_idx.add_theme_font_size_override("font_size", 24 * s)
+	header.add_child(lbl_idx)
+	
+	var lbl_name = Label.new()
+	lbl_name.text = slot_data.name if slot_data.has("name") else tr("empty")
+	lbl_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl_name.clip_text = true
+	header.add_child(lbl_name)
+	
+	var thumb_rect = TextureRect.new()
+	thumb_rect.custom_minimum_size = Vector2(340 * s, 120 * s)
+	thumb_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	thumb_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	if slot_data.has("thumbnail"):
+		thumb_rect.texture = slot_data.thumbnail
+	else:
+		var empty_tex = GradientTexture2D.new()
+		empty_tex.gradient = Gradient.new()
+		empty_tex.gradient.set_color(0, Color(0.1, 0.1, 0.1))
+		empty_tex.gradient.set_color(1, Color(0.1, 0.1, 0.1))
+		thumb_rect.texture = empty_tex
+	vbox.add_child(thumb_rect)
+	
+	var lbl_date = Label.new()
+	lbl_date.text = slot_data.date if slot_data.has("date") else ""
+	lbl_date.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	lbl_date.add_theme_font_size_override("font_size", 12 * s)
+	lbl_date.modulate = Color(0.6, 0.6, 0.6)
+	vbox.add_child(lbl_date)
+	
+	var btn_hbox = HBoxContainer.new()
+	vbox.add_child(btn_hbox)
+	
+	var save_btn = Button.new()
+	save_btn.text = tr("save")
+	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	save_btn.pressed.connect(func(): _confirm_save(slot_idx, lbl_name.text))
+	btn_hbox.add_child(save_btn)
+	
+	if slot_data.has("name"):
+		var load_btn = Button.new()
+		load_btn.text = "Load" # tr("load")
+		load_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		load_btn.pressed.connect(func(): _load_from_slot(slot_idx))
+		btn_hbox.add_child(load_btn)
+
+func _get_slot_data(idx):
+	var path = "user://save_slot_" + str(idx) + ".dat"
+	var thumb_path = "user://save_slot_" + str(idx) + ".png"
+	
+	var data = {}
+	if FileAccess.file_exists(path):
+		var file = FileAccess.open(path, FileAccess.READ)
+		if file:
+			var json = file.get_as_text()
+			var dict = JSON.parse_string(json)
+			if dict:
+				data.name = dict.get("name", "Save " + str(idx))
+				data.date = dict.get("date", "Unknown")
+			file.close()
+			
+	if FileAccess.file_exists(thumb_path):
+		var img = Image.load_from_file(thumb_path)
+		if img:
+			data.thumbnail = ImageTexture.create_from_image(img)
+			
+	return data
+
+func _confirm_save(idx, current_name):
+	if current_name == tr("empty"):
+		_save_to_slot(idx)
+		return
+		
+	var s = _get_ui_scale()
+	var dialog = PanelContainer.new()
+	dialog.name = "ConfirmDialog"
+	save_panel.add_child(dialog)
+	
+	var d_style = StyleBoxFlat.new()
+	d_style.bg_color = Color(0.1, 0.1, 0.1, 0.95)
+	d_style.border_width_left = 2; d_style.border_width_top = 2
+	d_style.border_width_right = 2; d_style.border_width_bottom = 2
+	d_style.border_color = Color.RED
+	dialog.add_theme_stylebox_override("panel", d_style)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 20 * s)
+	dialog.add_child(vbox)
+	
+	var msg = Label.new()
+	msg.text = tr("override_confirm").format([str(idx), current_name])
+	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(msg)
+	
+	var hbox = HBoxContainer.new()
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_child(hbox)
+	
+	var yes_btn = Button.new()
+	yes_btn.text = tr("yes")
+	yes_btn.custom_minimum_size = Vector2(100 * s, 50 * s)
+	yes_btn.pressed.connect(func(): 
+		_save_to_slot(idx)
+		dialog.queue_free()
+	)
+	hbox.add_child(yes_btn)
+	
+	var no_btn = Button.new()
+	no_btn.text = tr("no")
+	no_btn.custom_minimum_size = Vector2(100 * s, 50 * s)
+	no_btn.pressed.connect(func(): dialog.queue_free())
+	hbox.add_child(no_btn)
+
+func _save_to_slot(idx):
+	var path = "user://save_slot_" + str(idx) + ".dat"
+	var thumb_path = "user://save_slot_" + str(idx) + ".png"
+	
+	var time = Time.get_datetime_dict_from_system()
+	var date_str = "{0}/{1}/{2} {3}:{4}".format([time.day, time.month, time.year, time.hour, time.minute])
+	var save_name = "Save " + str(idx) + " - " + date_str
+	
+	var save_dict = {
+		"name": save_name,
+		"date": date_str,
+		"grid": Array(cells)
+	}
+	
+	var file = FileAccess.open(path, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(save_dict))
+		file.close()
+		
+	# CAPTURE MINI SCREENSHOT
+	var screen_img = img.duplicate()
+	screen_img.resize(int(grid_width * 0.5), int(grid_height * 0.5))
+	screen_img.save_png(thumb_path)
+	
+	_setup_save_ui() # Refresh list
+
+func _load_from_slot(idx):
+	var path = "user://save_slot_" + str(idx) + ".dat"
+	if not FileAccess.file_exists(path): return
+	
+	var file = FileAccess.open(path, FileAccess.READ)
+	if file:
+		var json = file.get_as_text()
+		var dict = JSON.parse_string(json)
+		if dict and dict.has("grid"):
+			var grid_data = dict["grid"]
+			if grid_data.size() == cells.size():
+				# We must ensure it's a PackedInt32Array
+				var packed = PackedInt32Array()
+				packed.resize(grid_data.size())
+				for i in range(grid_data.size()):
+					packed[i] = int(grid_data[i])
+				
+				cells = packed
+				_update_texture()
+				queue_redraw()
+				save_panel.queue_free()
+		file.close()

@@ -111,3 +111,11 @@ metronome,Metrónomo,Metronome,Metronomo,Métronome,Metronom,Metrônomo
 bpm,BPM (Tempo),BPM (Tempo),BPM (Tempo),BPM (Tempo),BPM (Tempo),BPM (Tempo)
 metronome_info,Este bloque libera electricidad automáticamente a este ritmo,This block releases electricity automatically at this rhythm,Questo blocco rilascia elettricità automaticamente a questo ritmo,Ce bloc libère l'électricité automatiquement à ce rythme,Dieser Block gibt automatisch Strom in diesem Rhythmus ab,Este bloco libera eletricidade automaticamente a este ritmo
 piano4,Piano espacial,Space Piano,Piano spaziale,Piano d'espace,Weltraumpiano,Piano espacial
+undo,Deshacer,Undo,Annulla,Annuler,Rückgängig,Desfazer
+redo,Rehacer,Redo,Rifare,Rétablir,Wiederherstellen,Refazer
+save,Guardar,Save,Salva,Enregistrer,Speichern,Salvar
+slot,Espacio,Slot,Slot,Emplacement,Steckplatz,Espaço
+override_confirm,"¿Estás seguro de que quieres sobre escribir {0}, {1}?","Are you sure you want to overwrite {0}, {1}?","Sei sicuro di voler sovrascrivere {0}, {1}?","Êtes-vous sûr de vouloir écraser {0}, {1} ?","Möchten Sie {0}, {1} wirklich überschreiben?","Tem certeza que deseja sobrescrever {0}, {1}?"
+yes,Sí,Yes,Sì,Oui,Ja,Sim
+no,No,No,No,Non,Nein,Não
+empty,Vacío,Empty,Vuoto,Vide,Leer,Vazio
