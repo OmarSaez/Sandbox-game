@@ -48,7 +48,9 @@ enum Tags {
 	TEXTURE_TRIPLE = 1 << 26, # Material uses 3 colors
 	MIX_LOW = 1 << 27,        # ~15% secondary color
 	MIX_MEDIUM = 1 << 28,     # ~35% secondary color
-	MIX_HIGH = 1 << 29        # ~50% secondary color
+	MIX_HIGH = 1 << 29,       # ~50% secondary color
+	# Music system
+	MUSIC = 1 << 30
 }
 
 @export var name: String = "Material"

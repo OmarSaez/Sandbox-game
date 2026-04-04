@@ -65,6 +65,20 @@ var npc_control_gui: Control
 var main_controls: Control
 var ui_root: CanvasLayer
 var mouse_was_pressed: bool = false
+var is_blocking: bool = false
+
+# --- MUSIC SYSTEM (NEW) ---
+var selected_music_instrument: int = 0
+var selected_music_note: int = 0
+var music_player: AudioStreamPlayer
+var music_panel: PanelContainer
+var is_music_menu_open: bool = false
+const MUSIC_ID_START = 500
+const MUSIC_INSTRUMENTS = ["piano1", "piano2", "piano3", "drums"]
+const MUSIC_INST_COLORS = [Color("#9E1FFF"), Color("#1F4CFF"), Color("#1FDDFF"), Color("#FFC31F")]
+const MUSIC_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+const MUSIC_PITCHES = [1.0, 1.05946, 1.12246, 1.18921, 1.25992, 1.33483, 1.41421, 1.49831, 1.58740, 1.68179, 1.78180, 1.88775]
+
 @export var custom_emoji_font: Font 
 
 var _combined_font: FontVariation 
@@ -320,6 +334,15 @@ func _ready():
 	ascent_player = AudioStreamPlayer.new(); add_child(ascent_player)
 	volcano_loop_player = AudioStreamPlayer.new(); add_child(volcano_loop_player)
 	fire_loop_player = AudioStreamPlayer.new(); add_child(fire_loop_player)
+	
+	# Initialize material arrays to a safe size for all IDs (including music 500+)
+	mat_colors_1.resize(1024); mat_colors_1.fill(Color.BLACK)
+	mat_colors_2.resize(1024); mat_colors_2.fill(Color.BLACK)
+	mat_colors_3.resize(1024); mat_colors_3.fill(Color.BLACK)
+	material_tags_raw.resize(1024); material_tags_raw.fill(0)
+	
+	music_player = AudioStreamPlayer.new(); add_child(music_player)
+	_register_musical_materials()
 	
 	# Calculate grid size (Smart Height: Exactly above the UI)
 	var viewport_size = get_viewport_rect().size
@@ -926,6 +949,7 @@ func _setup_main_ui_containers():
 	_setup_npc_control_gui() # Fresh build of the control overlay
 	
 	_setup_materials_within_grid()
+	_setup_music_button() # Add the piano button to the action column
 	_update_material_highlights()
 	_update_menu_highlights()
 
@@ -1354,8 +1378,8 @@ func _refresh_ui_text():
 	for key in ui_elements:
 		var node_data = ui_elements[key]
 		
-		# Handle direct button nodes (Tools/Disasters)
-		var btn_h = (336.0 - (6.0 * s)) / 3.0
+		# Handle direct button nodes (Tools/Disasters/NPC/Music)
+		var btn_h = (336.0 - (9.0 * s)) / 4.0
 		if key == "tools_btn": 
 			node_data.text = tr("tools")
 			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
@@ -1366,6 +1390,10 @@ func _refresh_ui_text():
 			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 		elif key == "npc_btn": 
 			node_data.text = tr("npc")
+			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
+			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
+		elif key == "music_btn": 
+			node_data.text = "🎹 " + tr("music")
 			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
 			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 		elif key == "pause_btn": 
@@ -1511,7 +1539,15 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	# 1. ICON LAYER (Always visible material color)
 	var icon_panel = PanelContainer.new()
 	var icon_style = StyleBoxFlat.new()
-	icon_style.bg_color = Color.BLACK if is_upcoming else (mat_colors_1[mat_id] if mat_id >= 0 else Color(0.1, 0.1, 0.1))
+	var final_color = Color.BLACK
+	if not is_upcoming:
+		if mat_id == MUSIC_ID_START:
+			final_color = Color("#A61266")
+		elif mat_id >= 0:
+			final_color = mat_colors_1[mat_id]
+		else:
+			final_color = Color(0.1, 0.1, 0.1)
+	icon_style.bg_color = final_color
 	var radius = int(8 * s)
 	icon_style.corner_radius_top_left = radius
 	icon_style.corner_radius_top_right = radius
@@ -1550,6 +1586,10 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 				selected_material = mat_id
 				_update_material_highlights()
 				_update_menu_highlights()
+				
+				# Music is no longer in MaterialGrid, so this part can be simplified/removed for MaterialGrid
+				# But specifically if we ever call it from elsewhere:
+				pass
 				# FORCE SWAP BACK TO ARCADE CONTROLS
 				if is_npc_mode_menu_open or is_instance_valid(controlled_npc):
 					_on_arcade_selection_made(false)
@@ -1604,7 +1644,13 @@ func _update_material_highlights():
 		
 		if not overlay or not label: continue
 		
-		if mat_id == selected_material:
+		var is_selected = (mat_id == selected_material)
+		
+		# Music button exception: highlight if ANY music material is selected
+		if mat_id == MUSIC_ID_START and selected_material >= MUSIC_ID_START and selected_material < MUSIC_ID_START + 48:
+			is_selected = true
+			
+		if is_selected:
 			overlay.visible = true
 			# Only apply style once, don't duplicate on every click
 			if not overlay.has_theme_stylebox_override("panel"):
@@ -1688,6 +1734,7 @@ func _update_menu_highlights():
 						btn.remove_theme_stylebox_override("normal")
 
 func _is_any_ui_blocking() -> bool:
+	if is_blocking: return true # GLOBAL MODAL BLOCKER
 	if is_mouse_over_ui: return true
 	if is_npc_mode_menu_open: return true # GLOBAL PROTECTOR: Block all workspace edits while arcade menu is up
 	
@@ -1707,6 +1754,9 @@ func _is_any_ui_blocking() -> bool:
 	if npc_panel and npc_panel.visible and npc_panel.get_global_rect().has_point(m_pos):
 		return true
 	
+	if music_panel and music_panel.visible and music_panel.get_global_rect().has_point(m_pos):
+		return true
+		
 	# Fallback to signal-based flag
 	if is_mouse_over_ui: return true
 		
@@ -1809,11 +1859,11 @@ func _process(delta):
 	
 	# Handle input with robust UI blocking
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		var is_blocking = _is_any_ui_blocking()
+		var ui_blocked = _is_any_ui_blocking()
 		
 		# 1. INITIAL TOUCH PROTECTION
 		if not mouse_was_pressed:
-			touch_started_on_ui = touch_started_on_ui or is_blocking
+			touch_started_on_ui = touch_started_on_ui or ui_blocked
 			
 			# NPC CONTROL SELECTION
 			if is_selecting_npc_to_control and not touch_started_on_ui:
@@ -1851,7 +1901,7 @@ func _process(delta):
 				if is_instance_valid(npc_panel) and npc_panel.visible: npc_panel.visible = false
 
 		# DRAW LOGIC (Only if touch session started on Sandbox, current position is Sandbox, and NOT in selection mode)
-		if not touch_started_on_ui and not is_blocking and not is_selecting_npc_to_control:
+		if not touch_started_on_ui and not ui_blocked and not is_selecting_npc_to_control:
 			var m_pos = get_local_mouse_position()
 			var gx = int(m_pos.x / grid_scale)
 			var gy = int(m_pos.y / grid_scale)
@@ -1862,6 +1912,13 @@ func _process(delta):
 					_place_npc(gx, gy)
 					_play_action_sound("npc_place")
 				_manage_brush_sound(-1) # Stop brush if switching to NPC
+			elif (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC):
+				if not mouse_was_pressed:
+					_place_music_block(gx, gy, selected_material)
+					var inst = (selected_material - MUSIC_ID_START) / 12
+					var note = (selected_material - MUSIC_ID_START) % 12
+					_play_music_note(inst, note)
+				_manage_brush_sound(-1)
 			else:
 				_manage_brush_sound(selected_material)
 				_draw_circle(gx, gy, brush_radius, selected_material)
@@ -2498,6 +2555,14 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				charge_array[idx] = randi_range(20, 70)
 				_register_charge(idx)
 				_play_action_sound("fuse_burning", 0.1)
+
+	# --- MUSIC INTERACTIONS ---
+	if (tags & SandboxMaterial.Tags.MUSIC):
+		# Trigger on pulse or neighbor heat
+		if charge_array[idx] == 100 or _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY):
+			var inst = (pure_id - MUSIC_ID_START) / 12
+			var note = (pure_id - MUSIC_ID_START) % 12
+			_play_music_note(inst, note)
 	
 	if pure_id == 19: 
 		charge_array[idx] -= 1
@@ -4629,3 +4694,246 @@ func _update_arcade_dynamic_button():
 		var ext_labels = npc_control_gui.get_node_or_null("ArcadeLabels")
 		if ext_labels:
 			for child in ext_labels.get_children(): child.queue_free()
+
+# --- MUSIC SYSTEM IMPLEMENTATION (NEW) ---
+
+func _register_musical_materials():
+	for inst in range(4):
+		var base_color = MUSIC_INST_COLORS[inst]
+		for note in range(12):
+			var mat_id = MUSIC_ID_START + (inst * 12) + note
+			var color = base_color
+			if inst < 3: # Keyboard instruments: darken from agudo (11) to grave (0)
+				# 11 = Highest (Base Color), 0 = Lowest (Darkest)
+				var factor = 0.4 + (float(note) / 11.0) * 0.6 
+				color = base_color.darkened(1.0 - factor)
+			
+			_register_material(mat_id, color, SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.MUSIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.CONDUCTOR)
+
+func _place_music_block(gx, gy, mat_id):
+	# Places a 2x2 block (4 pixels)
+	for oy in range(2):
+		for ox in range(2):
+			_set_cell(gx + ox, gy + oy, mat_id)
+
+func _play_music_note(inst_idx, note_idx):
+	var s_name = MUSIC_INSTRUMENTS[inst_idx]
+	var p_scale = MUSIC_PITCHES[note_idx % 12]
+	
+	# Special Drum Handling: Use distinct sounds
+	if inst_idx == 3:
+		var drum_keys = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom"]
+		s_name = drum_keys[note_idx % 4]
+		p_scale = 1.0 # Use natural sample pitch
+		
+	var stream = _get_sfx_stream(s_name)
+	if stream:
+		music_player.stream = stream
+		music_player.pitch_scale = p_scale
+		music_player.play()
+
+func _setup_music_ui():
+	var s = _get_ui_scale()
+	var ui_root = get_parent().get_node("UI")
+	
+	# CLEAN UP ALL PREVIOUS MUSICAL UI (Ensures no screen darkening stack or menu leaks)
+	for child in ui_root.get_children():
+		if child.name.begins_with("MusicMenuBlocker") or child.name.begins_with("MusicPanel"):
+			child.name = "TO_DELETE" # Rename to avoid name collision during current frame
+			child.hide()
+			child.queue_free()
+	
+	# Create Full-screen protector (Block all workspace clicks)
+	var blocker = ColorRect.new() # Use ColorRect for absolute visual certainty during debug
+	blocker.name = "MusicMenuBlocker"
+	blocker.color = Color(0, 0, 0, 0.4) # Subtle dim
+	blocker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	blocker.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(blocker)
+	
+	music_panel = PanelContainer.new()
+	music_panel.name = "MusicPanel"
+	ui_root.add_child(music_panel)
+	
+	# Global draws are blocked while this is open
+	is_blocking = true
+	
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.12, 0.08, 0.12, 0.98) # Darker Purple-ish
+	panel_style.border_width_left = 3; panel_style.border_width_top = 3
+	panel_style.border_width_right = 3; panel_style.border_width_bottom = 3
+	panel_style.border_color = Color("#A61266") # Base Musical Color Border
+	panel_style.corner_radius_top_left = 15; panel_style.corner_radius_top_right = 15
+	panel_style.corner_radius_bottom_left = 15; panel_style.corner_radius_bottom_right = 15
+	music_panel.add_theme_stylebox_override("panel", panel_style)
+	music_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	
+	music_panel.anchor_left = 0.5; music_panel.anchor_right = 0.5
+	music_panel.anchor_top = 0.5; music_panel.anchor_bottom = 0.5
+	
+	var m_width = 560 * s
+	var m_height = 430 * s
+	music_panel.offset_left = -m_width / 2
+	music_panel.offset_right = m_width / 2
+	music_panel.offset_top = -m_height / 2
+	music_panel.offset_bottom = m_height / 2
+	
+	var main_vbox = VBoxContainer.new()
+	main_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	main_vbox.add_theme_constant_override("separation", 15 * s)
+	music_panel.add_child(main_vbox)
+	
+	var title = Label.new()
+	title.text = "🎹 " + tr("music")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", _get_safe_font())
+	title.add_theme_font_size_override("font_size", 28 * s)
+	main_vbox.add_child(title)
+	
+	# Instrument Selection Row
+	var inst_hbox = HBoxContainer.new()
+	inst_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	inst_hbox.add_theme_constant_override("separation", 10 * s)
+	main_vbox.add_child(inst_hbox)
+	
+	var i_keys = ["piano1", "piano2", "piano3", "drums"]
+	for i in range(4):
+		var btn = Button.new()
+		btn.text = tr(i_keys[i])
+		btn.custom_minimum_size = Vector2(120 * s, 45 * s)
+		btn.add_theme_font_override("font", _get_safe_font())
+		btn.add_theme_font_size_override("font_size", 14 * s)
+		
+		var b_style = StyleBoxFlat.new()
+		b_style.bg_color = MUSIC_INST_COLORS[i].darkened(0.6)
+		b_style.border_width_bottom = 4 if i == selected_music_instrument else 0
+		b_style.border_color = Color.WHITE
+		btn.add_theme_stylebox_override("normal", b_style)
+		btn.add_theme_stylebox_override("hover", b_style)
+		btn.add_theme_stylebox_override("pressed", b_style)
+		
+		var inst_idx = i
+		btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			selected_music_instrument = inst_idx
+			_play_music_note(selected_music_instrument, selected_music_note)
+			_setup_music_ui() # Refresh
+		)
+		inst_hbox.add_child(btn)
+	
+	# Note Selection Grid
+	var note_grid = GridContainer.new()
+	var num_notes = 12 if selected_music_instrument < 3 else 4
+	note_grid.columns = 4
+	note_grid.add_theme_constant_override("h_separation", 8 * s)
+	note_grid.add_theme_constant_override("v_separation", 8 * s)
+	note_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	main_vbox.add_child(note_grid)
+	
+	var drum_names = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom"]
+	
+	for i in range(num_notes):
+		var btn = Button.new()
+		if selected_music_instrument < 3:
+			btn.text = MUSIC_NOTES[i]
+		else:
+			btn.text = tr(drum_names[i])
+		
+		btn.custom_minimum_size = Vector2(80 * s, 80 * s)
+		btn.add_theme_font_override("font", _get_safe_font())
+		btn.add_theme_font_size_override("font_size", 16 * s if selected_music_instrument == 3 else 22 * s)
+		
+		var base_color = MUSIC_INST_COLORS[selected_music_instrument]
+		var factor = 0.4 + (float(i) / 11.0) * 0.6
+		var n_color = base_color.darkened(1.0 - factor) if selected_music_instrument < 3 else base_color
+		
+		var n_style = StyleBoxFlat.new()
+		n_style.bg_color = n_color
+		n_style.border_width_left = 4 if i == selected_music_note else 1
+		n_style.border_width_top = 4 if i == selected_music_note else 1
+		n_style.border_width_right = 4 if i == selected_music_note else 1
+		n_style.border_width_bottom = 4 if i == selected_music_note else 1
+		n_style.border_color = Color.WHITE if i == selected_music_note else Color(1, 1, 1, 0.3)
+		n_style.set_corner_radius_all(8 * s)
+		
+		btn.add_theme_stylebox_override("normal", n_style)
+		btn.add_theme_stylebox_override("hover", n_style)
+		btn.add_theme_stylebox_override("pressed", n_style)
+		
+		var note_idx = i
+		btn.pressed.connect(func():
+			selected_music_note = note_idx
+			_play_music_note(selected_music_instrument, selected_music_note)
+			# Update selected material to the specific ID
+			selected_material = MUSIC_ID_START + (selected_music_instrument * 12) + selected_music_note
+			_setup_music_ui() # Refresh
+		)
+		note_grid.add_child(btn)
+	
+	# Accept Button
+	var accept_btn = Button.new()
+	accept_btn.text = tr("welcome_close") # "Empezar/Start" - Reuse for Accept
+	accept_btn.custom_minimum_size = Vector2(250 * s, 60 * s)
+	accept_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	accept_btn.add_theme_font_override("font", _get_safe_font())
+	accept_btn.add_theme_font_size_override("font_size", 24 * s)
+	
+	var acc_style = StyleBoxFlat.new()
+	acc_style.bg_color = Color("#A61266")
+	acc_style.border_width_bottom = 2
+	acc_style.border_color = Color.WHITE
+	acc_style.set_corner_radius_all(10 * s)
+	accept_btn.add_theme_stylebox_override("normal", acc_style)
+	
+	accept_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		selected_material = MUSIC_ID_START + (selected_music_instrument * 12) + selected_music_note
+		music_panel.visible = false
+		is_blocking = false # RESUME drawing
+		
+		# CLEAN UP ALL MUSIC UI ELEMENTS
+		for child in ui_root.get_children():
+			if child.name.begins_with("MusicMenuBlocker") or child.name.begins_with("MusicPanel") or child.name == "TO_DELETE":
+				child.queue_free()
+		
+		_update_material_highlights()
+		_update_menu_highlights()
+		_on_arcade_selection_made(false)
+	)
+	main_vbox.add_child(accept_btn)
+	
+func _setup_music_button():
+	var s = _get_ui_scale()
+	var btn = Button.new()
+	btn.name = "MusicBtn"
+	btn.text = "🎹 " + tr("music")
+	btn.add_theme_font_override("font", _get_safe_font())
+	
+	# Calculation for 4 buttons height
+	var btn_h = (336.0 - (9.0 * s)) / 4.0
+	btn.custom_minimum_size = Vector2(160 * s, btn_h)
+	btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
+	
+	var m_style = StyleBoxFlat.new()
+	m_style.bg_color = Color("#9E1FFF").darkened(0.6) # Consistent dark purple base
+	m_style.border_width_left = 1; m_style.border_width_top = 1
+	m_style.border_width_right = 1; m_style.border_width_bottom = 1
+	m_style.border_color = Color(0.4, 0.4, 0.5) # Same border color as others
+	m_style.set_corner_radius_all(5)
+	
+	# Apply FIXED style to all states
+	btn.add_theme_stylebox_override("normal", m_style)
+	btn.add_theme_stylebox_override("hover", m_style)
+	btn.add_theme_stylebox_override("pressed", m_style)
+	btn.add_theme_stylebox_override("focus", m_style)
+	
+	btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		_setup_music_ui()
+	)
+	
+	action_vbox.add_child(btn)
+	ui_elements["music_btn"] = btn
+
+func _is_music_active() -> bool:
+	return (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC) != 0

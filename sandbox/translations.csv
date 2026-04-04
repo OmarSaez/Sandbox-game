@@ -49,11 +49,16 @@ team_yellow,🟡 Amarillo,🟡 Yellow,🟡 Giallo,🟡 Jaune,🟡 Gelb,🟡 Amar
 team_green,🟢 Verde,🟢 Green,🟢 Verde,🟢 Vert,🟢 Grün,🟢 Verde
 team,Equipo,Team,Squadra,Équipe,Team,Equipe
 ice,Hielo,Ice,Ghiaccio,Glace,Eis,Gelo
-support,💎 Apoya al Creador (Anuncio),💎 Support Creator (Ad),💎 Sostieni el Creatore (Annuncio),💎 Soutenir le créateur (Pub),💎 Schöpfer unterstützen (Anzeige),💎 Apoie o Criador (Anúncio)
+support,💎 Apoya al Creador (Anuncio),💎 Support Creator (Ad),💎 Sostieni el Creatore (Annuncio),💎 Soutenir le créateur (Pub),💎 Schöpfer unterstützen (Anzeige),💎 Apoie o Criador (Anúnção)
 resume_in,El juego se reanudará en ,Game resumes in ,Il juego riprenderá tra ,Le juego reprendra dans ,Das Spiel wird fortgesetzt in ,O juego será retomado em 
 coming_soon,⏳ PROXIMAMENTE,⏳ COMING SOON,⏳ PROSSIMAMENTE,⏳ BIENTÔT,⏳ DEMNÄCHST,⏳ EM BREVE
 toxic_gas,Gas Tóxico,Toxic Gas,Gas Tossico,Gaz Toxique,Giftiges Gas,Gás Tóxico
 void,Vacío,Void,Vuoto,Vide,Leere,Vazio
+battedrums,Batería,Drums,Batteria,Batterie,Batterie,Bateria
+drum_kick,Bombo,Kick,Cassa,Grosse Caisse,Bassdrum,Bumbo
+drum_snare,Redoblante,Snare,Rullante,Caisse Claire,Snare,Caixa
+drum_hihat,Hi-Hat,Hi-Hat,Hi-Hat,Hi-Hat,Hi-Hat,Hi-Hat
+drum_tom,Tom-Tom,Tom-Tom,Tom-Tom,Tom-Tom,Tom-Tom,Tom-Tom
 battery,Batería,Battery,Batteria,Batterie,Batterie,Bateria
 npc_act,Activador NPC,NPC Act.,Attivatore NPC,Activateur NPC,NPC-Aktivator,Ativador NPC
 door,Puerta,Door,Puerta,Porte,Tür,Porta
@@ -93,3 +98,12 @@ npc_controller_title,🎮 Controlador de NPC,🎮 NPC Controller,🎮 Controller
 active,Activo,Active,Attivo,Actif,Aktiv,Ativo
 inactive,Desactivado,Disabled,Disattivato,Désactivé,Deaktiviert,Desativado
 menu,MENÚ,MENU,MENU,MENU,MENÜ,MENU
+music,Música,Music,Musica,Musique,Musik,Música
+piano1,Piano Clásico,Grand Piano,Pianoforte,Piano,Klavier,Piano
+piano2,Piano Suave,Soft Piano,Piano Dolce,Piano Doux,Softes Klavier,Piano Suave
+piano3,Sintetizador,Synth,Sintetizzatore,Synthé,Synthesizer,Sintetizador
+drums,Batería,Drums,Batteria,Batterie,Schlagzeug,Bateria
+drum_kick,Bombo,Kick,Cassa,Grosse Caisse,Bassdrum,Bumbo
+drum_snare,Redoblante,Snare,Rullante,Caisse Claire,Snare,Caixa
+drum_hihat,Hi-Hat,Hi-Hat,Hi-Hat,Hi-Hat,Hi-Hat,Hi-Hat
+drum_tom,Tom-Tom,Tom-Tom,Tom-Tom,Tom-Tom,Tom-Tom,Tom-Tom
