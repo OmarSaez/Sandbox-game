@@ -70,7 +70,7 @@ var is_blocking: bool = false
 
 # History / Undo System
 var history_buffer = [] # Array of PackedInt32Array
-var history_max_steps: int = 5
+var history_max_steps: int = 6 # Store 6 snapshots to allow 5 undo steps
 var history_current_index: int = -1
 
 # Save / Load System
@@ -1947,6 +1947,8 @@ func _process(delta):
 		if not mouse_was_pressed:
 			touch_started_on_ui = touch_started_on_ui or ui_blocked
 			
+			# HISTORY REMOVED FROM MOUSE DOWN TO PREVENT UNDO BUG
+			
 			# NPC CONTROL SELECTION
 			if is_selecting_npc_to_control and not touch_started_on_ui:
 				var m_pos = get_local_mouse_position()
@@ -2029,7 +2031,9 @@ func _process(delta):
 		mouse_was_pressed = true
 	else:
 		if mouse_was_pressed:
-			save_history_state() # Save state when finger is lifted after drawing
+			# CAPTURE HISTORY ON RELEASE (POST-ACTION)
+			if not touch_started_on_ui and not is_selecting_npc_to_control:
+				save_history_state()
 			
 		mouse_was_pressed = false
 		touch_started_on_ui = false
@@ -2072,27 +2076,50 @@ func save_history_state():
 	# If we're not at the head of the buffer (we undid something), clear the "future"
 	if history_current_index < history_buffer.size() - 1:
 		history_buffer.resize(history_current_index + 1)
-		
-	# Store a copy of the current grid state
-	history_buffer.append(cells.duplicate())
+
+	# OPTIMIZATION: Don't save identical consecutive states (e.g. clicking without drawing)
+	var current_snapshot = {
+		"cells": cells.duplicate(),
+		"charge": charge_array.duplicate(),
+		"tags": tags_array.duplicate(),
+		"chunks": chunks_active.duplicate(),
+		"next_chunks": next_chunks_active.duplicate()
+	}
 	
-	# Keep only the last N states
+	if history_buffer.size() > 0:
+		var last = history_buffer.back()
+		# Quick check: if cells first/mid/last are same, it's likely same (for speed)
+		if last.cells == current_snapshot.cells:
+			return
+
+	history_buffer.append(current_snapshot)
+	
 	if history_buffer.size() > history_max_steps:
 		history_buffer.pop_front()
-	else:
-		history_current_index += 1
+	
+	history_current_index = history_buffer.size() - 1
 
 func undo_history():
 	if history_current_index > 0:
 		history_current_index -= 1
-		cells = history_buffer[history_current_index].duplicate()
+		var snapshot = history_buffer[history_current_index]
+		cells = snapshot.cells.duplicate()
+		charge_array = snapshot.charge.duplicate()
+		tags_array = snapshot.tags.duplicate()
+		chunks_active = snapshot.chunks.duplicate()
+		next_chunks_active = snapshot.next_chunks.duplicate()
 		_update_texture()
 		queue_redraw()
 
 func redo_history():
 	if history_current_index < history_buffer.size() - 1:
 		history_current_index += 1
-		cells = history_buffer[history_current_index].duplicate()
+		var snapshot = history_buffer[history_current_index]
+		cells = snapshot.cells.duplicate()
+		charge_array = snapshot.charge.duplicate()
+		tags_array = snapshot.tags.duplicate()
+		chunks_active = snapshot.chunks.duplicate()
+		next_chunks_active = snapshot.next_chunks.duplicate()
 		_update_texture()
 		queue_redraw()
 
