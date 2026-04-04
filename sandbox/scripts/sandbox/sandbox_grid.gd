@@ -1036,7 +1036,7 @@ func _setup_tools_ui():
 	tools_panel.anchor_bottom = 1.0
 	
 	var panel_width = 530 * s
-	var panel_height = 490 * s
+	var panel_height = 540 * s
 	var h = 340 # Match the Fixed Tall HUD height
 	var bottom_gap = h + (5 * s) # Dynamic GAP above HUD floor
 	
@@ -1140,6 +1140,13 @@ func _setup_tools_ui():
 	)
 
 	# NEW: ACTION ROW (Undo, Redo, Eraser, Save)
+	var func_lbl = Label.new()
+	func_lbl.text = tr("func") + ":"
+	func_lbl.add_theme_font_size_override("font_size", 14 * s)
+	func_lbl.add_theme_font_override("font", _get_safe_font())
+	v_box.add_child(func_lbl)
+	ui_elements["func_lbl"] = func_lbl
+
 	var action_row = HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 10 * s)
 	action_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1153,16 +1160,17 @@ func _setup_tools_ui():
 		btn.add_theme_font_override("font", _get_safe_font())
 		btn.add_theme_font_size_override("font_size", 14 * s)
 		
+		# BASE STYLE (Matching row buttons like lang/size)
 		var style = StyleBoxFlat.new()
-		style.bg_color = color.darkened(0.6)
-		style.border_width_left = 2; style.border_width_top = 2
-		style.border_width_right = 2; style.border_width_bottom = 2
-		style.border_color = color.lightened(0.2)
-		style.set_corner_radius_all(10 * s)
+		style.bg_color = Color(0.1, 0.1, 0.1, 0.8) # Consistent dark theme
+		style.border_width_left = 1; style.border_width_top = 1
+		style.border_width_right = 1; style.border_width_bottom = 1
+		style.border_color = Color(0.25, 0.25, 0.3)
+		style.set_corner_radius_all(5 * s)
 		btn.add_theme_stylebox_override("normal", style)
 		
 		var hover = style.duplicate()
-		hover.bg_color = color.darkened(0.4)
+		hover.bg_color = Color(0.2, 0.2, 0.25, 0.9)
 		btn.add_theme_stylebox_override("hover", hover)
 		
 		btn.pressed.connect(func():
@@ -1170,18 +1178,19 @@ func _setup_tools_ui():
 			callback.call()
 		)
 		action_row.add_child(btn)
+		ui_elements[text_key + "_btn"] = btn # Register for highlights
 		return btn
 
 	create_action_btn.call("undo", Color.ORANGE, func(): undo_history())
 	create_action_btn.call("redo", Color.SKY_BLUE, func(): redo_history())
-	create_action_btn.call("eraser", Color.GRAY, func(): 
+	create_action_btn.call("eraser_tool", Color.GRAY, func(): 
 		selected_material = 0
-		brush_radius = 3 # Special 3px radius as requested
+		brush_radius = 3 
 		_update_material_highlights()
 		_update_menu_highlights()
 		_on_arcade_selection_made(true)
 	)
-	create_action_btn.call("save", Color.GOLD, func(): 
+	create_action_btn.call("save_btn_ui", Color.GOLD, func(): 
 		if is_instance_valid(save_panel):
 			save_panel.queue_free()
 		else:
@@ -1521,7 +1530,7 @@ func _refresh_ui_text():
 			node_data.text = tr("inactive")
 		elif key == "control_npc_lbl":
 			node_data.text = tr("npc_controller_title") + ": "
-		elif key.ends_with("_btn") and not key.ends_with("_mat_btn"): # Generic NPC/Tool handler
+		elif key.ends_with("_btn") and not (key == "undo_btn" or key == "redo_btn" or key == "eraser_tool_btn" or key == "save_btn_ui_btn") and not key.ends_with("_mat_btn"): # Generic NPC/Tool handler
 			var pure_key = key.replace("_btn", "")
 			node_data.text = tr(pure_key)
 			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
@@ -1588,6 +1597,22 @@ func _refresh_ui_text():
 				var pure_key = key.replace("_btn_0", "")
 				node_data.text = tr(pure_key)
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
+				node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key == "undo_btn":
+				node_data.text = tr("undo")
+				node_data.custom_minimum_size = Vector2(0, 50 * s)
+				node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key == "redo_btn":
+				node_data.text = tr("redo")
+				node_data.custom_minimum_size = Vector2(0, 50 * s)
+				node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key == "eraser_tool_btn":
+				node_data.text = tr("eraser_tool")
+				node_data.custom_minimum_size = Vector2(0, 50 * s)
+				node_data.add_theme_font_size_override("font_size", 14 * s)
+			elif key == "save_btn_ui_btn":
+				node_data.text = tr("save_btn_ui")
+				node_data.custom_minimum_size = Vector2(0, 50 * s)
 				node_data.add_theme_font_size_override("font_size", 14 * s)
 	
 	_update_arcade_dynamic_button() # Sync HUD to new language
@@ -1804,6 +1829,10 @@ func _update_menu_highlights():
 				elif key.begins_with("team_btn_"):
 					var idx = int(key.split("_")[-1])
 					if idx == selected_team: is_active = true
+				elif key == "eraser_tool_btn":
+					if selected_material == 0: is_active = true
+				elif key == "save_btn_ui_btn":
+					if is_instance_valid(save_panel): is_active = true
 				elif key == "control_active_btn":
 					is_active = is_selecting_npc_to_control or is_instance_valid(controlled_npc)
 				elif key == "control_disabled_btn":
@@ -2399,6 +2428,24 @@ func _strike_lightning():
 			break
 
 func _draw_circle(cx, cy, radius, mat_id):
+	if mat_id == 0:
+		# ERASER: Also remove NPCs in range
+		var nearby = _get_nearby_npcs(cx, cy, radius + 2)
+		for npc in nearby:
+			# Precise collision check: if any of the NPC's 5x2 pixels are inside the circle
+			var hit = false
+			for oy in range(5):
+				for ox in range(2):
+					var px = npc.pos.x + ox
+					var py = npc.pos.y + oy
+					if (px - cx)**2 + (py - cy)**2 <= radius**2:
+						hit = true; break
+				if hit: break
+			
+			if hit:
+				npc.hp = 0 # Instant kill
+				npc.hit_flash = 1 # Minimal flash to trigger removal next frame
+	
 	for y in range(-radius, radius + 1):
 		for x in range(-radius, radius + 1):
 			if x*x + y*y <= radius*radius:

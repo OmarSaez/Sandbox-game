@@ -112,8 +112,9 @@ bpm,BPM (Tempo),BPM (Tempo),BPM (Tempo),BPM (Tempo),BPM (Tempo),BPM (Tempo)
 metronome_info,Este bloque libera electricidad automáticamente a este ritmo,This block releases electricity automatically at this rhythm,Questo blocco rilascia elettricità automaticamente a questo ritmo,Ce bloc libère l'électricité automatiquement à ce rythme,Dieser Block gibt automatisch Strom in diesem Rhythmus ab,Este bloco libera eletricidade automaticamente a este ritmo
 piano4,Piano espacial,Space Piano,Piano spaziale,Piano d'espace,Weltraumpiano,Piano espacial
 undo,Deshacer,Undo,Annulla,Annuler,Rückgängig,Desfazer
-redo,Rehacer,Redo,Rifare,Rétablir,Wiederherstellen,Refazer
-save,Guardar,Save,Salva,Enregistrer,Speichern,Salvar
+redo,Rehacer,Redo,Ripristina,Rétablir,Wiederherstellen,Refazer
+eraser_tool,Borrador,Eraser,Gomma,Gomme,Radiergummi,Borrador
+save_btn_ui,Guardar,Save,Salva,Sauvegarder,Speichern,Salvar
 slot,Espacio,Slot,Slot,Emplacement,Steckplatz,Espaço
 override_confirm,"¿Estás seguro de que quieres sobre escribir {0}, {1}?","Are you sure you want to overwrite {0}, {1}?","Sei sicuro di voler sovrascrivere {0}, {1}?","Êtes-vous sûr de vouloir écraser {0}, {1} ?","Möchten Sie {0}, {1} wirklich überschreiben?","Tem certeza que deseja sobrescrever {0}, {1}?"
 yes,Sí,Yes,Sì,Oui,Ja,Sim
@@ -122,3 +123,4 @@ empty,Vacío,Empty,Vuoto,Vide,Leer,Vazio
 load,Cargar,Load,Carica,Charger,Laden,Carregar
 enter_save_name,Escribe un nombre...,Enter a name...,Scrivi un nome...,Entrer un nom...,Nombre eingeben...,Digite um nome...
 save_to_slot,Guardar en Slot {0},Save to Slot {0},Salva nel Slot {0},Sauvegarder dans Slot {0},In Slot {0} speichern,Salvar no Slot {0}
+func,Funcionalidad,Functionality,Funzionalità,Fonctionnalité,Funktionalität,Funcionalidade
