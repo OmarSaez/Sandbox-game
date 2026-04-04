@@ -1292,7 +1292,6 @@ func _setup_tools_ui():
 	_add_ui_header(v_box, "coming_soon")
 	
 	create_row.call("speed", ["x0.2", "x0.5", "x0.8", "x1", "x2", "x4"], func(_l): pass, true)
-	create_row.call("eraser", [tr("eraser")], func(_l): pass, true)
 	create_row.call("shapes", [
 		tr("line"),
 		tr("rect"),
@@ -5310,12 +5309,6 @@ func _setup_save_ui():
 	title.add_theme_font_override("font", _get_safe_font())
 	title.add_theme_font_size_override("font_size", 36 * s)
 	title_hbox.add_child(title)
-	
-	var close_btn = Button.new()
-	close_btn.text = "X"
-	close_btn.custom_minimum_size = Vector2(60 * s, 60 * s)
-	close_btn.pressed.connect(func(): save_panel.queue_free())
-	title_hbox.add_child(close_btn)
 	
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
