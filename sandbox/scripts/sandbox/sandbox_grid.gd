@@ -1996,15 +1996,17 @@ func _draw():
 	var s = _get_ui_scale()
 	var g_scale = float(grid_scale)
 	
-	# MUSICAL RHYTHM GRID
-	if _is_music_active():
-		var grid_col = Color(1, 1, 1, 0.15)
-		# Vertical lines
+	# MUSICAL RHYTHM GRID (Prioridad Alta)
+	var music_menu_node = get_parent().get_node_or_null("UI/MusicPanel")
+	if (music_menu_node and music_menu_node.visible) or _is_music_active():
+		var grid_col = Color(1, 1, 1, 0.5) # Muy visible
+		var thickness = 2.0
+		# Vertical lines (Todo el mapa)
 		for x in range(0, grid_width + 1, 4):
-			draw_line(Vector2(x * g_scale, 0), Vector2(x * g_scale, dynamic_grid_height * g_scale), grid_col, 1.0)
-		# Horizontal lines
-		for y in range(0, dynamic_grid_height + 1, 4):
-			draw_line(Vector2(0, y * g_scale), Vector2(grid_width * g_scale, y * g_scale), grid_col, 1.0)
+			draw_line(Vector2(x * g_scale, 0), Vector2(x * g_scale, grid_height * g_scale), grid_col, thickness)
+		# Horizontal lines (Todo el mapa)
+		for y in range(0, grid_height + 1, 4):
+			draw_line(Vector2(0, y * g_scale), Vector2(grid_width * g_scale, y * g_scale), grid_col, thickness)
 			
 	# METRONOME VISUAL RHYTHM PULSE
 	if Engine.get_frames_drawn() % music_tempo_frames < 5:
@@ -4750,20 +4752,20 @@ func _update_arcade_dynamic_button():
 # --- MUSIC SYSTEM IMPLEMENTATION (NEW) ---
 
 func _register_musical_materials():
+	# Register 4 distinct instrument sets (3 pianos + 1 drum set)
 	for inst in range(4):
 		var base_color = MUSIC_INST_COLORS[inst]
 		for note in range(12):
 			var mat_id = MUSIC_ID_START + (inst * 12) + note
 			var color = base_color
 			if inst < 3: # Keyboard instruments: darken from agudo (11) to grave (0)
-				# 11 = Highest (Base Color), 0 = Lowest (Darkest)
 				var factor = 0.4 + (float(note) / 11.0) * 0.6 
 				color = base_color.darkened(1.0 - factor)
 			
 			_register_material(mat_id, color, SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.MUSIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.CONDUCTOR)
 	
 	# Register METRONOME (ID 550) - Neon Cyan pulses
-	_register_material(550, Color("#00F2FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)
+	_register_material(550, Color("#00F2FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.MUSIC)
 
 func _place_music_block(gx, gy, mat_id):
 	# Places a 2x2 block (4 pixels)
@@ -4773,10 +4775,12 @@ func _place_music_block(gx, gy, mat_id):
 
 func _play_music_note(inst_idx, note_idx):
 	var s_name = MUSIC_INSTRUMENTS[inst_idx]
-	var p_scale = MUSIC_PITCHES[note_idx % 12]
+	# MATHEMATICAL TUNING: 2^(n/12) ensures perfect semitones
+	# Assuming original sample is Middle C (1.0), then C=1.0, C#=1.059, etc.
+	var p_scale = pow(2.0, float(note_idx % 12) / 12.0)
 	
 	# Special Drum Handling: Use distinct sounds
-	if inst_idx == 3:
+	if inst_idx == 3: # Drums are at index 3 in ["piano1", "piano2", "piano3", "drums"]
 		var drum_keys = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom"]
 		s_name = drum_keys[note_idx % 4]
 		p_scale = 1.0 # Use natural sample
@@ -5023,4 +5027,7 @@ func _setup_music_button():
 	ui_elements["music_btn"] = btn
 
 func _is_music_active() -> bool:
+	# Show grid if music menu is open OR if a musical material is selected
+	if is_instance_valid(music_panel) and music_panel.visible:
+		return true
 	return (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC) != 0
