@@ -75,16 +75,17 @@ var music_player_pool: Array[AudioStreamPlayer] = []
 var music_next_idx: int = 0
 var music_panel: PanelContainer
 const MUSIC_ID_START = 500
-const MUSIC_INSTRUMENTS = ["piano1", "piano2", "piano3", "drums", "metronome"]
+const MUSIC_INSTRUMENTS = ["piano1", "piano2", "piano3", "piano4", "drums", "metronome"]
 const MUSIC_INST_COLORS = [
-	Color("#9E1FFF"), # Purple
-	Color("#1F4CFF"), # Blue
-	Color("#1FDDFF"), # Cyan
+	Color("#D652FF"), # Purple
+	Color("#5E7FFF"), # Blue
+	Color("#C0B8FF"), # Cyan
+	Color("#1FDDFF"), # Space Piano (Violet)
 	Color("#FFC31F"), # Yellow
-	Color("#00F2FF")  # Neon Cyan
+	Color("#E0BB87")  # Neon Cyan
 ]
-const MUSIC_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-const MUSIC_PITCHES = [1.0, 1.05946, 1.12246, 1.18921, 1.25992, 1.33483, 1.41421, 1.49831, 1.58740, 1.68179, 1.78180, 1.88775]
+const MUSIC_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B", "C", "C#", "D", "E"]
+const MUSIC_PITCHES = [1.0, 1.05946, 1.12246, 1.18921, 1.25992, 1.33483, 1.41421, 1.49831, 1.58740, 1.68179, 1.78180, 1.88775, 2.0, 2.11893, 2.24492, 2.51984]
 
 @export var custom_emoji_font: Font 
 
@@ -201,7 +202,7 @@ var action_sfx = {
 	"tornado_loop": "tornado_loop",
 	"firework_launch": "rocket_launch",
 	"firework_ascent": "rocket_launch_ascent",
-	"firework_burst": "rocket_explode", # Sonido de explosión de colores en el aire
+	"firework_burst": "firework_explode", # Sonido de explosión de colores en el aire
 	"fuse_burning": "fuse",
 	
 	# --- SISTEMA SIMPLIFICADO DEL VOLCÁN ---
@@ -434,7 +435,7 @@ func _ready():
 	_register_material(6, Color("#66380C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#4D2A09")) # Tierra
 	
 	# 8: Metal
-	_register_material(8, Color("EDEDED"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.GRAV_STATIC) # Metal
+	_register_material(8, Color("E3E3E3"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.GRAV_STATIC) # Metal
 	# 9: Electricidad
 	_register_material(9, Color("FFF300"), SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC) # Electricidad
 	# 10: Rocas
@@ -1566,7 +1567,7 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	if not is_upcoming:
 		if mat_id == MUSIC_ID_START:
 			final_color = Color("#A61266")
-		elif mat_id == 550:
+		elif mat_id == 600:
 			final_color = Color("#FFD700")
 		elif mat_id >= 0:
 			final_color = mat_colors_1[mat_id]
@@ -1948,12 +1949,15 @@ func _process(delta):
 					
 					# 4. MUSIC: Trigger note on pulse/heat
 					if (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC):
-						var inst = (selected_material - MUSIC_ID_START) / 12
-						var note = (selected_material - MUSIC_ID_START) % 12
-						_play_music_note(inst, note)
+						if selected_material == 600:
+							_play_music_note(5, 0)
+						else:
+							var inst = (selected_material - MUSIC_ID_START) / 16
+							var note = (selected_material - MUSIC_ID_START) % 16
+							_play_music_note(inst, note)
 					
-					# 5. METRONOME (ID 550): Auto-pulse every ~30 frames if active (Self-activation)
-					if selected_material == 550:
+					# 5. METRONOME (ID 600): Auto-pulse every ~30 frames if active (Self-activation)
+					if selected_material == 600:
 						# Metronomes only pulse on specific intervals
 						if (Engine.get_frames_drawn() % 30 == 0):
 							# We don't do anything here, we just use the frame count to determine pulse
@@ -2013,7 +2017,7 @@ func _draw():
 	# MUSICAL RHYTHM GRID (Prioridad Alta)
 	var music_menu_node = get_parent().get_node_or_null("UI/MusicPanel")
 	if (music_menu_node and music_menu_node.visible) or _is_music_active():
-		var grid_col = Color(1, 1, 1, 0.5) # Muy visible
+		var grid_col = Color("#4D4D4D") # Muy visible
 		var thickness = 2.0
 		# Vertical lines (Todo el mapa)
 		for x in range(0, grid_width + 1, 4):
@@ -2026,7 +2030,7 @@ func _draw():
 	if Engine.get_frames_drawn() % music_tempo_frames < 5:
 		for y in range(0, dynamic_grid_height, 4):
 			for x in range(0, grid_width, 4):
-				if _get_cell(x, y) == 550:
+				if _get_cell(x, y) == 600:
 					draw_rect(Rect2(Vector2(x, y) * g_scale, Vector2(g_scale * 2, g_scale * 2)), Color(1, 1, 1, 0.4), false, 1.5)
 	
 	# NPC EMOJIS
@@ -2494,11 +2498,11 @@ func _process_electricity():
 				# 2x2 DUPES FILTER: Only trigger for the "top-left" pixel of the 2x2 block
 				# This ensures 1 block = 1 voice, saving pool and preventing saturation
 				if (gx % 2 == 0 and gy % 2 == 0):
-					if mid == 550: # Metronome sound
-						_play_music_note(4, 0)
+					if mid == 600: # Metronome sound
+						_play_music_note(5, 0)
 					else:
-						var inst = (mid - MUSIC_ID_START) / 12
-						var note = (mid - MUSIC_ID_START) % 12
+						var inst = (mid - MUSIC_ID_START) / 16
+						var note = (mid - MUSIC_ID_START) % 16
 						_play_music_note(inst, note)
 			
 			continue
@@ -2601,10 +2605,10 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			_register_charge(idx)
 			
 	# METRONOME: Self-pulsing electrical source
-	if pure_id == 550:
+	if pure_id == 600:
 		if Engine.get_frames_drawn() % music_tempo_frames == 0:
 			# Emit a pulse only if it's not already busy
-			if charge_array[idx] == 0:
+			if charge_array[idx] <= 10: # Allow pulsing if cooldown is almost done
 				charge_array[idx] = 101
 				_register_charge(idx)
 		
@@ -2644,20 +2648,18 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				_register_charge(idx)
 				_play_action_sound("fuse_burning", 0.1)
 
+	# (Redundant Metronome Pulse removed to consolidate logic)
 	# --- MUSIC INTERACTIONS ---
 	if (tags & SandboxMaterial.Tags.MUSIC):
 		# Trigger on pulse or neighbor heat
 		if charge_array[idx] == 100 or _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY):
-			var inst = (pure_id - MUSIC_ID_START) / 12
-			var note = (pure_id - MUSIC_ID_START) % 12
-			_play_music_note(inst, note)
-	
-	# --- METRONOME PULSE (ID 550) ---
-	if pure_id == 550:
-		if (Engine.get_frames_drawn() % music_tempo_frames == 0): # Dynamic Rhythm
-			charge_array[idx] = 100
-			_register_charge(idx)
-	
+			if pure_id == 600:
+				_play_music_note(5, 0)
+			else:
+				var inst = (pure_id - MUSIC_ID_START) / 16
+				var note = (pure_id - MUSIC_ID_START) % 16
+				_play_music_note(inst, note)
+
 	if pure_id == 19: 
 		charge_array[idx] -= 1
 		if charge_array[idx] > 0: _register_charge(idx)
@@ -4793,20 +4795,20 @@ func _update_arcade_dynamic_button():
 # --- MUSIC SYSTEM IMPLEMENTATION (NEW) ---
 
 func _register_musical_materials():
-	# Register 4 distinct instrument sets (3 pianos + 1 drum set)
-	for inst in range(4):
+	# Register 5 distinct instrument sets (4 pianos + 1 drum set)
+	for inst in range(5):
 		var base_color = MUSIC_INST_COLORS[inst]
-		for note in range(12):
-			var mat_id = MUSIC_ID_START + (inst * 12) + note
+		for note in range(16):
+			var mat_id = MUSIC_ID_START + (inst * 16) + note
 			var color = base_color
-			if inst < 3: # Keyboard instruments: darken from agudo (11) to grave (0)
-				var factor = 0.4 + (float(note) / 11.0) * 0.6 
+			if inst < 4: # Keyboard instruments: darken from agudo (15) to grave (0)
+				var factor = 0.4 + (float(note) / 15.0) * 0.6 
 				color = base_color.darkened(1.0 - factor)
 			
 			_register_material(mat_id, color, SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.MUSIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.CONDUCTOR)
 	
-	# Register METRONOME (ID 550) - Neon Cyan pulses
-	_register_material(550, Color("#00F2FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.MUSIC)
+	# Register METRONOME (ID 600) - Neon Cyan pulses
+	_register_material(600, Color("#00F2FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.MUSIC)
 
 func _place_music_block(gx, gy, mat_id):
 	# Places a 2x2 block (4 pixels)
@@ -4816,13 +4818,13 @@ func _place_music_block(gx, gy, mat_id):
 
 func _play_music_note(inst_idx, note_idx):
 	var s_name = MUSIC_INSTRUMENTS[inst_idx]
-	var p_scale = pow(2.0, float(note_idx % 12) / 12.0)
+	var p_scale = MUSIC_PITCHES[note_idx % 16]
 	
-	if inst_idx == 3: # Drum Set
+	if inst_idx == 4: # Drum Set (Now index 4)
 		var drum_keys = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom"]
 		s_name = drum_keys[note_idx % 4]
 		p_scale = 1.0
-	elif inst_idx == 4: # Metronome
+	elif inst_idx == 5: # Metronome (Now index 5)
 		s_name = "ui_pop" # Or any tick sound
 		p_scale = 2.0
 		
@@ -4869,7 +4871,7 @@ func _setup_music_ui(force_refresh: bool = false):
 	
 	# ROBUST POSITIONING (Same as ToolsPanel: Centered above Bottom HUD)
 	var m_width = 530 * s
-	var m_height = 550 * s
+	var m_height = 650 * s
 	music_panel.custom_minimum_size = Vector2(m_width, m_height)
 	
 	# Anchor to Bottom-Center
@@ -4935,17 +4937,17 @@ func _setup_music_ui(force_refresh: bool = false):
 		btn.pressed.connect(func():
 			_play_action_sound("ui_click")
 			selected_music_instrument = idx
-			if idx == 4: # METRONOME
-				selected_material = 550
+			if idx == 5: # METRONOME (Now at index 5)
+				selected_material = 600
 			else:
-				selected_material = MUSIC_ID_START + (idx * 12) + selected_music_note
+				selected_material = MUSIC_ID_START + (idx * 16) + selected_music_note
 				_play_music_note(selected_music_instrument, selected_music_note)
 			_setup_music_ui(true)
 		)
 		inst_grid.add_child(btn)
 	
 	# 2. Tab Content Area
-	if selected_music_instrument == 4: # METRONOME VIEW
+	if selected_music_instrument == 5: # METRONOME VIEW (Index 5 after 4 pianos + 1 drums)
 		var metro_vbox = VBoxContainer.new()
 		metro_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		metro_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -4981,7 +4983,7 @@ func _setup_music_ui(force_refresh: bool = false):
 		
 	else: # PIANO/DRUMS VIEW
 		var note_grid = GridContainer.new()
-		var n_count = 12 if selected_music_instrument < 3 else 4
+		var n_count = 16 if selected_music_instrument < 4 else 4
 		note_grid.columns = 4
 		note_grid.add_theme_constant_override("h_separation", 8 * s)
 		note_grid.add_theme_constant_override("v_separation", 8 * s)
@@ -4991,14 +4993,14 @@ func _setup_music_ui(force_refresh: bool = false):
 		var drum_names = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom"]
 		for i in range(n_count):
 			var btn = Button.new()
-			btn.text = MUSIC_NOTES[i] if selected_music_instrument < 3 else tr(drum_names[i])
+			btn.text = MUSIC_NOTES[i] if selected_music_instrument < 4 else tr(drum_names[i])
 			btn.custom_minimum_size = Vector2(105 * s, 105 * s) # Bigger note buttons
 			btn.add_theme_font_override("font", _get_safe_font())
-			btn.add_theme_font_size_override("font_size", 20 * s if selected_music_instrument == 3 else 32 * s)
+			btn.add_theme_font_size_override("font_size", 20 * s if selected_music_instrument == 4 else 32 * s)
 			
 			var base_color = MUSIC_INST_COLORS[selected_music_instrument]
-			var factor = 0.4 + (float(i) / 11.0) * 0.6
-			var n_color = base_color.darkened(1.0 - factor) if selected_music_instrument < 3 else base_color
+			var factor = 0.4 + (float(i) / 15.0) * 0.6
+			var n_color = base_color.darkened(1.0 - factor) if selected_music_instrument < 4 else base_color
 			
 			var n_style = StyleBoxFlat.new()
 			n_style.bg_color = n_color
@@ -5012,7 +5014,7 @@ func _setup_music_ui(force_refresh: bool = false):
 			var nid = i
 			btn.pressed.connect(func():
 				selected_music_note = nid
-				selected_material = MUSIC_ID_START + (selected_music_instrument * 12) + nid
+				selected_material = MUSIC_ID_START + (selected_music_instrument * 16) + nid
 				_play_music_note(selected_music_instrument, nid)
 				_setup_music_ui(true)
 			)
