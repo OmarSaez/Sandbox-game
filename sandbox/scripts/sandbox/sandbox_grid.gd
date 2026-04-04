@@ -1057,6 +1057,7 @@ func _setup_tools_ui():
 		_close_music_menu() # Close music if opening tools
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
+		if is_instance_valid(save_panel): save_panel.queue_free()
 		if is_instance_valid(tools_panel): tools_panel.visible = !tools_panel.visible
 	)
 	
@@ -1180,7 +1181,12 @@ func _setup_tools_ui():
 		_update_menu_highlights()
 		_on_arcade_selection_made(true)
 	)
-	create_action_btn.call("save", Color.GOLD, func(): _setup_save_ui())
+	create_action_btn.call("save", Color.GOLD, func(): 
+		if is_instance_valid(save_panel):
+			save_panel.queue_free()
+		else:
+			_setup_save_ui()
+	)
 
 	# 1. SUPPORT CREATOR BUTTON (AD)
 	var support_btn = Button.new()
@@ -1356,6 +1362,7 @@ func _setup_disaster_ui():
 		_close_music_menu() # Close music if opening disasters
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
+		if is_instance_valid(save_panel): save_panel.queue_free()
 		if is_instance_valid(disaster_panel): disaster_panel.visible = !disaster_panel.visible
 	)
 	
@@ -1820,10 +1827,11 @@ func _is_any_ui_blocking() -> bool:
 	if is_mouse_over_ui: return true
 	if is_npc_mode_menu_open: return true # GLOBAL PROTECTOR: Block all workspace edits while arcade menu is up
 	
-	# 1. Check if we are over the bottom HUD using grid math (FASTEST)
+	# 1. Check if we are over the bottom HUD using grid math
+	# BUT only block if we are NOT currently over a floating UI panel like Save/Tools
 	var m_local = get_local_mouse_position()
 	var gy = int(m_local.y / grid_scale)
-	if gy >= dynamic_grid_height:
+	if gy >= dynamic_grid_height and not is_mouse_over_ui:
 		return true
 
 	# 2. Check Floating Panels (Only if they are actually visible)
@@ -1839,8 +1847,8 @@ func _is_any_ui_blocking() -> bool:
 	if music_panel and music_panel.visible and music_panel.get_global_rect().has_point(m_pos):
 		return true
 		
-	# Fallback to signal-based flag
-	if is_mouse_over_ui: return true
+	if is_instance_valid(save_panel) and save_panel.get_global_rect().has_point(m_pos):
+		return true
 		
 	return false
 
@@ -1941,11 +1949,11 @@ func _process(delta):
 	
 	# Handle input with robust UI blocking
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		var ui_blocked = _is_any_ui_blocking()
+		var is_over_ui = _is_any_ui_blocking()
 		
 		# 1. INITIAL TOUCH PROTECTION
 		if not mouse_was_pressed:
-			touch_started_on_ui = touch_started_on_ui or ui_blocked
+			touch_started_on_ui = touch_started_on_ui or is_over_ui
 			
 			# HISTORY REMOVED FROM MOUSE DOWN TO PREVENT UNDO BUG
 			
@@ -1978,15 +1986,16 @@ func _process(delta):
 					touch_started_on_ui = true # BLOCK drawing for the rest of this touch session
 					return # Stop processing
 			
-			# 2. AUTOCLOSE MENUS ON WORKSPACE TAP (Only if didn't start on UI)
-			if not touch_started_on_ui:
+			# 2. AUTOCLOSE MENUS ON WORKSPACE TAP (Only if didn't start on UI and NOT over UI)
+			if not touch_started_on_ui and not is_over_ui:
 				if is_instance_valid(tools_panel) and tools_panel.visible: tools_panel.visible = false
 				if is_instance_valid(disaster_panel) and disaster_panel.visible: disaster_panel.visible = false
 				if is_instance_valid(npc_panel) and npc_panel.visible: npc_panel.visible = false
 				if is_instance_valid(music_panel) and music_panel.visible: _close_music_menu()
+				if is_instance_valid(save_panel): save_panel.queue_free()
 
 		# DRAW LOGIC (Only if touch session started on Sandbox, current position is Sandbox, and NOT in selection mode)
-		if not touch_started_on_ui and not ui_blocked and not is_selecting_npc_to_control:
+		if not touch_started_on_ui and not is_over_ui and not is_selecting_npc_to_control:
 			var m_pos = get_local_mouse_position()
 			var gx = int(m_pos.x / grid_scale)
 			var gy = int(m_pos.y / grid_scale)
@@ -3486,6 +3495,7 @@ func _setup_npc_ui():
 		_close_music_menu() # Close music if opening NPCs
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
+		if is_instance_valid(save_panel): save_panel.queue_free()
 		if is_instance_valid(npc_panel): npc_panel.visible = !npc_panel.visible
 	)
 	
@@ -5181,6 +5191,7 @@ func _setup_music_button():
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
+		if is_instance_valid(save_panel): save_panel.queue_free()
 		
 		_setup_music_ui()
 	)
@@ -5215,16 +5226,28 @@ func _setup_save_ui():
 	panel_style.corner_radius_top_left = 15; panel_style.corner_radius_top_right = 15
 	save_panel.add_theme_stylebox_override("panel", panel_style)
 	save_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	save_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	save_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
+	
+	# Close other menus for exclusive focus
+	if is_instance_valid(tools_panel): tools_panel.visible = false
+	if is_instance_valid(disaster_panel): disaster_panel.visible = false
+	if is_instance_valid(npc_panel): npc_panel.visible = false
+	_close_music_menu()
+
+	save_panel.anchor_left = 0.5; save_panel.anchor_right = 0.5
+	save_panel.anchor_top = 1.0; save_panel.anchor_bottom = 1.0
 	
 	var m_width = 530 * s
-	var m_height = min(650 * s, get_viewport_rect().size.y * 0.85)
+	var m_height = min(650 * s, get_viewport_rect().size.y * 0.8)
+	var h = 340 # Match Fixed Tall HUD height
+	var bottom_gap = h + (5 * s)
+	
 	save_panel.custom_minimum_size = Vector2(m_width, m_height)
-	save_panel.anchor_left = 0.5; save_panel.anchor_right = 0.5
-	save_panel.anchor_top = 0.5; save_panel.anchor_bottom = 0.5
 	save_panel.offset_left = -m_width / 2.0
 	save_panel.offset_right = m_width / 2.0
-	save_panel.offset_top = -m_height / 2.0
-	save_panel.offset_bottom = m_height / 2.0
+	save_panel.offset_bottom = -bottom_gap
+	save_panel.offset_top = -bottom_gap - m_height
 	
 	var main_vbox = VBoxContainer.new()
 	main_vbox.add_theme_constant_override("separation", 20 * s)
@@ -5251,12 +5274,17 @@ func _setup_save_ui():
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_vbox.add_child(scroll)
 	
+	# Centering Container for Grid
+	var grid_hbox = HBoxContainer.new()
+	grid_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	grid_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(grid_hbox)
+
 	var grid = GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 10 * s)
 	grid.add_theme_constant_override("v_separation", 15 * s)
-	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(grid)
+	grid_hbox.add_child(grid)
 	
 	for i in range(1, 11):
 		_add_save_slot_ui(grid, i)
@@ -5274,6 +5302,8 @@ func _add_save_slot_ui(container, slot_idx):
 	style.border_width_right = 2; style.border_width_bottom = 2
 	style.border_color = Color(0.3, 0.3, 0.3)
 	slot_panel.add_theme_stylebox_override("panel", style)
+	slot_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	slot_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 	container.add_child(slot_panel)
 	
 	var vbox = VBoxContainer.new()
@@ -5295,9 +5325,9 @@ func _add_save_slot_ui(container, slot_idx):
 	header.add_child(lbl_name)
 	
 	var thumb_rect = TextureRect.new()
-	thumb_rect.custom_minimum_size = Vector2(215 * s, 320 * s) # Narrower thumbnail to fill the slot
+	thumb_rect.custom_minimum_size = Vector2(215 * s, 320 * s) 
 	thumb_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	thumb_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED # Covered ensures no black bars on sides
+	thumb_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED # Ensure full height visibility without crop
 	if slot_data.has("thumbnail"):
 		thumb_rect.texture = slot_data.thumbnail
 	else:
@@ -5327,7 +5357,8 @@ func _add_save_slot_ui(container, slot_idx):
 	
 	if slot_data.has("name"):
 		var load_btn = Button.new()
-		load_btn.text = "Load" # tr("load")
+		load_btn.text = tr("load")
+		load_btn.add_theme_font_size_override("font_size", 16 * s)
 		load_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		load_btn.pressed.connect(func(): _load_from_slot(slot_idx))
 		btn_hbox.add_child(load_btn)
@@ -5438,10 +5469,10 @@ func _save_to_slot(idx, custom_name: String = ""):
 		file.close()
 		
 	# CAPTURE ACCURATE MINI SCREENSHOT
-	# We must manually 'render' the colors because the ID texture (cells) 
-	# doesn't look like the game until it passes through the shader.
+	# We only capture up to dynamic_grid_height to avoid the empty HUD space
+	var sample_height = dynamic_grid_height
 	var thumb_w = int(grid_width * 0.5)
-	var thumb_h = int(grid_height * 0.5)
+	var thumb_h = int(sample_height * 0.5)
 	var thumb = Image.create(thumb_w, thumb_h, false, Image.FORMAT_RGBA8)
 	
 	for ty in range(thumb_h):

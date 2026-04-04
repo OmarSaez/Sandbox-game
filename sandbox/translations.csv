@@ -119,3 +119,6 @@ override_confirm,"¿Estás seguro de que quieres sobre escribir {0}, {1}?","Are 
 yes,Sí,Yes,Sì,Oui,Ja,Sim
 no,No,No,No,Non,Nein,Não
 empty,Vacío,Empty,Vuoto,Vide,Leer,Vazio
+load,Cargar,Load,Carica,Charger,Laden,Carregar
+enter_save_name,Escribe un nombre...,Enter a name...,Scrivi un nome...,Entrer un nom...,Nombre eingeben...,Digite um nome...
+save_to_slot,Guardar en Slot {0},Save to Slot {0},Salva nel Slot {0},Sauvegarder dans Slot {0},In Slot {0} speichern,Salvar no Slot {0}
