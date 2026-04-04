@@ -1910,6 +1910,7 @@ func _process(delta):
 				if is_instance_valid(tools_panel) and tools_panel.visible: tools_panel.visible = false
 				if is_instance_valid(disaster_panel) and disaster_panel.visible: disaster_panel.visible = false
 				if is_instance_valid(npc_panel) and npc_panel.visible: npc_panel.visible = false
+				if is_instance_valid(music_panel) and music_panel.visible: _close_music_menu()
 
 		# DRAW LOGIC (Only if touch session started on Sandbox, current position is Sandbox, and NOT in selection mode)
 		if not touch_started_on_ui and not ui_blocked and not is_selecting_npc_to_control:
@@ -4786,12 +4787,12 @@ func _play_music_note(inst_idx, note_idx):
 		music_player.pitch_scale = p_scale
 		music_player.play()
 
-func _setup_music_ui():
+func _setup_music_ui(force_refresh: bool = false):
 	var s = _get_ui_scale()
 	var ui_root = get_parent().get_node("UI")
 	
 	# EXCLUSIVE TOGGLE: If already open, close it (like other panels)
-	if is_instance_valid(music_panel) and music_panel.visible:
+	if not force_refresh and is_instance_valid(music_panel) and music_panel.visible:
 		_close_music_menu()
 		return
 		
@@ -4809,33 +4810,42 @@ func _setup_music_ui():
 	is_blocking = false # NO MORE BLOCKING (non-modal like tools)
 	
 	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.1, 0.07, 0.1, 0.9) # Premium semi-transparent dark
-	panel_style.border_width_left = 3; panel_style.border_width_top = 3
-	panel_style.border_width_right = 3; panel_style.border_width_bottom = 3
+	panel_style.bg_color = Color(0.1, 0.07, 0.1, 0.95) # Premium semi-transparent dark
+	panel_style.border_width_left = 2; panel_style.border_width_top = 2
+	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
 	panel_style.border_color = Color(0.8, 0.1, 0.5, 0.6) # Soft musical glow
-	panel_style.set_corner_radius_all(25 * s) # Softer corners
+	panel_style.corner_radius_top_left = 10; panel_style.corner_radius_top_right = 10
 	music_panel.add_theme_stylebox_override("panel", panel_style)
+	music_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	# ROBUST POSITIONING (Same as DisasterPanel: Centered above Bottom HUD)
+	# ROBUST POSITIONING (Same as ToolsPanel: Centered above Bottom HUD)
 	var m_width = 530 * s
-	var m_height = 580 * s
+	var m_height = 550 * s
 	music_panel.custom_minimum_size = Vector2(m_width, m_height)
 	
 	# Anchor to Bottom-Center
 	music_panel.anchor_left = 0.5; music_panel.anchor_right = 0.5
 	music_panel.anchor_top = 1.0; music_panel.anchor_bottom = 1.0
 	
-	var h = 400 # FIXED BASE HUD height (Used by other panels)
-	var bottom_gap = h + (10 * s) # Consistent gap across scales
+	var h = 340 # Match the Fixed Tall HUD height
+	var bottom_gap = h + (5 * s) # Consistent gap across scales
 	
 	music_panel.offset_left = -m_width / 2.0
 	music_panel.offset_right = m_width / 2.0
 	music_panel.offset_bottom = -bottom_gap
 	music_panel.offset_top = -bottom_gap - m_height
+
+	# INTERNAL SCROLL (Crucial to prevent overlap if content is tall)
+	var scroll = ScrollContainer.new()
+	scroll.name = "MusicScroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	music_panel.add_child(scroll)
 	
 	var main_vbox = VBoxContainer.new()
-	main_vbox.add_theme_constant_override("separation", 25 * s) # Improved airier spacing
-	music_panel.add_child(main_vbox)
+	main_vbox.add_theme_constant_override("separation", 15 * s) # Better spacing matching others
+	main_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(main_vbox)
 	
 	# Title
 	var title = Label.new()
@@ -4881,7 +4891,7 @@ func _setup_music_ui():
 			else:
 				selected_material = MUSIC_ID_START + (idx * 12) + selected_music_note
 				_play_music_note(selected_music_instrument, selected_music_note)
-			_setup_music_ui()
+			_setup_music_ui(true)
 		)
 		inst_grid.add_child(btn)
 	
@@ -4955,34 +4965,12 @@ func _setup_music_ui():
 				selected_music_note = nid
 				selected_material = MUSIC_ID_START + (selected_music_instrument * 12) + nid
 				_play_music_note(selected_music_instrument, nid)
-				_setup_music_ui()
+				_setup_music_ui(true)
 			)
 			note_grid.add_child(btn)
 	
-	# Global Accept Button
-	var accept_btn = Button.new()
-	accept_btn.text = tr("welcome_close")
-	accept_btn.custom_minimum_size = Vector2(250 * s, 60 * s)
-	accept_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	accept_btn.add_theme_font_size_override("font_size", 24 * s)
-	
-	var acc_style = StyleBoxFlat.new()
-	acc_style.bg_color = Color("#A61266")
-	acc_style.set_corner_radius_all(10 * s)
-	accept_btn.add_theme_stylebox_override("normal", acc_style)
-	
-	accept_btn.pressed.connect(func():
-		_play_action_sound("ui_click")
-		
-		# FINAL MATERIAL ASSIGNMENT (Crucial fix)
-		if selected_music_instrument == 4:
-			selected_material = 550 # Metronome ID
-		else:
-			selected_material = MUSIC_ID_START + (selected_music_instrument * 12) + selected_music_note
-			
-		_close_music_menu()
-	)
-	main_vbox.add_child(accept_btn)
+	# (El botón de empezar ha sido eliminado para selección inmediata)
+	pass
 
 func _close_music_menu():
 	is_blocking = false
