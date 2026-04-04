@@ -5216,8 +5216,8 @@ func _setup_save_ui():
 	save_panel.add_theme_stylebox_override("panel", panel_style)
 	save_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	var m_width = 800 * s
-	var m_height = 800 * s
+	var m_width = 530 * s
+	var m_height = min(650 * s, get_viewport_rect().size.y * 0.85)
 	save_panel.custom_minimum_size = Vector2(m_width, m_height)
 	save_panel.anchor_left = 0.5; save_panel.anchor_right = 0.5
 	save_panel.anchor_top = 0.5; save_panel.anchor_bottom = 0.5
@@ -5253,8 +5253,8 @@ func _setup_save_ui():
 	
 	var grid = GridContainer.new()
 	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 20 * s)
-	grid.add_theme_constant_override("v_separation", 20 * s)
+	grid.add_theme_constant_override("h_separation", 10 * s)
+	grid.add_theme_constant_override("v_separation", 15 * s)
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(grid)
 	
@@ -5266,7 +5266,7 @@ func _add_save_slot_ui(container, slot_idx):
 	var slot_data = _get_slot_data(slot_idx)
 	
 	var slot_panel = PanelContainer.new()
-	slot_panel.custom_minimum_size = Vector2(360 * s, 220 * s)
+	slot_panel.custom_minimum_size = Vector2(235 * s, 420 * s) # Narrower and more vertical to fit 530px width
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.15, 0.15, 0.18)
 	style.set_corner_radius_all(10 * s)
@@ -5295,9 +5295,9 @@ func _add_save_slot_ui(container, slot_idx):
 	header.add_child(lbl_name)
 	
 	var thumb_rect = TextureRect.new()
-	thumb_rect.custom_minimum_size = Vector2(340 * s, 120 * s)
+	thumb_rect.custom_minimum_size = Vector2(215 * s, 320 * s) # Narrower thumbnail to fill the slot
 	thumb_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	thumb_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	thumb_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED # Covered ensures no black bars on sides
 	if slot_data.has("thumbnail"):
 		thumb_rect.texture = slot_data.thumbnail
 	else:
@@ -5311,7 +5311,7 @@ func _add_save_slot_ui(container, slot_idx):
 	var lbl_date = Label.new()
 	lbl_date.text = slot_data.date if slot_data.has("date") else ""
 	lbl_date.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	lbl_date.add_theme_font_size_override("font_size", 12 * s)
+	lbl_date.add_theme_font_size_override("font_size", 14 * s)
 	lbl_date.modulate = Color(0.6, 0.6, 0.6)
 	vbox.add_child(lbl_date)
 	
@@ -5320,6 +5320,7 @@ func _add_save_slot_ui(container, slot_idx):
 	
 	var save_btn = Button.new()
 	save_btn.text = tr("save")
+	save_btn.add_theme_font_size_override("font_size", 16 * s)
 	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	save_btn.pressed.connect(func(): _confirm_save(slot_idx, lbl_name.text))
 	btn_hbox.add_child(save_btn)
@@ -5354,63 +5355,81 @@ func _get_slot_data(idx):
 	return data
 
 func _confirm_save(idx, current_name):
-	if current_name == tr("empty"):
-		_save_to_slot(idx)
-		return
-		
 	var s = _get_ui_scale()
 	var dialog = PanelContainer.new()
 	dialog.name = "ConfirmDialog"
 	save_panel.add_child(dialog)
 	
 	var d_style = StyleBoxFlat.new()
-	d_style.bg_color = Color(0.1, 0.1, 0.1, 0.95)
-	d_style.border_width_left = 2; d_style.border_width_top = 2
-	d_style.border_width_right = 2; d_style.border_width_bottom = 2
-	d_style.border_color = Color.RED
+	d_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
+	d_style.border_width_left = 3; d_style.border_width_top = 3
+	d_style.border_width_right = 3; d_style.border_width_bottom = 3
+	d_style.border_color = Color(0.6, 0.5, 0.2)
+	d_style.set_corner_radius_all(15 * s)
 	dialog.add_theme_stylebox_override("panel", d_style)
+	
+	dialog.anchor_left = 0.5; dialog.anchor_right = 0.5
+	dialog.anchor_top = 0.5; dialog.anchor_bottom = 0.5
+	dialog.offset_left = -250 * s; dialog.offset_right = 250 * s
+	dialog.offset_top = -150 * s; dialog.offset_bottom = 150 * s
 	
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 20 * s)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	dialog.add_child(vbox)
 	
 	var msg = Label.new()
-	msg.text = tr("override_confirm").format([str(idx), current_name])
+	msg.text = tr("save_to_slot").format([str(idx)])
+	if current_name != tr("empty"):
+		msg.text = tr("override_confirm").format([str(idx), current_name])
 	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	msg.add_theme_font_size_override("font_size", 20 * s)
 	vbox.add_child(msg)
+	
+	var name_edit = LineEdit.new()
+	name_edit.placeholder_text = tr("enter_save_name")
+	name_edit.text = current_name if current_name != tr("empty") else "Save " + str(idx)
+	name_edit.custom_minimum_size = Vector2(300 * s, 50 * s)
+	name_edit.add_theme_font_size_override("font_size", 18 * s)
+	vbox.add_child(name_edit)
 	
 	var hbox = HBoxContainer.new()
 	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	hbox.add_theme_constant_override("separation", 20 * s)
 	vbox.add_child(hbox)
 	
 	var yes_btn = Button.new()
 	yes_btn.text = tr("yes")
-	yes_btn.custom_minimum_size = Vector2(100 * s, 50 * s)
+	yes_btn.custom_minimum_size = Vector2(100 * s, 60 * s)
 	yes_btn.pressed.connect(func(): 
-		_save_to_slot(idx)
+		_save_to_slot(idx, name_edit.text)
 		dialog.queue_free()
 	)
 	hbox.add_child(yes_btn)
 	
 	var no_btn = Button.new()
 	no_btn.text = tr("no")
-	no_btn.custom_minimum_size = Vector2(100 * s, 50 * s)
+	no_btn.custom_minimum_size = Vector2(100 * s, 60 * s)
 	no_btn.pressed.connect(func(): dialog.queue_free())
 	hbox.add_child(no_btn)
 
-func _save_to_slot(idx):
+func _save_to_slot(idx, custom_name: String = ""):
 	var path = "user://save_slot_" + str(idx) + ".dat"
 	var thumb_path = "user://save_slot_" + str(idx) + ".png"
 	
 	var time = Time.get_datetime_dict_from_system()
 	var date_str = "{0}/{1}/{2} {3}:{4}".format([time.day, time.month, time.year, time.hour, time.minute])
-	var save_name = "Save " + str(idx) + " - " + date_str
+	var save_name = custom_name if custom_name != "" else ("Save " + str(idx))
 	
 	var save_dict = {
 		"name": save_name,
 		"date": date_str,
-		"grid": Array(cells)
+		"grid": Array(cells),
+		"charge": Array(charge_array),
+		"tags": Array(tags_array),
+		"chunks": Array(chunks_active),
+		"next_chunks": Array(next_chunks_active)
 	}
 	
 	var file = FileAccess.open(path, FileAccess.WRITE)
@@ -5418,10 +5437,32 @@ func _save_to_slot(idx):
 		file.store_string(JSON.stringify(save_dict))
 		file.close()
 		
-	# CAPTURE MINI SCREENSHOT
-	var screen_img = img.duplicate()
-	screen_img.resize(int(grid_width * 0.5), int(grid_height * 0.5))
-	screen_img.save_png(thumb_path)
+	# CAPTURE ACCURATE MINI SCREENSHOT
+	# We must manually 'render' the colors because the ID texture (cells) 
+	# doesn't look like the game until it passes through the shader.
+	var thumb_w = int(grid_width * 0.5)
+	var thumb_h = int(grid_height * 0.5)
+	var thumb = Image.create(thumb_w, thumb_h, false, Image.FORMAT_RGBA8)
+	
+	for ty in range(thumb_h):
+		for tx in range(thumb_w):
+			# Sample the grid (2x2 average for the thumbnail pixel)
+			var gx = tx * 2
+			var gy = ty * 2
+			var cell_idx = gy * grid_width + gx
+			var raw_id = cells[cell_idx]
+			var mid = raw_id & 0xFFFF
+			var variant = (raw_id >> 24) & 0xFF
+			
+			var color = Color(0,0,0,0)
+			if mid > 0:
+				if variant == 1: color = mat_colors_2[mid]
+				elif variant == 2: color = mat_colors_3[mid]
+				else: color = mat_colors_1[mid]
+			
+			thumb.set_pixel(tx, ty, color)
+	
+	thumb.save_png(thumb_path)
 	
 	_setup_save_ui() # Refresh list
 
@@ -5433,17 +5474,39 @@ func _load_from_slot(idx):
 	if file:
 		var json = file.get_as_text()
 		var dict = JSON.parse_string(json)
-		if dict and dict.has("grid"):
-			var grid_data = dict["grid"]
-			if grid_data.size() == cells.size():
-				# We must ensure it's a PackedInt32Array
-				var packed = PackedInt32Array()
-				packed.resize(grid_data.size())
-				for i in range(grid_data.size()):
-					packed[i] = int(grid_data[i])
-				
-				cells = packed
-				_update_texture()
-				queue_redraw()
-				save_panel.queue_free()
+		if dict:
+			# 1. CLEAN CURRENT STATE
+			_clear_all() 
+			
+			# 2. RESTORE PRIMARY GRID
+			if dict.has("grid"):
+				var data = dict["grid"]
+				if data.size() == cells.size():
+					for i in range(data.size()): cells[i] = int(data[i])
+			
+			# 3. RESTORE SECONDARY DATA (Physics & Energy)
+			if dict.has("charge"):
+				var data = dict["charge"]
+				if data.size() == charge_array.size(): 
+					for i in range(data.size()): charge_array[i] = int(data[i])
+			
+			if dict.has("tags"):
+				var data = dict["tags"]
+				if data.size() == tags_array.size():
+					for i in range(data.size()): tags_array[i] = int(data[i])
+					
+			# 4. RESTORE SIMULATION STATE (Wake up relevant parts)
+			if dict.has("chunks"):
+				var data = dict["chunks"]
+				if data.size() == chunks_active.size():
+					for i in range(data.size()): chunks_active[i] = int(data[i])
+			
+			if dict.has("next_chunks"):
+				var data = dict["next_chunks"]
+				if data.size() == next_chunks_active.size():
+					for i in range(data.size()): next_chunks_active[i] = int(data[i])
+			
+			_update_texture()
+			queue_redraw()
+			save_panel.queue_free()
 		file.close()
