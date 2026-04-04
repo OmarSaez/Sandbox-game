@@ -71,9 +71,9 @@ var is_blocking: bool = false
 # --- MUSIC SYSTEM (NEW) ---
 var selected_music_instrument: int = 0
 var selected_music_note: int = 0
-var music_player: AudioStreamPlayer
+var music_player_pool: Array[AudioStreamPlayer] = []
+var music_next_idx: int = 0
 var music_panel: PanelContainer
-var is_music_menu_open: bool = false
 const MUSIC_ID_START = 500
 const MUSIC_INSTRUMENTS = ["piano1", "piano2", "piano3", "drums", "metronome"]
 const MUSIC_INST_COLORS = [
@@ -348,7 +348,21 @@ func _ready():
 	mat_colors_3.resize(1024); mat_colors_3.fill(Color.BLACK)
 	material_tags_raw.resize(1024); material_tags_raw.fill(0)
 	
-	music_player = AudioStreamPlayer.new(); add_child(music_player)
+	# --- AUDIO POOL INITIALIZATION ---
+	# 1. Create a dedicated Music Bus with a Limiter to prevent saturation
+	var music_bus_idx = AudioServer.bus_count
+	AudioServer.add_bus(music_bus_idx)
+	AudioServer.set_bus_name(music_bus_idx, "MusicBus")
+	var limiter = AudioEffectLimiter.new()
+	AudioServer.add_bus_effect(music_bus_idx, limiter)
+	
+	music_player_pool.clear()
+	for i in range(32): # 32-note polyphony
+		var p = AudioStreamPlayer.new()
+		p.bus = "MusicBus" # Assign to our protected bus
+		add_child(p)
+		music_player_pool.append(p)
+	
 	_register_musical_materials()
 	
 	# Calculate grid size (Smart Height: Exactly above the UI)
@@ -2471,6 +2485,22 @@ func _process_electricity():
 		if charge == 101:
 			charge_array[idx] = 100
 			_register_charge(idx)
+			
+			# MUSIC TRIGGER: Automatic activation for music blocks
+			if (material_tags_raw[mid] & SandboxMaterial.Tags.MUSIC):
+				var gx = idx % grid_width
+				var gy = int(float(idx) / grid_width)
+				
+				# 2x2 DUPES FILTER: Only trigger for the "top-left" pixel of the 2x2 block
+				# This ensures 1 block = 1 voice, saving pool and preventing saturation
+				if (gx % 2 == 0 and gy % 2 == 0) or mid == 550:
+					if mid == 550: # Metronome sound
+						_play_music_note(4, 0)
+					else:
+						var inst = (mid - MUSIC_ID_START) / 12
+						var note = (mid - MUSIC_ID_START) % 12
+						_play_music_note(inst, note)
+			
 			continue
 		
 		if charge == 100:
@@ -4775,21 +4805,25 @@ func _place_music_block(gx, gy, mat_id):
 
 func _play_music_note(inst_idx, note_idx):
 	var s_name = MUSIC_INSTRUMENTS[inst_idx]
-	# MATHEMATICAL TUNING: 2^(n/12) ensures perfect semitones
-	# Assuming original sample is Middle C (1.0), then C=1.0, C#=1.059, etc.
 	var p_scale = pow(2.0, float(note_idx % 12) / 12.0)
 	
-	# Special Drum Handling: Use distinct sounds
-	if inst_idx == 3: # Drums are at index 3 in ["piano1", "piano2", "piano3", "drums"]
+	if inst_idx == 3: # Drum Set
 		var drum_keys = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom"]
 		s_name = drum_keys[note_idx % 4]
-		p_scale = 1.0 # Use natural sample
+		p_scale = 1.0
+	elif inst_idx == 4: # Metronome
+		s_name = "ui_pop" # Or any tick sound
+		p_scale = 2.0
 		
 	var stream = _get_sfx_stream(s_name)
 	if stream:
-		music_player.stream = stream
-		music_player.pitch_scale = p_scale
-		music_player.play()
+		# POLYPHONY: Use next available player in the music pool
+		var p = music_player_pool[music_next_idx]
+		p.stream = stream
+		p.pitch_scale = p_scale
+		p.volume_db = -10.0 # Lower base volume per note to allow headroom for chords
+		p.play()
+		music_next_idx = (music_next_idx + 1) % 32
 
 func _setup_music_ui(force_refresh: bool = false):
 	var s = _get_ui_scale()
