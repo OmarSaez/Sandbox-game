@@ -107,3 +107,6 @@ drum_kick,Bombo,Kick,Cassa,Grosse Caisse,Bassdrum,Bumbo
 drum_snare,Redoblante,Snare,Rullante,Caisse Claire,Snare,Caixa
 drum_hihat,Hi-Hat,Hi-Hat,Hi-Hat,Hi-Hat,Hi-Hat,Hi-Hat
 drum_tom,Tom-Tom,Tom-Tom,Tom-Tom,Tom-Tom,Tom-Tom,Tom-Tom
+metronome,Metrónomo,Metronome,Metronomo,Métronome,Metronom,Metrônomo
+bpm,BPM (Tempo),BPM (Tempo),BPM (Tempo),BPM (Tempo),BPM (Tempo),BPM (Tempo)
+metronome_info,Este bloque libera electricidad automáticamente a este ritmo,This block releases electricity automatically at this rhythm,Questo blocco rilascia elettricità automaticamente a questo ritmo,Ce bloc libère l'électricité automatiquement à ce rythme,Dieser Block gibt automatisch Strom in diesem Rhythmus ab,Este bloco libera eletricidade automaticamente a este ritmo
