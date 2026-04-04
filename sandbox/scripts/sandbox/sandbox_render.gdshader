@@ -45,12 +45,17 @@ void fragment() {
             }
         }
         
-        // 5. ELECTRIC GLOW (Exclude Fresh Cement ID 25 and Acid ID 13)
-        // Only glow if charge is high (> 0.1) and it's NOT a material using charge for metadata
-        if (charge > 0.1 && id > 0 && id != 13 && id != 25 && id != 5 && id != 7 && id != 20 && id != 71 && id != 72 && id != 77) {
-            vec4 electric_yellow = vec4(1.0, 1.0, 0.0, 1.0);
-            color = mix(color, electric_yellow, 0.9);
-            color.rgb += vec3(0.2, 0.2, 0.0);
+        // 5. ELECTRIC GLOW (High Intensity Sparks with Amber Contrast)
+        if (charge > 0.05 && id > 0 && id != 13 && id != 25 && id != 5 && id != 7 && id != 20 && id != 71 && id != 72 && id != 77) {
+            float spark_intensity = smoothstep(0.12, 1.0, charge);
+            vec4 electric_amber = vec4(1.0, 0.7, 0.0, 1.0); // Amber/Orange-Yellow for better contrast on white
+            
+            // Darken the background slightly under the spark to make it pop on white metal
+            color.rgb = mix(color.rgb, color.rgb * 0.5, spark_intensity * 0.7);
+            
+            // Brighter Amber Core
+            color = mix(color, electric_amber, spark_intensity * 0.9);
+            color.rgb += vec3(0.6, 0.3, 0.0) * (charge * 2.0); // Hot core glow
         }
         
         COLOR = color;

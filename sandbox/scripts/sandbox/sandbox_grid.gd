@@ -2493,7 +2493,7 @@ func _process_electricity():
 				
 				# 2x2 DUPES FILTER: Only trigger for the "top-left" pixel of the 2x2 block
 				# This ensures 1 block = 1 voice, saving pool and preventing saturation
-				if (gx % 2 == 0 and gy % 2 == 0) or mid == 550:
+				if (gx % 2 == 0 and gy % 2 == 0):
 					if mid == 550: # Metronome sound
 						_play_music_note(4, 0)
 					else:
@@ -2523,7 +2523,10 @@ func _process_electricity():
 							_activate_chunk(nx, ny)
 		
 		if (material_tags_raw[mid] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
-			charge_array[idx] -= 5
+			# STABLE COOLDOWN: Balance between music speed and loop prevention
+			# 100 -> 90 -> 80 -> ... -> 0 (10 frames of refractory period)
+			# This prevents the pulse from "turning back" and re-igniting the wire.
+			charge_array[idx] -= 10
 			if charge_array[idx] > 100: charge_array[idx] = 100
 			if charge_array[idx] > 0:
 				_register_charge(idx)
@@ -2596,6 +2599,14 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		if charge_array[idx] == 0:
 			charge_array[idx] = 101
 			_register_charge(idx)
+			
+	# METRONOME: Self-pulsing electrical source
+	if pure_id == 550:
+		if Engine.get_frames_drawn() % music_tempo_frames == 0:
+			# Emit a pulse only if it's not already busy
+			if charge_array[idx] == 0:
+				charge_array[idx] = 101
+				_register_charge(idx)
 		
 	# FIRE AND HEAT REACTIONS
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
