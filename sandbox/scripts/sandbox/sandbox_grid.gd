@@ -1007,8 +1007,8 @@ func _setup_tools_ui():
 	btn_style.border_width_left = 1; btn_style.border_width_top = 1
 	btn_style.border_width_right = 1; btn_style.border_width_bottom = 1
 	btn_style.border_color = Color(0.4, 0.4, 0.5)
-	btn_style.corner_radius_top_left = 5; btn_style.corner_radius_top_right = 5
-	btn_style.corner_radius_bottom_left = 5; btn_style.corner_radius_bottom_right = 5
+	btn_style.corner_radius_top_left = 0; btn_style.corner_radius_top_right = 0
+	btn_style.corner_radius_bottom_left = 0; btn_style.corner_radius_bottom_right = 0
 	tools_btn.add_theme_stylebox_override("normal", btn_style)
 	tools_btn.add_theme_stylebox_override("hover", btn_style)
 	tools_btn.add_theme_stylebox_override("pressed", btn_style)
@@ -1023,7 +1023,7 @@ func _setup_tools_ui():
 	panel_style.border_width_left = 2; panel_style.border_width_top = 2
 	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
 	panel_style.border_color = Color(0.4, 0.4, 0.5)
-	panel_style.corner_radius_top_left = 10; panel_style.corner_radius_top_right = 10
+	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
 	tools_panel.add_theme_stylebox_override("panel", panel_style)
 	tools_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	# RESTORE STATE
@@ -1036,7 +1036,7 @@ func _setup_tools_ui():
 	tools_panel.anchor_bottom = 1.0
 	
 	var panel_width = 530 * s
-	var panel_height = 540 * s
+	var panel_height = 600 * s
 	var h = 340 # Match the Fixed Tall HUD height
 	var bottom_gap = h + (5 * s) # Dynamic GAP above HUD floor
 	
@@ -1223,8 +1223,8 @@ func _setup_tools_ui():
 	support_style.border_width_left = 2; support_style.border_width_top = 2
 	support_style.border_width_right = 2; support_style.border_width_bottom = 2
 	support_style.border_color = Color.GOLD
-	support_style.corner_radius_top_left = 8; support_style.corner_radius_top_right = 8
-	support_style.corner_radius_bottom_left = 8; support_style.corner_radius_bottom_right = 8
+	support_style.corner_radius_top_left = 30; support_style.corner_radius_top_right = 30
+	support_style.corner_radius_bottom_left = 30; support_style.corner_radius_bottom_right = 30
 	
 	support_btn.add_theme_stylebox_override("normal", support_style)
 	support_btn.add_theme_stylebox_override("hover", support_style)
@@ -1331,8 +1331,8 @@ func _setup_disaster_ui():
 	btn_style.border_width_left = 1; btn_style.border_width_top = 1
 	btn_style.border_width_right = 1; btn_style.border_width_bottom = 1
 	btn_style.border_color = Color(0.5, 0.4, 0.4)
-	btn_style.corner_radius_top_left = 5; btn_style.corner_radius_top_right = 5
-	btn_style.corner_radius_bottom_left = 5; btn_style.corner_radius_bottom_right = 5
+	btn_style.corner_radius_top_left = 0; btn_style.corner_radius_top_right = 0
+	btn_style.corner_radius_bottom_left = 0; btn_style.corner_radius_bottom_right = 0
 	disaster_btn.add_theme_stylebox_override("normal", btn_style)
 	disaster_btn.add_theme_stylebox_override("hover", btn_style)
 	disaster_btn.add_theme_stylebox_override("pressed", btn_style)
@@ -1348,7 +1348,7 @@ func _setup_disaster_ui():
 	panel_style.border_width_left = 2; panel_style.border_width_top = 2
 	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
 	panel_style.border_color = Color(0.5, 0.4, 0.4)
-	panel_style.corner_radius_top_left = 10; panel_style.corner_radius_top_right = 10
+	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
 	disaster_panel.add_theme_stylebox_override("panel", panel_style)
 	
 	disaster_panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -3132,7 +3132,7 @@ func _setup_npc_panel_node():
 	panel_style.border_width_left = 2; panel_style.border_width_top = 2
 	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
 	panel_style.border_color = Color(0.4, 0.5, 0.4)
-	panel_style.corner_radius_top_left = 10; panel_style.corner_radius_top_right = 10
+	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
 	npc_panel.add_theme_stylebox_override("panel", panel_style)
 	
 	# Compact dynamic positioning (Middle menu)
@@ -3575,8 +3575,8 @@ func _setup_npc_ui():
 	btn_style.border_width_left = 1; btn_style.border_width_top = 1
 	btn_style.border_width_right = 1; btn_style.border_width_bottom = 1
 	btn_style.border_color = Color(0.4, 0.5, 0.4)
-	btn_style.corner_radius_top_left = 5; btn_style.corner_radius_top_right = 5
-	btn_style.corner_radius_bottom_left = 5; btn_style.corner_radius_bottom_right = 5
+	btn_style.corner_radius_top_left = 0; btn_style.corner_radius_top_right = 0
+	btn_style.corner_radius_bottom_left = 0; btn_style.corner_radius_bottom_right = 0
 	npc_btn.add_theme_stylebox_override("normal", btn_style)
 	npc_btn.add_theme_stylebox_override("hover", btn_style)
 	npc_btn.add_theme_stylebox_override("pressed", btn_style)
@@ -5084,7 +5084,7 @@ func _setup_music_ui(force_refresh: bool = false):
 	panel_style.border_width_left = 2; panel_style.border_width_top = 2
 	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
 	panel_style.border_color = Color(0.8, 0.1, 0.5, 0.6) # Soft musical glow
-	panel_style.corner_radius_top_left = 10; panel_style.corner_radius_top_right = 10
+	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
 	music_panel.add_theme_stylebox_override("panel", panel_style)
 	music_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
@@ -5317,7 +5317,7 @@ func _setup_save_ui():
 	panel_style.border_width_left = 3; panel_style.border_width_top = 3
 	panel_style.border_width_right = 3; panel_style.border_width_bottom = 3
 	panel_style.border_color = Color(0.6, 0.5, 0.2)
-	panel_style.corner_radius_top_left = 15; panel_style.corner_radius_top_right = 15
+	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
 	save_panel.add_theme_stylebox_override("panel", panel_style)
 	save_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	save_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
