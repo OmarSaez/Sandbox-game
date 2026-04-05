@@ -1557,11 +1557,11 @@ func _refresh_ui_text():
 		elif key == "control_npc_lbl":
 			node_data.text = tr("npc_controller_title") + ": "
 		elif key == "tools_panel_title":
-			node_data.text = "🛠️ " + tr("tools")
+			node_data.text = tr("tools")
 		elif key == "disaster_panel_title":
-			node_data.text = "🌪️ " + tr("disasters")
+			node_data.text = tr("disasters")
 		elif key == "npc_panel_title":
-			node_data.text = "👥 " + tr("npc")
+			node_data.text = tr("npc")
 		elif key.ends_with("_btn") and not (key == "undo_btn" or key == "redo_btn" or key == "eraser_tool_btn" or key == "save_btn_ui_btn") and not key.ends_with("_mat_btn"): # Generic NPC/Tool handler
 			var pure_key = key.replace("_btn", "")
 			node_data.text = tr(pure_key)
