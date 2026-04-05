@@ -1532,19 +1532,19 @@ func _refresh_ui_text():
 			node_data.add_theme_font_size_override("font_size", 16 * s)
 		elif key == "warrior_btn":
 			node_data.text = tr("warrior")
-			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
+			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "archer_btn":
 			node_data.text = tr("archer")
-			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
+			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "miner_btn":
 			node_data.text = tr("miner")
-			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
+			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "medic_btn":
 			node_data.text = tr("medic")
-			node_data.custom_minimum_size = Vector2(120 * s, 45 * s)
+			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
 			node_data.add_theme_font_size_override("font_size", 14 * s)
 		elif key == "arcade_menu_btn":
 			node_data.text = tr("menu")
@@ -3666,6 +3666,7 @@ func _setup_npc_ui():
 			btn.text = tr(key)
 			btn.custom_minimum_size = Vector2(100 * s, 45 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
+			btn.add_theme_font_size_override("font_size", 14 * s)
 			btn.mouse_filter = Control.MOUSE_FILTER_PASS
 			btn.pressed.connect(func():
 				_play_action_sound("ui_click")
