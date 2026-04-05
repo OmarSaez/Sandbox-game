@@ -1050,7 +1050,21 @@ func _setup_tools_ui():
 	scroll.name = "ToolsScroll"
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tools_panel.add_child(scroll)
+	
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 10 * s)
+	tools_panel.add_child(main_vbox)
+	
+	# Title
+	var title = Label.new()
+	title.text = tr("tools")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", _get_safe_font())
+	title.add_theme_font_size_override("font_size", 34 * s)
+	ui_elements["tools_panel_title"] = title
+	main_vbox.add_child(title)
+	
+	main_vbox.add_child(scroll)
 	
 	tools_btn.pressed.connect(func(): 
 		_play_action_sound("ui_click")
@@ -1363,7 +1377,20 @@ func _setup_disaster_ui():
 	scroll.name = "DisasterScroll"
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	disaster_panel.add_child(scroll)
+	# DISASTER PANEL NEEDS A VBOX FOR THE TITLE
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 10 * s)
+	disaster_panel.add_child(main_vbox)
+	
+	var title_lbl = Label.new()
+	title_lbl.text = tr("disasters")
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.add_theme_font_override("font", _get_safe_font())
+	title_lbl.add_theme_font_size_override("font_size", 34 * s)
+	ui_elements["disaster_panel_title"] = title_lbl
+	main_vbox.add_child(title_lbl)
+	
+	main_vbox.add_child(scroll)
 	
 	disaster_btn.pressed.connect(func(): 
 		_play_action_sound("ui_click")
@@ -1529,6 +1556,12 @@ func _refresh_ui_text():
 			node_data.text = tr("inactive")
 		elif key == "control_npc_lbl":
 			node_data.text = tr("npc_controller_title") + ": "
+		elif key == "tools_panel_title":
+			node_data.text = "🛠️ " + tr("tools")
+		elif key == "disaster_panel_title":
+			node_data.text = "🌪️ " + tr("disasters")
+		elif key == "npc_panel_title":
+			node_data.text = "👥 " + tr("npc")
 		elif key.ends_with("_btn") and not (key == "undo_btn" or key == "redo_btn" or key == "eraser_tool_btn" or key == "save_btn_ui_btn") and not key.ends_with("_mat_btn"): # Generic NPC/Tool handler
 			var pure_key = key.replace("_btn", "")
 			node_data.text = tr(pure_key)
@@ -3111,7 +3144,7 @@ func _setup_npc_panel_node():
 	
 	#Tamaño del panel NPC
 	var p_width = 530 * s
-	var p_height = 250 * s
+	var p_height = 350 * s
 	var h = 340 # Match the Fixed Tall HUD height
 	var bottom_gap = h + (5 * s)
 	
@@ -3131,7 +3164,19 @@ func _setup_npc_panel_node():
 	scroll.name = "NPCScroll"
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	npc_panel.add_child(scroll)
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 10 * s)
+	npc_panel.add_child(main_vbox)
+	
+	var title = Label.new()
+	title.text = tr("npc")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", _get_safe_font())
+	title.add_theme_font_size_override("font_size", 34 * s)
+	ui_elements["npc_panel_title"] = title
+	main_vbox.add_child(title)
+	
+	main_vbox.add_child(scroll)
 	
 	var v_box = VBoxContainer.new()
 	v_box.name = "NPCVBox"
@@ -3547,10 +3592,12 @@ func _setup_npc_ui():
 	
 	# Clear and Fill
 	if is_instance_valid(npc_panel):
-		var scroll = npc_panel.get_child(0) as ScrollContainer
-		var v_box = scroll.get_child(0) as VBoxContainer
-		for child in v_box.get_children(): 
-			if is_instance_valid(child): child.queue_free()
+		var scroll = npc_panel.find_child("NPCScroll", true, false)
+		var v_box = scroll.find_child("NPCVBox", true, false) if scroll else null
+		
+		if is_instance_valid(v_box):
+			for child in v_box.get_children(): 
+				if is_instance_valid(child): child.queue_free()
 		
 		# ----------------------------------------------------
 		# NPC CONTROL SECTION (NEW PHILOSOPHY)
