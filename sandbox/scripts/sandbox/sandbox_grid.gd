@@ -610,7 +610,7 @@ func _show_welcome_message():
 		file.close()
 
 	var s = _get_ui_scale()
-	var ui_root = get_parent().get_node_or_null("UI")
+	ui_root = get_parent().get_node_or_null("UI")
 	if not ui_root:
 		return
 		
@@ -989,7 +989,7 @@ func _setup_main_ui_containers():
 
 func _setup_tools_ui():
 	var s = _get_ui_scale()
-	var ui_root = get_parent().get_node("UI")
+	ui_root = get_parent().get_node("UI")
 	
 	var tools_btn = Button.new()
 	tools_btn.name = "ToolsBtn"
@@ -1166,7 +1166,7 @@ func _setup_tools_ui():
 	action_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v_box.add_child(action_row)
 
-	var create_action_btn = func(text_key: String, color: Color, callback: Callable):
+	var create_action_btn = func(text_key: String, _color: Color, callback: Callable):
 		var btn = Button.new()
 		btn.text = tr(text_key)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1338,7 +1338,7 @@ func _setup_disaster_ui():
 	disaster_btn.add_theme_stylebox_override("pressed", btn_style)
 	
 	# CREATE FRESH PANEL WITH STYLE
-	var ui_root = get_parent().get_node("UI")
+	ui_root = get_parent().get_node("UI")
 	disaster_panel = PanelContainer.new()
 	disaster_panel.name = "DisasterPanel"
 	ui_root.add_child(disaster_panel)
@@ -2033,8 +2033,8 @@ func _process(delta):
 					
 					# Update UI
 					if is_instance_valid(npc_panel): npc_panel.visible = false
-					var ui_root = get_parent().get_node("UI")
-					var main_controls = ui_root.get_node("Controls")
+					ui_root = get_parent().get_node("UI")
+					main_controls = ui_root.get_node("Controls")
 					main_controls.visible = false
 					
 					if is_instance_valid(npc_control_gui):
@@ -2080,7 +2080,7 @@ func _process(delta):
 						if selected_material == 600:
 							_play_music_note(5, 0)
 						else:
-							var inst = (selected_material - MUSIC_ID_START) / 16
+							var inst = int(float(selected_material - MUSIC_ID_START) / 16.0)
 							var note = (selected_material - MUSIC_ID_START) % 16
 							_play_music_note(inst, note)
 					
@@ -2265,10 +2265,14 @@ func _process_tsunami(delta):
 		var mid = 0
 		for gy in range(5, grid_height - 5):
 			var idx = gy * grid_width + rx
-			if cells[idx] > 0 and (material_tags_raw[cells[idx]] & SandboxMaterial.Tags.LIQUID):
-				y_top = gy
-				mid = cells[idx]
-				break
+			if idx >= 0 and idx < cells.size():
+				var raw_id = cells[idx]
+				var pure_id = raw_id & 0xFFFF
+				if pure_id > 0 and pure_id < material_tags_raw.size():
+					if (material_tags_raw[pure_id] & SandboxMaterial.Tags.LIQUID):
+						y_top = gy
+						mid = raw_id # Keep variant info
+						break
 		
 		if y_top == -1: continue
 		surface_cache[rx] = y_top
@@ -2282,8 +2286,10 @@ func _process_tsunami(delta):
 				# Purely mathematical shift, no randf()
 				if _get_cell(rx, target_y) == 0:
 					_set_cell(rx, target_y, mid)
-					if (material_tags_raw[_get_cell(rx, source_y)] & SandboxMaterial.Tags.LIQUID):
-						_set_cell(rx, source_y, 0)
+					var check_id = _get_cell(rx, source_y) & 0xFFFF
+					if check_id > 0 and check_id < material_tags_raw.size():
+						if (material_tags_raw[check_id] & SandboxMaterial.Tags.LIQUID):
+							_set_cell(rx, source_y, 0)
 
 func _process_tornado(delta):
 	if tornado_timer <= 0:
@@ -2502,7 +2508,11 @@ func _set_cell(x, y, mat_id):
 			_activate_chunk(x, y)
 			return
 
-		var tags = material_tags_raw[mat_id]
+		# ENSURE mat_id is just the base material ID for lookup (Strip variants/data)
+		var pure_id = mat_id & 0xFFFF
+		if pure_id < 0 or pure_id >= material_tags_raw.size(): return
+		
+		var tags = material_tags_raw[pure_id]
 		
 		# Scalable Texturing Variant calculation
 		var variant = 0
@@ -2704,7 +2714,7 @@ func _process_electricity():
 					if mid == 600: # Metronome sound
 						_play_music_note(5, 0)
 					else:
-						var inst = (mid - MUSIC_ID_START) / 16
+						var inst = int(float(mid - MUSIC_ID_START) / 16.0)
 						var note = (mid - MUSIC_ID_START) % 16
 						_play_music_note(inst, note)
 			
@@ -3121,7 +3131,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 
 func _setup_npc_panel_node():
 	# If it exists but was lost during a UI refresh, we need to ensure it's in the tree
-	var ui_root = get_parent().get_node("UI")
+	ui_root = get_parent().get_node("UI")
 	
 	npc_panel = PanelContainer.new()
 	npc_panel.name = "NPCPanel"
@@ -3189,8 +3199,8 @@ func _setup_npc_panel_node():
 
 func _setup_npc_control_gui():
 	var s = 1.1 # FIXED SCALE: Unified size for movement/action pads
-	var ui_root = get_parent().get_node("UI")
-	var main_controls = ui_root.get_node("Controls")
+	ui_root = get_parent().get_node("UI")
+	main_controls = ui_root.get_node("Controls")
 	
 	if is_instance_valid(npc_control_gui):
 		# Avoid duplicate connections or nodes
@@ -3374,8 +3384,8 @@ func _stop_controlling_npc():
 	if is_instance_valid(npc_control_gui):
 		npc_control_gui.visible = false
 	
-	var ui_root = get_parent().get_node("UI")
-	var main_controls = ui_root.get_node("Controls")
+	ui_root = get_parent().get_node("UI")
+	main_controls = ui_root.get_node("Controls")
 	if is_instance_valid(main_controls):
 		main_controls.visible = true
 		main_controls.offset_top = -340
@@ -3389,17 +3399,19 @@ func _stop_controlling_npc():
 	is_mouse_over_ui = false
 	_update_menu_highlights() 
 
-func _toggle_npc_mode_menu(show: bool):
+func _toggle_npc_mode_menu(p_show: bool):
+	ui_root = get_parent().get_node("UI")
+	main_controls = ui_root.get_node("Controls")
 	if not is_instance_valid(main_controls) or not is_instance_valid(ui_root): return
 	_play_action_sound("ui_click")
-	is_npc_mode_menu_open = show
+	is_npc_mode_menu_open = p_show
 	
 	# SWAP VISIBILITY: Building Menu vs Arcade HUD
-	main_controls.visible = show
+	main_controls.visible = p_show
 	if is_instance_valid(npc_control_gui):
-		npc_control_gui.visible = !show
+		npc_control_gui.visible = !p_show
 	
-	if !show:
+	if !p_show:
 		# Close floating sub-panels
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
@@ -3612,7 +3624,7 @@ func _setup_npc_ui():
 		control_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v_box.add_child(control_flow)
 		
-		var ui_root = get_parent().get_node("UI")
+		ui_root = get_parent().get_node("UI")
 		
 		# Button: ACTIVE
 		var active_btn = Button.new()
@@ -5059,7 +5071,7 @@ func _play_music_note(inst_idx, note_idx):
 
 func _setup_music_ui(force_refresh: bool = false):
 	var s = _get_ui_scale()
-	var ui_root = get_parent().get_node("UI")
+	ui_root = get_parent().get_node("UI")
 	
 	# EXCLUSIVE TOGGLE: If already open, close it (like other panels)
 	if not force_refresh and is_instance_valid(music_panel) and music_panel.visible:
@@ -5244,7 +5256,7 @@ func _setup_music_ui(force_refresh: bool = false):
 
 func _close_music_menu():
 	is_blocking = false
-	var ui_root = get_parent().get_node_or_null("UI")
+	ui_root = get_parent().get_node_or_null("UI")
 	if ui_root:
 		for child in ui_root.get_children():
 			if child.name.begins_with("MusicMenuBlocker") or child.name.begins_with("MusicPanel") or child.name == "TO_DELETE":
@@ -5303,7 +5315,7 @@ func _is_music_active() -> bool:
 
 func _setup_save_ui():
 	var s = _get_ui_scale()
-	var ui_root = get_parent().get_node("UI")
+	ui_root = get_parent().get_node("UI")
 	
 	if is_instance_valid(save_panel):
 		save_panel.queue_free()
@@ -5469,9 +5481,9 @@ func _get_slot_data(idx):
 			file.close()
 			
 	if FileAccess.file_exists(thumb_path):
-		var img = Image.load_from_file(thumb_path)
-		if img:
-			data.thumbnail = ImageTexture.create_from_image(img)
+		var _img = Image.load_from_file(thumb_path)
+		if _img:
+			data.thumbnail = ImageTexture.create_from_image(_img)
 			
 	return data
 
