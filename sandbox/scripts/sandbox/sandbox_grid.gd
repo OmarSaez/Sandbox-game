@@ -5303,7 +5303,7 @@ func _setup_save_ui():
 	main_vbox.add_child(title_hbox)
 	
 	var title = Label.new()
-	title.text = "💾 " + tr("save")
+	title.text = "💾 " + tr("save_btn_ui")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_override("font", _get_safe_font())
@@ -5389,8 +5389,9 @@ func _add_save_slot_ui(container, slot_idx):
 	vbox.add_child(btn_hbox)
 	
 	var save_btn = Button.new()
-	save_btn.text = tr("save")
+	save_btn.text = tr("save_btn_ui")
 	save_btn.add_theme_font_size_override("font_size", 16 * s)
+	save_btn.add_theme_font_override("font", _get_safe_font())
 	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	save_btn.pressed.connect(func(): _confirm_save(slot_idx, lbl_name.text))
 	btn_hbox.add_child(save_btn)
@@ -5399,6 +5400,7 @@ func _add_save_slot_ui(container, slot_idx):
 		var load_btn = Button.new()
 		load_btn.text = tr("load")
 		load_btn.add_theme_font_size_override("font_size", 16 * s)
+		load_btn.add_theme_font_override("font", _get_safe_font())
 		load_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		load_btn.pressed.connect(func(): _load_from_slot(slot_idx))
 		btn_hbox.add_child(load_btn)
