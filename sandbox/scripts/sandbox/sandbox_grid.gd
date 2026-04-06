@@ -2822,10 +2822,14 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 	# METRONOME: Self-pulsing electrical source
 	if pure_id == 600:
 		if Engine.get_frames_drawn() % music_tempo_frames == 0:
-			# Emit a pulse only if it's not already busy
-			if charge_array[idx] <= 10: # Allow pulsing if cooldown is almost done
-				charge_array[idx] = 101
-				_register_charge(idx)
+			var gx = idx % grid_width
+			var gy = int(float(idx) / grid_width)
+			# Only pulse from the master pixel of the 2x2 block
+			if (gx % 2 == 0 and gy % 2 == 0):
+				# Emit a pulse only if it's not already busy
+				if charge_array[idx] <= 10: 
+					charge_array[idx] = 101
+					_register_charge(idx)
 		
 	# FIRE AND HEAT REACTIONS
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
@@ -2866,14 +2870,18 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 	# (Redundant Metronome Pulse removed to consolidate logic)
 	# --- MUSIC INTERACTIONS ---
 	if (tags & SandboxMaterial.Tags.MUSIC):
-		# Trigger on pulse or neighbor heat
-		if charge_array[idx] == 100 or _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY):
-			if pure_id == 600:
-				_play_music_note(5, 0)
-			else:
-				var inst = (pure_id - MUSIC_ID_START) / 16
-				var note = (pure_id - MUSIC_ID_START) % 16
-				_play_music_note(inst, note)
+		# Trigger only on neighbor heat (electricity check removed as it's handled in _process_electricity)
+		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY):
+			var gx = idx % grid_width
+			var gy = int(float(idx) / grid_width)
+			# 2x2 DUPES FILTER: Only trigger for the "top-left" pixel of the 2x2 block
+			if (gx % 2 == 0 and gy % 2 == 0):
+				if pure_id == 600:
+					_play_music_note(5, 0)
+				else:
+					var inst = (pure_id - MUSIC_ID_START) / 16
+					var note = (pure_id - MUSIC_ID_START) % 16
+					_play_music_note(inst, note)
 
 	if pure_id == 19: 
 		charge_array[idx] -= 1
@@ -5034,9 +5042,9 @@ func _register_musical_materials():
 		for note in range(16):
 			var mat_id = MUSIC_ID_START + (inst * 16) + note
 			var color = base_color
-			if inst < 4: # Keyboard instruments: darken from agudo (15) to grave (0)
-				var factor = 0.4 + (float(note) / 15.0) * 0.6 
-				color = base_color.darkened(1.0 - factor)
+			var max_n = 15.0 if inst < 4 else 8.0 # 16 notes for pianos, 9 notes for drums
+			var factor = 0.4 + (float(note % int(max_n + 1)) / max_n) * 0.6 
+			color = base_color.darkened(1.0 - factor)
 			
 			_register_material(mat_id, color, SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.MUSIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.CONDUCTOR)
 	
@@ -5054,8 +5062,8 @@ func _play_music_note(inst_idx, note_idx):
 	var p_scale = MUSIC_PITCHES[note_idx % 16]
 	
 	if inst_idx == 4: # Drum Set (Now index 4)
-		var drum_keys = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom"]
-		s_name = drum_keys[note_idx % 4]
+		var drum_keys = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom", "drum_tom_low", "drum_tom_high", "drum_ride", "drum_crash", "drum_sticks"]
+		s_name = drum_keys[note_idx % 9]
 		p_scale = 1.0
 	elif inst_idx == 5: # Metronome (Now index 5)
 		s_name = "ui_pop" # Or any tick sound
@@ -5067,7 +5075,7 @@ func _play_music_note(inst_idx, note_idx):
 		var p = music_player_pool[music_next_idx]
 		p.stream = stream
 		p.pitch_scale = p_scale
-		p.volume_db = -10.0 # Lower base volume per note to allow headroom for chords
+		p.volume_db = -5.0 # Lower base volume per note to allow headroom for chords
 		p.play()
 		music_next_idx = (music_next_idx + 1) % 32
 
@@ -5104,7 +5112,7 @@ func _setup_music_ui(force_refresh: bool = false):
 	
 	# ROBUST POSITIONING (Same as ToolsPanel: Centered above Bottom HUD)
 	var m_width = 530 * s
-	var m_height = 650 * s
+	var m_height = 655 * s
 	music_panel.custom_minimum_size = Vector2(m_width, m_height)
 	
 	# Anchor to Bottom-Center
@@ -5127,7 +5135,7 @@ func _setup_music_ui(force_refresh: bool = false):
 	music_panel.add_child(scroll)
 	
 	var main_vbox = VBoxContainer.new()
-	main_vbox.add_theme_constant_override("separation", 15 * s) # Better spacing matching others
+	main_vbox.add_theme_constant_override("separation", 15 * s) # Tighter spacing to pull content up
 	main_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(main_vbox)
 	
@@ -5217,17 +5225,19 @@ func _setup_music_ui(force_refresh: bool = false):
 		
 	else: # PIANO/DRUMS VIEW
 		var note_grid = GridContainer.new()
-		var n_count = 16 if selected_music_instrument < 4 else 4
-		note_grid.columns = 4
+		var n_count = 16 if selected_music_instrument < 4 else 9
+		note_grid.columns = 4 if selected_music_instrument < 4 else 3
 		note_grid.add_theme_constant_override("h_separation", 8 * s)
 		note_grid.add_theme_constant_override("v_separation", 8 * s)
 		note_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		main_vbox.add_child(note_grid)
 		
-		var drum_names = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom"]
+		var drum_names = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom", "drum_tom_low", "drum_tom_high", "drum_ride", "drum_crash", "drum_sticks"]
 		for i in range(n_count):
 			var btn = Button.new()
-			btn.custom_minimum_size = Vector2(105 * s, 105 * s) # Bigger note buttons
+			# Fine-tuned size: 135px fits better without hitting the bottom
+			var b_size = 105 * s if selected_music_instrument < 4 else 140 * s
+			btn.custom_minimum_size = Vector2(b_size, b_size)
 			btn.add_theme_font_override("font", _get_safe_font())
 			
 			if selected_music_instrument < 4:
@@ -5262,8 +5272,9 @@ func _setup_music_ui(force_refresh: bool = false):
 					btn.add_theme_color_override("font_color", Color.BLACK)
 			
 			var base_color = MUSIC_INST_COLORS[selected_music_instrument]
-			var factor = 0.4 + (float(i) / 15.0) * 0.6
-			var n_color = base_color.darkened(1.0 - factor) if selected_music_instrument < 4 else base_color
+			var max_n = float(n_count - 1)
+			var factor = 0.4 + (float(i) / max_n) * 0.6
+			var n_color = base_color.darkened(1.0 - factor)
 			
 			var n_style = StyleBoxFlat.new()
 			n_style.bg_color = n_color

@@ -124,3 +124,8 @@ load,Cargar,Load,Carica,Charger,Laden,Carregar
 enter_save_name,Escribe un nombre...,Enter a name...,Scrivi un nome...,Entrer un nom...,Nombre eingeben...,Digite um nome...
 save_to_slot,Guardar en Slot {0},Save to Slot {0},Salva nel Slot {0},Sauvegarder dans Slot {0},In Slot {0} speichern,Salvar no Slot {0}
 func,Funcionalidad,Functionality,Funzionalità,Fonctionnalité,Funktionalität,Funcionalidade
+drum_tom_low,Tom Bajo,Low Tom,Tom Basso,Tom Bas,Tiefe Tom,Tom Baixo
+drum_tom_high,Tom Agudo,High Tom,Tom Alto,Tom Haut,Hohe Tom,Tom Agudo
+drum_ride,Platillo Ride,Ride Cymbal,Piatto Ride,Cymbale Ride,Ride-Becken,Prato Ride
+drum_crash,Platillo Crash,Crash Cymbal,Piatto Crash,Cymbale Crash,Crash-Becken,Prato Crash
+drum_sticks,Palitos,Sticks,Bacchette,Baguettes,Sticks,Baquetas
