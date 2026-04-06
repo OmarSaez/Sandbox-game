@@ -94,7 +94,9 @@ const MUSIC_INST_COLORS = [
 	Color("#E0BB87")  # Neon Cyan
 ]
 const MUSIC_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B", "C", "C#", "D", "E"]
+const MUSIC_NOTES_LATIN = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si", "Do", "Do#", "Re", "Mi"]
 const MUSIC_PITCHES = [1.0, 1.05946, 1.12246, 1.18921, 1.25992, 1.33483, 1.41421, 1.49831, 1.58740, 1.68179, 1.78180, 1.88775, 2.0, 2.11893, 2.24492, 2.51984]
+
 
 @export var custom_emoji_font: Font 
 
@@ -5148,6 +5150,7 @@ func _setup_music_ui(force_refresh: bool = false):
 	for i in range(MUSIC_INSTRUMENTS.size()):
 		var btn = Button.new()
 		btn.text = tr(MUSIC_INSTRUMENTS[i])
+		if i == 4: btn.add_theme_color_override("font_color", Color.BLACK)
 		# Larger buttons
 		btn.custom_minimum_size = Vector2(160 * s, 60 * s)
 		btn.add_theme_font_override("font", _get_safe_font())
@@ -5224,10 +5227,39 @@ func _setup_music_ui(force_refresh: bool = false):
 		var drum_names = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom"]
 		for i in range(n_count):
 			var btn = Button.new()
-			btn.text = MUSIC_NOTES[i] if selected_music_instrument < 4 else tr(drum_names[i])
 			btn.custom_minimum_size = Vector2(105 * s, 105 * s) # Bigger note buttons
 			btn.add_theme_font_override("font", _get_safe_font())
-			btn.add_theme_font_size_override("font_size", 20 * s if selected_music_instrument == 4 else 32 * s)
+			
+			if selected_music_instrument < 4:
+				# Piano Notes with Dual Labels
+				btn.text = "" 
+				var v = VBoxContainer.new()
+				v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+				v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				v.alignment = BoxContainer.ALIGNMENT_CENTER
+				btn.add_child(v)
+				
+				var l1 = Label.new()
+				l1.text = MUSIC_NOTES[i]
+				l1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				l1.add_theme_font_override("font", _get_safe_font())
+				l1.add_theme_font_size_override("font_size", 32 * s)
+				v.add_child(l1)
+				
+				var l2 = Label.new()
+				l2.text = MUSIC_NOTES_LATIN[i]
+				l2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				l2.add_theme_font_override("font", _get_safe_font())
+				l2.add_theme_font_size_override("font_size", 20 * s)
+				l2.modulate = Color(1, 1, 1, 0.8)
+				v.add_child(l2)
+				
+			else:
+				# Drums/Metronome labels
+				btn.text = tr(drum_names[i])
+				btn.add_theme_font_size_override("font_size", 20 * s if selected_music_instrument == 4 else 32 * s)
+				if selected_music_instrument == 4:
+					btn.add_theme_color_override("font_color", Color.BLACK)
 			
 			var base_color = MUSIC_INST_COLORS[selected_music_instrument]
 			var factor = 0.4 + (float(i) / 15.0) * 0.6
