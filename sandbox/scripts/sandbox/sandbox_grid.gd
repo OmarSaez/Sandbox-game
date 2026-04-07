@@ -58,10 +58,11 @@ var tools_panel: PanelContainer
 var lab_panel: PanelContainer
 var lab_selected_slot: int = 0
 var lab_custom_data = [
-	{"c1": Color(1, 1, 1, 1), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "tags": {}, "name": ""},
-	{"c1": Color(1, 1, 1, 1), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "tags": {}, "name": ""},
-	{"c1": Color(1, 1, 1, 1), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "tags": {}, "name": ""}
+	{"c1": Color(0, 0, 0, 0), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "tags": {}, "name": ""},
+	{"c1": Color(0, 0, 0, 0), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "tags": {}, "name": ""},
+	{"c1": Color(0, 0, 0, 0), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "tags": {}, "name": ""}
 ]
+var is_lab_unlocked: bool = true
 var disaster_panel: PanelContainer
 var npc_panel: PanelContainer
 var selected_team: int = 0 
@@ -747,7 +748,13 @@ func _show_welcome_message():
 
 
 func _setup_materials_within_grid():
-	if material_grid.get_child_count() > 0: return # Already setup physically?
+	var has_standard = false
+	if material_grid.get_child_count() > 0:
+		for c in material_grid.get_children():
+			if not c.has_meta("is_custom"):
+				has_standard = true
+				break
+	if has_standard: return # Already setup standard elements physically?
 	
 	# Setup all material buttons (Unified)
 	_add_button("sand", 1)
@@ -1643,7 +1650,7 @@ func _setup_lab_ui():
 		var cat_lbl = Label.new()
 		cat_lbl.text = category
 		cat_lbl.add_theme_font_override("font", _get_safe_font())
-		cat_lbl.add_theme_font_size_override("font_size", 18 * s)
+		cat_lbl.add_theme_font_size_override("font_size", 22 * s)
 		cat_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
 		v_box.add_child(cat_lbl)
 		
@@ -1657,7 +1664,7 @@ func _setup_lab_ui():
 			tb.text = tag
 			tb.toggle_mode = true
 			tb.add_theme_font_override("font", _get_safe_font())
-			tb.add_theme_font_size_override("font_size", 16 * s)
+			tb.add_theme_font_size_override("font_size", 20 * s)
 			
 			var st_n = StyleBoxFlat.new()
 			st_n.bg_color = Color(0.15, 0.15, 0.2)
@@ -1682,6 +1689,152 @@ func _setup_lab_ui():
 	for i in range(3):
 		_update_lab_preview(i)
 	_update_lab_inspector()
+
+func _set_lab_unlocked(unlocked: bool):
+	is_lab_unlocked = unlocked
+	_update_custom_mats_in_material_grid()
+
+func _update_custom_mats_in_material_grid():
+	var material_grid = main_controls.find_child("MaterialGrid", true, false)
+	if not is_instance_valid(material_grid): return
+	
+	# Clean up old custom generated items
+	for c in material_grid.get_children():
+		if c.has_meta("is_custom"):
+			material_grid.remove_child(c)
+			c.queue_free()
+			
+	if not is_lab_unlocked: 
+		return
+		
+	var s = _get_ui_scale()
+	var insert_idx = 0
+	
+	for i in range(3):
+		var data = lab_custom_data[i]
+		var has_color = data["c1"].a > 0.0 or data["c2"].a > 0.0 or data["c3"].a > 0.0
+		if not has_color: continue
+			
+		var slot_pnl = PanelContainer.new()
+		var slot_style = StyleBoxEmpty.new()
+		slot_pnl.add_theme_stylebox_override("panel", slot_style)
+		slot_pnl.mouse_filter = Control.MOUSE_FILTER_PASS
+		slot_pnl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slot_pnl.custom_minimum_size = Vector2(110 * s, 85 * s) 
+		slot_pnl.set_meta("is_custom", true)
+		
+		var main_vbox = VBoxContainer.new()
+		main_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		main_vbox.add_theme_constant_override("separation", 2 * s)
+		main_vbox.mouse_filter = Control.MOUSE_FILTER_PASS
+		slot_pnl.add_child(main_vbox)
+		
+		var stack = Control.new()
+		stack.custom_minimum_size = Vector2(90 * s, 46 * s)
+		stack.mouse_filter = Control.MOUSE_FILTER_PASS
+		main_vbox.add_child(stack)
+		
+		var icon_panel = PanelContainer.new()
+		icon_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		icon_panel.clip_children = Control.CLIP_CHILDREN_AND_DRAW # 2 (CLIP_CHILDREN_AND_DRAW) - Masks child TextureRect by StyleBox rounded corners!
+		
+		var st = StyleBoxFlat.new()
+		st.bg_color = data["c1"] if data["c1"].a > 0.0 else Color(0.1, 0.1, 0.1)
+		var radius = int(8 * s)
+		st.corner_radius_top_left = radius; st.corner_radius_top_right = radius
+		st.corner_radius_bottom_left = radius; st.corner_radius_bottom_right = radius
+		icon_panel.add_theme_stylebox_override("panel", st)
+		
+		if is_instance_valid(data["node"]) and data["node"].texture:
+			var tex_rect = TextureRect.new()
+			tex_rect.texture = data["node"].texture
+			tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tex_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			icon_panel.add_child(tex_rect)
+			
+		icon_panel.mouse_filter = Control.MOUSE_FILTER_PASS
+		stack.add_child(icon_panel)
+		
+		var selection_overlay = PanelContainer.new()
+		selection_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		selection_overlay.visible = false
+		selection_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		stack.add_child(selection_overlay)
+		
+		var btn_lbl = Label.new()
+		btn_lbl.name = "MatLabel"
+		btn_lbl.text = (data["name"] if data["name"] != "" else "Mat "+str(i+1))
+		btn_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		btn_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
+		btn_lbl.add_theme_font_size_override("font_size", 18 * s)
+		btn_lbl.add_theme_font_override("font", _get_safe_font())
+		main_vbox.add_child(btn_lbl)
+		
+		var mat_id = 900 + i
+		slot_pnl.gui_input.connect(func(event):
+			if not is_instance_valid(event) or not is_instance_valid(slot_pnl): return
+			if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+				_play_action_sound("ui_click")
+				selected_material = mat_id
+				_update_material_highlights()
+				_update_menu_highlights()
+		)
+		
+		slot_pnl.set_meta("mat_id", mat_id)
+		slot_pnl.set_meta("overlay", selection_overlay)
+		slot_pnl.set_meta("label", btn_lbl)
+		
+		material_grid.add_child(slot_pnl)
+		material_grid.move_child(slot_pnl, insert_idx)
+		insert_idx += 1
+		
+	_update_material_highlights()
+
+func _sync_palette_to_shader():
+	var palette_img = Image.create(2048, 3, false, Image.FORMAT_RGBA8)
+	palette_img.fill(Color(0,0,0,0))
+	for i in range(2048):
+		palette_img.set_pixel(i, 0, mat_colors_1[i])
+		palette_img.set_pixel(i, 1, mat_colors_2[i])
+		palette_img.set_pixel(i, 2, mat_colors_3[i])
+	var palette_tex = ImageTexture.create_from_image(palette_img)
+	if is_instance_valid(texture_rect) and texture_rect.material:
+		texture_rect.material.set_shader_parameter("palette_tex", palette_tex)
+
+func _apply_custom_material_to_engine(i: int):
+	var data = lab_custom_data[i]
+	var mat_id = 900 + i
+	var tags_mask = 0
+	
+	if data["state"] == 0: tags_mask |= SandboxMaterial.Tags.GAS
+	elif data["state"] == 1: tags_mask |= SandboxMaterial.Tags.LIQUID
+	elif data["state"] == 2: tags_mask |= SandboxMaterial.Tags.POWDER
+	elif data["state"] == 3: tags_mask |= SandboxMaterial.Tags.SOLID
+	
+	if data["grav"] == 0: tags_mask |= SandboxMaterial.Tags.GRAV_SLOW
+	elif data["grav"] == 1: tags_mask |= SandboxMaterial.Tags.GRAV_NORMAL
+	elif data["grav"] == 2: tags_mask |= SandboxMaterial.Tags.GRAV_UP
+	elif data["grav"] == 3: tags_mask |= SandboxMaterial.Tags.GRAV_STATIC
+	
+	for tag_name in data["tags"]:
+		if tag_name in SandboxMaterial.Tags:
+			tags_mask |= SandboxMaterial.Tags[tag_name]
+			
+	var has_c2 = data["c2"].a > 0.0
+	var has_c3 = data["c3"].a > 0.0
+	
+	if has_c2 and has_c3: tags_mask |= SandboxMaterial.Tags.TEXTURE_TRIPLE
+	elif has_c2: tags_mask |= SandboxMaterial.Tags.TEXTURE_DOUBLE
+		
+	if data["mix"] == 0: tags_mask |= SandboxMaterial.Tags.MIX_LOW
+	elif data["mix"] == 1: tags_mask |= SandboxMaterial.Tags.MIX_MEDIUM
+	elif data["mix"] == 2: tags_mask |= SandboxMaterial.Tags.MIX_HIGH
+	
+	var c1 = data["c1"] if data["c1"].a > 0.0 else Color(1,0,1,1)
+	
+	if has_method("_register_material"): # Safety check because we are hooking deep!
+		_register_material(mat_id, c1, tags_mask, data["c2"], data["c3"])
 
 func _update_lab_inspector():
 	if not ui_elements.has("lab_col_pickers"): return
@@ -1722,6 +1875,12 @@ func _update_lab_inspector():
 			tb.set_block_signals(true)
 			tb.button_pressed = current_tags.has(tag)
 			tb.set_block_signals(false)
+			
+	for i in range(3):
+		_apply_custom_material_to_engine(i)
+	_sync_palette_to_shader()
+		
+	_update_custom_mats_in_material_grid()
 	
 	for i in range(3):
 		var cp = ui_elements["lab_col_pickers"][i]
