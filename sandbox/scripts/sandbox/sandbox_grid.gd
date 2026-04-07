@@ -58,9 +58,9 @@ var tools_panel: PanelContainer
 var lab_panel: PanelContainer
 var lab_selected_slot: int = 0
 var lab_custom_data = [
-	{"c1": Color(1, 1, 1, 1), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "name": ""},
-	{"c1": Color(1, 1, 1, 1), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "name": ""},
-	{"c1": Color(1, 1, 1, 1), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "name": ""}
+	{"c1": Color(1, 1, 1, 1), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "tags": {}, "name": ""},
+	{"c1": Color(1, 1, 1, 1), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "tags": {}, "name": ""},
+	{"c1": Color(1, 1, 1, 1), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "tags": {}, "name": ""}
 ]
 var disaster_panel: PanelContainer
 var npc_panel: PanelContainer
@@ -1366,8 +1366,8 @@ func _setup_lab_ui():
 	lab_panel.anchor_top = 1.0
 	lab_panel.anchor_bottom = 1.0
 	
-	var l_width = 450 * s
-	var l_height = 580 * s
+	var l_width = 530 * s
+	var l_height = 650 * s
 	var h = 340
 	var l_bottom_gap = h + (5 * s)
 	
@@ -1404,7 +1404,7 @@ func _setup_lab_ui():
 	var time_lbl = Label.new()
 	time_lbl.text = "Tiempo: 12:00:00"
 	time_lbl.add_theme_font_override("font", _get_safe_font())
-	time_lbl.add_theme_font_size_override("font_size", 16 * s)
+	time_lbl.add_theme_font_size_override("font_size", 20 * s)
 	time_lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
 	top_hbox.add_child(time_lbl)
 	
@@ -1447,8 +1447,8 @@ func _setup_lab_ui():
 		var pnl = PanelContainer.new()
 		var out_st = StyleBoxFlat.new()
 		out_st.bg_color = Color(0,0,0,1)
-		out_st.border_width_left = 2; out_st.border_width_top = 2
-		out_st.border_width_right = 2; out_st.border_width_bottom = 2
+		out_st.border_width_left = 6; out_st.border_width_top = 6
+		out_st.border_width_right = 6; out_st.border_width_bottom = 6
 		out_st.border_color = Color(0.4, 0.4, 0.5)
 		pnl.add_theme_stylebox_override("panel", out_st)
 		
@@ -1476,11 +1476,20 @@ func _setup_lab_ui():
 		name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
 		name_edit.custom_minimum_size = Vector2(80 * s, 30 * s)
 		name_edit.add_theme_font_override("font", _get_safe_font())
-		name_edit.add_theme_font_size_override("font_size", 14 * s)
+		name_edit.add_theme_font_size_override("font_size", 18 * s)
 		name_edit.text_changed.connect(func(new_text): lab_custom_data[i]["name"] = new_text)
 		slot_vbox.add_child(name_edit)
 	
-	var sep1 = HSeparator.new()
+	var make_h_line = func():
+		var cr = ColorRect.new(); cr.custom_minimum_size = Vector2(0, 2 * s)
+		cr.size_flags_horizontal = Control.SIZE_EXPAND_FILL; cr.color = Color(0.4, 0.4, 0.5, 0.8)
+		return cr
+	var make_v_line = func():
+		var cr = ColorRect.new(); cr.custom_minimum_size = Vector2(2 * s, 0)
+		cr.size_flags_vertical = Control.SIZE_EXPAND_FILL; cr.color = Color(0.4, 0.4, 0.5, 0.8)
+		return cr
+		
+	var sep1 = make_h_line.call()
 	v_box.add_child(sep1)
 	
 	var columns_hbox = HBoxContainer.new()
@@ -1491,32 +1500,27 @@ func _setup_lab_ui():
 	var col_color = VBoxContainer.new()
 	var col_grav = VBoxContainer.new()
 	var col_est = VBoxContainer.new()
-	var col_car = VBoxContainer.new()
 	
-	for col in [col_color, col_grav, col_est, col_car]:
+	for col in [col_color, col_grav, col_est]:
 		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	
 	columns_hbox.add_child(col_color)
-	columns_hbox.add_child(VSeparator.new())
+	columns_hbox.add_child(make_v_line.call())
 	columns_hbox.add_child(col_grav)
-	columns_hbox.add_child(VSeparator.new())
+	columns_hbox.add_child(make_v_line.call())
 	columns_hbox.add_child(col_est)
-	columns_hbox.add_child(VSeparator.new())
-	columns_hbox.add_child(col_car)
 	
 	var c1 = Label.new(); c1.text = "Color"; c1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var cg = Label.new(); cg.text = "Gravedad"; cg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var ce = Label.new(); ce.text = "Estado"; ce.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var cc = Label.new(); cc.text = "Características"; cc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	
-	for l in [c1, cg, ce, cc]:
+	for l in [c1, cg, ce]:
 		l.add_theme_font_override("font", _get_safe_font())
-		l.add_theme_font_size_override("font_size", 14 * s)
+		l.add_theme_font_size_override("font_size", 20 * s)
 	
 	col_color.add_child(c1)
 	col_grav.add_child(cg)
 	col_est.add_child(ce)
-	col_car.add_child(cc)
 	
 	ui_elements["lab_col_pickers"] = []
 	ui_elements["lab_col_trash"] = []
@@ -1540,6 +1544,7 @@ func _setup_lab_ui():
 		var trash = Button.new()
 		trash.text = "🗑️"
 		trash.add_theme_font_override("font", _get_safe_font())
+		trash.add_theme_font_size_override("font_size", 20 * s)
 		trash.custom_minimum_size = Vector2(25 * s, 30 * s)
 		trash.pressed.connect(func():
 			_play_action_sound("ui_click")
@@ -1557,7 +1562,7 @@ func _setup_lab_ui():
 	var tex_lbl = Label.new()
 	tex_lbl.text = "Textura"
 	tex_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tex_lbl.add_theme_font_size_override("font_size", 12 * s)
+	tex_lbl.add_theme_font_size_override("font_size", 16 * s)
 	col_color.add_child(tex_lbl)
 	
 	var mix_slider = HSlider.new()
@@ -1572,23 +1577,107 @@ func _setup_lab_ui():
 	col_color.add_child(mix_slider)
 	ui_elements["lab_mix_slider"] = mix_slider
 		
-	for g in ["Lenta", "Normal", "Sube", "Estático"]:
-		var lb = Label.new(); lb.text = g; lb.add_theme_font_size_override("font_size", 12 * s)
-		lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		var pn = PanelContainer.new(); pn.add_child(lb)
-		pn.modulate = Color(0.7,0.7,0.7)
-		col_grav.add_child(pn)
+	ui_elements["lab_grav_buttons"] = []
+	var grav_options = ["Lenta", "Normal", "Sube", "Estático"]
+	for j in range(grav_options.size()):
+		var btn = Button.new(); btn.text = grav_options[j]; btn.toggle_mode = true
+		btn.add_theme_font_override("font", _get_safe_font())
+		btn.add_theme_font_size_override("font_size", 16 * s)
+		var st_n = StyleBoxFlat.new(); st_n.bg_color = Color(0.15,0.15,0.2)
+		st_n.border_width_left=1; st_n.border_width_right=1; st_n.border_width_top=1; st_n.border_width_bottom=1
+		st_n.border_color = Color(0.3, 0.3, 0.4)
+		btn.add_theme_stylebox_override("normal", st_n)
+		var st_p = StyleBoxFlat.new(); st_p.bg_color = Color(0.2,0.5,1.0)
+		btn.add_theme_stylebox_override("pressed", st_p)
+		btn.toggled.connect(func(pressed):
+			if pressed:
+				_play_action_sound("ui_click")
+				lab_custom_data[lab_selected_slot]["grav"] = j
+				_update_lab_inspector()
+		)
+		col_grav.add_child(btn)
+		ui_elements["lab_grav_buttons"].append(btn)
 		
-	for e in ["Gas", "Líquido", "Polvo", "Sólido"]:
-		var lb = Label.new(); lb.text = e; lb.add_theme_font_size_override("font_size", 12 * s)
-		lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		var pn = PanelContainer.new(); pn.add_child(lb)
-		pn.modulate = Color(0.7,0.7,0.7)
-		col_est.add_child(pn)
+	ui_elements["lab_est_buttons"] = []
+	var est_options = ["Gas", "Líquido", "Polvo", "Sólido"]
+	for j in range(est_options.size()):
+		var btn = Button.new(); btn.text = est_options[j]; btn.toggle_mode = true
+		btn.add_theme_font_override("font", _get_safe_font())
+		btn.add_theme_font_size_override("font_size", 16 * s)
+		var st_n = StyleBoxFlat.new(); st_n.bg_color = Color(0.15,0.15,0.2)
+		st_n.border_width_left=1; st_n.border_width_right=1; st_n.border_width_top=1; st_n.border_width_bottom=1
+		st_n.border_color = Color(0.3, 0.3, 0.4)
+		btn.add_theme_stylebox_override("normal", st_n)
+		var st_p = StyleBoxFlat.new(); st_p.bg_color = Color(0.2,0.5,1.0)
+		btn.add_theme_stylebox_override("pressed", st_p)
+		btn.toggled.connect(func(pressed):
+			if pressed:
+				_play_action_sound("ui_click")
+				lab_custom_data[lab_selected_slot]["state"] = j
+				_update_lab_inspector()
+		)
+		col_est.add_child(btn)
+		ui_elements["lab_est_buttons"].append(btn)
 	
-	var lb_c = Label.new(); lb_c.text = "---"; lb_c.add_theme_font_size_override("font_size", 12 * s)
-	lb_c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col_car.add_child(lb_c)
+	var tags_sep = make_h_line.call()
+	v_box.add_child(tags_sep)
+	
+	var car_title = Label.new()
+	car_title.text = "Características"
+	car_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	car_title.add_theme_font_override("font", _get_safe_font())
+	car_title.add_theme_font_size_override("font_size", 20 * s)
+	v_box.add_child(car_title)
+	
+	var tag_dict = {
+		"Electricidad": ["ELECTRICITY", "CONDUCTOR", "ELECTRIC_ACTIVATED"],
+		"Corrosión": ["ACID", "ANTI_ACID"],
+		"Combustión": ["BURN_SMOKE", "BURN_COAL", "BURN_NONE"],
+		"Plantas": ["FERTILE", "SEED", "PLANT"],
+		"Interacción Física/Química": ["FLAMMABLE", "INCENDIARY", "EXPLOSIVE", "ANTI_EXPLOSIVE"]
+	}
+	
+	ui_elements["lab_tag_buttons"] = {}
+	
+	for category in tag_dict:
+		var cat_lbl = Label.new()
+		cat_lbl.text = category
+		cat_lbl.add_theme_font_override("font", _get_safe_font())
+		cat_lbl.add_theme_font_size_override("font_size", 18 * s)
+		cat_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
+		v_box.add_child(cat_lbl)
+		
+		var flow = HFlowContainer.new()
+		flow.add_theme_constant_override("h_separation", 10 * s)
+		flow.add_theme_constant_override("v_separation", 10 * s)
+		v_box.add_child(flow)
+		
+		for tag in tag_dict[category]:
+			var tb = Button.new()
+			tb.text = tag
+			tb.toggle_mode = true
+			tb.add_theme_font_override("font", _get_safe_font())
+			tb.add_theme_font_size_override("font_size", 16 * s)
+			
+			var st_n = StyleBoxFlat.new()
+			st_n.bg_color = Color(0.15, 0.15, 0.2)
+			st_n.border_width_left=1; st_n.border_width_top=1; st_n.border_width_right=1; st_n.border_width_bottom=1
+			tb.add_theme_stylebox_override("normal", st_n)
+			
+			var st_p = StyleBoxFlat.new()
+			st_p.bg_color = Color(0.2, 0.5, 1.0)
+			st_p.border_width_left=1; st_p.border_width_top=1; st_p.border_width_right=1; st_p.border_width_bottom=1
+			tb.add_theme_stylebox_override("pressed", st_p)
+			
+			tb.toggled.connect(func(pressed):
+				_play_action_sound("ui_click")
+				if pressed:
+					lab_custom_data[lab_selected_slot]["tags"][tag] = true
+				else:
+					lab_custom_data[lab_selected_slot]["tags"].erase(tag)
+			)
+			flow.add_child(tb)
+			ui_elements["lab_tag_buttons"][tag] = tb
 
 	for i in range(3):
 		_update_lab_preview(i)
@@ -1596,6 +1685,8 @@ func _setup_lab_ui():
 
 func _update_lab_inspector():
 	if not ui_elements.has("lab_col_pickers"): return
+	
+	var data = lab_custom_data[lab_selected_slot]
 	
 	# Update borders
 	if ui_elements.has("lab_slot_borders"):
@@ -1606,8 +1697,31 @@ func _update_lab_inspector():
 				st.border_color = Color(0.2, 0.5, 1.0) # Highlight selected
 			else:
 				st.border_color = Color(0.4, 0.4, 0.5) # Default
-	
-	var data = lab_custom_data[lab_selected_slot]
+				
+	# Update Grav buttons
+	if ui_elements.has("lab_grav_buttons"):
+		for j in range(4):
+			var btn = ui_elements["lab_grav_buttons"][j]
+			btn.set_block_signals(true)
+			btn.button_pressed = (data["grav"] == j)
+			btn.set_block_signals(false)
+			
+	# Update Est buttons
+	if ui_elements.has("lab_est_buttons"):
+		for j in range(4):
+			var btn = ui_elements["lab_est_buttons"][j]
+			btn.set_block_signals(true)
+			btn.button_pressed = (data["state"] == j)
+			btn.set_block_signals(false)
+				
+	# Update tag toggle buttons visibly
+	if ui_elements.has("lab_tag_buttons"):
+		var current_tags = data["tags"]
+		for tag in ui_elements["lab_tag_buttons"]:
+			var tb = ui_elements["lab_tag_buttons"][tag]
+			tb.set_block_signals(true)
+			tb.button_pressed = current_tags.has(tag)
+			tb.set_block_signals(false)
 	
 	for i in range(3):
 		var cp = ui_elements["lab_col_pickers"][i]
