@@ -62,7 +62,8 @@ var lab_custom_data = [
 	{"c1": Color(0, 0, 0, 0), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "tags": {}, "name": ""},
 	{"c1": Color(0, 0, 0, 0), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "tags": {}, "name": ""}
 ]
-var is_lab_unlocked: bool = true
+var is_lab_unlocked: bool = false
+var lab_unlock_expiry_unix: int = 0
 var disaster_panel: PanelContainer
 var npc_panel: PanelContainer
 var selected_team: int = 0 
@@ -582,6 +583,17 @@ func _ready():
 	tools_panel.visible = false
 	disaster_panel.visible = false
 	if npc_panel: npc_panel.visible = false
+	
+	# Connect Lab unlock global signal
+	if AdMobManager.has_signal("lab_unlocked"):
+		AdMobManager.lab_unlocked.connect(func():
+			_play_action_sound("ui_click")
+			lab_unlock_expiry_unix = int(Time.get_unix_time_from_system()) + (12 * 3600)
+			_set_lab_unlocked(true)
+			_save_lab_state()
+		)
+	
+	_load_lab_state()
 	
 	_register_material(19, Color(1, 0.8, 0.9), SandboxMaterial.Tags.GRAV_STATIC) # Firework Fuse
 
@@ -1413,9 +1425,91 @@ func _setup_lab_ui():
 	time_lbl.add_theme_font_override("font", _get_safe_font())
 	time_lbl.add_theme_font_size_override("font_size", 20 * s)
 	time_lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+	ui_elements["lab_time_lbl"] = time_lbl
 	top_hbox.add_child(time_lbl)
 	
 	main_vbox.add_child(scroll)
+	
+	# BLOQUEADOR DE ANUNCIOS (OVERLAY)
+	var lab_overlay = PanelContainer.new()
+	var lab_overlay_style = StyleBoxFlat.new()
+	lab_overlay_style.bg_color = Color(0.05, 0.05, 0.08, 0.90) # Oscuro
+	lab_overlay_style.corner_radius_top_left = 12 * s
+	lab_overlay_style.corner_radius_top_right = 12 * s
+	lab_overlay_style.corner_radius_bottom_left = 12 * s
+	lab_overlay_style.corner_radius_bottom_right = 12 * s
+	lab_overlay.add_theme_stylebox_override("panel", lab_overlay_style)
+	lab_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	
+	var overlay_vbox = VBoxContainer.new()
+	overlay_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	overlay_vbox.add_theme_constant_override("separation", 35 * s)
+	lab_overlay.add_child(overlay_vbox)
+	
+	var title_overlay = Label.new()
+	title_overlay.text = "🧪 Laboratorio Experimental"
+	title_overlay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_overlay.add_theme_font_override("font", _get_safe_font())
+	title_overlay.add_theme_font_size_override("font_size", 42* s)
+	title_overlay.add_theme_color_override("font_color", Color(0.9, 0.9, 1.0))
+	
+	var desc_overlay = Label.new()
+	desc_overlay.text = "Desbloquea la creación de elementos.\nAjusta el color, nombre, gravedad y reacciones con otros elementos.\n\nMira un anuncio para activarlo por 12 horas."
+	desc_overlay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	desc_overlay.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc_overlay.add_theme_font_override("font", _get_safe_font())
+	desc_overlay.add_theme_font_size_override("font_size", 32 * s)
+	desc_overlay.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8))
+	
+	var text_vbox = VBoxContainer.new()
+	text_vbox.add_theme_constant_override("separation", 25 * s)
+	text_vbox.add_child(title_overlay)
+	text_vbox.add_child(desc_overlay)
+	
+	var m_cont = MarginContainer.new()
+	m_cont.add_theme_constant_override("margin_left", 60 * s)
+	m_cont.add_theme_constant_override("margin_right", 60 * s)
+	m_cont.add_child(text_vbox)
+	
+	overlay_vbox.add_child(m_cont)
+	
+	var btn_hbox = HBoxContainer.new()
+	btn_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_hbox.add_theme_constant_override("separation", 30 * s)
+	overlay_vbox.add_child(btn_hbox)
+	
+	var no_btn = Button.new()
+	no_btn.text = "No por ahora"
+	no_btn.custom_minimum_size = Vector2(200 * s, 60 * s)
+	no_btn.add_theme_font_override("font", _get_safe_font())
+	no_btn.add_theme_font_size_override("font_size", 22 * s)
+	var no_st = StyleBoxFlat.new()
+	no_st.bg_color = Color(0.2, 0.2, 0.25)
+	no_st.corner_radius_top_left = 12*s; no_st.corner_radius_top_right = 12*s; no_st.corner_radius_bottom_left = 12*s; no_st.corner_radius_bottom_right = 12*s
+	no_btn.add_theme_stylebox_override("normal", no_st)
+	no_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		if is_instance_valid(lab_panel) and lab_panel.visible: lab_panel.visible = false
+	)
+	btn_hbox.add_child(no_btn)
+	
+	var ad_btn = Button.new()
+	ad_btn.text = "Ver anuncio 📺"
+	ad_btn.custom_minimum_size = Vector2(220 * s, 60 * s)
+	ad_btn.add_theme_font_override("font", _get_safe_font())
+	ad_btn.add_theme_font_size_override("font_size", 22 * s)
+	var ad_st = StyleBoxFlat.new()
+	ad_st.bg_color = Color(0.1, 0.5, 0.2)
+	ad_st.corner_radius_top_left = 12*s; ad_st.corner_radius_top_right = 12*s; ad_st.corner_radius_bottom_left = 12*s; ad_st.corner_radius_bottom_right = 12*s
+	ad_btn.add_theme_stylebox_override("normal", ad_st)
+	ad_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		AdMobManager.show_lab_rewarded()
+	)
+	btn_hbox.add_child(ad_btn)
+	
+	ui_elements["lab_overlay"] = lab_overlay
+	lab_panel.add_child(lab_overlay)
 	
 	lab_btn.pressed.connect(func(): 
 		_play_action_sound("ui_click")
@@ -1690,6 +1784,29 @@ func _setup_lab_ui():
 		_update_lab_preview(i)
 	_update_lab_inspector()
 
+func _save_lab_state():
+	var save = {
+		"expiry": lab_unlock_expiry_unix,
+		"data": lab_custom_data
+	}
+	var file = FileAccess.open("user://lab_state.save", FileAccess.WRITE)
+	if file: file.store_var(save)
+	
+func _load_lab_state():
+	if FileAccess.file_exists("user://lab_state.save"):
+		var file = FileAccess.open("user://lab_state.save", FileAccess.READ)
+		var save = file.get_var()
+		if typeof(save) == TYPE_DICTIONARY:
+			lab_unlock_expiry_unix = save.get("expiry", 0)
+			if save.has("data"):
+				lab_custom_data = save["data"]
+			
+	var now = int(Time.get_unix_time_from_system())
+	if now < lab_unlock_expiry_unix:
+		_set_lab_unlocked(true)
+	else:
+		_set_lab_unlocked(false)
+
 func _set_lab_unlocked(unlocked: bool):
 	is_lab_unlocked = unlocked
 	_update_custom_mats_in_material_grid()
@@ -1880,6 +1997,8 @@ func _update_lab_inspector():
 		_apply_custom_material_to_engine(i)
 	_sync_palette_to_shader()
 		
+	_save_lab_state()
+	
 	_update_custom_mats_in_material_grid()
 	
 	for i in range(3):
@@ -2634,6 +2753,29 @@ func _play_action_sound(action: String, min_interval: float = 0.08):
 		_play_sfx(action_sfx[action])
 
 func _process(delta):
+	if is_instance_valid(lab_panel) and lab_panel.visible:
+		var now = int(Time.get_unix_time_from_system())
+		var left = lab_unlock_expiry_unix - now
+		if ui_elements.has("lab_time_lbl") and is_instance_valid(ui_elements["lab_time_lbl"]):
+			if left > 0:
+				var hrs = left / 3600
+				var mins = (left % 3600) / 60
+				var secs = left % 60
+				ui_elements["lab_time_lbl"].text = "Tiempo: %02d:%02d:%02d" % [hrs, mins, secs]
+			else:
+				ui_elements["lab_time_lbl"].text = "Bloqueado"
+
+		if ui_elements.has("lab_overlay") and is_instance_valid(ui_elements["lab_overlay"]):
+			var overlay = ui_elements["lab_overlay"]
+			if left > 0:
+				if overlay.visible: 
+					overlay.visible = false
+					if not is_lab_unlocked: _set_lab_unlocked(true)
+			else:
+				if not overlay.visible:
+					overlay.visible = true
+					if is_lab_unlocked: _set_lab_unlocked(false)
+
 	# Increment SFX timer and reset every 1 second
 	explosions_sfx_timer += delta
 	if explosions_sfx_timer >= 1.0:

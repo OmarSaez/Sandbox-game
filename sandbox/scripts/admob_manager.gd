@@ -10,9 +10,12 @@ signal ad_dismissed
 var _banner_view : AdView
 var _interstitial_ad : InterstitialAd
 var _rewarded_ad : RewardedAd
+var _lab_rewarded_ad : RewardedAd
 var _active_ad # Keeps the current ad alive
 var _interstitial_loading : bool = false
 var _rewarded_loading : bool = false
+var _lab_rewarded_loading : bool = false
+signal lab_unlocked
 var ad_free_time : float = 0.0 # Segundos restantes sin anuncios
 var first_pause_used : bool = false
 var first_reset_used : bool = false
@@ -51,6 +54,7 @@ func _initialize_sdk():
 		_create_banner()
 		_load_interstitial() # Pre-cargar el de sistema
 		_load_rewarded()     # Pre-cargar el de apoyo
+		_load_lab_rewarded() # Pre-cargar el del laboratorio
 	
 	MobileAds.initialize(init_listener)
 
@@ -118,6 +122,60 @@ func show_rewarded() -> bool:
 	else:
 		print("ADMOB: Rewarded no listo.")
 		_load_rewarded()
+		return false
+
+# --- SISTEMA DE REWARDED (LABORATORIO) ---
+
+func _load_lab_rewarded():
+	if _lab_rewarded_loading or _lab_rewarded_ad: return
+	_lab_rewarded_loading = true
+	
+	var unit_id = "ca-app-pub-6982275568315854/2828758798"
+	var load_callback := RewardedAdLoadCallback.new()
+	
+	load_callback.on_ad_failed_to_load = func(error : LoadAdError):
+		print("ADMOB: Lab Rewarded falló -> ", error.message)
+		_lab_rewarded_loading = false
+
+	load_callback.on_ad_loaded = func(ad : RewardedAd):
+		print("ADMOB: Lab Rewarded CARGADO.")
+		_lab_rewarded_ad = ad
+		_lab_rewarded_loading = false
+	
+	var request = AdRequest.new()
+	print("ADMOB: Cargando Rewarded (Laboratorio)...")
+	RewardedAdLoader.new().load(unit_id, request, load_callback)
+
+func show_lab_rewarded() -> bool:
+	if OS.get_name() != "Android" and OS.get_name() != "iOS":
+		print("ADMOB: [PC EMULADOR] Laboratorio Desbloqueado.")
+		lab_unlocked.emit()
+		ad_dismissed.emit()
+		return true
+		
+	if _lab_rewarded_ad:
+		print("ADMOB: Mostrando Lab Rewarded...")
+		_active_ad = _lab_rewarded_ad
+		_lab_rewarded_ad = null
+		
+		var callback := FullScreenContentCallback.new()
+		callback.on_ad_dismissed_full_screen_content = func():
+			print("ADMOB: Lab Rewarded cerrado.")
+			_active_ad = null
+			_load_lab_rewarded()
+			ad_dismissed.emit()
+		
+		var reward_listener := OnUserEarnedRewardListener.new()
+		reward_listener.on_user_earned_reward = func(rewarded_item):
+			print("ADMOB: ¡LABORATORIO DESBLOQUEADO (12h)!")
+			lab_unlocked.emit()
+		
+		_active_ad.full_screen_content_callback = callback
+		_active_ad.show(reward_listener)
+		return true
+	else:
+		print("ADMOB: Lab Rewarded no listo.")
+		_load_lab_rewarded()
 		return false
 
 # --- SISTEMA DE INTERSTITIAL (PAUSA / RESET) ---
