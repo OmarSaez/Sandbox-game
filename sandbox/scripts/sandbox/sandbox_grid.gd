@@ -55,6 +55,13 @@ func _get_ui_scale() -> float:
 
 var ui_elements = {} # To track nodes for re-labeling
 var tools_panel: PanelContainer
+var lab_panel: PanelContainer
+var lab_selected_slot: int = 0
+var lab_custom_data = [
+	{"c1": Color(1, 1, 1, 1), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "name": ""},
+	{"c1": Color(1, 1, 1, 1), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "name": ""},
+	{"c1": Color(1, 1, 1, 1), "c2": Color(0, 0, 0, 0), "c3": Color(0, 0, 0, 0), "mix": 1, "grav": 1, "state": 3, "name": ""}
+]
 var disaster_panel: PanelContainer
 var npc_panel: PanelContainer
 var selected_team: int = 0 
@@ -805,15 +812,15 @@ func _setup_main_ui_containers():
 	ui_root = get_parent().get_node("UI")
 	main_controls = ui_root.get_node("Controls")
 	
-	# 1. CAPTURE VISIBILITY (Fixes auto-open and lost state bugs)
 	var tools_v = is_instance_valid(tools_panel) and tools_panel.visible
+	var lab_v = is_instance_valid(lab_panel) and lab_panel.visible
 	var disaster_v = is_instance_valid(disaster_panel) and disaster_panel.visible
 	var npc_v = is_instance_valid(npc_panel) and npc_panel.visible
 	
 	# 2. PURGE OLD UI CLONES & ACTION NODES
 	ui_elements.clear()
 	for child in ui_root.get_children():
-		if child.name.begins_with("ToolsPanel") or child.name.begins_with("DisasterPanel") or child.name.begins_with("NPCPanel"):
+		if child.name.begins_with("ToolsPanel") or child.name.begins_with("LabPanel") or child.name.begins_with("DisasterPanel") or child.name.begins_with("NPCPanel"):
 			child.get_parent().remove_child(child)
 			child.queue_free()
 			
@@ -974,10 +981,12 @@ func _setup_main_ui_containers():
 
 	# 5. CONSTRUCT ALL SUB-UI
 	ui_root.set_meta("tools_v", tools_v)
+	ui_root.set_meta("lab_v", lab_v)
 	ui_root.set_meta("disaster_v", disaster_v)
 	ui_root.set_meta("npc_v", npc_v)
 	
 	_setup_tools_ui()
+	_setup_lab_ui()
 	_setup_disaster_ui()
 	_setup_npc_panel_node()
 	_setup_npc_ui()         
@@ -1074,6 +1083,7 @@ func _setup_tools_ui():
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
+		if is_instance_valid(lab_panel): lab_panel.visible = false
 		if is_instance_valid(tools_panel): tools_panel.visible = !tools_panel.visible
 	)
 	
@@ -1315,6 +1325,353 @@ func _setup_tools_ui():
 		tr("tria")
 	], func(_l): pass, true)
 
+func _setup_lab_ui():
+	var s = _get_ui_scale()
+	var lab_btn = Button.new()
+	lab_btn.name = "LabBtn"
+	lab_btn.custom_minimum_size = Vector2(160 * s, 58 * s)
+	lab_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
+	lab_btn.text = tr("lab")
+	ui_elements["lab_btn"] = lab_btn
+	lab_btn.add_theme_font_override("font", _get_safe_font())
+	lab_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	lab_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	action_vbox.add_child(lab_btn)
+	
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.18, 0.15, 0.22, 1.0)
+	btn_style.border_width_left = 1; btn_style.border_width_top = 1
+	btn_style.border_width_right = 1; btn_style.border_width_bottom = 1
+	btn_style.border_color = Color(0.4, 0.3, 0.5)
+	lab_btn.add_theme_stylebox_override("normal", btn_style)
+	lab_btn.add_theme_stylebox_override("hover", btn_style)
+	lab_btn.add_theme_stylebox_override("pressed", btn_style)
+	
+	ui_root = get_parent().get_node("UI")
+	lab_panel = PanelContainer.new()
+	lab_panel.name = "LabPanel"
+	ui_root.add_child(lab_panel)
+	
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.15, 0.12, 0.2, 0.95)
+	panel_style.border_width_left = 2; panel_style.border_width_top = 2
+	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
+	panel_style.border_color = Color(0.4, 0.3, 0.5)
+	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
+	lab_panel.add_theme_stylebox_override("panel", panel_style)
+	
+	lab_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	lab_panel.anchor_left = 0.5
+	lab_panel.anchor_right = 0.5
+	lab_panel.anchor_top = 1.0
+	lab_panel.anchor_bottom = 1.0
+	
+	var l_width = 450 * s
+	var l_height = 580 * s
+	var h = 340
+	var l_bottom_gap = h + (5 * s)
+	
+	lab_panel.offset_left = -l_width / 2
+	lab_panel.offset_right = l_width / 2
+	lab_panel.offset_bottom = -l_bottom_gap
+	lab_panel.offset_top = -l_bottom_gap - l_height
+	lab_panel.visible = ui_root.get_meta("lab_v", false)
+	
+	for child in lab_panel.get_children(): 
+		if is_instance_valid(child): child.free()
+		
+	var scroll = ScrollContainer.new()
+	scroll.name = "LabScroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 10 * s)
+	lab_panel.add_child(main_vbox)
+	
+	var top_hbox = HBoxContainer.new()
+	top_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	top_hbox.add_theme_constant_override("separation", 20 * s)
+	main_vbox.add_child(top_hbox)
+	
+	var title_lbl = Label.new()
+	title_lbl.text = tr("lab")
+	title_lbl.add_theme_font_override("font", _get_safe_font())
+	title_lbl.add_theme_font_size_override("font_size", 34 * s)
+	ui_elements["lab_panel_title"] = title_lbl
+	top_hbox.add_child(title_lbl)
+	
+	var time_lbl = Label.new()
+	time_lbl.text = "Tiempo: 12:00:00"
+	time_lbl.add_theme_font_override("font", _get_safe_font())
+	time_lbl.add_theme_font_size_override("font_size", 16 * s)
+	time_lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+	top_hbox.add_child(time_lbl)
+	
+	main_vbox.add_child(scroll)
+	
+	lab_btn.pressed.connect(func(): 
+		_play_action_sound("ui_click")
+		_close_music_menu()
+		if is_instance_valid(tools_panel): tools_panel.visible = false
+		if is_instance_valid(disaster_panel): disaster_panel.visible = false
+		if is_instance_valid(npc_panel): npc_panel.visible = false
+		if is_instance_valid(save_panel): save_panel.queue_free()
+		if is_instance_valid(lab_panel): lab_panel.visible = !lab_panel.visible
+	)
+	
+	lab_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	lab_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
+	
+	var v_box = VBoxContainer.new()
+	v_box.add_theme_constant_override("separation", 15 * s)
+	v_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(v_box)
+	
+	var slots_hbox = HBoxContainer.new()
+	slots_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	slots_hbox.add_theme_constant_override("separation", 20 * s)
+	v_box.add_child(slots_hbox)
+	
+	ui_elements["lab_slot_borders"] = []
+	for i in range(3):
+		var slot_vbox = VBoxContainer.new()
+		slots_hbox.add_child(slot_vbox)
+		
+		var block_rect = TextureRect.new()
+		block_rect.custom_minimum_size = Vector2(80 * s, 80 * s)
+		block_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		block_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		lab_custom_data[i]["node"] = block_rect
+		
+		var pnl = PanelContainer.new()
+		var out_st = StyleBoxFlat.new()
+		out_st.bg_color = Color(0,0,0,1)
+		out_st.border_width_left = 2; out_st.border_width_top = 2
+		out_st.border_width_right = 2; out_st.border_width_bottom = 2
+		out_st.border_color = Color(0.4, 0.4, 0.5)
+		pnl.add_theme_stylebox_override("panel", out_st)
+		
+		var btn = Button.new()
+		btn.flat = true
+		btn.custom_minimum_size = Vector2(80 * s, 80 * s)
+		
+		var stack = MarginContainer.new()
+		stack.add_child(block_rect)
+		stack.add_child(btn)
+		
+		pnl.add_child(stack)
+		slot_vbox.add_child(pnl)
+		ui_elements["lab_slot_borders"].append(pnl)
+		
+		btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			lab_selected_slot = i
+			_update_lab_inspector()
+		)
+		
+		var name_edit = LineEdit.new()
+		name_edit.placeholder_text = "Nombre"
+		name_edit.text = lab_custom_data[i]["name"]
+		name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_edit.custom_minimum_size = Vector2(80 * s, 30 * s)
+		name_edit.add_theme_font_override("font", _get_safe_font())
+		name_edit.add_theme_font_size_override("font_size", 14 * s)
+		name_edit.text_changed.connect(func(new_text): lab_custom_data[i]["name"] = new_text)
+		slot_vbox.add_child(name_edit)
+	
+	var sep1 = HSeparator.new()
+	v_box.add_child(sep1)
+	
+	var columns_hbox = HBoxContainer.new()
+	columns_hbox.add_theme_constant_override("separation", 15 * s)
+	columns_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	v_box.add_child(columns_hbox)
+	
+	var col_color = VBoxContainer.new()
+	var col_grav = VBoxContainer.new()
+	var col_est = VBoxContainer.new()
+	var col_car = VBoxContainer.new()
+	
+	for col in [col_color, col_grav, col_est, col_car]:
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	columns_hbox.add_child(col_color)
+	columns_hbox.add_child(VSeparator.new())
+	columns_hbox.add_child(col_grav)
+	columns_hbox.add_child(VSeparator.new())
+	columns_hbox.add_child(col_est)
+	columns_hbox.add_child(VSeparator.new())
+	columns_hbox.add_child(col_car)
+	
+	var c1 = Label.new(); c1.text = "Color"; c1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var cg = Label.new(); cg.text = "Gravedad"; cg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var ce = Label.new(); ce.text = "Estado"; ce.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var cc = Label.new(); cc.text = "Características"; cc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	
+	for l in [c1, cg, ce, cc]:
+		l.add_theme_font_override("font", _get_safe_font())
+		l.add_theme_font_size_override("font_size", 14 * s)
+	
+	col_color.add_child(c1)
+	col_grav.add_child(cg)
+	col_est.add_child(ce)
+	col_car.add_child(cc)
+	
+	ui_elements["lab_col_pickers"] = []
+	ui_elements["lab_col_trash"] = []
+	
+	for i in range(3):
+		var hb = HBoxContainer.new()
+		hb.alignment = BoxContainer.ALIGNMENT_CENTER
+		col_color.add_child(hb)
+		
+		var cp = ColorPickerButton.new()
+		cp.custom_minimum_size = Vector2(30 * s, 30 * s)
+		cp.color_changed.connect(func(c):
+			var prop = "c" + str(i+1)
+			lab_custom_data[lab_selected_slot][prop] = c
+			_update_lab_preview(lab_selected_slot)
+			_update_lab_inspector()
+		)
+		hb.add_child(cp)
+		ui_elements["lab_col_pickers"].append(cp)
+		
+		var trash = Button.new()
+		trash.text = "🗑️"
+		trash.add_theme_font_override("font", _get_safe_font())
+		trash.custom_minimum_size = Vector2(25 * s, 30 * s)
+		trash.pressed.connect(func():
+			_play_action_sound("ui_click")
+			if i == 0:
+				lab_custom_data[lab_selected_slot]["c1"] = Color(1, 1, 1, 1) # Default
+			else:
+				var prop = "c" + str(i+1)
+				lab_custom_data[lab_selected_slot][prop] = Color(0,0,0,0) # Empty indication
+			_update_lab_preview(lab_selected_slot)
+			_update_lab_inspector()
+		)
+		hb.add_child(trash)
+		ui_elements["lab_col_trash"].append(trash)
+		
+	var tex_lbl = Label.new()
+	tex_lbl.text = "Textura"
+	tex_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tex_lbl.add_theme_font_size_override("font_size", 12 * s)
+	col_color.add_child(tex_lbl)
+	
+	var mix_slider = HSlider.new()
+	mix_slider.min_value = 0
+	mix_slider.max_value = 2
+	mix_slider.step = 1
+	mix_slider.tick_count = 3
+	mix_slider.value_changed.connect(func(v):
+		lab_custom_data[lab_selected_slot]["mix"] = v
+		_update_lab_preview(lab_selected_slot)
+	)
+	col_color.add_child(mix_slider)
+	ui_elements["lab_mix_slider"] = mix_slider
+		
+	for g in ["Lenta", "Normal", "Sube", "Estático"]:
+		var lb = Label.new(); lb.text = g; lb.add_theme_font_size_override("font_size", 12 * s)
+		lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var pn = PanelContainer.new(); pn.add_child(lb)
+		pn.modulate = Color(0.7,0.7,0.7)
+		col_grav.add_child(pn)
+		
+	for e in ["Gas", "Líquido", "Polvo", "Sólido"]:
+		var lb = Label.new(); lb.text = e; lb.add_theme_font_size_override("font_size", 12 * s)
+		lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var pn = PanelContainer.new(); pn.add_child(lb)
+		pn.modulate = Color(0.7,0.7,0.7)
+		col_est.add_child(pn)
+	
+	var lb_c = Label.new(); lb_c.text = "---"; lb_c.add_theme_font_size_override("font_size", 12 * s)
+	lb_c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col_car.add_child(lb_c)
+
+	for i in range(3):
+		_update_lab_preview(i)
+	_update_lab_inspector()
+
+func _update_lab_inspector():
+	if not ui_elements.has("lab_col_pickers"): return
+	
+	# Update borders
+	if ui_elements.has("lab_slot_borders"):
+		for i in range(3):
+			var pnl = ui_elements["lab_slot_borders"][i]
+			var st = pnl.get_theme_stylebox("panel")
+			if i == lab_selected_slot:
+				st.border_color = Color(0.2, 0.5, 1.0) # Highlight selected
+			else:
+				st.border_color = Color(0.4, 0.4, 0.5) # Default
+	
+	var data = lab_custom_data[lab_selected_slot]
+	
+	for i in range(3):
+		var cp = ui_elements["lab_col_pickers"][i]
+		var tr_btn = ui_elements["lab_col_trash"][i]
+		var prop = "c" + str(i+1)
+		
+		var is_null = data[prop].a == 0.0 and i > 0
+		
+		if is_null:
+			cp.color = Color.BLACK
+			tr_btn.visible = false
+		else:
+			cp.color = data[prop]
+			tr_btn.visible = true
+			
+		if i == 2 and data["c2"].a == 0.0:
+			cp.disabled = true
+			cp.color = Color(0.2,0.2,0.2)
+		else:
+			cp.disabled = false
+			
+	if ui_elements.has("lab_mix_slider"):
+		var mix_slider = ui_elements["lab_mix_slider"]
+		mix_slider.set_block_signals(true)
+		mix_slider.value = data["mix"]
+		mix_slider.set_block_signals(false)
+
+func _update_lab_preview(idx: int):
+	var data = lab_custom_data[idx]
+	if not data["node"]: return
+	
+	var tex_rect = data["node"]
+	
+	var img = Image.create(10, 10, false, Image.FORMAT_RGBA8)
+	var c1 = data["c1"]
+	var c2 = data["c2"]
+	var c3 = data["c3"]
+	
+	var has_c2 = c2.a > 0.0
+	var has_c3 = c3.a > 0.0
+	var mix_val = data["mix"] 
+	var mix_factor = 0.1
+	if mix_val == 1: mix_factor = 0.25
+	elif mix_val == 2: mix_factor = 0.44
+	
+	for y in range(10):
+		for x in range(10):
+			var val = randf()
+			var p_color = c1
+			
+			if has_c2 and has_c3:
+				if val < mix_factor:
+					p_color = c2
+				elif val < mix_factor * 2.0:
+					p_color = c3
+			elif has_c2:
+				if val < mix_factor:
+					p_color = c2
+					
+			img.set_pixel(x,y, p_color)
+			
+	var tex = ImageTexture.create_from_image(img)
+	tex_rect.texture = tex
+
 func _setup_disaster_ui():
 	var s = _get_ui_scale()
 	var disaster_btn = Button.new()
@@ -1400,6 +1757,7 @@ func _setup_disaster_ui():
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
+		if is_instance_valid(lab_panel): lab_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = !disaster_panel.visible
 	)
 	
@@ -1512,6 +1870,10 @@ func _refresh_ui_text():
 			node_data.text = tr("disasters")
 			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
 			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
+		elif key == "lab_btn": 
+			node_data.text = tr("lab")
+			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
+			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 		elif key == "npc_btn": 
 			node_data.text = tr("npc")
 			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
@@ -1562,6 +1924,8 @@ func _refresh_ui_text():
 			node_data.text = tr("tools")
 		elif key == "disaster_panel_title":
 			node_data.text = tr("disasters")
+		elif key == "lab_panel_title":
+			node_data.text = tr("lab")
 		elif key == "npc_panel_title":
 			node_data.text = tr("npc")
 		elif key.ends_with("_btn") and not (key == "undo_btn" or key == "redo_btn" or key == "eraser_tool_btn" or key == "save_btn_ui_btn") and not key.ends_with("_mat_btn"): # Generic NPC/Tool handler
@@ -1902,6 +2266,8 @@ func _is_any_ui_blocking() -> bool:
 	
 	if tools_panel and tools_panel.visible and tools_panel.get_global_rect().has_point(m_pos):
 		return true
+	if lab_panel and lab_panel.visible and lab_panel.get_global_rect().has_point(m_pos):
+		return true
 	if disaster_panel and disaster_panel.visible and disaster_panel.get_global_rect().has_point(m_pos):
 		return true
 	if npc_panel and npc_panel.visible and npc_panel.get_global_rect().has_point(m_pos):
@@ -2052,6 +2418,7 @@ func _process(delta):
 			# 2. AUTOCLOSE MENUS ON WORKSPACE TAP (Only if didn't start on UI and NOT over UI)
 			if not touch_started_on_ui and not is_over_ui:
 				if is_instance_valid(tools_panel) and tools_panel.visible: tools_panel.visible = false
+				if is_instance_valid(lab_panel) and lab_panel.visible: lab_panel.visible = false
 				if is_instance_valid(disaster_panel) and disaster_panel.visible: disaster_panel.visible = false
 				if is_instance_valid(npc_panel) and npc_panel.visible: npc_panel.visible = false
 				if is_instance_valid(music_panel) and music_panel.visible: _close_music_menu()
@@ -3609,6 +3976,7 @@ func _setup_npc_ui():
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
+		if is_instance_valid(lab_panel): lab_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = !npc_panel.visible
 	)
 	
