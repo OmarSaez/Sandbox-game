@@ -1617,7 +1617,7 @@ func _setup_lab_ui():
 	
 	for l in [c1, cg, ce]:
 		l.add_theme_font_override("font", _get_safe_font())
-		l.add_theme_font_size_override("font_size", 20 * s)
+		l.add_theme_font_size_override("font_size", 26 * s)
 	
 	col_color.add_child(c1)
 	col_grav.add_child(cg)
@@ -1629,10 +1629,29 @@ func _setup_lab_ui():
 	for i in range(3):
 		var hb = HBoxContainer.new()
 		hb.alignment = BoxContainer.ALIGNMENT_CENTER
+		hb.add_theme_constant_override("separation", 8 * s)
 		col_color.add_child(hb)
+		
+		var num_lbl = Label.new()
+		num_lbl.text = str(i+1)
+		num_lbl.add_theme_font_override("font", _get_safe_font())
+		num_lbl.add_theme_font_size_override("font_size", 18 * s)
+		num_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+		hb.add_child(num_lbl)
 		
 		var cp = ColorPickerButton.new()
 		cp.custom_minimum_size = Vector2(30 * s, 30 * s)
+		
+		var null_overlay = Label.new()
+		null_overlay.text = "/"
+		null_overlay.add_theme_font_override("font", _get_safe_font())
+		null_overlay.add_theme_font_size_override("font_size", 28 * s)
+		null_overlay.add_theme_color_override("font_color", Color.RED)
+		null_overlay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		null_overlay.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		null_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		null_overlay.name = "NullOverlay"
+		cp.add_child(null_overlay)
 		cp.color_changed.connect(func(c):
 			var prop = "c" + str(i+1)
 			lab_custom_data[lab_selected_slot][prop] = c
@@ -1649,11 +1668,8 @@ func _setup_lab_ui():
 		trash.custom_minimum_size = Vector2(25 * s, 30 * s)
 		trash.pressed.connect(func():
 			_play_action_sound("ui_click")
-			if i == 0:
-				lab_custom_data[lab_selected_slot]["c1"] = Color(1, 1, 1, 1) # Default
-			else:
-				var prop = "c" + str(i+1)
-				lab_custom_data[lab_selected_slot][prop] = Color(0,0,0,0) # Empty indication
+			var prop = "c" + str(i+1)
+			lab_custom_data[lab_selected_slot][prop] = Color(0,0,0,0) # Empty indication
 			_update_lab_preview(lab_selected_slot)
 			_update_lab_inspector()
 		)
@@ -1683,12 +1699,16 @@ func _setup_lab_ui():
 	for j in range(grav_options.size()):
 		var btn = Button.new(); btn.text = grav_options[j]; btn.toggle_mode = true
 		btn.add_theme_font_override("font", _get_safe_font())
-		btn.add_theme_font_size_override("font_size", 16 * s)
+		btn.add_theme_font_size_override("font_size", 22 * s)
 		var st_n = StyleBoxFlat.new(); st_n.bg_color = Color(0.15,0.15,0.2)
 		st_n.border_width_left=1; st_n.border_width_right=1; st_n.border_width_top=1; st_n.border_width_bottom=1
 		st_n.border_color = Color(0.3, 0.3, 0.4)
+		st_n.corner_radius_top_left=6*s; st_n.corner_radius_top_right=6*s; st_n.corner_radius_bottom_left=6*s; st_n.corner_radius_bottom_right=6*s
+		st_n.content_margin_top=6*s; st_n.content_margin_bottom=6*s
 		btn.add_theme_stylebox_override("normal", st_n)
 		var st_p = StyleBoxFlat.new(); st_p.bg_color = Color(0.2,0.5,1.0)
+		st_p.corner_radius_top_left=6*s; st_p.corner_radius_top_right=6*s; st_p.corner_radius_bottom_left=6*s; st_p.corner_radius_bottom_right=6*s
+		st_p.content_margin_top=6*s; st_p.content_margin_bottom=6*s
 		btn.add_theme_stylebox_override("pressed", st_p)
 		btn.toggled.connect(func(pressed):
 			if pressed:
@@ -1704,12 +1724,16 @@ func _setup_lab_ui():
 	for j in range(est_options.size()):
 		var btn = Button.new(); btn.text = est_options[j]; btn.toggle_mode = true
 		btn.add_theme_font_override("font", _get_safe_font())
-		btn.add_theme_font_size_override("font_size", 16 * s)
+		btn.add_theme_font_size_override("font_size", 22 * s)
 		var st_n = StyleBoxFlat.new(); st_n.bg_color = Color(0.15,0.15,0.2)
 		st_n.border_width_left=1; st_n.border_width_right=1; st_n.border_width_top=1; st_n.border_width_bottom=1
 		st_n.border_color = Color(0.3, 0.3, 0.4)
+		st_n.corner_radius_top_left=6*s; st_n.corner_radius_top_right=6*s; st_n.corner_radius_bottom_left=6*s; st_n.corner_radius_bottom_right=6*s
+		st_n.content_margin_top=6*s; st_n.content_margin_bottom=6*s
 		btn.add_theme_stylebox_override("normal", st_n)
 		var st_p = StyleBoxFlat.new(); st_p.bg_color = Color(0.2,0.5,1.0)
+		st_p.corner_radius_top_left=6*s; st_p.corner_radius_top_right=6*s; st_p.corner_radius_bottom_left=6*s; st_p.corner_radius_bottom_right=6*s
+		st_p.content_margin_top=6*s; st_p.content_margin_bottom=6*s
 		btn.add_theme_stylebox_override("pressed", st_p)
 		btn.toggled.connect(func(pressed):
 			if pressed:
@@ -1761,13 +1785,19 @@ func _setup_lab_ui():
 			tb.add_theme_font_size_override("font_size", 20 * s)
 			
 			var st_n = StyleBoxFlat.new()
-			st_n.bg_color = Color(0.15, 0.15, 0.2)
-			st_n.border_width_left=1; st_n.border_width_top=1; st_n.border_width_right=1; st_n.border_width_bottom=1
+			st_n.bg_color = Color(0.15, 0.15, 0.22)
+			st_n.border_width_left=2; st_n.border_width_top=2; st_n.border_width_right=2; st_n.border_width_bottom=2
+			st_n.border_color = Color(0.3, 0.3, 0.4)
+			st_n.corner_radius_top_left=12*s; st_n.corner_radius_top_right=12*s; st_n.corner_radius_bottom_left=12*s; st_n.corner_radius_bottom_right=12*s
+			st_n.content_margin_left=16*s; st_n.content_margin_right=16*s; st_n.content_margin_top=10*s; st_n.content_margin_bottom=10*s
 			tb.add_theme_stylebox_override("normal", st_n)
 			
 			var st_p = StyleBoxFlat.new()
-			st_p.bg_color = Color(0.2, 0.5, 1.0)
-			st_p.border_width_left=1; st_p.border_width_top=1; st_p.border_width_right=1; st_p.border_width_bottom=1
+			st_p.bg_color = Color(0.2, 0.55, 0.3)
+			st_p.border_width_left=2; st_p.border_width_top=2; st_p.border_width_right=2; st_p.border_width_bottom=2
+			st_p.border_color = Color(0.3, 0.8, 0.5)
+			st_p.corner_radius_top_left=12*s; st_p.corner_radius_top_right=12*s; st_p.corner_radius_bottom_left=12*s; st_p.corner_radius_bottom_right=12*s
+			st_p.content_margin_left=16*s; st_p.content_margin_right=16*s; st_p.content_margin_top=10*s; st_p.content_margin_bottom=10*s
 			tb.add_theme_stylebox_override("pressed", st_p)
 			
 			tb.toggled.connect(func(pressed):
@@ -1785,9 +1815,15 @@ func _setup_lab_ui():
 	_update_lab_inspector()
 
 func _save_lab_state():
+	var clean_data = []
+	for d in lab_custom_data:
+		var c = d.duplicate()
+		c.erase("node")
+		clean_data.append(c)
+
 	var save = {
 		"expiry": lab_unlock_expiry_unix,
-		"data": lab_custom_data
+		"data": clean_data
 	}
 	var file = FileAccess.open("user://lab_state.save", FileAccess.WRITE)
 	if file: file.store_var(save)
@@ -1799,7 +1835,12 @@ func _load_lab_state():
 		if typeof(save) == TYPE_DICTIONARY:
 			lab_unlock_expiry_unix = save.get("expiry", 0)
 			if save.has("data"):
-				lab_custom_data = save["data"]
+				var loaded_data = save["data"]
+				for i in range(min(loaded_data.size(), 3)):
+					for k in loaded_data[i].keys():
+						# Explicitly ignore node parameter so it doesn't corrupt the actual live Node object
+						if k != "node":
+							lab_custom_data[i][k] = loaded_data[i][k]
 			
 	var now = int(Time.get_unix_time_from_system())
 	if now < lab_unlock_expiry_unix:
@@ -2006,14 +2047,18 @@ func _update_lab_inspector():
 		var tr_btn = ui_elements["lab_col_trash"][i]
 		var prop = "c" + str(i+1)
 		
-		var is_null = data[prop].a == 0.0 and i > 0
+		var is_null = data[prop].a == 0.0
 		
 		if is_null:
-			cp.color = Color.BLACK
-			tr_btn.visible = false
+			cp.color = Color(0.2, 0.2, 0.2, 1.0)
+			if cp.has_node("NullOverlay"): cp.get_node("NullOverlay").visible = true
+			tr_btn.modulate = Color(1, 1, 1, 0) # Make fully transparent but keep layout space
+			tr_btn.disabled = true
 		else:
 			cp.color = data[prop]
-			tr_btn.visible = true
+			if cp.has_node("NullOverlay"): cp.get_node("NullOverlay").visible = false
+			tr_btn.modulate = Color(1, 1, 1, 1) # Full visibility
+			tr_btn.disabled = false
 			
 		if i == 2 and data["c2"].a == 0.0:
 			cp.disabled = true
