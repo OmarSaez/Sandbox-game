@@ -3456,7 +3456,8 @@ func _process_electricity():
 			var x = idx % grid_width
 			var y = int(float(idx) / grid_width)
 			var my_tags = material_tags_raw[mid]
-			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
+			# Only CONDUCTOR and pure ELECTRICITY can SPREAD energy to neighbors
+			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY)):
 				for ny in range(y - 1, y + 2):
 					if ny < 0 or ny >= grid_height: continue
 					for nx in range(x - 1, x + 2):
@@ -3466,11 +3467,13 @@ func _process_electricity():
 						var n_pid = cells[n_idx] & 0xFFFF
 						if n_pid <= 0: continue
 						var n_tags = tags_array[n_idx]
+						# CONDUCTOR and ELECTRIC_ACTIVATED can RECEIVE energy
 						if (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)) and charge_array[n_idx] == 0:
 							charge_array[n_idx] = 101
 							_register_charge(n_idx)
 							_activate_chunk(nx, ny)
 		
+		# Decay logic for energy carrying/reacting materials
 		if (material_tags_raw[mid] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
 			# STABLE COOLDOWN: Balance between music speed and loop prevention
 			# 100 -> 90 -> 80 -> ... -> 0 (10 frames of refractory period)
