@@ -304,6 +304,8 @@ var charge_queued_frame := PackedInt32Array()
 var img: Image
 
 func _ready():
+	_load_lab_state() # LOAD DATA FIRST
+	
 	# 0. GLOBAL VISUAL STABILITY (Fixes grey margins on Tablets/Modern Devices)
 	RenderingServer.set_default_clear_color(Color(0.04, 0.04, 0.04, 1.0))
 	
@@ -600,8 +602,8 @@ func _ready():
 			_save_lab_state()
 		)
 	
-	# Try to load state
-	_load_lab_state()
+	
+	# Connect Lab unlock global signal
 	
 	_register_material(19, Color(1, 0.8, 0.9), SandboxMaterial.Tags.GRAV_STATIC) # Firework Fuse
 
@@ -1525,6 +1527,9 @@ func _setup_lab_ui():
 	ui_elements["lab_overlay"] = lab_overlay
 	lab_panel.add_child(lab_overlay)
 	
+	# SYNC INITIAL VISIBILITY
+	lab_overlay.visible = !is_lab_unlocked
+	
 	lab_btn.pressed.connect(func(): 
 		_play_action_sound("ui_click")
 		_close_music_menu()
@@ -1897,30 +1902,45 @@ func _save_lab_state():
 	for d in lab_custom_data:
 		var c = d.duplicate()
 		c.erase("node")
+		# Convert colors to HTML for JSON safety
+		c["c1"] = c["c1"].to_html() if c["c1"] is Color else "00000000"
+		c["c2"] = c["c2"].to_html() if c["c2"] is Color else "00000000"
+		c["c3"] = c["c3"].to_html() if c["c3"] is Color else "00000000"
 		clean_data.append(c)
 
 	var save = {
 		"expiry": lab_unlock_expiry_unix,
 		"data": clean_data
 	}
-	var file = FileAccess.open("user://lab_state.save", FileAccess.WRITE)
-	if file: file.store_var(save)
-	
+	var file = FileAccess.open("user://lab_state.json", FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(save))
+		file.close()
+		printerr("LAB: Estado guardado. Expiración en: ", lab_unlock_expiry_unix)
+
 func _load_lab_state():
-	if FileAccess.file_exists("user://lab_state.save"):
-		var file = FileAccess.open("user://lab_state.save", FileAccess.READ)
-		var save = file.get_var()
+	if FileAccess.file_exists("user://lab_state.json"):
+		var file = FileAccess.open("user://lab_state.json", FileAccess.READ)
+		var json_str = file.get_as_text()
+		file.close()
+		
+		var save = JSON.parse_string(json_str)
 		if typeof(save) == TYPE_DICTIONARY:
-			lab_unlock_expiry_unix = save.get("expiry", 0)
+			lab_unlock_expiry_unix = int(save.get("expiry", 0))
+			printerr("LAB: Estado cargado. Expiración recuperada: ", lab_unlock_expiry_unix)
+			
 			if save.has("data"):
 				var loaded_data = save["data"]
 				for i in range(min(loaded_data.size(), 3)):
-					for k in loaded_data[i].keys():
-						# Explicitly ignore node parameter so it doesn't corrupt the actual live Node object
-						if k != "node":
-							lab_custom_data[i][k] = loaded_data[i][k]
-			
+					var d = loaded_data[i]
+					for k in d.keys():
+						if k == "c1" or k == "c2" or k == "c3":
+							lab_custom_data[i][k] = Color(d[k])
+						elif k != "node":
+							lab_custom_data[i][k] = d[k]
+	
 	var now = int(Time.get_unix_time_from_system())
+	printerr("LAB: Tiempo actual: ", now, " | Faltan: ", lab_unlock_expiry_unix - now, " segundos")
 	if now < lab_unlock_expiry_unix:
 		_set_lab_unlocked(true)
 	else:
@@ -1933,6 +1953,7 @@ func _set_lab_unlocked(unlocked: bool):
 	_update_custom_mats_in_material_grid()
 
 func _update_custom_mats_in_material_grid():
+	if not is_instance_valid(main_controls): return
 	var material_grid = main_controls.find_child("MaterialGrid", true, false)
 	if not is_instance_valid(material_grid): return
 	
