@@ -1066,7 +1066,7 @@ func _setup_tools_ui():
 	tools_panel.anchor_bottom = 1.0
 	
 	var panel_width = 530 * s
-	var panel_height = 600 * s
+	var panel_height = 650 * s
 	var h = 340 # Match the Fixed Tall HUD height
 	var bottom_gap = h + (5 * s) # Dynamic GAP above HUD floor
 	
@@ -2154,7 +2154,7 @@ func _setup_disaster_ui():
 	disaster_panel.anchor_top = 1.0
 	disaster_panel.anchor_bottom = 1.0
 	
-	var d_width = 350 * s
+	var d_width = 370 * s
 	var d_height = 490 * s
 	var h = 340 # Match the Fixed Tall HUD height
 	var d_bottom_gap = h + (5 * s)
@@ -2209,7 +2209,7 @@ func _setup_disaster_ui():
 	var create_row = func(label_key: String, options: Array, callback: Callable, is_upcoming: bool = false):
 		var lbl = Label.new()
 		lbl.text = tr(label_key) + ": "
-		lbl.add_theme_font_size_override("font_size", 14.0 * s)
+		lbl.add_theme_font_size_override("font_size", 22.0 * s)
 		lbl.add_theme_font_override("font", _get_safe_font())
 		ui_elements[label_key + "_lbl"] = lbl
 		v_box.add_child(lbl)
@@ -2228,7 +2228,7 @@ func _setup_disaster_ui():
 			# Try to translate if it's a key, otherwise use as string
 			btn.text = tr(osk)
 			btn.custom_minimum_size = Vector2(80.0 * s, 45.0 * s)
-			btn.add_theme_font_size_override("font_size", 14.0 * s)
+			btn.add_theme_font_size_override("font_size", 20.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
 			btn.mouse_filter = Control.MOUSE_FILTER_PASS
 			
