@@ -3575,6 +3575,16 @@ func _process_electricity():
 
 
 func _move_particle(x, y, _mat_id, tags, v_dir):
+	# SPECIAL GAS BEHAVIOR: Random Diffusion (Expansion)
+	if (tags & SandboxMaterial.Tags.GAS):
+		# Higher chance of random movement to simulate expansion
+		if randf() < 0.3: # 30% chance of random "jump"
+			var rx = x + (1 if randf() > 0.5 else -1)
+			var ry = y + (1 if randf() > 0.5 else -1)
+			if _get_cell(rx, ry) == 0:
+				_swap_cells(x, y, rx, ry)
+				return
+	
 	var next_y = y + v_dir
 	if next_y < 0 or next_y >= dynamic_grid_height: return
 	
@@ -3591,6 +3601,7 @@ func _move_particle(x, y, _mat_id, tags, v_dir):
 		elif _get_cell(x - side, next_y) == 0:
 			_swap_cells(x, y, x - side, next_y)
 		elif (tags & (SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GAS)):
+			# Flow laterally if gravity path is blocked
 			if _get_cell(x + side, y) == 0:
 				_swap_cells(x, y, x + side, y)
 			elif _get_cell(x - side, y) == 0:
