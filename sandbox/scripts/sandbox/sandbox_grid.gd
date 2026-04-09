@@ -2399,15 +2399,9 @@ func _refresh_ui_text():
 			btn.add_theme_font_size_override("font_size", 20 * s)
 		# Handle other buttons in rows (lang, brush, ui_size)
 		elif node_data is Button:
-			if key.begins_with("lang_btn_") or key.begins_with("brush_btn_"):
+			if key.begins_with("lang_btn_") or key.begins_with("brush_btn_") or key.begins_with("team_btn_"):
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
 				node_data.add_theme_font_size_override("font_size", 20 * s)
-			elif key.begins_with("team_btn_"):
-				var idx = int(key.split("_")[-1])
-				var team_keys = ["team_red", "team_blue", "team_yellow", "team_green"]
-				node_data.text = tr(team_keys[idx])
-				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 18 * s)
 			elif key.begins_with("ui_size_btn_"):
 				var idx = int(key.split("_")[-1])
 				var scales = ["1.0", "1.2", "1.3", "1.5", "1.7", "2.0"]
@@ -4453,7 +4447,7 @@ func _setup_npc_ui():
 		# NPC CONTROL SECTION (NEW PHILOSOPHY)
 		var control_lbl = Label.new()
 		control_lbl.text = tr("npc_controller_title") + ": "
-		control_lbl.add_theme_font_size_override("font_size", 14 * s)
+		control_lbl.add_theme_font_size_override("font_size", 22 * s)
 		control_lbl.add_theme_font_override("font", _get_safe_font())
 		v_box.add_child(control_lbl)
 		ui_elements["control_npc_lbl"] = control_lbl
@@ -4469,7 +4463,7 @@ func _setup_npc_ui():
 		active_btn.text = tr("active")
 		active_btn.custom_minimum_size = Vector2(100 * s, 45 * s)
 		active_btn.add_theme_font_override("font", _get_safe_font())
-		active_btn.add_theme_font_size_override("font_size", 12 * s)
+		active_btn.add_theme_font_size_override("font_size", 20 * s)
 		active_btn.pressed.connect(func():
 			_play_action_sound("ui_click")
 			if not is_selecting_npc_to_control and not is_instance_valid(controlled_npc):
@@ -4488,7 +4482,7 @@ func _setup_npc_ui():
 		disabled_btn.text = tr("inactive")
 		disabled_btn.custom_minimum_size = Vector2(120 * s, 45 * s)
 		disabled_btn.add_theme_font_override("font", _get_safe_font())
-		disabled_btn.add_theme_font_size_override("font_size", 12 * s)
+		disabled_btn.add_theme_font_size_override("font_size", 20 * s)
 		disabled_btn.pressed.connect(func():
 			_play_action_sound("ui_click")
 			_stop_controlling_npc()
@@ -4504,7 +4498,7 @@ func _setup_npc_ui():
 		# NPC Selection (NOW RESPONSIVE)
 		var npc_lbl = Label.new()
 		npc_lbl.text = tr("npc") + ": "
-		npc_lbl.add_theme_font_size_override("font_size", 14 * s)
+		npc_lbl.add_theme_font_size_override("font_size", 22 * s)
 		v_box.add_child(npc_lbl)
 		
 		var npc_flow = HFlowContainer.new()
@@ -4516,7 +4510,7 @@ func _setup_npc_ui():
 			btn.text = tr(key)
 			btn.custom_minimum_size = Vector2(100 * s, 45 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
-			btn.add_theme_font_size_override("font_size", 14 * s)
+			btn.add_theme_font_size_override("font_size", 20 * s)
 			btn.mouse_filter = Control.MOUSE_FILTER_PASS
 			btn.pressed.connect(func():
 				_play_action_sound("ui_click")
@@ -4540,7 +4534,7 @@ func _setup_npc_ui():
 		# Teams Row (NOW RESPONSIVE)
 		var team_lbl = Label.new()
 		team_lbl.text = tr("team") + ": "
-		team_lbl.add_theme_font_size_override("font_size", 14 * s)
+		team_lbl.add_theme_font_size_override("font_size", 22 * s)
 		ui_elements["team_lbl"] = team_lbl
 		v_box.add_child(team_lbl)
 		
@@ -4553,7 +4547,7 @@ func _setup_npc_ui():
 			var t_btn = Button.new()
 			t_btn.text = tr(team_keys[i])
 			t_btn.custom_minimum_size = Vector2(80 * s, 45 * s)
-			t_btn.add_theme_font_size_override("font_size", 12 * s)
+			t_btn.add_theme_font_size_override("font_size", 20 * s)
 			t_btn.add_theme_font_override("font", _get_safe_font())
 			t_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 			var tidx = i
@@ -4578,7 +4572,7 @@ func _setup_npc_ui():
 			btn.text = tr(key)
 			btn.custom_minimum_size = Vector2(100.0 * s, 45.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
-			btn.add_theme_font_size_override("font_size", 14.0 * s)
+			btn.add_theme_font_size_override("font_size", 20.0 * s)
 			btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			npc_flow_fut.add_child(btn)
 			ui_elements[key + "_btn"] = btn # Support refresh
