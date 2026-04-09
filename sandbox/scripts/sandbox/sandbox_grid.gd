@@ -2554,17 +2554,20 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 func _add_ui_header(container, key: String):
 	var s = _get_ui_scale()
 	var header_pnl = Control.new()
-	# Use a reasonable height and ensure it spans enough width
-	header_pnl.custom_minimum_size = Vector2(250 * s, 60 * s)
+	# Increased height slightly to avoid overlaps but removed \n\n to avoid the giant gap
+	header_pnl.custom_minimum_size = Vector2(250 * s, 80 * s)
 	header_pnl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	
 	var lbl = Label.new()
-	lbl.text = "\n\n" + tr(key) + "\n"
+	lbl.text = tr(key)
 	lbl.add_theme_font_size_override("font_size", 28 * s)
 	lbl.add_theme_font_override("font", _get_safe_font())
 	lbl.add_theme_color_override("font_color", Color(0.9, 0.9, 0.1)) # Gold/Yellowish
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	# Remove anchors that might cause overflow issues, use size flags
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	
 	header_pnl.add_child(lbl)
