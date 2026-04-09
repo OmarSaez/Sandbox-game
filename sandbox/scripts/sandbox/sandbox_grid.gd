@@ -594,11 +594,13 @@ func _ready():
 	if AdMobManager.has_signal("lab_unlocked"):
 		AdMobManager.lab_unlocked.connect(func():
 			_play_action_sound("ui_click")
-			lab_unlock_expiry_unix = int(Time.get_unix_time_from_system()) + (12 * 3600)
+			var now = int(Time.get_unix_time_from_system())
+			lab_unlock_expiry_unix = now + (12 * 3600)
 			_set_lab_unlocked(true)
 			_save_lab_state()
 		)
 	
+	# Try to load state
 	_load_lab_state()
 	
 	_register_material(19, Color(1, 0.8, 0.9), SandboxMaterial.Tags.GRAV_STATIC) # Firework Fuse
@@ -1543,10 +1545,11 @@ func _setup_lab_ui():
 	
 	var slots_hbox = HBoxContainer.new()
 	slots_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	slots_hbox.add_theme_constant_override("separation", 20 * s)
+	slots_hbox.add_theme_constant_override("separation", 60 * s)
 	v_box.add_child(slots_hbox)
 	
 	ui_elements["lab_slot_borders"] = []
+	ui_elements["lab_name_edits"] = []
 	for i in range(3):
 		var slot_vbox = VBoxContainer.new()
 		slots_hbox.add_child(slot_vbox)
@@ -1595,6 +1598,7 @@ func _setup_lab_ui():
 			_update_custom_mats_in_material_grid() # Correct function to refresh HUD
 		)
 		slot_vbox.add_child(name_edit)
+		ui_elements["lab_name_edits"].append(name_edit)
 	
 	var make_h_line = func():
 		var cr = ColorRect.new(); cr.custom_minimum_size = Vector2(0, 2 * s)
@@ -1924,6 +1928,8 @@ func _load_lab_state():
 
 func _set_lab_unlocked(unlocked: bool):
 	is_lab_unlocked = unlocked
+	if ui_elements.has("lab_overlay") and is_instance_valid(ui_elements["lab_overlay"]):
+		ui_elements["lab_overlay"].visible = !unlocked
 	_update_custom_mats_in_material_grid()
 
 func _update_custom_mats_in_material_grid():
@@ -6722,6 +6728,10 @@ func _restore_lab_data(lab_data: Array):
 		
 		# Re-apply to engine immediately
 		_apply_custom_material_to_engine(i)
+		
+		# Update UI LineEdit if it exists
+		if ui_elements.has("lab_name_edits") and ui_elements["lab_name_edits"].size() > i:
+			ui_elements["lab_name_edits"][i].text = lab_custom_data[i]["name"]
 	
 	# Refresh UI if it exists
 	if is_instance_valid(lab_panel):
