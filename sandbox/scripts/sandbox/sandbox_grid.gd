@@ -1156,8 +1156,10 @@ func _setup_tools_ui():
 	var lang_codes = ["es", "en", "it", "fr", "de", "pt"]
 	create_row.call("lang", lang_options, func(l):
 		current_language = lang_codes[l]
-		_refresh_ui_text()
-		_update_menu_highlights()
+		TranslationServer.set_locale(current_language)
+		# Rebuilding the UI is the most robust way to ensure all "premium" formatting
+		# and spacing is preserved identically across different languages.
+		call_deferred("_setup_main_ui_containers")
 	)
 
 	# UI SCALE ROW (Now 2nd)
@@ -1447,19 +1449,21 @@ func _setup_lab_ui():
 	lab_overlay.add_child(overlay_vbox)
 	
 	var title_overlay = Label.new()
-	title_overlay.text = "🧪 Laboratorio de Creación"
+	title_overlay.text = tr("lab_overlay_title")
 	title_overlay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_overlay.add_theme_font_override("font", _get_safe_font())
 	title_overlay.add_theme_font_size_override("font_size", 34 * s) # Slightly smaller to prevent decentering
 	title_overlay.add_theme_color_override("font_color", Color.YELLOW)
+	ui_elements["lab_overlay_title"] = title_overlay
 	
 	var desc_overlay = Label.new()
-	desc_overlay.text = "Desbloquea la creación de elementos.\nAjusta el color, nombre, gravedad y reacciones.\n\nMira un anuncio para activarlo por 12 horas."
+	desc_overlay.text = tr("lab_overlay_desc")
 	desc_overlay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	desc_overlay.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc_overlay.add_theme_font_override("font", _get_safe_font())
 	desc_overlay.add_theme_font_size_override("font_size", 25 * s) # Much more readable and centered
 	desc_overlay.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8))
+	ui_elements["lab_overlay_desc"] = desc_overlay
 	
 	var text_vbox = VBoxContainer.new()
 	text_vbox.add_theme_constant_override("separation", 25 * s)
@@ -1479,10 +1483,11 @@ func _setup_lab_ui():
 	overlay_vbox.add_child(btn_hbox)
 	
 	var no_btn = Button.new()
-	no_btn.text = "No por ahora"
+	no_btn.text = tr("not_now")
 	no_btn.custom_minimum_size = Vector2(200 * s, 60 * s)
 	no_btn.add_theme_font_override("font", _get_safe_font())
 	no_btn.add_theme_font_size_override("font_size", 22 * s)
+	ui_elements["not_now_btn"] = no_btn
 	var no_st = StyleBoxFlat.new()
 	no_st.bg_color = Color(0.2, 0.2, 0.25)
 	no_st.corner_radius_top_left = 12*s; no_st.corner_radius_top_right = 12*s; no_st.corner_radius_bottom_left = 12*s; no_st.corner_radius_bottom_right = 12*s
@@ -1494,10 +1499,11 @@ func _setup_lab_ui():
 	btn_hbox.add_child(no_btn)
 	
 	var ad_btn = Button.new()
-	ad_btn.text = "Ver anuncio 📺"
+	ad_btn.text = tr("watch_ad")
 	ad_btn.custom_minimum_size = Vector2(220 * s, 60 * s)
 	ad_btn.add_theme_font_override("font", _get_safe_font())
 	ad_btn.add_theme_font_size_override("font_size", 22 * s)
+	ui_elements["watch_ad_btn"] = ad_btn
 	var ad_st = StyleBoxFlat.new()
 	ad_st.bg_color = Color(0.1, 0.5, 0.2)
 	ad_st.corner_radius_top_left = 12*s; ad_st.corner_radius_top_right = 12*s; ad_st.corner_radius_bottom_left = 12*s; ad_st.corner_radius_bottom_right = 12*s
@@ -2292,159 +2298,10 @@ func _setup_disaster_ui():
 	create_row.call("sand_storm", ["off", "light", "med", "storm"], func(l): sand_storm_intensity = l; _update_menu_highlights(), true)
 
 func _refresh_ui_text():
+	# This function is now mostly legacy as we prefer rebuilding the UI
+	# to preserve complex layouts and premium formatting perfectly.
 	TranslationServer.set_locale(current_language)
-	var s = _get_ui_scale()
-	for key in ui_elements:
-		var node_data = ui_elements[key]
-		
-		# Handle direct button nodes (Tools/Disasters/NPC/Music)
-		var btn_h = (336.0 - (9.0 * s)) / 4.0
-		if key == "tools_btn": 
-			node_data.text = tr("tools")
-			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
-			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
-		elif key == "disaster_btn": 
-			node_data.text = tr("disasters")
-			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
-			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
-		elif key == "lab_btn": 
-			node_data.text = tr("lab")
-			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
-			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
-		elif key == "npc_btn": 
-			node_data.text = tr("npc")
-			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
-			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
-		elif key == "music_btn": 
-			node_data.text = "🎹 " + tr("music")
-			node_data.custom_minimum_size = Vector2(160.0 * s, btn_h)
-			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
-		elif key == "pause_btn": 
-			node_data.text = tr("play") if is_paused else tr("pause")
-			node_data.custom_minimum_size = Vector2(0, 50 * s)
-			node_data.add_theme_font_size_override("font_size", 22 * s)
-		elif key == "reset_btn": 
-			node_data.text = tr("reset")
-			node_data.custom_minimum_size = Vector2(0, 50 * s)
-			node_data.add_theme_font_size_override("font_size", 22 * s)
-		elif key == "support_btn":
-			node_data.text = tr("support")
-			node_data.custom_minimum_size = Vector2(0, 60 * s)
-			node_data.add_theme_font_size_override("font_size", 24 * s)
-		elif key == "warrior_btn":
-			node_data.text = tr("warrior")
-			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
-			node_data.add_theme_font_size_override("font_size", 14 * s)
-		elif key == "archer_btn":
-			node_data.text = tr("archer")
-			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
-			node_data.add_theme_font_size_override("font_size", 14 * s)
-		elif key == "miner_btn":
-			node_data.text = tr("miner")
-			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
-			node_data.add_theme_font_size_override("font_size", 14 * s)
-		elif key == "medic_btn":
-			node_data.text = tr("medic")
-			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
-			node_data.add_theme_font_size_override("font_size", 14 * s)
-		elif key == "arcade_menu_btn":
-			node_data.text = tr("menu")
-		elif key == "arcade_action_btn":
-			node_data.text = tr("action")
-		elif key == "control_active_btn":
-			node_data.text = tr("active")
-		elif key == "control_disabled_btn":
-			node_data.text = tr("inactive")
-		elif key == "control_npc_lbl":
-			node_data.text = tr("npc_controller_title") + ": "
-		elif key == "tools_panel_title":
-			node_data.text = tr("tools")
-		elif key == "disaster_panel_title":
-			node_data.text = tr("disasters")
-		elif key == "lab_panel_title":
-			node_data.text = tr("lab")
-		elif key == "npc_panel_title":
-			node_data.text = tr("npc")
-		elif key.ends_with("_btn") and not (key == "undo_btn" or key == "redo_btn" or key == "eraser_tool_btn" or key == "save_btn_ui_btn") and not key.ends_with("_mat_btn"): # Generic NPC/Tool handler
-			var pure_key = key.replace("_btn", "")
-			node_data.text = tr(pure_key)
-			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
-			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
-			
-		# Handle Labels (Main labels for rows and material names)
-		elif node_data is Label:
-			if key.ends_with("_mat_lbl"):
-				var pure_key = key.replace("_mat_lbl", "")
-				node_data.text = tr(pure_key)
-				node_data.add_theme_font_size_override("font_size", 18 * s) # PRECISE 18px matching creation
-			elif key.ends_with("_lbl"):
-				var pure_key = key.replace("_lbl", "")
-				node_data.text = tr(pure_key) + ": "
-				node_data.custom_minimum_size = Vector2(120 * s, 0)
-				node_data.add_theme_font_size_override("font_size", 22 * s)
-			elif key == "team_lbl":
-				node_data.text = tr("team") + ": "
-				node_data.add_theme_font_size_override("font_size", 22 * s)
-			elif "_hdr" in key:
-				var pure_key = key.split("_hdr")[0]
-				node_data.text = "\n\n" + tr(pure_key) + "\n"
-				node_data.add_theme_font_size_override("font_size", 28 * s)
-		
-		# Handle Intensity Buttons (Stored as Array [Btn, Key])
-		elif node_data is Array and node_data.size() >= 2 and (typeof(node_data[1]) == TYPE_STRING or typeof(node_data[1]) == TYPE_STRING_NAME):
-			var btn = node_data[0]
-			var osk = node_data[1]
-			btn.text = tr(osk)
-			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
-			btn.add_theme_font_size_override("font_size", 20 * s)
-		# Handle other buttons in rows (lang, brush, ui_size)
-		elif node_data is Button:
-			if key.begins_with("lang_btn_") or key.begins_with("brush_btn_") or key.begins_with("team_btn_"):
-				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 20 * s)
-			elif key.begins_with("ui_size_btn_"):
-				var idx = int(key.split("_")[-1])
-				var scales = ["1.0", "1.2", "1.3", "1.5", "1.7", "2.0"]
-				node_data.text = tr("size") + scales[idx]
-				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 20 * s)
-			elif key.begins_with("shapes_btn_"):
-				var idx = int(key.split("_")[-1])
-				var shape_keys = ["line", "rect", "circ", "tria"]
-				if idx < shape_keys.size():
-					node_data.text = tr(shape_keys[idx])
-				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 20 * s)
-			elif key.begins_with("speed_btn_"):
-				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 20 * s)
-			elif key == "eraser_btn_0":
-				node_data.text = tr("eraser")
-				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 20 * s)
-			elif key.ends_with("_btn_0"):
-				var pure_key = key.replace("_btn_0", "")
-				node_data.text = tr(pure_key)
-				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 20 * s)
-			elif key == "undo_btn":
-				node_data.text = tr("undo")
-				node_data.custom_minimum_size = Vector2(0, 50 * s)
-				node_data.add_theme_font_size_override("font_size", 20 * s)
-			elif key == "redo_btn":
-				node_data.text = tr("redo")
-				node_data.custom_minimum_size = Vector2(0, 50 * s)
-				node_data.add_theme_font_size_override("font_size", 20 * s)
-			elif key == "eraser_tool_btn":
-				node_data.text = tr("eraser_tool")
-				node_data.custom_minimum_size = Vector2(0, 50 * s)
-				node_data.add_theme_font_size_override("font_size", 20 * s)
-			elif key == "save_btn_ui_btn":
-				node_data.text = tr("save_btn_ui")
-				node_data.custom_minimum_size = Vector2(0, 50 * s)
-				node_data.add_theme_font_size_override("font_size", 20 * s)
-	
-	_update_arcade_dynamic_button() # Sync HUD to new language
+	# (Individual element refreshes removed in favor of _setup_main_ui_containers)
 
 func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	var s = _get_ui_scale()
