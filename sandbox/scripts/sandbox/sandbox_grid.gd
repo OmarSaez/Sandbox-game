@@ -6604,7 +6604,8 @@ func _save_to_slot(idx, custom_name: String = ""):
 		"charge": Array(charge_array),
 		"tags": Array(tags_array),
 		"chunks": Array(chunks_active),
-		"next_chunks": Array(next_chunks_active)
+		"next_chunks": Array(next_chunks_active),
+		"lab_data": _get_cleaned_lab_data()
 	}
 	
 	var file = FileAccess.open(path, FileAccess.WRITE)
@@ -6680,8 +6681,53 @@ func _load_from_slot(idx):
 				var data = dict["next_chunks"]
 				if data.size() == next_chunks_active.size():
 					for i in range(data.size()): next_chunks_active[i] = int(data[i])
+					
+			# 5. RESTORE LABORATORY EXPERIMENTS
+			if dict.has("lab_data"):
+				_restore_lab_data(dict["lab_data"])
 			
 			_update_texture()
 			queue_redraw()
-			save_panel.queue_free()
+			if is_instance_valid(save_panel): save_panel.queue_free()
 		file.close()
+
+func _get_cleaned_lab_data() -> Array:
+	var clean_lab = []
+	for i in range(3):
+		var data = lab_custom_data[i]
+		var entry = {
+			"name": data["name"],
+			"c1": data["c1"].to_html() if data["c1"] is Color else "00000000",
+			"c2": data["c2"].to_html() if data["c2"] is Color else "00000000",
+			"c3": data["c3"].to_html() if data["c3"] is Color else "00000000",
+			"mix": data["mix"],
+			"grav": data["grav"],
+			"state": data["state"],
+			"tags": data["tags"]
+		}
+		clean_lab.append(entry)
+	return clean_lab
+
+func _restore_lab_data(lab_data: Array):
+	for i in range(min(3, lab_data.size())):
+		var data = lab_data[i]
+		lab_custom_data[i]["name"] = data.get("name", "Name")
+		lab_custom_data[i]["c1"] = Color(data.get("c1", "00000000"))
+		lab_custom_data[i]["c2"] = Color(data.get("c2", "00000000"))
+		lab_custom_data[i]["c3"] = Color(data.get("c3", "00000000"))
+		lab_custom_data[i]["mix"] = data.get("mix", 0)
+		lab_custom_data[i]["grav"] = data.get("grav", 0)
+		lab_custom_data[i]["state"] = data.get("state", 0)
+		lab_custom_data[i]["tags"] = data.get("tags", 0)
+		
+		# Re-apply to engine immediately
+		_apply_custom_material_to_engine(i)
+	
+	# Refresh UI if it exists
+	if is_instance_valid(lab_panel):
+		_update_lab_inspector()
+		for i in range(3):
+			_update_lab_preview(i)
+	
+	# Always update tool list
+	_update_custom_mats_in_material_grid()
