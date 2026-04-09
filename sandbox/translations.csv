@@ -144,3 +144,9 @@ exp_water,Agua,Water,Acqua,Eau,Wasser,Água
 exp_lava,Lava,Lava,Lava,Lave,Lava,Lava
 exp_npc,NPC,NPC,NPC,NPC,NPC,NPC
 exp_life,Vida,Life,Vita,Vie,Leben,Vida
+exp_npc_team,Equipo de NPCs,NPC Team,Squadra NPC,Équipe NPC,NPC Team,Equipe NPC
+team_red,Rojo,Red,Rosso,Rouge,Rot,Vermelho
+team_blue,Azul,Blue,Blu,Bleu,Blau,Azul
+team_green,Verde,Green,Verde,Vert,Grün,Verde
+team_yellow,Amarillo,Yellow,Giallo,Jaune,Gelb,Amarelo
+team_mixed,Mixto,Mixed,Misto,Mixte,Gemischt,Misto

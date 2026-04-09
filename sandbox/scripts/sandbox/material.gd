@@ -58,7 +58,14 @@ enum Tags {
 	EXP_WATER = 1 << 32,      # Produces water drops on explosion
 	EXP_LAVA = 1 << 33,       # Produces lava drops on explosion
 	EXP_NPC = 1 << 34,        # Produces random NPCs on explosion
-	EXP_LIFE = 1 << 35         # Produces plants/life on explosion
+	EXP_LIFE = 1 << 35,       # Produces plants/life on explosion
+	
+	# --- EXPLOSION TEAM FLAGS ---
+	EXP_TEAM_RED = 1 << 36,
+	EXP_TEAM_BLUE = 1 << 37,
+	EXP_TEAM_GREEN = 1 << 38,
+	EXP_TEAM_YELLOW = 1 << 39,
+	EXP_TEAM_MIXED = 1 << 40
 }
 
 @export var name: String = "Material"

@@ -1780,6 +1780,13 @@ func _setup_lab_ui():
 			"tags": ["EXP_ELECTRIC", "EXP_ACID", "EXP_WATER", "EXP_LAVA", "EXP_NPC", "EXP_LIFE"]
 		},
 		{
+			"id": "exp_npc_team",
+			"name": tr("exp_npc_team"),    # "Equipo de la Explosión"
+			"parent": "EXP_NPC",           # Solo aparece si se activa explosión de NPCs
+			"radio": true,                 # Solo se puede elegir uno
+			"tags": ["EXP_TEAM_RED", "EXP_TEAM_BLUE", "EXP_TEAM_GREEN", "EXP_TEAM_YELLOW", "EXP_TEAM_MIXED"]
+		},
+		{
 			"id": "combustion",
 			"name": tr("combustion"),       # "Combustión"
 			"parent": "FLAMMABLE",          # Solo aparece si esta etiqueta está activa
@@ -2111,6 +2118,16 @@ func _update_lab_inspector():
 					current_tags.erase("EXP_LAVA")
 					current_tags.erase("EXP_NPC")
 					current_tags.erase("EXP_LIFE")
+			
+			if sections_node.has("exp_npc_team"):
+				var is_npc_exp = current_tags.has("EXP_NPC")
+				sections_node["exp_npc_team"].visible = is_npc_exp
+				if not is_npc_exp:
+					current_tags.erase("EXP_TEAM_RED")
+					current_tags.erase("EXP_TEAM_BLUE")
+					current_tags.erase("EXP_TEAM_GREEN")
+					current_tags.erase("EXP_TEAM_YELLOW")
+					current_tags.erase("EXP_TEAM_MIXED")
 			
 	for i in range(3):
 		_apply_custom_material_to_engine(i)
@@ -5411,6 +5428,15 @@ func _prime_explosive(x, y, id, manual_flags = -1):
 		if (m_tags & SandboxMaterial.Tags.EXP_LAVA): ignition_flags |= 512
 		if (m_tags & SandboxMaterial.Tags.EXP_NPC): ignition_flags |= 1024
 		if (m_tags & SandboxMaterial.Tags.EXP_LIFE): ignition_flags |= 2048
+		
+		# Team flags (Corrected 0-indexed IDs)
+		if (m_tags & SandboxMaterial.Tags.EXP_TEAM_RED): ignition_flags |= 4096
+		elif (m_tags & SandboxMaterial.Tags.EXP_TEAM_BLUE): ignition_flags |= 8192
+		elif (m_tags & SandboxMaterial.Tags.EXP_TEAM_GREEN): ignition_flags |= 16384
+		elif (m_tags & SandboxMaterial.Tags.EXP_TEAM_YELLOW): ignition_flags |= 32768
+		
+		# Separate bit for mixed mode
+		if (m_tags & SandboxMaterial.Tags.EXP_TEAM_MIXED): ignition_flags |= 65536
 	
 	_set_cell(x, y, 7 if id == 5 else 71) 
 	charge_array[idx] = 40 | ignition_flags
@@ -5583,12 +5609,22 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 				
 	# 5. NPC SPASH (Bit 1024)
 	if ignition_flags & 1024:
+		# Determine base team from flags (Corrected index for user's game order)
+		var target_team = selected_team # Fallback to current
+		if ignition_flags & 4096: target_team = 0    # Red
+		elif ignition_flags & 8192: target_team = 1  # Blue
+		elif ignition_flags & 16384: target_team = 3 # Green (Changed)
+		elif ignition_flags & 32768: target_team = 2 # Yellow (Changed)
+		
 		var npc_total = 3 if is_heavy_load else 8
 		for i in range(npc_total):
+			var final_team = target_team
+			if ignition_flags & 65536: final_team = randi_range(0, 3) # Mixed 0-3 
+			
 			var ang = randf() * TAU; var dist = randf_range(radius, radius + 5)
 			var nx = x + int(cos(ang) * dist); var ny = y + int(sin(ang) * dist)
 			if nx >= 0 and nx < grid_width and ny >= 0 and ny < dynamic_grid_height:
-				var npc = _spawn_explosion_npc(nx, ny, selected_team)
+				var npc = _spawn_explosion_npc(nx, ny, final_team)
 				if npc: 
 					npc.vx = cos(ang) * 15.0; npc.vy = sin(ang) * 15.0 # Launch them away!
 
