@@ -171,3 +171,17 @@ RADIOACTIVE,Radiactivo,Radioactive,Radioattivo,Radioactif,Radioaktiv,Radioativo
 corrosion,🧪 Corrosión,🧪 Corrosion,🧪 Corrosione,🧪 Corrosion,🧪 Korrosion,🧪 Corrosão
 ACID,Ácido,Acid,Acido,Acide,Säure,Ácido
 ANTI_ACID,Anticorrosivo,Anti-Acid,Anticorrosivo,Anti-Acide,Rostschutz,Anticorrosivo
+LAB_NAME,Nombre,Name,Nome,Nom,Name,Nome
+LAB_COLOR,Color,Color,Colore,Couleur,Farbe,Cor
+LAB_GRAVITY,Gravedad,Gravity,Gravità,Gravité,Gravitation,Gravidade
+LAB_STATE,Estado,State,Stato,État,Zustand,Estado
+LAB_TEXTURE,Textura,Texture,Texture,Texture,Textur,Textura
+LAB_CHARACTERISTICS,Características,Characteristics,Caratteristiche,Caractéristiques,Eigenschaften,Características
+GRAV_SLOW,Lenta,Slow,Lenta,Lente,Langsam,Lenta
+GRAV_NORMAL,Normal,Normal,Normale,Normal,Normal,Normal
+GRAV_UP,Sube,Rise,Sale,Monte,Steigen,Sobe
+GRAV_STATIC,Estático,Static,Statico,Statique,Statisch,Estático
+STATE_GAS,Gas,Gas,Gas,Gaz,Gas,Gás
+STATE_LIQUID,Líquido,Liquid,Liquido,Liquide,Flüssigkeit,Líquido
+STATE_POWDER,Polvo,Powder,Polvere,Poudre,Pulver,Pó
+STATE_SOLID,Sólido,Solid,Solido,Solide,Festkörper,Sólido

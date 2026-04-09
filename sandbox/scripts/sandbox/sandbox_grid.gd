@@ -1584,13 +1584,16 @@ func _setup_lab_ui():
 		)
 		
 		var name_edit = LineEdit.new()
-		name_edit.placeholder_text = "Nombre"
+		name_edit.placeholder_text = tr("LAB_NAME")
 		name_edit.text = lab_custom_data[i]["name"]
 		name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
 		name_edit.custom_minimum_size = Vector2(80 * s, 30 * s)
 		name_edit.add_theme_font_override("font", _get_safe_font())
 		name_edit.add_theme_font_size_override("font_size", 18 * s)
-		name_edit.text_changed.connect(func(new_text): lab_custom_data[i]["name"] = new_text)
+		name_edit.text_changed.connect(func(new_text): 
+			lab_custom_data[i]["name"] = new_text
+			_update_custom_mats_in_material_grid() # Correct function to refresh HUD
+		)
 		slot_vbox.add_child(name_edit)
 	
 	var make_h_line = func():
@@ -1610,6 +1613,7 @@ func _setup_lab_ui():
 	columns_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	v_box.add_child(columns_hbox)
 	
+	
 	var col_color = VBoxContainer.new()
 	var col_grav = VBoxContainer.new()
 	var col_est = VBoxContainer.new()
@@ -1617,23 +1621,31 @@ func _setup_lab_ui():
 	for col in [col_color, col_grav, col_est]:
 		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	
+	var col_color_title = Label.new()
+	col_color_title.text = tr("LAB_COLOR")
+	col_color_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col_color.add_child(col_color_title)
+
+	var col_grav_title = Label.new()
+	col_grav_title.text = tr("LAB_GRAVITY")
+	col_grav_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col_grav.add_child(col_grav_title)
+	
+	var col_est_title = Label.new()
+	col_est_title.text = tr("LAB_STATE")
+	col_est_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col_est.add_child(col_est_title)
+
 	columns_hbox.add_child(col_color)
 	columns_hbox.add_child(make_v_line.call())
 	columns_hbox.add_child(col_grav)
 	columns_hbox.add_child(make_v_line.call())
 	columns_hbox.add_child(col_est)
 	
-	var c1 = Label.new(); c1.text = "Color"; c1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var cg = Label.new(); cg.text = "Gravedad"; cg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var ce = Label.new(); ce.text = "Estado"; ce.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	
-	for l in [c1, cg, ce]:
+	for l in [col_color_title, col_grav_title, col_est_title]:
 		l.add_theme_font_override("font", _get_safe_font())
-		l.add_theme_font_size_override("font_size", 26 * s)
-	
-	col_color.add_child(c1)
-	col_grav.add_child(cg)
-	col_est.add_child(ce)
+		l.add_theme_font_size_override("font_size", 20 * s)
+		l.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9))
 	
 	ui_elements["lab_col_pickers"] = []
 	ui_elements["lab_col_trash"] = []
@@ -1652,7 +1664,7 @@ func _setup_lab_ui():
 		hb.add_child(num_lbl)
 		
 		var cp = ColorPickerButton.new()
-		cp.custom_minimum_size = Vector2(30 * s, 30 * s)
+		cp.custom_minimum_size = Vector2(40 * s, 40 * s)
 		
 		var null_overlay = Label.new()
 		null_overlay.text = "/"
@@ -1687,9 +1699,14 @@ func _setup_lab_ui():
 		)
 		hb.add_child(trash)
 		ui_elements["lab_col_trash"].append(trash)
+	
+	# Spacer for texture
+	var spacer = Control.new()
+	spacer.custom_minimum_size.y = 10 * s
+	col_color.add_child(spacer)
 		
 	var tex_lbl = Label.new()
-	tex_lbl.text = "Textura"
+	tex_lbl.text = tr("LAB_TEXTURE")
 	tex_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tex_lbl.add_theme_font_size_override("font_size", 16 * s)
 	col_color.add_child(tex_lbl)
@@ -1707,9 +1724,9 @@ func _setup_lab_ui():
 	ui_elements["lab_mix_slider"] = mix_slider
 		
 	ui_elements["lab_grav_buttons"] = []
-	var grav_options = ["Lenta", "Normal", "Sube", "Estático"]
+	var grav_options = ["GRAV_SLOW", "GRAV_NORMAL", "GRAV_UP", "GRAV_STATIC"]
 	for j in range(grav_options.size()):
-		var btn = Button.new(); btn.text = grav_options[j]; btn.toggle_mode = true
+		var btn = Button.new(); btn.text = tr(grav_options[j]); btn.toggle_mode = true
 		btn.add_theme_font_override("font", _get_safe_font())
 		btn.add_theme_font_size_override("font_size", 22 * s)
 		var st_n = StyleBoxFlat.new(); st_n.bg_color = Color(0.15,0.15,0.2)
@@ -1732,9 +1749,9 @@ func _setup_lab_ui():
 		ui_elements["lab_grav_buttons"].append(btn)
 		
 	ui_elements["lab_est_buttons"] = []
-	var est_options = ["Gas", "Líquido", "Polvo", "Sólido"]
+	var est_options = ["STATE_GAS", "STATE_LIQUID", "STATE_POWDER", "STATE_SOLID"]
 	for j in range(est_options.size()):
-		var btn = Button.new(); btn.text = est_options[j]; btn.toggle_mode = true
+		var btn = Button.new(); btn.text = tr(est_options[j]); btn.toggle_mode = true
 		btn.add_theme_font_override("font", _get_safe_font())
 		btn.add_theme_font_size_override("font_size", 22 * s)
 		var st_n = StyleBoxFlat.new(); st_n.bg_color = Color(0.15,0.15,0.2)
@@ -1760,7 +1777,7 @@ func _setup_lab_ui():
 	v_box.add_child(tags_sep)
 	
 	var car_title = Label.new()
-	car_title.text = "Características"
+	car_title.text = tr("LAB_CHARACTERISTICS")
 	car_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	car_title.add_theme_font_override("font", _get_safe_font())
 	car_title.add_theme_font_size_override("font_size", 20 * s)
