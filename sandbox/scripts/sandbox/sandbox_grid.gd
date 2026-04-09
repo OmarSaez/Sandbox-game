@@ -1791,7 +1791,7 @@ func _setup_lab_ui():
 			"name": tr("combustion"),       # "Combustión"
 			"parent": "FLAMMABLE",          # Solo aparece si esta etiqueta está activa
 			"radio": true,                  # Solo se puede elegir una
-			"tags": ["BURN_SMOKE", "BURN_COAL", "BURN_NONE"]
+			"tags": ["BURN_SMOKE", "BURN_COAL"]
 		},
 		{
 			"id": "electricity",

@@ -139,18 +139,35 @@ combustion,Combustión,Combustion,Combustione,Combustion,Verbrennung,Combustão
 electricity,Electricidad,Electricity,Elettricità,Électricité,Elektrizität,Eletricidade
 corrosion,Corrosión,Corrosion,Corrosione,Corrosion,Korrosion,Corrosão
 plants,Plantas,Plants,Piante,Plantes,Pflanzen,Plantas
-exp_special,Explosiones Especiales,Special Explosions,Esplosioni Speciali,Explosions Spéciales,Spezial-Explosionen,Explosões Especiais
-exp_water,Agua,Water,Acqua,Eau,Wasser,Água
-exp_lava,Lava,Lava,Lava,Lave,Lava,Lava
-exp_npc,NPC,NPC,NPC,NPC,NPC,NPC
-exp_life,Vida,Life,Vita,Vie,Leben,Vida
-exp_npc_team,Equipo de NPCs,NPC Team,Squadra NPC,Équipe NPC,NPC Team,Equipe NPC
-team_red,Rojo,Red,Rosso,Rouge,Rot,Vermelho
-team_blue,Azul,Blue,Blu,Bleu,Blau,Azul
-team_green,Verde,Green,Verde,Vert,Grün,Verde
-team_yellow,Amarillo,Yellow,Giallo,Jaune,Gelb,Amarelo
-team_mixed,Mixto,Mixed,Misto,Mixte,Gemischt,Misto
-VIRUS,Virus,Virus,Virus,Virus,Virus,Virus
-RADIOACTIVE,Radioactive,Radioactive,Radioactive,Radioactive,Radioactive,Radioactive
-INVINCIBLE,Invincible,Invincible,Invincible,Invincible,Invincible,Invincible
-VORTEX,Vortex,Vortex,Vortex,Vortex,Vortex,Vortex
+exp_special,💥 Explosiones Especiales,💥 Special Explosions,💥 Esplosioni Speciali,💥 Explosions Spéciales,💥 Spezial-Explosionen,💥 Explosões Especiais
+EXP_ELECTRIC,Eléctrica,Electric,Elettrica,Électrique,Elektrisch,Elétrica
+EXP_ACID,Ácida,Acidic,Acida,Acide,Säure,Ácida
+EXP_WATER,Agua,Water,Acqua,Eau,Wasser,Água
+EXP_LAVA,Lava,Lava,Lava,Lave,Lava,Lava
+EXP_NPC,NPCs,NPCs,NPC,NPC,NPCs,NPCs
+EXP_LIFE,Vida,Life,Vita,Vie,Leben,Vida
+exp_npc_team,👥 Equipo de NPCs,👥 NPC Team,👥 Squadra NPC,👥 Équipe NPC,👥 NPC Team,👥 Equipe NPC
+EXP_TEAM_RED,Rojo,Red,Rosso,Rouge,Rot,Vermelho
+EXP_TEAM_BLUE,Azul,Blue,Blu,Bleu,Blau,Azul
+EXP_TEAM_GREEN,Verde,Green,Verde,Vert,Grün,Verde
+EXP_TEAM_YELLOW,Amarillo,Yellow,Giallo,Jaune,Gelb,Amarelo
+EXP_TEAM_MIXED,Mixto,Mixed,Misto,Mixte,Gemischt,Misto
+combustion,🔥 Combustión,🔥 Combustion,🔥 Combustione,🔥 Combustion,🔥 Verbrennung,🔥 Combustão
+BURN_SMOKE,Humo,Smoke,Fumo,Fumée,Rauch,Fumaça
+BURN_COAL,Carbón,Coal,Carbone,Charbon,Kohle,Carvão
+interaction_tags,✨ Interacción,✨ Interaction,✨ Interazione,✨ Interaction,✨ Interaktion,✨ Interação
+FLAMMABLE,Inflamable,Flammable,Infiammabile,Inflammable,Entflambbar,Inflamável
+INCENDIARY,Incendiario,Incendiary,Incendiario,Incendiaire,Brandstifter,Incendiário
+EXPLOSIVE,Explosivo,Explosive,Esplosivo,Explosif,Explosiv,Explosivo
+ANTI_EXPLOSIVE,Blindado,Armored,Armato,Blindé,Gepanzert,Blindado
+VIRUS,Viral,Viral,Virale,Viral,Viral,Viral
+INVINCIBLE,Invencible,Invincible,Invincibile,Invincible,Unbesiegbar,Invencível
+VORTEX,Vórtice,Vortex,Vortice,Vortex,Vortice,Vórtice
+electricity,⚡ Electricidad,⚡ Electricity,⚡ Elettricità,⚡ Électricité,⚡ Elektrizität,⚡ Eletricidade
+ELECTRICITY,Fuente,Source,Sorgente,Source,Quelle,Fonte
+CONDUCTOR,Conductor,Conductor,Conduttore,Conducteur,Leiter,Condutor
+ELECTRIC_ACTIVATED,Activado,Activated,Attivato,Activé,Aktiviert,Ativado
+RADIOACTIVE,Radiactivo,Radioactive,Radioattivo,Radioactif,Radioaktiv,Radioativo
+corrosion,🧪 Corrosión,🧪 Corrosion,🧪 Corrosione,🧪 Corrosion,🧪 Korrosion,🧪 Corrosão
+ACID,Ácido,Acid,Acido,Acide,Säure,Ácido
+ANTI_ACID,Anticorrosivo,Anti-Acid,Anticorrosivo,Anti-Acide,Rostschutz,Anticorrosivo
