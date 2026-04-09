@@ -2,7 +2,7 @@ id,es,en,it,fr,de,pt
 disasters,🌪️ Desastres,🌪️ Disasters,🌪️ Disastri,🌪️ Catastrophes,🌪️ Katastrophen,🌪️ Desastres
 tools,🛠️ Herramientas,🛠️ Tools,🛠️ Strumenti,🛠️ Outils,🛠️ Werkzeuge,🛠️ Ferramentas
 lang,🌐 Idioma,🌐 Language,🌐 Lingua,🌐 Langue,🌐 Sprache,🌐 Idioma
-brush,🖌️ Pincel,🖌️ Brush,🖌️ Pennello,🖌️ Pinceau,🖌️ Pinsel,🖌️ Pincel
+brush,🖌️ Tamaño del pincel,🖌️ Brush Size,🖌️ Dimensione pennello,🖌️ Taille du pinceau,🖌️ Pinselgröße,🖌️ Tamanho do pincel
 weather,⛈️ Clima,⛈️ Weather,⛈️ Meteo,⛈️ Météo,⛈️ Wetter,⛈️ Clima
 quake,🏚️ Sismo,🏚️ Quake,🏚️ Sisma,🏚️ Séisme,🏚️ Beben,🏚️ Sismo
 tornado,🌪️ Tornado,🌪️ Tornado,🌪️ Tornado,🌪️ Tornade,🌪️ Tornado,🌪️ Tornado
@@ -33,8 +33,8 @@ vine,Pasto Alto,Vine,Erba Alta,Hautes Herbes,Hohes Gras,Grama Alta
 cem_fresh,Cem. Fresco,Fresh Cem.,Cem. Fresco,Cim. Frais,Fr. Zement,Cim. Fresco
 cement,Cemento,Cement,Cemento,Ciment,Zement,Cimento
 volcan,Volcán,Volcano,Vulcano,Volcan,Vulkan,Vulcão
-ui_size,Tamaño UI,UI Size,Dim. UI,Taille UI,UI-Größe,Tam. UI
-size,Escala,Scale,Scala,Échelle,Maßstab,Escala
+ui_size,Tamaño de los menús,Menu Size,Dimensione menu,Taille des menus,Menügröße,Tamanho do menu
+size,x,x,x,x,x,x
 reset,Limpar Todo,Clear All,Pulisci Tutto,Tout effacer,Alles löschen,Limpar Tudo
 pause,⏸️ Pausar,⏸️ Pause,⏸️ Pausa,⏸️ Pause,⏸️ Pause,⏸️ Pausar
 play,▶️ Reanudar,▶️ Resume,▶️ Ripristina,▶️ Reprendre,▶️ Weiter,▶️ Retomar

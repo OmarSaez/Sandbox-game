@@ -165,7 +165,7 @@ var ascent_player: AudioStreamPlayer   # Dedicated for rocket flying up
 var volcano_loop_player: AudioStreamPlayer # Dedicated for volcano bubbling loop
 var fire_loop_player: AudioStreamPlayer    # Dedicated for global crackling/burning
 const SFX_POOL_SIZE = 8
-var action_btn_font_size: int = 18 # Unified size for the 3 main ActionButtons tamaño botones
+var action_btn_font_size: int = 21 # Unified size for the 3 main ActionButtons tamaño botones
 
 # Mapeo: ID del Material -> Nombre del archivo (SONIDO EN BUCLE / LOOP) MP3
 # Estos sonidos se repiten mientras mantienes el pincel presionado.
@@ -1117,7 +1117,7 @@ func _setup_tools_ui():
 	var create_row = func(label_key: String, options: Array, callback: Callable, is_upcoming: bool = false):
 		var lbl = Label.new()
 		lbl.text = tr(label_key) + ": "
-		lbl.add_theme_font_size_override("font_size", 14.0 * s)
+		lbl.add_theme_font_size_override("font_size", 22.0 * s)
 		lbl.add_theme_font_override("font", _get_safe_font())
 		ui_elements[label_key + "_lbl"] = lbl
 		v_box.add_child(lbl)
@@ -1134,7 +1134,7 @@ func _setup_tools_ui():
 			var btn = Button.new()
 			btn.text = str(options[i])
 			btn.custom_minimum_size = Vector2(80.0 * s, 45.0 * s)
-			btn.add_theme_font_size_override("font_size", 14.0 * s)
+			btn.add_theme_font_size_override("font_size", 20.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
 			btn.mouse_filter = Control.MOUSE_FILTER_PASS
 			
@@ -1162,12 +1162,12 @@ func _setup_tools_ui():
 
 	# UI SCALE ROW (Now 2nd)
 	var scale_labels = [
-		tr("size") + " 1.0", 
-		tr("size") + " 1.2", 
-		tr("size") + " 1.3", 
-		tr("size") + " 1.5", 
-		tr("size") + " 1.7", 
-		tr("size") + " 2.0"
+		tr("size") + "1.0", 
+		tr("size") + "1.2", 
+		tr("size") + "1.3", 
+		tr("size") + "1.5", 
+		tr("size") + "1.7", 
+		tr("size") + "2.0"
 	]
 	create_row.call("ui_size", scale_labels, func(l): 
 		ui_scale_level = l
@@ -1187,7 +1187,7 @@ func _setup_tools_ui():
 	# NEW: ACTION ROW (Undo, Redo, Eraser, Save)
 	var func_lbl = Label.new()
 	func_lbl.text = tr("func") + ":"
-	func_lbl.add_theme_font_size_override("font_size", 14 * s)
+	func_lbl.add_theme_font_size_override("font_size", 22 * s)
 	func_lbl.add_theme_font_override("font", _get_safe_font())
 	v_box.add_child(func_lbl)
 	ui_elements["func_lbl"] = func_lbl
@@ -1203,7 +1203,7 @@ func _setup_tools_ui():
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.custom_minimum_size = Vector2(0, 50 * s)
 		btn.add_theme_font_override("font", _get_safe_font())
-		btn.add_theme_font_size_override("font_size", 14 * s)
+		btn.add_theme_font_size_override("font_size", 20 * s)
 		
 		# BASE STYLE (Matching row buttons like lang/size)
 		var style = StyleBoxFlat.new()
@@ -1246,7 +1246,7 @@ func _setup_tools_ui():
 	var support_btn = Button.new()
 	support_btn.text = tr("support")
 	support_btn.custom_minimum_size = Vector2(0, 60 * s) 
-	support_btn.add_theme_font_size_override("font_size", 16 * s) 
+	support_btn.add_theme_font_size_override("font_size", 24 * s) 
 	support_btn.add_theme_font_override("font", _get_safe_font())
 	
 	var support_style = StyleBoxFlat.new()
@@ -1277,7 +1277,7 @@ func _setup_tools_ui():
 	var pause_btn = Button.new()
 	pause_btn.text = tr("play") if is_paused else tr("pause")
 	pause_btn.custom_minimum_size = Vector2(0, 50 * s) # SCALED
-	pause_btn.add_theme_font_size_override("font_size", 16 * s) # SCALED
+	pause_btn.add_theme_font_size_override("font_size", 24 * s) # SCALED
 	pause_btn.add_theme_font_override("font", _get_safe_font())
 	pause_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	pause_btn.pressed.connect(func():
@@ -1320,7 +1320,7 @@ func _setup_tools_ui():
 	var reset_btn_node = Button.new() # Named local variable to avoid conflict with field
 	reset_btn_node.text = tr("reset")
 	reset_btn_node.custom_minimum_size = Vector2(0, 50 * s)
-	reset_btn_node.add_theme_font_size_override("font_size", 16 * s)
+	reset_btn_node.add_theme_font_size_override("font_size", 24 * s)
 	reset_btn_node.add_theme_font_override("font", _get_safe_font())
 	reset_btn_node.mouse_filter = Control.MOUSE_FILTER_PASS
 	reset_btn_node.pressed.connect(func():
@@ -2322,15 +2322,15 @@ func _refresh_ui_text():
 		elif key == "pause_btn": 
 			node_data.text = tr("play") if is_paused else tr("pause")
 			node_data.custom_minimum_size = Vector2(0, 50 * s)
-			node_data.add_theme_font_size_override("font_size", 14 * s)
+			node_data.add_theme_font_size_override("font_size", 22 * s)
 		elif key == "reset_btn": 
 			node_data.text = tr("reset")
 			node_data.custom_minimum_size = Vector2(0, 50 * s)
-			node_data.add_theme_font_size_override("font_size", 14 * s)
+			node_data.add_theme_font_size_override("font_size", 22 * s)
 		elif key == "support_btn":
 			node_data.text = tr("support")
 			node_data.custom_minimum_size = Vector2(0, 60 * s)
-			node_data.add_theme_font_size_override("font_size", 16 * s)
+			node_data.add_theme_font_size_override("font_size", 24 * s)
 		elif key == "warrior_btn":
 			node_data.text = tr("warrior")
 			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
@@ -2369,7 +2369,7 @@ func _refresh_ui_text():
 			var pure_key = key.replace("_btn", "")
 			node_data.text = tr(pure_key)
 			node_data.custom_minimum_size = Vector2(100 * s, 45 * s)
-			node_data.add_theme_font_size_override("font_size", 14 * s)
+			node_data.add_theme_font_size_override("font_size", action_btn_font_size * s)
 			
 		# Handle Labels (Main labels for rows and material names)
 		elif node_data is Label:
@@ -2381,74 +2381,74 @@ func _refresh_ui_text():
 				var pure_key = key.replace("_lbl", "")
 				node_data.text = tr(pure_key) + ": "
 				node_data.custom_minimum_size = Vector2(120 * s, 0)
-				node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.add_theme_font_size_override("font_size", 22 * s)
 			elif key == "team_lbl":
 				node_data.text = tr("team") + ": "
-				node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.add_theme_font_size_override("font_size", 22 * s)
 			elif "_hdr" in key:
 				var pure_key = key.split("_hdr")[0]
 				node_data.text = "\n\n" + tr(pure_key) + "\n"
-				node_data.add_theme_font_size_override("font_size", 20 * s)
+				node_data.add_theme_font_size_override("font_size", 28 * s)
 		
 		# Handle Intensity Buttons (Stored as Array [Btn, Key])
-		elif node_data is Array:
+		elif node_data is Array and node_data.size() >= 2 and (typeof(node_data[1]) == TYPE_STRING or typeof(node_data[1]) == TYPE_STRING_NAME):
 			var btn = node_data[0]
 			var osk = node_data[1]
 			btn.text = tr(osk)
 			btn.custom_minimum_size = Vector2(80 * s, 45 * s)
-			btn.add_theme_font_size_override("font_size", 14 * s)
+			btn.add_theme_font_size_override("font_size", 20 * s)
 		# Handle other buttons in rows (lang, brush, ui_size)
 		elif node_data is Button:
 			if key.begins_with("lang_btn_") or key.begins_with("brush_btn_"):
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.add_theme_font_size_override("font_size", 20 * s)
 			elif key.begins_with("team_btn_"):
 				var idx = int(key.split("_")[-1])
 				var team_keys = ["team_red", "team_blue", "team_yellow", "team_green"]
 				node_data.text = tr(team_keys[idx])
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 12 * s)
+				node_data.add_theme_font_size_override("font_size", 18 * s)
 			elif key.begins_with("ui_size_btn_"):
 				var idx = int(key.split("_")[-1])
 				var scales = ["1.0", "1.2", "1.3", "1.5", "1.7", "2.0"]
-				node_data.text = tr("size") + " " + scales[idx]
+				node_data.text = tr("size") + scales[idx]
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.add_theme_font_size_override("font_size", 20 * s)
 			elif key.begins_with("shapes_btn_"):
 				var idx = int(key.split("_")[-1])
 				var shape_keys = ["line", "rect", "circ", "tria"]
 				if idx < shape_keys.size():
 					node_data.text = tr(shape_keys[idx])
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.add_theme_font_size_override("font_size", 20 * s)
 			elif key.begins_with("speed_btn_"):
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.add_theme_font_size_override("font_size", 20 * s)
 			elif key == "eraser_btn_0":
 				node_data.text = tr("eraser")
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.add_theme_font_size_override("font_size", 20 * s)
 			elif key.ends_with("_btn_0"):
 				var pure_key = key.replace("_btn_0", "")
 				node_data.text = tr(pure_key)
 				node_data.custom_minimum_size = Vector2(80 * s, 45 * s)
-				node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.add_theme_font_size_override("font_size", 20 * s)
 			elif key == "undo_btn":
 				node_data.text = tr("undo")
 				node_data.custom_minimum_size = Vector2(0, 50 * s)
-				node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.add_theme_font_size_override("font_size", 20 * s)
 			elif key == "redo_btn":
 				node_data.text = tr("redo")
 				node_data.custom_minimum_size = Vector2(0, 50 * s)
-				node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.add_theme_font_size_override("font_size", 20 * s)
 			elif key == "eraser_tool_btn":
 				node_data.text = tr("eraser_tool")
 				node_data.custom_minimum_size = Vector2(0, 50 * s)
-				node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.add_theme_font_size_override("font_size", 20 * s)
 			elif key == "save_btn_ui_btn":
 				node_data.text = tr("save_btn_ui")
 				node_data.custom_minimum_size = Vector2(0, 50 * s)
-				node_data.add_theme_font_size_override("font_size", 14 * s)
+				node_data.add_theme_font_size_override("font_size", 20 * s)
 	
 	_update_arcade_dynamic_button() # Sync HUD to new language
 
@@ -2566,7 +2566,7 @@ func _add_ui_header(container, key: String):
 	
 	var lbl = Label.new()
 	lbl.text = "\n\n" + tr(key) + "\n"
-	lbl.add_theme_font_size_override("font_size", 20 * s)
+	lbl.add_theme_font_size_override("font_size", 28 * s)
 	lbl.add_theme_font_override("font", _get_safe_font())
 	lbl.add_theme_color_override("font_color", Color(0.9, 0.9, 0.1)) # Gold/Yellowish
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
