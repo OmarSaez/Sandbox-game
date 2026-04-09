@@ -34,7 +34,7 @@ enum Tags {
 	
 	# Plant life
 	PLANT = 1 << 20,
-	SEED = 1 << 21,
+	EXP_ELECTRIC = 1 << 21,  # Produces sparks on explosion
 	FERTILE = 1 << 22,
 	
 	# NPC system
@@ -50,7 +50,8 @@ enum Tags {
 	MIX_MEDIUM = 1 << 28,     # ~35% secondary color
 	MIX_HIGH = 1 << 29,       # ~50% secondary color
 	# Music system
-	MUSIC = 1 << 30
+	MUSIC = 1 << 30,
+	EXP_ACID = 1 << 31       # Produces acid drops on explosion
 }
 
 @export var name: String = "Material"

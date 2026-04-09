@@ -450,7 +450,7 @@ func _ready():
 	# 4: Petroleo
 	_register_material(4, Color("041200"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.BURN_SMOKE) # Petroleo
 	# 5: TNT
-	_register_material(5, Color("E30000"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC) # TNT
+	_register_material(5, Color("E30000"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.EXP_ELECTRIC | SandboxMaterial.Tags.GRAV_STATIC) # TNT + Chispas
 	# 6: Tierra
 	_register_material(6, Color("#66380C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#4D2A09")) # Tierra
 	
@@ -1768,6 +1768,12 @@ func _setup_lab_ui():
 			"tags": ["FLAMMABLE", "INCENDIARY", "EXPLOSIVE", "ANTI_EXPLOSIVE"]
 		},
 		{
+			"id": "exp_special",
+			"name": tr("exp_special"),     # "Explosiones Especiales"
+			"parent": "EXPLOSIVE",
+			"tags": ["EXP_ELECTRIC", "EXP_ACID"]
+		},
+		{
 			"id": "combustion",
 			"name": tr("combustion"),       # "Combustión"
 			"parent": "FLAMMABLE",          # Solo aparece si esta etiqueta está activa
@@ -2088,6 +2094,13 @@ func _update_lab_inspector():
 					current_tags.erase("BURN_SMOKE")
 					current_tags.erase("BURN_COAL")
 					current_tags.erase("BURN_NONE")
+			
+			if sections_node.has("exp_special"):
+				var is_explosive = current_tags.has("EXPLOSIVE")
+				sections_node["exp_special"].visible = is_explosive
+				if not is_explosive:
+					current_tags.erase("EXP_ELECTRIC")
+					current_tags.erase("EXP_ACID")
 			
 	for i in range(3):
 		_apply_custom_material_to_engine(i)
@@ -3588,12 +3601,28 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			elif pure_id == 4: # Petro
 				if randf() < 0.1: _set_cell(x, y, 3)
 			elif (tags & SandboxMaterial.Tags.EXPLOSIVE):
-				var flags = 0
-				if _has_tag_neighbor(x, y, SandboxMaterial.Tags.ACID):
-					flags = 64
-				elif charge_array[idx] > 50 or _count_neighbor_id(x, y, 9) > 0:
-					flags = 128
-				_prime_explosive(x, y, pure_id, flags)
+				# Only explosive materials with ELECTRIC_ACTIVATED can be primed by electricity
+				# We check for both charge (pulses) OR direct contact with Electric pixels (ID 9)
+				var has_elec_contact = _count_neighbor_id(x, y, 9) > 0
+				var can_elec_prime = (tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED) and (charge_array[idx] > 50 or has_elec_contact)
+				
+				# Fire/Heat ignition: Now ignores electricity pixels (ID 9) to respect the ELECTRIC_ACTIVATED requirement
+				var can_fire_prime = false
+				for ny in range(y - 1, y + 2):
+					for nx in range(x - 1, x + 2):
+						if nx == x and ny == y: continue
+						var nid = _get_cell(nx, ny)
+						if nid > 0 and nid != 9: # Ignore Electricity ID 9 here
+							if (material_tags_raw[nid] & SandboxMaterial.Tags.INCENDIARY):
+								can_fire_prime = true; break
+				
+				var can_acid_prime = _has_tag_neighbor(x, y, SandboxMaterial.Tags.ACID)
+				
+				if can_fire_prime or can_elec_prime or can_acid_prime:
+					var trigger_type = 0 # Default (Heat)
+					if can_acid_prime: trigger_type = 64
+					elif can_elec_prime: trigger_type = 128
+					_prime_explosive(x, y, pure_id, trigger_type)
 			elif pure_id == 18:
 				_set_cell(x, y, 19)
 				charge_array[idx] = randi_range(20, 70)
@@ -5298,26 +5327,25 @@ func _count_neighbor_id_radius(x, y, id, radius):
 			if _get_cell(nx, ny) == id: count += 1
 	return count
 
-func _prime_explosive(x, y, id, ignition_flags = 0):
+func _prime_explosive(x, y, id, manual_flags = -1):
 	if x < 0 or x >= grid_width or y < 0 or y >= grid_height: return
 	var idx = y * grid_width + x; var current_id = cells[idx] & 0xFFFF
 	
-	# FAILSAVE: If it's touching Acid RIGHT NOW, force Acid ignition
-	if _has_tag_neighbor(x, y, SandboxMaterial.Tags.ACID):
-		ignition_flags = 64
+	# Handle already primed cells
+	if current_id == 7 or current_id == 77 or current_id == 71 or current_id == 72: return 
 	
-	# Handle already primed cells (Priority upgrade: Acid > Electric > Normal)
-	if current_id == 7 or current_id == 77 or current_id == 71 or current_id == 72:
-		var current_flags = charge_array[idx] & 192
-		var target_flags = ignition_flags
-		
-		# Allow upgrading anything to ACID (64)
-		if target_flags == 64 and current_flags != 64: 
-			charge_array[idx] = (charge_array[idx] & 63) | 64
-		# Allow upgrading NORMAL (0) to ELECTRIC (128)
-		elif target_flags == 128 and current_flags == 0:
-			charge_array[idx] = (charge_array[idx] & 63) | 128
-		return 
+	# Determine explosion type
+	var m_tags = material_tags_raw[id]
+	var ignition_flags = 0
+	
+	# --- CODE A MEDIDA (Official dynamic behavior) ---
+	# For TNT (5) and Gunpowder (20), we allow the trigger to change the explosion type
+	if id == 5 or id == 20:
+		if manual_flags != -1: ignition_flags = manual_flags
+	else:
+		# For Laboratory materials, we follow tags 100% for predictability
+		if (m_tags & SandboxMaterial.Tags.EXP_ACID): ignition_flags |= 64
+		if (m_tags & SandboxMaterial.Tags.EXP_ELECTRIC): ignition_flags |= 128
 	
 	_set_cell(x, y, 7 if id == 5 else 71) 
 	charge_array[idx] = 40 | ignition_flags
@@ -5361,17 +5389,17 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 						if n_id == 27: _set_cell(nx, ny, 29); charge_array[nx + ny * grid_width] = randi_range(80, 120)
 						elif n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = randi_range(20, 70)
 						else:
-							# Hierarchy: Acid (64) > Electric (128) > Heat (0)
-							var f = 64 if (my_tags & SandboxMaterial.Tags.ACID) else (128 if my_id == 9 else 0)
-							_prime_explosive(nx, ny, n_id, f)
+							# Trigger check: If I am electricity, neighbor MUST be ELECTRIC_ACTIVATED
+							var source_is_elec = (my_id == 9 or (my_tags & SandboxMaterial.Tags.ELECTRICITY))
+							if not source_is_elec or (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
+								_prime_explosive(nx, ny, n_id)
 				else:
 					if (n_tags & SandboxMaterial.Tags.CONDUCTOR) and charge_array[n_idx] == 0: charge_array[n_idx] = 101
 					elif (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
 						if n_id == 27: _set_cell(nx, ny, 29); charge_array[n_idx] = randi_range(80, 120)
 						elif n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = randi_range(20, 70)
 						else:
-							var f = 64 if (my_tags & SandboxMaterial.Tags.ACID) else 128
-							_prime_explosive(nx, ny, n_id, f)
+							_prime_explosive(nx, ny, n_id)
 
 # Optimization #6: Explosion Budgeting (Prevents CPU choking during chain reactions)
 const MAX_EXPLOSIONS_PER_FRAME = 20 # SANE default for smooth experience
