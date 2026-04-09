@@ -1803,7 +1803,7 @@ func _setup_lab_ui():
 			"id": "exp_special",
 			"name": tr("exp_special"),     # "Explosiones Especiales"
 			"parent": "EXPLOSIVE",
-			"tags": ["EXP_ELECTRIC", "EXP_ACID", "EXP_WATER", "EXP_LAVA", "EXP_NPC", "EXP_LIFE"]
+			"tags": ["EXP_ELECTRIC", "EXP_ACID", "EXP_WATER", "EXP_LAVA", "EXP_NPC", "EXP_LIFE", "EXP_GAS", "EXP_QUAKE", "EXP_PINATA"]
 		},
 		{
 			"id": "exp_npc_team",
@@ -5555,6 +5555,9 @@ func _prime_explosive(x, y, id, manual_flags = -1):
 		if (m_tags & SandboxMaterial.Tags.EXP_LAVA): ignition_flags |= 512
 		if (m_tags & SandboxMaterial.Tags.EXP_NPC): ignition_flags |= 1024
 		if (m_tags & SandboxMaterial.Tags.EXP_LIFE): ignition_flags |= 2048
+		if (m_tags & SandboxMaterial.Tags.EXP_GAS): ignition_flags |= 131072
+		if (m_tags & SandboxMaterial.Tags.EXP_QUAKE): ignition_flags |= 262144
+		if (m_tags & SandboxMaterial.Tags.EXP_PINATA): ignition_flags |= 524288
 		
 		# Team flags (Corrected 0-indexed IDs)
 		if (m_tags & SandboxMaterial.Tags.EXP_TEAM_RED): ignition_flags |= 4096
@@ -5767,6 +5770,32 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 					if rand < 0.5: _set_cell(sx, sy, 6) # Fertile Soil
 					elif rand < 0.8: _set_cell(sx, sy, 22) # Plant Seeds/Grass
 					else: _set_cell(sx, sy, 2) # A bit of water for the plants
+	
+	# 7. SMOKE / GAS EXPLOSION (Bit 131072)
+	if ignition_flags & 131072:
+		var count = 60 if is_heavy_load else 150
+		for i in range(count):
+			var dist = randf_range(radius * 0.4, radius + 15); var ang = randf() * TAU
+			var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
+			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
+				if _get_cell(sx, sy) == 0: _set_cell(sx, sy, 15) # Smoke ID
+
+	# 8. SEISMIC EXPLOSION (Bit 262144)
+	if ignition_flags & 262144:
+		earthquake_intensity = 3 # Trigger a medium quake
+		earthquake_timer = 2.0 # Shake for 2 seconds
+
+	# 9. PIÑATA / FIREWORKS (Bit 524288)
+	if ignition_flags & 524288:
+		for i in range(6):
+			var ang = randf() * TAU
+			var px = x + int(cos(ang) * radius)
+			var py = y + int(sin(ang) * radius)
+			if randf() < 0.5:
+				_launch_firework(px, py) # 50% Launch
+			else:
+				var color = Color.from_hsv(randf(), 0.8, 1.0)
+				_explode_firework(px, py, color) # 50% Burst
 
 func _push_particle(x, y, dx, dy):
 	var dir_x = sign(dx); var dir_y = -1 if dy < 0 else (1 if dy > 0 else 0)

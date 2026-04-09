@@ -71,7 +71,10 @@ enum Tags {
 	VIRUS = 1 << 41,
 	RADIOACTIVE = 1 << 42,
 	INVINCIBLE = 1 << 43,
-	VORTEX = 1 << 44
+	VORTEX = 1 << 44,
+	EXP_GAS = 1 << 45,
+	EXP_QUAKE = 1 << 46,
+	EXP_PINATA = 1 << 47
 }
 
 @export var name: String = "Material"

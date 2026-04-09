@@ -146,6 +146,9 @@ EXP_WATER,Agua,Water,Acqua,Eau,Wasser,Água
 EXP_LAVA,Lava,Lava,Lava,Lave,Lava,Lava
 EXP_NPC,NPCs,NPCs,NPC,NPC,NPCs,NPCs
 EXP_LIFE,Vida,Life,Vita,Vie,Leben,Vida
+EXP_GAS,Humo,Smoke,Fumo,Fumée,Rauch,Fumaça
+EXP_QUAKE,Sísmica,Seismic,Sismica,Sismique,Seismisch,Sísmica
+EXP_PINATA,Piñata,Piñata,Pignatta,Piñata,Piñata,Piñata
 exp_npc_team,👥 Equipo de NPCs,👥 NPC Team,👥 Squadra NPC,👥 Équipe NPC,👥 NPC Team,👥 Equipe NPC
 EXP_TEAM_RED,Rojo,Red,Rosso,Rouge,Rot,Vermelho
 EXP_TEAM_BLUE,Azul,Blue,Blu,Bleu,Blau,Azul
