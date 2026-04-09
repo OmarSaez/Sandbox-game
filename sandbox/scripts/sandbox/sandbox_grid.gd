@@ -1916,9 +1916,14 @@ func _save_lab_state():
 	if file:
 		file.store_string(JSON.stringify(save))
 		file.close()
-		printerr("LAB: Estado guardado. Expiración en: ", lab_unlock_expiry_unix)
 
 func _load_lab_state():
+	# PC/EDITOR SKIP: Always unlock and skip logs for smoother testing
+	if OS.has_feature("editor"):
+		_set_lab_unlocked(true)
+		lab_unlock_expiry_unix = int(Time.get_unix_time_from_system()) + 86400
+		return
+
 	if FileAccess.file_exists("user://lab_state.json"):
 		var file = FileAccess.open("user://lab_state.json", FileAccess.READ)
 		var json_str = file.get_as_text()
@@ -1927,7 +1932,6 @@ func _load_lab_state():
 		var save = JSON.parse_string(json_str)
 		if typeof(save) == TYPE_DICTIONARY:
 			lab_unlock_expiry_unix = int(save.get("expiry", 0))
-			printerr("LAB: Estado cargado. Expiración recuperada: ", lab_unlock_expiry_unix)
 			
 			if save.has("data"):
 				var loaded_data = save["data"]
@@ -1940,7 +1944,6 @@ func _load_lab_state():
 							lab_custom_data[i][k] = d[k]
 	
 	var now = int(Time.get_unix_time_from_system())
-	printerr("LAB: Tiempo actual: ", now, " | Faltan: ", lab_unlock_expiry_unix - now, " segundos")
 	if now < lab_unlock_expiry_unix:
 		_set_lab_unlocked(true)
 	else:
