@@ -1771,7 +1771,7 @@ func _setup_lab_ui():
 		{
 			"id": "interaction",
 			"name": tr("interaction_tags"), # "🛠️ Etiquetas de Interacción"
-			"tags": ["FLAMMABLE", "INCENDIARY", "EXPLOSIVE", "ANTI_EXPLOSIVE"]
+			"tags": ["FLAMMABLE", "INCENDIARY", "EXPLOSIVE", "ANTI_EXPLOSIVE", "VIRUS", "INVINCIBLE", "VORTEX"]
 		},
 		{
 			"id": "exp_special",
@@ -1796,17 +1796,12 @@ func _setup_lab_ui():
 		{
 			"id": "electricity",
 			"name": tr("electricity"),     # "Electricidad"
-			"tags": ["ELECTRICITY", "CONDUCTOR", "ELECTRIC_ACTIVATED"]
+			"tags": ["ELECTRICITY", "CONDUCTOR", "ELECTRIC_ACTIVATED", "RADIOACTIVE"]
 		},
 		{
 			"id": "corrosion",
 			"name": tr("corrosion"),       # "Corrosión"
 			"tags": ["ACID", "ANTI_ACID"]
-		},
-		{
-			"id": "plants",
-			"name": tr("plants"),          # "Plantas"
-			"tags": ["FERTILE", "PLANT"]
 		}
 	]
 	
@@ -3609,6 +3604,79 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					charge_array[idx] = 101
 					_register_charge(idx)
 		
+	# VIRUS / EXPAND LOGIC (Laboratory Exclusive)
+	if (tags & SandboxMaterial.Tags.VIRUS):
+		if randf() < 0.03: # Speed of spread
+			var nx = x + randi_range(-1, 1)
+			var ny = y + randi_range(-1, 1)
+			if nx >= 0 and nx < grid_width and ny >= 0 and ny < dynamic_grid_height:
+				var nid = _get_cell(nx, ny)
+				# Only infect other materials (not empty, not same, not UI/HUD)
+				if nid > 0 and nid != pure_id and nid < 500: 
+					var n_tags = material_tags_raw[nid]
+					# INVINCIBLE or ANTI_ACID materials are naturally immune to the virus mutation
+					if not (n_tags & (SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.INVINCIBLE)): 
+						_set_cell(nx, ny, pure_id)
+						
+	# RADIOACTIVE LOGIC (Laboratory Exclusive - Constant Energy Reactor)
+	if (tags & SandboxMaterial.Tags.RADIOACTIVE):
+		if randf() < 0.02: # Frequency of energy leaks
+			for ny in range(y - 1, y + 2):
+				for nx in range(x - 1, x + 2):
+					if nx == x and ny == y: continue
+					if nx < 0 or nx >= grid_width or ny < 0 or ny >= dynamic_grid_height: continue
+					var n_idx = ny * grid_width + nx
+					if charge_array[n_idx] < 50:
+						charge_array[n_idx] = 101 # Intense electrical pulse
+						_register_charge(n_idx)
+			# Occasional visual discharge
+			if randf() < 0.1 and _get_cell(x, y - 1) == 0:
+				_set_cell(x, y - 1, 43)
+				
+	# VORTEX LOGIC (Laboratory Exclusive - Black Hole Effect)
+	if (tags & SandboxMaterial.Tags.VORTEX):
+		# COLOSSAL ACTION: High chance to process 10 targets in a 40px radius
+		if randf() < 0.45:
+			# 1. MATERIAL SUCTION & CONSUMPTION
+			for i in range(10): # High density suction
+				var dist = randi_range(1, 40)
+				var ang = randf() * 6.28
+				var vx = x + int(cos(ang) * dist)
+				var vy = y + int(sin(ang) * dist)
+				
+				if vx >= 0 and vx < grid_width and vy >= 0 and vy < dynamic_grid_height:
+					if vx == x and vy == y: continue
+					var vid = _get_cell(vx, vy)
+					# Only suck non-empty, non-vortex, non-HUD, non-invincible materials
+					if vid > 0 and vid != pure_id and vid < 500:
+						var n_tags = material_tags_raw[vid]
+						if not (n_tags & SandboxMaterial.Tags.INVINCIBLE):
+							var dist_to_center = abs(x - vx) + abs(y - vy)
+							if dist_to_center <= 3:
+								# CONSUME: Event Horizon is now wider (3px)
+								_set_cell(vx, vy, 0)
+								if randf() < 0.1: _add_spark(float(vx), float(vy), 0, 0, Color.BLACK, 0.4)
+							elif not (n_tags & SandboxMaterial.Tags.GRAV_STATIC): # Move mobile things
+								var dx = sign(x - vx)
+								var dy = sign(y - vy)
+								# TRACTOR BEAM: Max power for objects below
+								if dy < 0: 
+									if randf() < 0.4: dy = -1 
+								
+								var tx = vx + dx; var ty = vy + dy
+								var tid = _get_cell(tx, ty)
+								if tid == 0 or tid < 500: 
+									_swap_cells(vx, vy, tx, ty)
+			
+			# 2. NPC PULL (Extreme drag)
+			var nearby_npcs = _get_nearby_npcs(x, y, 40.0)
+			for npc in nearby_npcs:
+				var pull_dir = Vector2(x - npc.pos.x, y - npc.pos.y).normalized()
+				npc.vx += pull_dir.x * 0.6
+				npc.vy += pull_dir.y * 0.6
+				if (npc.pos.x - x)**2 + (npc.pos.y - y)**2 < 36: # High gravity crush
+					npc.hp -= 10.0 
+		
 	# FIRE AND HEAT REACTIONS
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
 		if pure_id == 3: is_fire_active = true 
@@ -3796,7 +3864,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					var nid = _get_cell(nx, ny)
 					if nid > 0:
 						var n_tags = material_tags_raw[nid]
-						if not (n_tags & SandboxMaterial.Tags.ANTI_ACID):
+						if not (n_tags & (SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.INVINCIBLE)):
 							# CORROSION: Destroy material and spark CORROSIVE ACID (ID 44)
 							_set_cell(nx, ny, 44) 
 							
@@ -5413,6 +5481,7 @@ func _prime_explosive(x, y, id, manual_flags = -1):
 	
 	# Determine explosion type
 	var m_tags = material_tags_raw[id]
+	if (m_tags & SandboxMaterial.Tags.INVINCIBLE): return
 	var ignition_flags = 0
 	
 	# --- CODE A MEDIDA (Official dynamic behavior) ---
@@ -5542,6 +5611,7 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 				var tx = x + rx; var ty = y + ry; var t_id = _get_cell(tx, ty)
 				if t_id <= 0: continue
 				var t_idx = ty * grid_width + tx; var t_tags = tags_array[t_idx]
+				if (t_tags & SandboxMaterial.Tags.INVINCIBLE): continue
 				if (t_tags & SandboxMaterial.Tags.EXPLOSIVE):
 					if t_id == 27: 
 						_set_cell(tx, ty, 29)

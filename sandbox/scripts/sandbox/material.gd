@@ -65,7 +65,13 @@ enum Tags {
 	EXP_TEAM_BLUE = 1 << 37,
 	EXP_TEAM_GREEN = 1 << 38,
 	EXP_TEAM_YELLOW = 1 << 39,
-	EXP_TEAM_MIXED = 1 << 40
+	EXP_TEAM_MIXED = 1 << 40,
+	
+	# Experimental Laboratory (New)
+	VIRUS = 1 << 41,
+	RADIOACTIVE = 1 << 42,
+	INVINCIBLE = 1 << 43,
+	VORTEX = 1 << 44
 }
 
 @export var name: String = "Material"
