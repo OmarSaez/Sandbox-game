@@ -18,9 +18,10 @@ var dynamic_grid_height: int # Logic floor (at HUD top)
 
 # Simulation Data
 var cells: PackedInt32Array
-var tags_array: PackedInt32Array
+var tags_array: PackedInt64Array
 var color_buffer: PackedByteArray 
-var charge_array: PackedByteArray # Track electric pulses (0 = none, 5 = full, counts down)
+var charge_array: PackedInt32Array # Track electric pulses and explosion flags
+var charge_visual_buffer: PackedByteArray # 8-bit buffer for GPU rendering
 
 # GPU Rendering Data (Primary: ID Texture | Secondary: Charge Texture)
 var charge_tex: ImageTexture 
@@ -40,7 +41,7 @@ var material_colors_bytes = PackedByteArray() # RGBA bytes for each material
 var mat_colors_1 = PackedColorArray()
 var mat_colors_2 = PackedColorArray()
 var mat_colors_3 = PackedColorArray()
-var material_tags_raw = PackedInt32Array() 
+var material_tags_raw = PackedInt64Array() 
 var selected_material: int = 1
 var current_weather: int = 0 
 var is_paused: bool = false
@@ -424,6 +425,8 @@ func _ready():
 	# GPU Image Buffers
 	img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8) # Main ID Texture
 	charge_img = Image.create(grid_width, grid_height, false, Image.FORMAT_L8) # Charge (Grayscale)
+	charge_visual_buffer.resize(grid_width * grid_height)
+	charge_visual_buffer.fill(0)
 	
 	mat_colors_1.resize(2048)
 	mat_colors_2.resize(2048)
@@ -439,6 +442,9 @@ func _ready():
 		
 	# Setup materials (0-255)
 	_register_material(0, Color(0, 0, 0, 0), SandboxMaterial.Tags.NONE)
+	
+	# Initial clear of visual buffer
+	charge_visual_buffer.fill(0)
 	
 	# --- RAW MATERIALS (0-20) ---
 	# 1: Arena
@@ -1771,7 +1777,7 @@ func _setup_lab_ui():
 			"id": "exp_special",
 			"name": tr("exp_special"),     # "Explosiones Especiales"
 			"parent": "EXPLOSIVE",
-			"tags": ["EXP_ELECTRIC", "EXP_ACID"]
+			"tags": ["EXP_ELECTRIC", "EXP_ACID", "EXP_WATER", "EXP_LAVA", "EXP_NPC", "EXP_LIFE"]
 		},
 		{
 			"id": "combustion",
@@ -2101,6 +2107,10 @@ func _update_lab_inspector():
 				if not is_explosive:
 					current_tags.erase("EXP_ELECTRIC")
 					current_tags.erase("EXP_ACID")
+					current_tags.erase("EXP_WATER")
+					current_tags.erase("EXP_LAVA")
+					current_tags.erase("EXP_NPC")
+					current_tags.erase("EXP_LIFE")
 			
 	for i in range(3):
 		_apply_custom_material_to_engine(i)
@@ -3250,6 +3260,7 @@ func _set_cell(x, y, mat_id):
 			cells[idx] = 0
 			tags_array[idx] = 0
 			charge_array[idx] = 0
+			charge_visual_buffer[idx] = 0
 			_activate_chunk(x, y)
 			return
 
@@ -3271,10 +3282,11 @@ func _set_cell(x, y, mat_id):
 				if (tags & SandboxMaterial.Tags.TEXTURE_TRIPLE) and randf() < 0.35:
 					variant = 2
 		
-		# Store Mat ID in Bits 0-15 (Red/Green channels), Variant in Bits 24-31 (Alpha Channel)
-		# Bits 16-23 (Blue) are kept zero for Material ID - used to flag Visual Effects (Sparks) in shader
 		cells[idx] = (mat_id & 0xFFFF) | (variant << 24)
 		tags_array[idx] = tags
+		# CLEANUP GLOW: Prevent ghost colors when painting over old explosions
+		charge_array[idx] = 0
+		charge_visual_buffer[idx] = 0
 		_activate_chunk(x, y)
 		
 		if (tags & SandboxMaterial.Tags.ELECTRICITY): 
@@ -3488,16 +3500,15 @@ func _process_electricity():
 		
 		# Decay logic for energy carrying/reacting materials
 		if (material_tags_raw[mid] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
-			# STABLE COOLDOWN: Balance between music speed and loop prevention
-			# 100 -> 90 -> 80 -> ... -> 0 (10 frames of refractory period)
-			# This prevents the pulse from "turning back" and re-igniting the wire.
 			charge_array[idx] -= 10
 			if charge_array[idx] > 100: charge_array[idx] = 100
+			if charge_array[idx] < 0: charge_array[idx] = 0
+			charge_visual_buffer[idx] = clampi(charge_array[idx], 0, 255)
 			if charge_array[idx] > 0:
 				_register_charge(idx)
 				_activate_chunk(idx % grid_width, int(float(idx) / grid_width))
-		elif mid == 7: # TNT logic
-			charge_array[idx] -= 5
+		elif mid == 7 or mid == 71 or mid == 77 or mid == 72: # TNT/Primed logic
+			charge_array[idx] -= 1 
 			if charge_array[idx] > 0:
 				_register_charge(idx)
 				_activate_chunk(idx % grid_width, int(float(idx) / grid_width))
@@ -3536,14 +3547,18 @@ func _swap_cells(x1, y1, x2, y2):
 	var m2 = cells[idx2]
 	var c1 = charge_array[idx1]
 	var c2 = charge_array[idx2]
+	var cv1 = charge_visual_buffer[idx1]
+	var cv2 = charge_visual_buffer[idx2]
 	
 	cells[idx1] = m2
 	tags_array[idx1] = material_tags_raw[m2 & 0xFFFF]
 	charge_array[idx1] = c2
+	charge_visual_buffer[idx1] = cv2
 	
 	cells[idx2] = m1
 	tags_array[idx2] = material_tags_raw[m1 & 0xFFFF]
 	charge_array[idx2] = c1
+	charge_visual_buffer[idx2] = cv1
 	
 	if c1 > 0: _register_charge(idx2)
 	if c2 > 0: _register_charge(idx1)
@@ -3648,6 +3663,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 	if pure_id == 19: 
 		charge_array[idx] -= 1
 		if charge_array[idx] > 0: _register_charge(idx)
+		charge_visual_buffer[idx] = clampi(charge_array[idx], 0, 255) # For shader
 		if Engine.get_frames_drawn() % 4 == 0: _set_cell(x, y, 18)
 		elif Engine.get_frames_drawn() % 4 == 2: _set_cell(x, y, 19)
 		if charge_array[idx] <= 0: _launch_firework(x, y)
@@ -3655,7 +3671,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 	elif pure_id == 7 or pure_id == 77 or pure_id == 71 or pure_id == 72: 
 		var charge = charge_array[idx]
 		var timer = charge & 63
-		var flags = charge & 192
+		var flags = charge & 0xFFFFFFC0 # Use all high bits for stackable flags
 		var is_gunpowder = (pure_id == 71 or pure_id == 72)
 		var base_id = 77 if not is_gunpowder else 72
 		var prime_id = 7 if not is_gunpowder else 71
@@ -3666,6 +3682,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			return
 		
 		charge_array[idx] = flags | timer
+		charge_visual_buffer[idx] = clampi(timer * 4, 0, 255) # Prime glow
 		_register_charge(idx)
 		if Engine.get_frames_drawn() % 10 < 5: cells[idx] = (cells[idx] & 0xFFFF0000) | prime_id
 		else: cells[idx] = (cells[idx] & 0xFFFF0000) | base_id
@@ -4606,6 +4623,49 @@ func _place_npc(x, y):
 	active_npcs.append(new_npc)
 	_draw_npc_pixels(new_npc)
 
+func _spawn_explosion_npc(x, y, team = 0):
+	# Final Full-Structure Sync to ensure 100% compatibility with _process_npcs
+	if active_npcs.size() > 100: return null 
+	
+	var types = ["warrior", "archer", "miner", "medic", "bomber"]
+	var n_type = types[randi() % types.size()]
+	
+	var new_npc = {
+		"pos": Vector2i(x, y),
+		"team": team,
+		"dir": 1 if randf() > 0.5 else -1,
+		"type": n_type,
+		"hp": 100.0,
+		"max_hp": 100.0,
+		"atk_dmg": 1.0,
+		"knockback_mult": 1.0,
+		"precision": 0.0,
+		"cowardice": 0.3,
+		"heal_power": 25.0,
+		"attack_cooldown": 0.0,
+		"hit_flash": 0,
+		"hit_type": "none",
+		"dig_timer": 0.0,
+		"spawn_y": y,
+		"mine_state": "ramp",
+		"state_steps": 25,
+		"last_dig_time": 0,
+		"vx": 0.0,
+		"vy": 0.0,
+		"emoji_timer": 0.0,
+		"current_emoji": "",
+		"idle_emote_timer": 2.0,
+		"stuck_timer": 0.0,
+		"last_pos_x": x,
+		"fall_depth": 0,
+		"miss_counter": 0,
+		"is_fire_variant": false,
+		"has_spotted_enemy": false
+	}
+	active_npcs.append(new_npc)
+	_draw_npc_pixels(new_npc)
+	return new_npc
+
 
 func _draw_npc_pixels(npc, override_mat = -1):
 	var is_dead = npc.hp <= 0; var is_flashing = npc.hit_flash > 0
@@ -5344,11 +5404,17 @@ func _prime_explosive(x, y, id, manual_flags = -1):
 		if manual_flags != -1: ignition_flags = manual_flags
 	else:
 		# For Laboratory materials, we follow tags 100% for predictability
+		# Stackable explosions
 		if (m_tags & SandboxMaterial.Tags.EXP_ACID): ignition_flags |= 64
 		if (m_tags & SandboxMaterial.Tags.EXP_ELECTRIC): ignition_flags |= 128
+		if (m_tags & SandboxMaterial.Tags.EXP_WATER): ignition_flags |= 256
+		if (m_tags & SandboxMaterial.Tags.EXP_LAVA): ignition_flags |= 512
+		if (m_tags & SandboxMaterial.Tags.EXP_NPC): ignition_flags |= 1024
+		if (m_tags & SandboxMaterial.Tags.EXP_LIFE): ignition_flags |= 2048
 	
 	_set_cell(x, y, 7 if id == 5 else 71) 
 	charge_array[idx] = 40 | ignition_flags
+	charge_visual_buffer[idx] = 160 # Bright priming glow
 
 func _trigger_electric_devices(x, y):
 	for ny in range(y - 1, y + 2):
@@ -5391,8 +5457,14 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 						else:
 							# Trigger check: If I am electricity, neighbor MUST be ELECTRIC_ACTIVATED
 							var source_is_elec = (my_id == 9 or (my_tags & SandboxMaterial.Tags.ELECTRICITY))
+							var source_is_acid = (my_tags & SandboxMaterial.Tags.ACID)
+							
 							if not source_is_elec or (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
-								_prime_explosive(nx, ny, n_id)
+								# Pass the correct trigger type (128 for elec, 64 for acid) so TNT knows what effect to use
+								var t_flag = -1
+								if source_is_elec: t_flag = 128
+								elif source_is_acid: t_flag = 64
+								_prime_explosive(nx, ny, n_id, t_flag)
 				else:
 					if (n_tags & SandboxMaterial.Tags.CONDUCTOR) and charge_array[n_idx] == 0: charge_array[n_idx] = 101
 					elif (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
@@ -5457,38 +5529,80 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 				else:
 					var prob = 0.15 if is_heavy_load else 0.45
 					if randf() < prob: _push_particle(tx, ty, rx, ry)
+	# 1. ELECTRIC SPARK EFFECT (Bit 128)
 	if ignition_flags & 128:
-		for i in range(12 if is_heavy_load else 25):
-			var dist = randi_range(2, 5); var ang = randf() * TAU; var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
+		for i in range(15 if is_heavy_load else 30):
+			var dist = randi_range(2, 6); var ang = randf() * TAU; var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
 			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
 				if _get_cell(sx, sy) == 0:
-					_set_cell(sx, sy, 43); _activate_chunk(sx, sy)
+					_set_cell(sx, sy, 43); # Real Lightning Pixel
 					var deg = rad_to_deg(ang); if deg < 0: deg += 360
 					var dir_idx = int((deg + 22.5 + 90) / 45) % 8
 					var c_idx = sy * grid_width + sx
-					charge_array[c_idx] = (31 << 3) | dir_idx
+					# Launch with high energy
+					charge_array[c_idx] = (randi_range(60, 100) << 3) | dir_idx
 					_register_charge(c_idx)
 	
-	# 2. CORROSIVE DROPS EFFECT (If ACID BIT 64 is set)
+	# 2. CORROSIVE DROPS EFFECT (Bit 64)
 	if ignition_flags & 64:
 		var drop_count = 20 if is_heavy_load else 45
 		for i in range(drop_count):
-			var dist = randi_range(2, 7); var ang = randf() * TAU
+			var dist = randi_range(2, 8); var ang = randf() * TAU
+			var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
+			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
+				if _get_cell(sx, sy) == 0: 
+					_set_cell(sx, sy, 44); # Real Corrosive Projectile
+					var deg = rad_to_deg(ang); if deg < 0: deg += 360
+					var dir_idx = int((deg + 22.5 + 90) / 45) % 8
+					charge_array[sy * grid_width + sx] = (randi_range(30, 60) << 3) | dir_idx
+					_register_charge(sy * grid_width + sx)
+	
+	# 3. WATER DROPS EFFECT (Bit 256)
+	if ignition_flags & 256:
+		var drop_count = 50 if is_heavy_load else 120 # Much more water!
+		for i in range(drop_count):
+			var dist = randf_range(radius * 0.45, radius + 2); var ang = randf() * TAU
+			var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
+			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
+				if _get_cell(sx, sy) == 0: _set_cell(sx, sy, 2); _activate_chunk(sx, sy)
+
+	# 4. LAVA DROPS EFFECT (Bit 512)
+	if ignition_flags & 512:
+		var drop_count = 35 if is_heavy_load else 80 # Much more lava!
+		for i in range(drop_count):
+			var dist = randf_range(radius * 0.45, radius + 3); var ang = randf() * TAU
+			var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
+			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
+				if _get_cell(sx, sy) == 0: _set_cell(sx, sy, 11); _activate_chunk(sx, sy)
+				
+		# Add burning smoke for Lava explosions
+		for i in range(15):
+			var sx = x + randi_range(-radius, radius); var sy = y + randi_range(-radius, radius)
+			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
+				if _get_cell(sx, sy) == 0: _set_cell(sx, sy, 15)
+				
+	# 5. NPC SPASH (Bit 1024)
+	if ignition_flags & 1024:
+		var npc_total = 3 if is_heavy_load else 8
+		for i in range(npc_total):
+			var ang = randf() * TAU; var dist = randf_range(radius, radius + 5)
+			var nx = x + int(cos(ang) * dist); var ny = y + int(sin(ang) * dist)
+			if nx >= 0 and nx < grid_width and ny >= 0 and ny < dynamic_grid_height:
+				var npc = _spawn_explosion_npc(nx, ny, selected_team)
+				if npc: 
+					npc.vx = cos(ang) * 15.0; npc.vy = sin(ang) * 15.0 # Launch them away!
+
+	# 6. LIFE EXPLOSION (Bit 2048)
+	if ignition_flags & 2048:
+		for i in range(40 if is_heavy_load else 90):
+			var dist = randf_range(radius * 0.45, radius + 5); var ang = randf() * TAU
 			var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
 			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
 				if _get_cell(sx, sy) == 0:
-					_set_cell(sx, sy, 44) # Acid Projectile (Turns into ID 13 on hit)
-					_activate_chunk(sx, sy)
-					var deg = rad_to_deg(ang); if deg < 0: deg += 360
-					var dir_idx = int((deg + 22.5 + 90) / 45) % 8
-					charge_array[sy * grid_width + sx] = (randi_range(20, 31) << 3) | dir_idx
-		
-		# TOXIC SMOKE: Add clouds of corrosive gas
-		for i in range(12 if is_heavy_load else 25):
-			var dist = randi_range(1, radius - 2); var ang = randf() * TAU
-			var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
-			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
-				if _get_cell(sx, sy) == 0: _set_cell(sx, sy, 15)
+					var rand = randf()
+					if rand < 0.5: _set_cell(sx, sy, 6) # Fertile Soil
+					elif rand < 0.8: _set_cell(sx, sy, 22) # Plant Seeds/Grass
+					else: _set_cell(sx, sy, 2) # A bit of water for the plants
 
 func _push_particle(x, y, dx, dy):
 	var dir_x = sign(dx); var dir_y = -1 if dy < 0 else (1 if dy > 0 else 0)
@@ -5527,7 +5641,7 @@ func _update_texture():
 			img.set_pixel(fx, fy, fc) # Bright head
 			
 	# Update Charge Texture for Shader effects
-	charge_img.set_data(grid_width, grid_height, false, Image.FORMAT_L8, charge_array)
+	charge_img.set_data(grid_width, grid_height, false, Image.FORMAT_L8, charge_visual_buffer)
 	charge_tex.update(charge_img)
 	
 	texture_rect.texture.update(img)

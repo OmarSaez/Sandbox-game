@@ -49,9 +49,16 @@ enum Tags {
 	MIX_LOW = 1 << 27,        # ~15% secondary color
 	MIX_MEDIUM = 1 << 28,     # ~35% secondary color
 	MIX_HIGH = 1 << 29,       # ~50% secondary color
+	
 	# Music system
 	MUSIC = 1 << 30,
-	EXP_ACID = 1 << 31       # Produces acid drops on explosion
+	EXP_ACID = 1 << 31,       # Produces acid drops on explosion
+	
+	# --- EXTENDED TAGS (64-bit range) ---
+	EXP_WATER = 1 << 32,      # Produces water drops on explosion
+	EXP_LAVA = 1 << 33,       # Produces lava drops on explosion
+	EXP_NPC = 1 << 34,        # Produces random NPCs on explosion
+	EXP_LIFE = 1 << 35         # Produces plants/life on explosion
 }
 
 @export var name: String = "Material"
