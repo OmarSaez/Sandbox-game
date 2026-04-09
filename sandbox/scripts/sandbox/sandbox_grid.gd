@@ -1447,18 +1447,18 @@ func _setup_lab_ui():
 	lab_overlay.add_child(overlay_vbox)
 	
 	var title_overlay = Label.new()
-	title_overlay.text = "🧪 Laboratorio Experimental"
+	title_overlay.text = "🧪 Laboratorio de Creación"
 	title_overlay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_overlay.add_theme_font_override("font", _get_safe_font())
-	title_overlay.add_theme_font_size_override("font_size", 42* s)
-	title_overlay.add_theme_color_override("font_color", Color(0.9, 0.9, 1.0))
+	title_overlay.add_theme_font_size_override("font_size", 34 * s) # Slightly smaller to prevent decentering
+	title_overlay.add_theme_color_override("font_color", Color.YELLOW)
 	
 	var desc_overlay = Label.new()
-	desc_overlay.text = "Desbloquea la creación de elementos.\nAjusta el color, nombre, gravedad y reacciones con otros elementos.\n\nMira un anuncio para activarlo por 12 horas."
+	desc_overlay.text = "Desbloquea la creación de elementos.\nAjusta el color, nombre, gravedad y reacciones.\n\nMira un anuncio para activarlo por 12 horas."
 	desc_overlay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	desc_overlay.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc_overlay.add_theme_font_override("font", _get_safe_font())
-	desc_overlay.add_theme_font_size_override("font_size", 32 * s)
+	desc_overlay.add_theme_font_size_override("font_size", 25 * s) # Much more readable and centered
 	desc_overlay.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8))
 	
 	var text_vbox = VBoxContainer.new()
@@ -1467,8 +1467,8 @@ func _setup_lab_ui():
 	text_vbox.add_child(desc_overlay)
 	
 	var m_cont = MarginContainer.new()
-	m_cont.add_theme_constant_override("margin_left", 60 * s)
-	m_cont.add_theme_constant_override("margin_right", 60 * s)
+	m_cont.add_theme_constant_override("margin_left", 30 * s)
+	m_cont.add_theme_constant_override("margin_right", 30 * s)
 	m_cont.add_child(text_vbox)
 	
 	overlay_vbox.add_child(m_cont)
