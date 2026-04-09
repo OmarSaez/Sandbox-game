@@ -1760,30 +1760,58 @@ func _setup_lab_ui():
 	car_title.add_theme_font_size_override("font_size", 20 * s)
 	v_box.add_child(car_title)
 	
-	var tag_dict = {
-		"Electricidad": ["ELECTRICITY", "CONDUCTOR", "ELECTRIC_ACTIVATED"],
-		"Corrosión": ["ACID", "ANTI_ACID"],
-		"Combustión": ["BURN_SMOKE", "BURN_COAL", "BURN_NONE"],
-		"Plantas": ["FERTILE", "SEED", "PLANT"],
-		"Interacción Física/Química": ["FLAMMABLE", "INCENDIARY", "EXPLOSIVE", "ANTI_EXPLOSIVE"]
-	}
+	# --- SECCIÓN DE CARACTERÍSTICAS DINÁMICA ---
+	var tag_sections = [
+		{
+			"id": "interaction",
+			"name": tr("interaction_tags"), # "🛠️ Etiquetas de Interacción"
+			"tags": ["FLAMMABLE", "INCENDIARY", "EXPLOSIVE", "ANTI_EXPLOSIVE"]
+		},
+		{
+			"id": "combustion",
+			"name": tr("combustion"),       # "Combustión"
+			"parent": "FLAMMABLE",          # Solo aparece si esta etiqueta está activa
+			"radio": true,                  # Solo se puede elegir una
+			"tags": ["BURN_SMOKE", "BURN_COAL", "BURN_NONE"]
+		},
+		{
+			"id": "electricity",
+			"name": tr("electricity"),     # "Electricidad"
+			"tags": ["ELECTRICITY", "CONDUCTOR", "ELECTRIC_ACTIVATED"]
+		},
+		{
+			"id": "corrosion",
+			"name": tr("corrosion"),       # "Corrosión"
+			"tags": ["ACID", "ANTI_ACID"]
+		},
+		{
+			"id": "plants",
+			"name": tr("plants"),          # "Plantas"
+			"tags": ["FERTILE", "PLANT"]
+		}
+	]
 	
 	ui_elements["lab_tag_buttons"] = {}
+	ui_elements["lab_tag_sections"] = {} # Para ocultar/mostrar secciones enteras
 	
-	for category in tag_dict:
+	for section in tag_sections:
+		var sec_vbox = VBoxContainer.new()
+		ui_elements["lab_tag_sections"][section["id"]] = sec_vbox
+		v_box.add_child(sec_vbox)
+		
 		var cat_lbl = Label.new()
-		cat_lbl.text = category
+		cat_lbl.text = section["name"]
 		cat_lbl.add_theme_font_override("font", _get_safe_font())
 		cat_lbl.add_theme_font_size_override("font_size", 22 * s)
 		cat_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
-		v_box.add_child(cat_lbl)
+		sec_vbox.add_child(cat_lbl)
 		
 		var flow = HFlowContainer.new()
 		flow.add_theme_constant_override("h_separation", 10 * s)
 		flow.add_theme_constant_override("v_separation", 10 * s)
-		v_box.add_child(flow)
+		sec_vbox.add_child(flow)
 		
-		for tag in tag_dict[category]:
+		for tag in section["tags"]:
 			var tb = Button.new()
 			tb.text = tag
 			tb.toggle_mode = true
@@ -1808,10 +1836,19 @@ func _setup_lab_ui():
 			
 			tb.toggled.connect(func(pressed):
 				_play_action_sound("ui_click")
+				var current_data = lab_custom_data[lab_selected_slot]
+				
 				if pressed:
-					lab_custom_data[lab_selected_slot]["tags"][tag] = true
+					# Si es una sección Radio (Combustión), apagar las otras del mismo grupo
+					if section.get("radio", false):
+						for other_tag in section["tags"]:
+							if other_tag != tag: current_data["tags"].erase(other_tag)
+					
+					current_data["tags"][tag] = true
 				else:
-					lab_custom_data[lab_selected_slot]["tags"].erase(tag)
+					current_data["tags"].erase(tag)
+				
+				_update_lab_inspector()
 			)
 			flow.add_child(tb)
 			ui_elements["lab_tag_buttons"][tag] = tb
@@ -2031,7 +2068,7 @@ func _update_lab_inspector():
 			btn.button_pressed = (data["state"] == j)
 			btn.set_block_signals(false)
 				
-	# Update tag toggle buttons visibly
+	# Update tag toggle buttons visibly and handle conditional sections
 	if ui_elements.has("lab_tag_buttons"):
 		var current_tags = data["tags"]
 		for tag in ui_elements["lab_tag_buttons"]:
@@ -2039,6 +2076,18 @@ func _update_lab_inspector():
 			tb.set_block_signals(true)
 			tb.button_pressed = current_tags.has(tag)
 			tb.set_block_signals(false)
+		
+		# Dinámicamente ocultar/mostrar secciones basadas en dependencias (ej: Combustión solo si FLAMMABLE)
+		if ui_elements.has("lab_tag_sections"):
+			var sections_node = ui_elements["lab_tag_sections"]
+			if sections_node.has("combustion"):
+				var is_flammable = current_tags.has("FLAMMABLE")
+				sections_node["combustion"].visible = is_flammable
+				# Si deja de ser inflamable, limpiar automáticamente las etiquetas de combustión
+				if not is_flammable:
+					current_tags.erase("BURN_SMOKE")
+					current_tags.erase("BURN_COAL")
+					current_tags.erase("BURN_NONE")
 			
 	for i in range(3):
 		_apply_custom_material_to_engine(i)
