@@ -74,7 +74,8 @@ enum Tags {
 	VORTEX = 1 << 44,
 	EXP_GAS = 1 << 45,
 	EXP_QUAKE = 1 << 46,
-	EXP_PINATA = 1 << 47
+	EXP_PINATA = 1 << 47,
+	REPEL = 1 << 48
 }
 
 @export var name: String = "Material"

@@ -1829,7 +1829,7 @@ func _setup_lab_ui():
 		{
 			"id": "interaction",
 			"name": tr("interaction_tags"), # "🛠️ Etiquetas de Interacción"
-			"tags": ["FLAMMABLE", "INCENDIARY", "EXPLOSIVE", "ANTI_EXPLOSIVE", "VIRUS", "INVINCIBLE", "VORTEX"]
+			"tags": ["FLAMMABLE", "INCENDIARY", "EXPLOSIVE", "ANTI_EXPLOSIVE", "VIRUS", "INVINCIBLE", "VORTEX", "REPEL"]
 		},
 		{
 			"id": "exp_special",
@@ -3755,11 +3755,11 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				
 	# VORTEX LOGIC (Laboratory Exclusive - Black Hole Effect)
 	if (tags & SandboxMaterial.Tags.VORTEX):
-		# COLOSSAL ACTION: High chance to process 10 targets in a 40px radius
-		if randf() < 0.45:
+		# SUPER VORTEX: Higher frequency and density
+		if randf() < 0.65:
 			# 1. MATERIAL SUCTION & CONSUMPTION
-			for i in range(10): # High density suction
-				var dist = randi_range(1, 40)
+			for i in range(20): # Doubled suction density
+				var dist = randi_range(1, 45) # Wider reach
 				var ang = randf() * 6.28
 				var vx = x + int(cos(ang) * dist)
 				var vy = y + int(sin(ang) * dist)
@@ -3771,9 +3771,9 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					if vid > 0 and vid != pure_id and vid < 500:
 						var n_tags = material_tags_raw[vid]
 						if not (n_tags & SandboxMaterial.Tags.INVINCIBLE):
-							var dist_to_center = abs(x - vx) + abs(y - vy)
-							if dist_to_center <= 3:
-								# CONSUME: Event Horizon is now wider (3px)
+							var dist_to_center = (Vector2(x, y) - Vector2(vx, vy)).length()
+							if dist_to_center <= 6:
+								# MEGA CONSUME: Event Horizon is now double (6px)
 								_set_cell(vx, vy, 0)
 								if randf() < 0.1: _add_spark(float(vx), float(vy), 0, 0, Color.BLACK, 0.4)
 							elif not (n_tags & SandboxMaterial.Tags.GRAV_STATIC): # Move mobile things
@@ -3789,13 +3789,55 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 									_swap_cells(vx, vy, tx, ty)
 			
 			# 2. NPC PULL (Extreme drag)
-			var nearby_npcs = _get_nearby_npcs(x, y, 40.0)
+			var nearby_npcs = _get_nearby_npcs(x, y, 50.0)
 			for npc in nearby_npcs:
 				var pull_dir = Vector2(x - npc.pos.x, y - npc.pos.y).normalized()
-				npc.vx += pull_dir.x * 0.6
-				npc.vy += pull_dir.y * 0.6
+				npc.vx += pull_dir.x * 0.1 # Tripled pull force
+				npc.vy += pull_dir.y * 0.1
 				if (npc.pos.x - x)**2 + (npc.pos.y - y)**2 < 36: # High gravity crush
 					npc.hp -= 10.0 
+		
+	# REPEL LOGIC (Laboratory Exclusive - Fan/Wind effect)
+	if (tags & SandboxMaterial.Tags.REPEL):
+		if randf() < 0.6: # High reaction speed
+			# 1. MEGA MATERIAL REPULSION (Blast Away)
+			for i in range(15): # More processing points
+				var dist = randi_range(1, 30) # Wider impact zone
+				var ang = randf() * 6.28
+				var vx = x + int(cos(ang) * dist)
+				var vy = y + int(sin(ang) * dist)
+				
+				if vx >= 0 and vx < grid_width and vy >= 0 and vy < dynamic_grid_height:
+					if vx == x and vy == y: continue
+					var vid = _get_cell(vx, vy)
+					if vid > 0 and vid != pure_id and vid < 1000:
+						var n_tags = material_tags_raw[vid]
+						if not (n_tags & SandboxMaterial.Tags.GRAV_STATIC):
+							# TELEPORT PUSH: Move items multiple pixels at once for high-velocity feel
+							var dx = sign(vx - x) * randi_range(2, 6)
+							var dy = sign(vy - y) * randi_range(1, 4)
+							if dy == 0: dy = -1 # Add constant "lift" to send things flying
+							
+							var tx = vx + dx; var ty = vy + dy
+							if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+								if _get_cell(tx, ty) == 0:
+									_swap_cells(vx, vy, tx, ty)
+									# Occasional visual pressure sparks
+									if randf() < 0.05: _add_spark(float(vx), float(vy), float(dx), float(dy), Color.WHITE, 0.4)
+			
+			# 2. NPC PUSH
+			var nearby_npcs = _get_nearby_npcs(x, y, 40.0)
+			for npc in nearby_npcs:
+				var diff = Vector2(npc.pos.x - x, npc.pos.y - y)
+				var d_sq = diff.length_squared()
+				if d_sq < 9.0: d_sq = 9.0 # Cap max force
+				var push_dir = diff.normalized()
+				
+				# MEGA FORCE: Violent propulsion
+				var force = 35.0 / sqrt(d_sq)
+				npc.vx += push_dir.x * force * 1.5
+				npc.vy += (push_dir.y * force) - 3.5 # Massive upward lift
+				if randf() < 0.1: npc.hp -= 1.0 # Kinetic impact damage
 		
 	# FIRE AND HEAT REACTIONS
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
