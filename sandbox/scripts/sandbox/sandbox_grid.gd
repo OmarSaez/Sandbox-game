@@ -2962,7 +2962,11 @@ func _process(delta):
 	# Simulation
 	if not is_paused:
 		_handle_controlled_npc_input(delta) # Handle player control
-		_update_npc_spatial_hash()
+		
+		# OPTIMIZATION: Update spatial hash every 2 frames
+		if _frame_count % 2 == 0:
+			_update_npc_spatial_hash()
+			
 		_step_simulation()
 		
 		# NPC AI & Physics
@@ -3008,7 +3012,8 @@ func save_history_state():
 	
 	if history_buffer.size() > 0:
 		var last = history_buffer.back()
-		# Quick check: if cells first/mid/last are same, it's likely same (for speed)
+		# HIGH-PERFORMANCE CHANGE DETECTION
+		# Only save if the actual grid cells have changed
 		if last.cells == current_snapshot.cells:
 			return
 
@@ -5982,12 +5987,17 @@ func _add_spark(px, py, p_vx, p_vy, p_color, p_life):
 	vs_ptr = (vs_ptr + 1) % MAX_VISUAL_SPARKS
 
 func _update_visual_sparks(delta):
+	# OPTIMIZATION: Process only active sparks with cached life
 	for i in range(MAX_VISUAL_SPARKS):
-		if vs_life[i] <= 0: continue
+		var l = vs_life[i]
+		if l <= 0: continue
+		
 		vs_x[i] += vs_vx[i] * delta
 		vs_y[i] += vs_vy[i] * delta
 		vs_vy[i] += 30.0 * delta
-		vs_life[i] -= 1.3 * delta
+		
+		l -= 1.3 * delta
+		vs_life[i] = l
 
 func _explode_firework(ex, ey, p_color):
 	_play_action_sound("firework_burst")
