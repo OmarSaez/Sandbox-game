@@ -1059,10 +1059,10 @@ func _setup_tools_ui():
 	ui_root.add_child(tools_panel)
 	
 	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.1, 0.1, 0.15, 0.95) # Near opaque dark blue-grey
-	panel_style.border_width_left = 2; panel_style.border_width_top = 2
-	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
-	panel_style.border_color = Color(0.4, 0.4, 0.5)
+	panel_style.bg_color = Color(0.1, 0.1, 0.15, 0.98) # Original "Tools" blue-grey personality
+	panel_style.border_width_left = 3; panel_style.border_width_top = 3
+	panel_style.border_width_right = 3; panel_style.border_width_bottom = 3
+	panel_style.border_color = Color(0.4, 0.4, 0.5) # Original border blue-grey
 	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
 	tools_panel.add_theme_stylebox_override("panel", panel_style)
 	tools_panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -1075,6 +1075,7 @@ func _setup_tools_ui():
 	tools_panel.anchor_top = 1.0
 	tools_panel.anchor_bottom = 1.0
 	
+	#Tools_panel
 	var panel_width = 530 * s
 	var panel_height = 650 * s
 	var h = 340 # Match the Fixed Tall HUD height
@@ -1126,14 +1127,17 @@ func _setup_tools_ui():
 	
 	var create_row = func(label_key: String, options: Array, callback: Callable, is_upcoming: bool = false):
 		var lbl = Label.new()
-		lbl.text = tr(label_key) + ": "
+		lbl.text = tr(label_key) + ":"
 		lbl.add_theme_font_size_override("font_size", 22.0 * s)
 		lbl.add_theme_font_override("font", _get_safe_font())
+		lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9)) # Modern light grey-blue
 		ui_elements[label_key + "_lbl"] = lbl
 		v_box.add_child(lbl)
 		
 		var flow = HFlowContainer.new()
 		flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		flow.add_theme_constant_override("h_separation", 8 * s)
+		flow.add_theme_constant_override("v_separation", 8 * s)
 		v_box.add_child(flow)
 		
 		if is_upcoming:
@@ -1147,6 +1151,19 @@ func _setup_tools_ui():
 			btn.add_theme_font_size_override("font_size", 20.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
 			btn.mouse_filter = Control.MOUSE_FILTER_PASS
+			
+			# PREMIUM BASE STYLE
+			var b_style = StyleBoxFlat.new()
+			b_style.bg_color = Color(0.12, 0.12, 0.15, 0.8)
+			b_style.border_width_left = 1; b_style.border_width_top = 1
+			b_style.border_width_right = 1; b_style.border_width_bottom = 1
+			b_style.border_color = Color(0.3, 0.3, 0.4)
+			b_style.corner_radius_top_left = 10 * s; b_style.corner_radius_top_right = 10 * s
+			b_style.corner_radius_bottom_left = 10 * s; b_style.corner_radius_bottom_right = 10 * s
+			btn.add_theme_stylebox_override("normal", b_style)
+			btn.add_theme_stylebox_override("hover", b_style)
+			btn.add_theme_stylebox_override("pressed", b_style)
+			btn.set_meta("base_style", b_style)
 			
 			if is_upcoming:
 				btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1196,39 +1213,53 @@ func _setup_tools_ui():
 		_on_arcade_selection_made(true) # Real-time update for Arcade HUD (don't close menu)
 	)
 
-	# NEW: ACTION ROW (Undo, Redo, Eraser, Save)
+	# SEPARATOR FOR ACTIONS
+	var sep = HSeparator.new()
+	sep.custom_minimum_size = Vector2(0, 15 * s)
+	v_box.add_child(sep)
+	
+	# ACTION ROW (Undo, Redo, Eraser, Save)
 	var func_lbl = Label.new()
-	func_lbl.text = tr("func") + ":"
+	func_lbl.text = tr("func")
 	func_lbl.add_theme_font_size_override("font_size", 22 * s)
 	func_lbl.add_theme_font_override("font", _get_safe_font())
+	func_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0)) # Soft blue
 	v_box.add_child(func_lbl)
 	ui_elements["func_lbl"] = func_lbl
 
-	var action_row = HBoxContainer.new()
-	action_row.add_theme_constant_override("separation", 10 * s)
+	var action_row = GridContainer.new()
+	action_row.columns = 2
+	action_row.add_theme_constant_override("h_separation", 10 * s)
+	action_row.add_theme_constant_override("v_separation", 10 * s)
 	action_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v_box.add_child(action_row)
 
-	var create_action_btn = func(text_key: String, _color: Color, callback: Callable):
+	var create_action_btn = func(text_key: String, accent_color: Color, callback: Callable):
 		var btn = Button.new()
 		btn.text = tr(text_key)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.custom_minimum_size = Vector2(0, 50 * s)
+		btn.custom_minimum_size = Vector2(0, 60 * s)
 		btn.add_theme_font_override("font", _get_safe_font())
-		btn.add_theme_font_size_override("font_size", 20 * s)
+		btn.add_theme_font_size_override("font_size", 21 * s)
 		
-		# BASE STYLE (Matching row buttons like lang/size)
+		# PREMIUM STYLE
 		var style = StyleBoxFlat.new()
-		style.bg_color = Color(0.1, 0.1, 0.1, 0.8) # Consistent dark theme
-		style.border_width_left = 1; style.border_width_top = 1
-		style.border_width_right = 1; style.border_width_bottom = 1
-		style.border_color = Color(0.25, 0.25, 0.3)
-		style.set_corner_radius_all(5 * s)
+		style.bg_color = Color(0.15, 0.15, 0.18, 0.9)
+		style.border_width_left = 2; style.border_width_top = 2
+		style.border_width_right = 2; style.border_width_bottom = 2
+		style.border_color = accent_color.lerp(Color.BLACK, 0.3) # Subtle darkened accent
+		style.corner_radius_top_left = 12 * s
+		style.corner_radius_top_right = 12 * s
+		style.corner_radius_bottom_left = 12 * s
+		style.corner_radius_bottom_right = 12 * s
 		btn.add_theme_stylebox_override("normal", style)
+		btn.set_meta("base_style", style)
 		
 		var hover = style.duplicate()
-		hover.bg_color = Color(0.2, 0.2, 0.25, 0.9)
+		hover.bg_color = accent_color.lerp(Color.BLACK, 0.7) # Dark tint on hover
+		hover.border_color = accent_color # Brighter border on hover
 		btn.add_theme_stylebox_override("hover", hover)
+		btn.add_theme_stylebox_override("pressed", hover)
 		
 		btn.pressed.connect(func():
 			_play_action_sound("ui_click")
@@ -1238,16 +1269,16 @@ func _setup_tools_ui():
 		ui_elements[text_key + "_btn"] = btn # Register for highlights
 		return btn
 
-	create_action_btn.call("undo", Color.ORANGE, func(): undo_history())
-	create_action_btn.call("redo", Color.SKY_BLUE, func(): redo_history())
-	create_action_btn.call("eraser_tool", Color.GRAY, func(): 
+	create_action_btn.call("undo", Color("#ff9f43"), func(): undo_history())
+	create_action_btn.call("redo", Color("#48dbfb"), func(): redo_history())
+	create_action_btn.call("eraser_tool", Color("#ff6b6b"), func(): 
 		selected_material = 0
 		brush_radius = 3 
 		_update_material_highlights()
 		_update_menu_highlights()
 		_on_arcade_selection_made(true)
 	)
-	create_action_btn.call("save_btn_ui", Color.GOLD, func(): 
+	create_action_btn.call("save_btn_ui", Color("#feca57"), func(): 
 		if is_instance_valid(save_panel):
 			save_panel.queue_free()
 		else:
@@ -1262,12 +1293,12 @@ func _setup_tools_ui():
 	support_btn.add_theme_font_override("font", _get_safe_font())
 	
 	var support_style = StyleBoxFlat.new()
-	support_style.bg_color = Color(0.2, 0.4, 0.2, 1.0) # Nice Emerald Green
+	support_style.bg_color = Color(0.1, 0.35, 0.2, 0.9) # Elegant dark emerald
 	support_style.border_width_left = 2; support_style.border_width_top = 2
 	support_style.border_width_right = 2; support_style.border_width_bottom = 2
-	support_style.border_color = Color.GOLD
-	support_style.corner_radius_top_left = 30; support_style.corner_radius_top_right = 30
-	support_style.corner_radius_bottom_left = 30; support_style.corner_radius_bottom_right = 30
+	support_style.border_color = Color(0.3, 0.6, 0.4)
+	support_style.corner_radius_top_left = 12 * s; support_style.corner_radius_top_right = 12 * s
+	support_style.corner_radius_bottom_left = 12 * s; support_style.corner_radius_bottom_right = 12 * s
 	
 	support_btn.add_theme_stylebox_override("normal", support_style)
 	support_btn.add_theme_stylebox_override("hover", support_style)
@@ -2362,12 +2393,24 @@ func _setup_disaster_ui():
 		for i in range(options.size()):
 			var osk = options[i]
 			var btn = Button.new()
-			# Try to translate if it's a key, otherwise use as string
 			btn.text = tr(osk)
 			btn.custom_minimum_size = Vector2(80.0 * s, 45.0 * s)
 			btn.add_theme_font_size_override("font_size", 20.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
 			btn.mouse_filter = Control.MOUSE_FILTER_PASS
+			
+			# PREMIUM BASE STYLE
+			var b_style = StyleBoxFlat.new()
+			b_style.bg_color = Color(0.12, 0.12, 0.15, 0.8)
+			b_style.border_width_left = 1; b_style.border_width_top = 1
+			b_style.border_width_right = 1; b_style.border_width_bottom = 1
+			b_style.border_color = Color(0.3, 0.3, 0.4)
+			b_style.corner_radius_top_left = 10 * s; b_style.corner_radius_top_right = 10 * s
+			b_style.corner_radius_bottom_left = 10 * s; b_style.corner_radius_bottom_right = 10 * s
+			btn.add_theme_stylebox_override("normal", b_style)
+			btn.add_theme_stylebox_override("hover", b_style)
+			btn.add_theme_stylebox_override("pressed", b_style)
+			btn.set_meta("base_style", b_style)
 			
 			if is_upcoming:
 				btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2609,6 +2652,7 @@ func _update_material_highlights():
 			label.remove_theme_color_override("font_color")
 
 func _update_menu_highlights():
+	var s = _get_ui_scale()
 	# Update Tool/Disaster/NPC Highlights (Buttons)
 	for key in ui_elements:
 		var node_data = ui_elements[key]
@@ -2659,17 +2703,24 @@ func _update_menu_highlights():
 					is_active = not is_selecting_npc_to_control and not is_instance_valid(controlled_npc)
 				
 				if is_active:
-					if not btn.has_theme_color_override("font_color"):
-						btn.add_theme_color_override("font_color", Color.YELLOW)
-						var highlight_style = StyleBoxFlat.new()
-						highlight_style.bg_color = Color(0.3, 0.3, 0.4)
-						highlight_style.border_width_bottom = 3
-						highlight_style.border_color = Color.SKY_BLUE
-						btn.add_theme_stylebox_override("normal", highlight_style)
+					# PREMIUM ACTIVE HIGHLIGHT (Solid Background matching Lab)
+					var highlight_style = StyleBoxFlat.new()
+					highlight_style.bg_color = Color(0.2, 0.5, 1.0) # Lab Blue
+					highlight_style.set_corner_radius_all(10 * s)
+					highlight_style.border_width_bottom = 4 * s
+					highlight_style.border_color = Color(0.5, 0.8, 1.0) # Light blue accent
+					btn.add_theme_stylebox_override("normal", highlight_style)
+					btn.add_theme_stylebox_override("hover", highlight_style)
+					btn.add_theme_stylebox_override("pressed", highlight_style)
+					btn.add_theme_color_override("font_color", Color.WHITE)
 				else:
+					if btn.has_meta("base_style"):
+						btn.add_theme_stylebox_override("normal", btn.get_meta("base_style"))
+						btn.add_theme_stylebox_override("hover", btn.get_meta("base_style"))
+						btn.add_theme_stylebox_override("pressed", btn.get_meta("base_style"))
+					
 					if btn.has_theme_color_override("font_color"):
 						btn.remove_theme_color_override("font_color")
-						btn.remove_theme_stylebox_override("normal")
 
 func _is_any_ui_blocking() -> bool:
 	if is_blocking: return true # GLOBAL MODAL BLOCKER
@@ -3042,6 +3093,7 @@ func _process_tsunami(delta):
 	if tsunami_timer <= 0:
 		tsunami_intensity = 0
 		if tsunami_player.playing: tsunami_player.stop()
+		_update_menu_highlights()
 		return
 	
 	tsunami_timer -= delta
@@ -3050,6 +3102,7 @@ func _process_tsunami(delta):
 	tsunami_wave_x += (grid_width / 5.0) * delta * 5.0
 	if tsunami_wave_x > grid_width + 150:
 		tsunami_intensity = 0 # STOP AFTER ONE PASS
+		_update_menu_highlights()
 		return
 	
 	# Wave Configuration Constants (HALF POWER)
@@ -3109,6 +3162,7 @@ func _process_tornado(delta):
 	if tornado_timer <= 0:
 		tornado_intensity = 0
 		if tornado_player.playing: tornado_player.stop()
+		_update_menu_highlights()
 		return
 	
 	tornado_timer -= delta
@@ -3195,6 +3249,7 @@ func _process_earthquake(delta):
 			texture_rect.position = Vector2.ZERO
 		earthquake_intensity = 0
 		if quake_player.playing: quake_player.stop()
+		_update_menu_highlights()
 		return
 	
 	earthquake_timer -= delta
@@ -4559,24 +4614,33 @@ func _setup_npc_ui():
 		
 		ui_root = get_parent().get_node("UI")
 		
+		# PREMIUM BASE STYLE FOR NPC
+		var n_base = StyleBoxFlat.new()
+		n_base.bg_color = Color(0.1, 0.15, 0.1, 0.8) # Subtle green-grey
+		n_base.border_width_left = 1; n_base.border_width_top = 1
+		n_base.border_width_right = 1; n_base.border_width_bottom = 1
+		n_base.border_color = Color(0.3, 0.4, 0.3)
+		n_base.set_corner_radius_all(10 * s)
+		
 		# Button: ACTIVE
 		var active_btn = Button.new()
 		active_btn.text = tr("active")
 		active_btn.custom_minimum_size = Vector2(100 * s, 45 * s)
 		active_btn.add_theme_font_override("font", _get_safe_font())
 		active_btn.add_theme_font_size_override("font_size", 20 * s)
+		active_btn.add_theme_stylebox_override("normal", n_base)
+		active_btn.set_meta("base_style", n_base)
 		active_btn.pressed.connect(func():
 			_play_action_sound("ui_click")
-			if not is_selecting_npc_to_control and not is_instance_valid(controlled_npc):
+			if not is_instance_valid(controlled_npc):
 				is_selecting_npc_to_control = true
 				selected_material = 0 
 				_update_material_highlights()
 			_update_menu_highlights()
-			_on_arcade_selection_made(true) # Update button but don't close
+			_on_arcade_selection_made(true)
 		)
 		control_flow.add_child(active_btn)
 		ui_elements["control_active_btn"] = active_btn
-		ui_root.set_meta("npc_control_active_btn_ref", active_btn)
 		
 		# Button: DISABLED
 		var disabled_btn = Button.new()
@@ -4584,6 +4648,8 @@ func _setup_npc_ui():
 		disabled_btn.custom_minimum_size = Vector2(120 * s, 45 * s)
 		disabled_btn.add_theme_font_override("font", _get_safe_font())
 		disabled_btn.add_theme_font_size_override("font_size", 20 * s)
+		disabled_btn.add_theme_stylebox_override("normal", n_base)
+		disabled_btn.set_meta("base_style", n_base)
 		disabled_btn.pressed.connect(func():
 			_play_action_sound("ui_click")
 			_stop_controlling_npc()
@@ -4592,7 +4658,6 @@ func _setup_npc_ui():
 		)
 		control_flow.add_child(disabled_btn)
 		ui_elements["control_disabled_btn"] = disabled_btn
-		ui_root.set_meta("npc_control_disabled_btn_ref", disabled_btn)
 		
 		# ----------------------------------------------------
 
@@ -4613,15 +4678,15 @@ func _setup_npc_ui():
 			btn.add_theme_font_override("font", _get_safe_font())
 			btn.add_theme_font_size_override("font_size", 20 * s)
 			btn.mouse_filter = Control.MOUSE_FILTER_PASS
+			btn.add_theme_stylebox_override("normal", n_base)
+			btn.set_meta("base_style", n_base)
 			btn.pressed.connect(func():
 				_play_action_sound("ui_click")
 				selected_material = id # Master Warrior Material
-				# CANCEL possession mode ONLY IF we haven't started controlling yet
 				if not is_instance_valid(controlled_npc):
 					is_selecting_npc_to_control = false
 				_update_material_highlights()
 				_update_menu_highlights()
-				# FORCE SWAP BACK TO ARCADE
 				_on_arcade_selection_made(false)
 			)
 			ui_elements[key + "_btn"] = btn
@@ -4651,12 +4716,14 @@ func _setup_npc_ui():
 			t_btn.add_theme_font_size_override("font_size", 20 * s)
 			t_btn.add_theme_font_override("font", _get_safe_font())
 			t_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+			t_btn.add_theme_stylebox_override("normal", n_base)
+			t_btn.set_meta("base_style", n_base)
 			var tidx = i
 			t_btn.pressed.connect(func():
 				_play_action_sound("ui_click")
 				selected_team = tidx
 				_update_menu_highlights()
-				_on_arcade_selection_made(true) # Real-time update for Arcade HUD (stay in menu)
+				_on_arcade_selection_made(true)
 			)
 			ui_elements["team_btn_" + str(i)] = t_btn
 			team_flow.add_child(t_btn)
@@ -6210,7 +6277,7 @@ func _setup_music_ui(force_refresh: bool = false):
 	
 	# Title
 	var title = Label.new()
-	title.text = "🎹 " + tr("music")
+	title.text = tr("music")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_override("font", _get_safe_font())
 	title.add_theme_font_size_override("font_size", 34 * s) # Bigger title
@@ -6381,7 +6448,7 @@ func _setup_music_button():
 	var s = _get_ui_scale()
 	var btn = Button.new()
 	btn.name = "MusicBtn"
-	btn.text = "🎹 " + tr("music")
+	btn.text = tr("music")
 	btn.add_theme_font_override("font", _get_safe_font())
 	
 	# Calculation for 4 buttons height
