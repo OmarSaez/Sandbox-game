@@ -239,6 +239,7 @@ var is_fire_active = false
 var is_npc_mode_menu_open: bool = false
 var _frame_count = 0
 var _npc_id_counter = 0
+var active_metronome_indices = {} # Using Dictionary as a Set [index] -> true
 
 var sfx_cache = {} # Cache for loaded AudioStreams
 
@@ -2939,12 +2940,6 @@ func _process(delta):
 							var note = (selected_material - MUSIC_ID_START) % 16
 							_play_music_note(inst, note)
 					
-					# 5. METRONOME (ID 600): Auto-pulse every ~30 frames if active (Self-activation)
-					if selected_material == 600:
-						# Metronomes only pulse on specific intervals
-						if (Engine.get_frames_drawn() % 30 == 0):
-							# We don't do anything here, we just use the frame count to determine pulse
-							pass
 				_manage_brush_sound(-1)
 			else:
 				_manage_brush_sound(selected_material)
@@ -3388,18 +3383,21 @@ func _set_cell(x, y, mat_id):
 				if (tags & SandboxMaterial.Tags.TEXTURE_TRIPLE) and randf() < 0.35:
 					variant = 2
 		
+		# TRACK METRONOME REGISTRY
+		var old_id = cells[idx] & 0xFFFF
+		if old_id == 600: active_metronome_indices.erase(idx)
+		if pure_id == 600: active_metronome_indices[idx] = true
+
 		cells[idx] = (mat_id & 0xFFFF) | (variant << 24)
 		tags_array[idx] = tags
 		# CLEANUP GLOW: Prevent ghost colors when painting over old explosions
 		charge_array[idx] = 0
 		charge_visual_buffer[idx] = 0
 		_activate_chunk(x, y)
-		
+
 		if (tags & SandboxMaterial.Tags.ELECTRICITY): 
 			charge_array[idx] = 101
 			_register_charge(idx)
-		else: 
-			charge_array[idx] = 0
 
 func _activate_chunk(gx, gy):
 	var cx = int(gx / CHUNK_SIZE)
@@ -3425,8 +3423,15 @@ func _step_simulation():
 	is_volcano_active = false
 	is_fire_active = false
 	
-	# PASS 0: RESET FRAME COUNTERS
+	# Pass 0: RESET FRAME COUNTERS
 	explosions_this_frame = 0
+	
+	# Pass 0.1: METRONOME GLOBAL PULSE
+	if _frame_count % music_tempo_frames == 0:
+		for idx in active_metronome_indices:
+			charge_array[idx] = 101
+			_register_charge(idx)
+			_activate_chunk(idx % grid_width, int(idx / grid_width))
 	
 	# Update active chunk countdowns
 	chunks_active = next_chunks_active.duplicate()
@@ -3552,10 +3557,10 @@ func _process_electricity():
 	for idx in active_charge_indices:
 		var charge = charge_array[idx]
 		if charge == 0: continue
-		
 		var mid = cells[idx] & 0xFFFF
+		
 		if mid == 7 or mid == 77 or mid == 71 or mid == 72:
-			_register_charge(idx) # Keep timer alive
+			_register_charge(idx) 
 			continue
 		
 		if (mid == 5 or mid == 20) and charge < 101: 
@@ -3603,12 +3608,12 @@ func _process_electricity():
 							charge_array[n_idx] = 101
 							_register_charge(n_idx)
 							_activate_chunk(nx, ny)
-		
 		# Decay logic for energy carrying/reacting materials
 		if (material_tags_raw[mid] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
 			charge_array[idx] -= 10
 			if charge_array[idx] > 100: charge_array[idx] = 100
 			if charge_array[idx] < 0: charge_array[idx] = 0
+			
 			charge_visual_buffer[idx] = clampi(charge_array[idx], 0, 255)
 			if charge_array[idx] > 0:
 				_register_charge(idx)
@@ -6350,31 +6355,60 @@ func _setup_music_ui(force_refresh: bool = false):
 		main_vbox.add_child(metro_vbox)
 		
 		var bpm_val = int(3600.0 / float(music_tempo_frames))
-		var bpm_label = Label.new()
-		bpm_label.text = str(bpm_val) + " BPM"
-		bpm_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		bpm_label.add_theme_font_override("font", _get_safe_font())
-		bpm_label.add_theme_font_size_override("font_size", 54 * s) # Much bigger BPM
-		metro_vbox.add_child(bpm_label)
+		
+		# EDITABLE BPM INPUT (Looks like a big label)
+		var bpm_edit = LineEdit.new()
+		bpm_edit.text = str(bpm_val)
+		bpm_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		bpm_edit.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+		bpm_edit.context_menu_enabled = false
+		bpm_edit.add_theme_font_override("font", _get_safe_font())
+		bpm_edit.add_theme_font_size_override("font_size", 54 * s)
+		
+		# Stylized Edit Box
+		var edit_style = StyleBoxFlat.new()
+		edit_style.bg_color = Color(0,0,0,0.2) # Very subtle dark backing
+		edit_style.set_corner_radius_all(10 * s)
+		bpm_edit.add_theme_stylebox_override("normal", edit_style)
+		bpm_edit.add_theme_stylebox_override("focus", edit_style)
+		metro_vbox.add_child(bpm_edit)
 		
 		var bpm_slider = HSlider.new()
-		bpm_slider.min_value = 40
+		bpm_slider.min_value = 1
 		bpm_slider.max_value = 240
 		bpm_slider.value = bpm_val
 		bpm_slider.custom_minimum_size = Vector2(400 * s, 60 * s)
 		bpm_slider.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		
+		# SYNC Slider -> Input
 		bpm_slider.value_changed.connect(func(val):
 			music_tempo_frames = int(3600.0 / float(val))
-			bpm_label.text = str(val) + " BPM"
+			bpm_edit.text = str(int(val))
 		)
+		
+		# SYNC Input -> Slider + Validation
+		bpm_edit.text_changed.connect(func(new_text):
+			# Filter: only allow numbers
+			var filtered = ""
+			for c in new_text:
+				if c in "0123456789": filtered += c
+			if filtered != new_text: bpm_edit.text = filtered; bpm_edit.caret_column = filtered.length()
+			
+			if filtered.length() > 0:
+				var val = clampi(int(filtered), 1, 240)
+				music_tempo_frames = int(3600.0 / float(val))
+				bpm_slider.value = val # Sync slider
+		)
+		
 		metro_vbox.add_child(bpm_slider)
 		
 		var info = Label.new()
 		info.text = tr("metronome_info")
 		info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		info.add_theme_font_override("font", _get_safe_font())
-		info.add_theme_font_size_override("font_size", 14 * s)
-		info.add_theme_color_override("font_color", Color.GRAY)
+		info.add_theme_font_size_override("font_size", 22 * s) # BIGGER INFO
+		info.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8)) # Lighter grey-blue
 		metro_vbox.add_child(info)
 		
 	else: # PIANO/DRUMS VIEW
