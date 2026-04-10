@@ -237,6 +237,8 @@ var last_action_times = {} # Para controlar la saturación de sonidos
 var is_volcano_active = false 
 var is_fire_active = false 
 var is_npc_mode_menu_open: bool = false
+var _frame_count = 0
+var _npc_id_counter = 0
 
 var sfx_cache = {} # Cache for loaded AudioStreams
 
@@ -579,6 +581,7 @@ func _ready():
 	texture_rect.show_behind_parent = true # Emojis are drawn in SandboxGrid._draw(), so Display MUST be behind it
 	charge_tex = ImageTexture.create_from_image(charge_img)
 
+	# Initialize UI
 	_setup_main_ui_containers()
 	
 	# FORCE START HIDDEN
@@ -2823,6 +2826,7 @@ func _play_action_sound(action: String, min_interval: float = 0.08):
 		_play_sfx(action_sfx[action])
 
 func _process(delta):
+	_frame_count += 1
 	if is_instance_valid(lab_panel) and lab_panel.visible:
 		var now = int(Time.get_unix_time_from_system())
 		var left = lab_unlock_expiry_unix - now
@@ -4814,8 +4818,10 @@ func _place_npc(x, y):
 		"idle_emote_timer": randf_range(2.0, 5.0),
 		"has_spotted_enemy": false,
 		"stuck_timer": 0.0, 
-		"last_pos_x": start_x 
+		"last_pos_x": start_x,
+		"id": _npc_id_counter
 	}
+	_npc_id_counter += 1
 	
 	new_npc["max_hp"] = new_npc["hp"]
 	active_npcs.append(new_npc)
@@ -4858,8 +4864,10 @@ func _spawn_explosion_npc(x, y, team = 0):
 		"fall_depth": 0,
 		"miss_counter": 0,
 		"is_fire_variant": false,
-		"has_spotted_enemy": false
+		"has_spotted_enemy": false,
+		"id": _npc_id_counter
 	}
+	_npc_id_counter += 1
 	active_npcs.append(new_npc)
 	_draw_npc_pixels(new_npc)
 	return new_npc
@@ -5038,18 +5046,35 @@ func _process_npcs(delta):
 			# Update common timers
 			if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
 			
+			# OPTIMIZATION: Staggered AI Logic (Only update heavy checks once every 6 frames)
+			var can_think = (npc.id % 6 == _frame_count % 6)
+			
 			# AUTONOMOUS AI LOGIC (Skip if controlled)
 			if npc != controlled_npc:
 				if npc.type == "medic":
 					var heal_cd = npc.attack_cooldown
-					var closest_enemy = _find_closest_enemy(npc, 180.0); var closest_ally = null; var ally_dist = 999.0
-					var nearby = _get_nearby_npcs(npc.pos.x, npc.pos.y, 180.0)
-					for other in nearby:
-						if other.team == npc.team and other != npc and other.hp > 0 and other.type != "medic":
-							var mhp = other.get("max_hp", 100.0)
-							if other.hp < mhp: 
-								var d = npc.pos.distance_to(other.pos)
-								if d < ally_dist: ally_dist = d; closest_ally = other
+					var closest_enemy = null
+					var closest_ally = null
+					var ally_dist = 999.0
+					
+					if can_think:
+						closest_enemy = _find_closest_enemy(npc, 180.0)
+						var nearby = _get_nearby_npcs(npc.pos.x, npc.pos.y, 180.0)
+						for other in nearby:
+							if other.team == npc.team and other != npc and other.hp > 0 and other.type != "medic":
+								var mhp = other.get("max_hp", 100.0)
+								if other.hp < mhp: 
+									var d = npc.pos.distance_to(other.pos)
+									if d < ally_dist: ally_dist = d; closest_ally = other
+						# Store results to avoid recalculating every frame
+						npc["cached_closest_enemy"] = closest_enemy
+						npc["cached_closest_ally"] = closest_ally
+						npc["cached_ally_dist"] = ally_dist
+					else:
+						closest_enemy = npc.get("cached_closest_enemy", null)
+						closest_ally = npc.get("cached_closest_ally", null)
+						ally_dist = npc.get("cached_ally_dist", 999.0)
+						
 					var medic_critical = npc.hp < (npc.get("max_hp", 100.0) * 0.5)
 					var enemy_very_close = closest_enemy and npc.pos.distance_to(closest_enemy.pos) < 120.0
 					if (medic_critical and enemy_very_close) or (enemy_very_close and not closest_ally):
@@ -5072,7 +5097,12 @@ func _process_npcs(delta):
 							if randf() < 0.02: npc.dir = 1 if randf() > 0.5 else -1
 							if npc.dir == 0: npc.dir = 1 if randf() > 0.5 else -1
 				elif npc.type != "miner":
-					target = _find_closest_enemy(npc, 250.0)
+					if can_think:
+						target = _find_closest_enemy(npc, 250.0)
+						npc["cached_target"] = target
+					else:
+						target = npc.get("cached_target", null)
+						
 					if target and !npc.get("morale_broken", false):
 						if !npc.get("has_spotted_enemy", false):
 							_set_npc_emoji(npc, "❗", 1.2)
