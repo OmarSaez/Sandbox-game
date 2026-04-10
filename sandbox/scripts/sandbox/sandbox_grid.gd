@@ -743,6 +743,14 @@ func _show_welcome_message():
 	btn.pressed.connect(func():
 		if has_method("_play_action_sound"):
 			call("_play_action_sound", "ui_click")
+		
+		# TUTORIAL: Garantizar que caiga arena al cerrar por primera vez
+		# Esto asegura que el usuario vea el efecto incluso en dispositivos lentos.
+		var center = btn.global_position + (btn.size / 2.0)
+		var gx = int(center.x / grid_scale)
+		var gy = int(center.y / grid_scale)
+		_draw_circle(gx, gy, 7, 1) # Forzar material 1 (Arena)
+		
 		overlay.queue_free()
 		
 		# Spawneo de fuegos artificiales de bienvenida directos (con retraso y tandas)
@@ -1088,6 +1096,8 @@ func _setup_tools_ui():
 	scroll.name = "ToolsScroll"
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.scroll_deadzone = 25
+	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 	
 	var main_vbox = VBoxContainer.new()
 	main_vbox.add_theme_constant_override("separation", 10 * s)
@@ -1241,6 +1251,7 @@ func _setup_tools_ui():
 		btn.custom_minimum_size = Vector2(0, 60 * s)
 		btn.add_theme_font_override("font", _get_safe_font())
 		btn.add_theme_font_size_override("font_size", 21 * s)
+		btn.mouse_filter = Control.MOUSE_FILTER_PASS
 		
 		# PREMIUM STYLE
 		var style = StyleBoxFlat.new()
@@ -1446,6 +1457,8 @@ func _setup_lab_ui():
 	scroll.name = "LabScroll"
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.scroll_deadzone = 25
+	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 	
 	var main_vbox = VBoxContainer.new()
 	main_vbox.add_theme_constant_override("separation", 10 * s)
@@ -1528,6 +1541,7 @@ func _setup_lab_ui():
 	no_btn.custom_minimum_size = Vector2(200 * s, 60 * s)
 	no_btn.add_theme_font_override("font", _get_safe_font())
 	no_btn.add_theme_font_size_override("font_size", 22 * s)
+	no_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	ui_elements["not_now_btn"] = no_btn
 	var no_st = StyleBoxFlat.new()
 	no_st.bg_color = Color(0.2, 0.2, 0.25)
@@ -1544,6 +1558,7 @@ func _setup_lab_ui():
 	ad_btn.custom_minimum_size = Vector2(220 * s, 60 * s)
 	ad_btn.add_theme_font_override("font", _get_safe_font())
 	ad_btn.add_theme_font_size_override("font_size", 22 * s)
+	ad_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	ui_elements["watch_ad_btn"] = ad_btn
 	var ad_st = StyleBoxFlat.new()
 	ad_st.bg_color = Color(0.1, 0.5, 0.2)
@@ -1607,6 +1622,7 @@ func _setup_lab_ui():
 		var btn = Button.new()
 		btn.flat = true
 		btn.custom_minimum_size = Vector2(80 * s, 80 * s)
+		btn.mouse_filter = Control.MOUSE_FILTER_PASS
 		
 		var stack = MarginContainer.new()
 		stack.add_child(block_rect)
@@ -1629,6 +1645,7 @@ func _setup_lab_ui():
 		name_edit.custom_minimum_size = Vector2(80 * s, 30 * s)
 		name_edit.add_theme_font_override("font", _get_safe_font())
 		name_edit.add_theme_font_size_override("font_size", 18 * s)
+		name_edit.mouse_filter = Control.MOUSE_FILTER_PASS
 		name_edit.text_changed.connect(func(new_text): 
 			lab_custom_data[i]["name"] = new_text
 			_update_custom_mats_in_material_grid() # Correct function to refresh HUD
@@ -1705,6 +1722,7 @@ func _setup_lab_ui():
 		
 		var cp = ColorPickerButton.new()
 		cp.custom_minimum_size = Vector2(40 * s, 40 * s)
+		cp.mouse_filter = Control.MOUSE_FILTER_PASS
 		
 		var null_overlay = Label.new()
 		null_overlay.text = "/"
@@ -1730,6 +1748,7 @@ func _setup_lab_ui():
 		trash.add_theme_font_override("font", _get_safe_font())
 		trash.add_theme_font_size_override("font_size", 20 * s)
 		trash.custom_minimum_size = Vector2(25 * s, 30 * s)
+		trash.mouse_filter = Control.MOUSE_FILTER_PASS
 		trash.pressed.connect(func():
 			_play_action_sound("ui_click")
 			var prop = "c" + str(i+1)
@@ -1752,6 +1771,7 @@ func _setup_lab_ui():
 	col_color.add_child(tex_lbl)
 	
 	var mix_slider = HSlider.new()
+	mix_slider.mouse_filter = Control.MOUSE_FILTER_PASS
 	mix_slider.min_value = 0
 	mix_slider.max_value = 2
 	mix_slider.step = 1
@@ -1766,7 +1786,7 @@ func _setup_lab_ui():
 	ui_elements["lab_grav_buttons"] = []
 	var grav_options = ["GRAV_SLOW", "GRAV_NORMAL", "GRAV_UP", "GRAV_STATIC"]
 	for j in range(grav_options.size()):
-		var btn = Button.new(); btn.text = tr(grav_options[j]); btn.toggle_mode = true
+		var btn = Button.new(); btn.text = tr(grav_options[j]); btn.toggle_mode = true; btn.mouse_filter = Control.MOUSE_FILTER_PASS
 		btn.add_theme_font_override("font", _get_safe_font())
 		btn.add_theme_font_size_override("font_size", 22 * s)
 		var st_n = StyleBoxFlat.new(); st_n.bg_color = Color(0.15,0.15,0.2)
@@ -1791,7 +1811,7 @@ func _setup_lab_ui():
 	ui_elements["lab_est_buttons"] = []
 	var est_options = ["STATE_GAS", "STATE_LIQUID", "STATE_POWDER", "STATE_SOLID"]
 	for j in range(est_options.size()):
-		var btn = Button.new(); btn.text = tr(est_options[j]); btn.toggle_mode = true
+		var btn = Button.new(); btn.text = tr(est_options[j]); btn.toggle_mode = true; btn.mouse_filter = Control.MOUSE_FILTER_PASS
 		btn.add_theme_font_override("font", _get_safe_font())
 		btn.add_theme_font_size_override("font_size", 22 * s)
 		var st_n = StyleBoxFlat.new(); st_n.bg_color = Color(0.15,0.15,0.2)
@@ -1888,6 +1908,7 @@ func _setup_lab_ui():
 			tb.toggle_mode = true
 			tb.add_theme_font_override("font", _get_safe_font())
 			tb.add_theme_font_size_override("font_size", 20 * s)
+			tb.mouse_filter = Control.MOUSE_FILTER_PASS
 			
 			var st_n = StyleBoxFlat.new()
 			st_n.bg_color = Color(0.15, 0.15, 0.22)
