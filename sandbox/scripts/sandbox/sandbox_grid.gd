@@ -3721,16 +3721,21 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		
 	# VIRUS / EXPAND LOGIC (Laboratory Exclusive)
 	if (tags & SandboxMaterial.Tags.VIRUS):
-		if randf() < 0.03: # Speed of spread
+		if randf() < 0.15: # High spread speed for dynamic laboratory battles
 			var nx = x + randi_range(-1, 1)
 			var ny = y + randi_range(-1, 1)
 			if nx >= 0 and nx < grid_width and ny >= 0 and ny < dynamic_grid_height:
 				var nid = _get_cell(nx, ny)
-				# Only infect other materials (not empty, not same, not UI/HUD)
-				if nid > 0 and nid != pure_id and nid < 500: 
+				# RANGE FIX: Allow infecting up to ID 1000 to include Lab Experiments (900+)
+				if nid > 0 and nid != pure_id and nid < 1000: 
 					var n_tags = material_tags_raw[nid]
-					# INVINCIBLE or ANTI_ACID materials are naturally immune to the virus mutation
-					if not (n_tags & (SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.INVINCIBLE)): 
+					
+					# FIGHT LOGIC: If the target is ANOTHER type of virus, ignore protections!
+					# This allows different virus types to "fight" for territory.
+					var is_enemy_virus = (n_tags & SandboxMaterial.Tags.VIRUS) != 0
+					var is_protected = (n_tags & (SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.INVINCIBLE)) != 0
+					
+					if is_enemy_virus or not is_protected: 
 						_set_cell(nx, ny, pure_id)
 						
 	# RADIOACTIVE LOGIC (Laboratory Exclusive - Constant Energy Reactor)
