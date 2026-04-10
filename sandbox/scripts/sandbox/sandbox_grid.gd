@@ -1071,7 +1071,7 @@ func _setup_tools_ui():
 	
 	#Tools_panel
 	var panel_width = 530 * s
-	var panel_height = 650 * s
+	var panel_height = 570 * s
 	var h = 340 # Match the Fixed Tall HUD height
 	var bottom_gap = h + (5 * s) # Dynamic GAP above HUD floor
 	
@@ -1124,15 +1124,21 @@ func _setup_tools_ui():
 		lbl.text = tr(label_key) + ":"
 		lbl.add_theme_font_size_override("font_size", 22.0 * s)
 		lbl.add_theme_font_override("font", _get_safe_font())
-		lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9)) # Modern light grey-blue
+		lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9))
 		ui_elements[label_key + "_lbl"] = lbl
 		v_box.add_child(lbl)
 		
-		var flow = HFlowContainer.new()
+		# ROW CONTAINER WITH 2PX MARGINS
+		var row_margin = MarginContainer.new()
+		row_margin.add_theme_constant_override("margin_left", 2 * s)
+		row_margin.add_theme_constant_override("margin_right", 2 * s)
+		v_box.add_child(row_margin)
+		
+		# Use HBoxContainer for perfect equal distribution (fills side-to-side)
+		var flow = HBoxContainer.new()
 		flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		flow.add_theme_constant_override("h_separation", 8 * s)
-		flow.add_theme_constant_override("v_separation", 8 * s)
-		v_box.add_child(flow)
+		flow.add_theme_constant_override("h_separation", 6 * s)
+		row_margin.add_child(flow)
 		
 		if is_upcoming:
 			lbl.modulate = Color(0.5, 0.5, 0.5, 0.7)
@@ -1141,7 +1147,9 @@ func _setup_tools_ui():
 		for i in range(options.size()):
 			var btn = Button.new()
 			btn.text = str(options[i])
-			btn.custom_minimum_size = Vector2(80.0 * s, 45.0 * s)
+			# AUTO-FILL: This makes all buttons share the row width equally
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			btn.custom_minimum_size = Vector2(0, 45.0 * s)
 			btn.add_theme_font_size_override("font_size", 20.0 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
 			btn.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -1152,8 +1160,7 @@ func _setup_tools_ui():
 			b_style.border_width_left = 1; b_style.border_width_top = 1
 			b_style.border_width_right = 1; b_style.border_width_bottom = 1
 			b_style.border_color = Color(0.3, 0.3, 0.4)
-			b_style.corner_radius_top_left = 10 * s; b_style.corner_radius_top_right = 10 * s
-			b_style.corner_radius_bottom_left = 10 * s; b_style.corner_radius_bottom_right = 10 * s
+			b_style.set_corner_radius_all(10 * s)
 			btn.add_theme_stylebox_override("normal", b_style)
 			btn.add_theme_stylebox_override("hover", b_style)
 			btn.add_theme_stylebox_override("pressed", b_style)
@@ -1207,10 +1214,6 @@ func _setup_tools_ui():
 		_on_arcade_selection_made(true) # Real-time update for Arcade HUD (don't close menu)
 	)
 
-	# SEPARATOR FOR ACTIONS
-	var sep = HSeparator.new()
-	sep.custom_minimum_size = Vector2(0, 15 * s)
-	v_box.add_child(sep)
 	
 	# ACTION ROW (Undo, Redo, Eraser, Save)
 	var func_lbl = Label.new()
