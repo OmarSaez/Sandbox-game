@@ -801,7 +801,6 @@ func _setup_materials_within_grid():
 	
 	# --- SECCIÓN PROXIMAMENTE ---
 	_add_ui_header(material_grid, "coming_soon")
-	_add_button("custom_mat", 0, true)
 	_add_button("toxic_gas", 0, true)
 	_add_button("void", 0, true)
 	_add_button("battery", 0, true)
@@ -2696,6 +2695,7 @@ func _update_menu_highlights():
 				if is_instance_valid(save_panel): is_active = true
 			elif key == "control_active_btn":
 				is_active = is_selecting_npc_to_control or is_instance_valid(controlled_npc)
+				btn.text = tr("selecting_npc") if is_selecting_npc_to_control else tr("active")
 			elif key == "control_disabled_btn":
 				is_active = not is_selecting_npc_to_control and not is_instance_valid(controlled_npc)
 			
@@ -4411,13 +4411,14 @@ func _setup_npc_control_gui():
 	npc_control_gui.add_child(action_btn)
 	ui_elements["arcade_action_btn"] = action_btn
 
-func _stop_controlling_npc():
+func _stop_controlling_npc(keep_menus_open: bool = false):
 	_play_action_sound("ui_click")
 	controlled_npc = null
 	is_selecting_npc_to_control = false
 	is_npc_mode_menu_open = false
 	
 	if is_instance_valid(npc_control_gui):
+		# Just hide the pad, the HUD itself might transition back
 		npc_control_gui.visible = false
 	
 	ui_root = get_parent().get_node("UI")
@@ -4427,13 +4428,16 @@ func _stop_controlling_npc():
 		main_controls.offset_top = -340
 		main_controls.offset_bottom = 0
 	
-	# Close all floating menus
-	if is_instance_valid(tools_panel): tools_panel.visible = false
-	if is_instance_valid(disaster_panel): disaster_panel.visible = false
-	if is_instance_valid(npc_panel): npc_panel.visible = false
+	if not keep_menus_open:
+		# Close all floating menus
+		if is_instance_valid(tools_panel): tools_panel.visible = false
+		if is_instance_valid(disaster_panel): disaster_panel.visible = false
+		if is_instance_valid(npc_panel): npc_panel.visible = false
 	
-	is_mouse_over_ui = false
+	# Always reset mouse over ui state when stopping control to avoid stuck pointer logic
+	is_mouse_over_ui = false 
 	_update_menu_highlights() 
+	_update_arcade_dynamic_button()
 
 func _toggle_npc_mode_menu(p_show: bool):
 	ui_root = get_parent().get_node("UI")
@@ -4701,9 +4705,7 @@ func _setup_npc_ui():
 		disabled_btn.set_meta("base_style", n_base)
 		disabled_btn.pressed.connect(func():
 			_play_action_sound("ui_click")
-			_stop_controlling_npc()
-			_update_menu_highlights()
-			_on_arcade_selection_made(false)
+			_stop_controlling_npc(true) # Keep NPC Panel open when disabling controller
 		)
 		control_flow.add_child(disabled_btn)
 		ui_elements["control_disabled_btn"] = disabled_btn
