@@ -6523,6 +6523,13 @@ func _clear_all():
 	next_charge_indices.clear()
 	charge_queued_frame.fill(-1)
 	
+	# CLEAR PAINTING
+	cell_paint_colors.fill(0)
+	if is_instance_valid(background_img):
+		background_img.fill(Color(0, 0, 0, 0))
+	background_dirty = true
+	element_paint_dirty = true
+	
 	_reset_all_disasters() # Optimized & Scalable reset
 	
 	_update_texture()
@@ -7297,7 +7304,9 @@ func _save_to_slot(idx, custom_name: String = ""):
 		"tags": Array(tags_array),
 		"chunks": Array(chunks_active),
 		"next_chunks": Array(next_chunks_active),
-		"lab_data": _get_cleaned_lab_data()
+		"lab_data": _get_cleaned_lab_data(),
+		"cell_paint": Array(cell_paint_colors),
+		"bg_paint": Array(background_img.get_data().to_int32_array())
 	}
 	
 	var file = FileAccess.open(path, FileAccess.WRITE)
@@ -7323,10 +7332,23 @@ func _save_to_slot(idx, custom_name: String = ""):
 			var variant = (raw_id >> 24) & 0xFF
 			
 			var color = Color(0,0,0,0)
+			
+			# 1. Start with background paint
+			color = background_img.get_pixel(gx, gy)
+			
+			# 2. Add element (Palette or Custom)
 			if mid > 0:
-				if variant == 1: color = mat_colors_2[mid]
-				elif variant == 2: color = mat_colors_3[mid]
-				else: color = mat_colors_1[mid]
+				var custom_i32 = cell_paint_colors[cell_idx]
+				if custom_i32 != 0:
+					var r = (custom_i32 & 0xFF) / 255.0
+					var g = ((custom_i32 >> 8) & 0xFF) / 255.0
+					var b = ((custom_i32 >> 16) & 0xFF) / 255.0
+					var a = ((custom_i32 >> 24) & 0xFF) / 255.0
+					color = Color(r, g, b, a)
+				else:
+					if variant == 1: color = mat_colors_2[mid]
+					elif variant == 2: color = mat_colors_3[mid]
+					else: color = mat_colors_1[mid]
 			
 			thumb.set_pixel(tx, ty, color)
 	
@@ -7377,6 +7399,19 @@ func _load_from_slot(idx):
 			# 5. RESTORE LABORATORY EXPERIMENTS
 			if dict.has("lab_data"):
 				_restore_lab_data(dict["lab_data"])
+				
+			# 6. RESTORE PAINTING
+			if dict.has("cell_paint"):
+				var data = dict["cell_paint"]
+				if data.size() == cell_paint_colors.size():
+					for i in range(data.size()): cell_paint_colors[i] = int(data[i])
+			
+			if dict.has("bg_paint"):
+				var data = dict["bg_paint"]
+				if data.size() == (grid_width * grid_height):
+					var bytes = PackedInt32Array(data).to_byte_array()
+					background_img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, bytes)
+					background_dirty = true
 			
 			_update_texture()
 			queue_redraw()
