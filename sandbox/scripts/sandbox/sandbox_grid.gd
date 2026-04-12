@@ -28,6 +28,10 @@ var charge_tex: ImageTexture
 var background_img: Image
 var background_tex: ImageTexture
 var background_dirty: bool = false
+var element_paint_img: Image
+var element_paint_tex: ImageTexture
+var element_paint_dirty: bool = false
+var cell_paint_colors: PackedInt32Array # Stores per-pixel custom color (ABGR32)
 var charge_img: Image
 
 # Simulation Chunking
@@ -414,6 +418,8 @@ func _ready():
 	cells.resize(grid_width * grid_height)
 	tags_array.resize(grid_width * grid_height)
 	charge_array.resize(grid_width * grid_height)
+	cell_paint_colors.resize(grid_width * grid_height)
+	cell_paint_colors.fill(0)
 	img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8)
 	color_buffer.resize(grid_width * grid_height * 4)
 	surface_cache.resize(grid_width)
@@ -440,6 +446,10 @@ func _ready():
 	background_img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8)
 	background_img.fill(Color(0, 0, 0, 0)) # Start transparent
 	background_tex = ImageTexture.create_from_image(background_img)
+	
+	element_paint_img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8)
+	element_paint_img.fill(Color(0, 0, 0, 0)) # Transparent = Original material colors
+	element_paint_tex = ImageTexture.create_from_image(element_paint_img)
 	
 	mat_colors_1.resize(2048)
 	mat_colors_2.resize(2048)
@@ -638,6 +648,7 @@ func _ready():
 	s_mat.set_shader_parameter("palette_tex", palette_tex)
 	s_mat.set_shader_parameter("charge_tex", charge_tex) # Dedicated link
 	s_mat.set_shader_parameter("background_tex", background_tex)
+	s_mat.set_shader_parameter("element_color_tex", element_paint_tex)
 	texture_rect.material = s_mat
 	
 	save_history_state() # Initialize first history step
@@ -2974,9 +2985,9 @@ func _process(delta):
 					var p_diameters = [1, 3, 5, 10, 15, 25]
 					_paint_background_circle(gx, gy, p_diameters[paint_brush_radius_idx], selected_paint_color)
 				else:
-					# Pintar elementos (Usar pincel normal por ahora)
-					_manage_brush_sound(selected_material)
-					_draw_circle(gx, gy, brush_radius, selected_material)
+					# Pintar elementos
+					var p_diameters = [1, 3, 5, 10, 15, 25]
+					_paint_elements_circle(gx, gy, p_diameters[paint_brush_radius_idx], selected_paint_color)
 			elif (material_tags_raw[selected_material] & SandboxMaterial.Tags.NPC):
 				if not mouse_was_pressed:
 					_place_npc(gx, gy)
@@ -3400,6 +3411,21 @@ func _paint_background_circle(cx: int, cy: int, diameter: int, color: Color):
 					background_img.set_pixel(x, y, color)
 					background_dirty = true
 
+func _paint_elements_circle(cx: int, cy: int, diameter: int, color: Color):
+	var radius = diameter / 2.0
+	var r2 = radius * radius
+	var r_int = int(ceil(radius))
+	var color_int = color.to_abgr32() # Simulation-friendly format
+	for x in range(cx - r_int, cx + r_int + 1):
+		for y in range(cy - r_int, cy + r_int + 1):
+			if x >= 0 and x < grid_width and y >= 0 and y < dynamic_grid_height:
+				var dx = float(x - cx)
+				var dy = float(y - cy)
+				if dx*dx + dy*dy <= r2:
+					var idx = y * grid_width + x
+					cell_paint_colors[idx] = color_int
+					element_paint_dirty = true
+
 func _draw_circle(cx, cy, radius, mat_id):
 	if mat_id == 0:
 		# ERASER: Also remove NPCs in range
@@ -3438,6 +3464,7 @@ func _set_cell(x, y, mat_id):
 		if mat_id == 0:
 			if cells[idx] == 0: return # Already air, no work needed
 			cells[idx] = 0
+			cell_paint_colors[idx] = 0 # Clear paint when clearing element
 			tags_array[idx] = 0
 			charge_array[idx] = 0
 			charge_visual_buffer[idx] = 0
@@ -3467,6 +3494,9 @@ func _set_cell(x, y, mat_id):
 		if old_id == 600: active_metronome_indices.erase(idx)
 		if pure_id == 600: active_metronome_indices[idx] = true
 
+		# For specific IDs (Metronome/Music), clear paint
+		if pure_id >= 500: cell_paint_colors[idx] = 0
+		
 		cells[idx] = (mat_id & 0xFFFF) | (variant << 24)
 		tags_array[idx] = tags
 		# CLEANUP GLOW: Prevent ghost colors when painting over old explosions
@@ -3760,6 +3790,11 @@ func _swap_cells(x1, y1, x2, y2):
 	tags_array[idx2] = material_tags_raw[m1 & 0xFFFF]
 	charge_array[idx2] = c1
 	charge_visual_buffer[idx2] = cv1
+	
+	# MOVE PAINT COLOR WITH PARTICLE
+	var color1 = cell_paint_colors[idx1]
+	cell_paint_colors[idx1] = cell_paint_colors[idx2]
+	cell_paint_colors[idx2] = color1
 	
 	if c1 > 0: _register_charge(idx2)
 	if c2 > 0: _register_charge(idx1)
@@ -6383,6 +6418,12 @@ func _update_texture():
 	if background_dirty:
 		background_tex.update(background_img)
 		background_dirty = false
+		
+	# SYNC SIMULATION COLORS (DYNAMIC)
+	# Optimized: Always sync if simulation is moving? (Or just rely on dirty flag from painting)
+	# BUT since particles move cell_paint_colors every frame, we MUST update the texture every frame
+	element_paint_img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cell_paint_colors.to_byte_array())
+	element_paint_tex.update(element_paint_img)
 
 func _launch_firework(x, y):
 	_set_cell(x, y, 0) # Clear the station

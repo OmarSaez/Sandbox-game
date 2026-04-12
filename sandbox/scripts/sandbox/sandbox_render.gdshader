@@ -3,6 +3,7 @@ shader_type canvas_item;
 uniform sampler2D palette_tex : filter_nearest;
 uniform sampler2D charge_tex : filter_nearest;
 uniform sampler2D background_tex : filter_nearest;
+uniform sampler2D element_color_tex : filter_nearest;
 
 uniform float tornado_x = -100.0;
 uniform float tornado_ground_y = 1000.0;
@@ -36,6 +37,12 @@ void fragment() {
         // 4. BACKGROUND PAINTING (Apply background_tex if cell is air/ID 0)
         if (id == 0) {
             color = texture(background_tex, UV);
+        } else {
+            // ELEMENT COLOR OVERLAY (Paint over existing materials)
+            vec4 overlay = texture(element_color_tex, UV);
+            if (overlay.a > 0.01) {
+                color.rgb = overlay.rgb;
+            }
         }
         
         // 4. Tornado Funnel for Air (ID 0)
