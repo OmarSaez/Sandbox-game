@@ -1484,6 +1484,7 @@ func _setup_lab_ui():
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.scroll_deadzone = 25
 	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+	ui_elements["lab_scroll"] = scroll
 	
 	var main_vbox = VBoxContainer.new()
 	main_vbox.add_theme_constant_override("separation", 10 * s)
@@ -1614,6 +1615,10 @@ func _setup_lab_ui():
 			lab_panel.visible = !lab_panel.visible
 			if lab_panel.visible and not is_lab_tutorial_done:
 				lab_tutorial_step = 1
+				# TUTORIAL RESET: Start with no selection to force the user to pick
+				lab_custom_data[0]["grav"] = -1
+				lab_custom_data[0]["state"] = -1
+				_update_lab_inspector()
 				_update_lab_tutorial_highlight()
 			elif not lab_panel.visible:
 				if lab_tutorial_step == 5:
@@ -1674,6 +1679,10 @@ func _setup_lab_ui():
 		btn.pressed.connect(func():
 			_play_action_sound("ui_click")
 			lab_selected_slot = i
+			if lab_tutorial_step == 1:
+				# TUTORIAL DYNAMIC RESET: Adapt to whichever slot the user chooses
+				lab_custom_data[i]["grav"] = -1
+				lab_custom_data[i]["state"] = -1
 			_update_lab_inspector()
 		)
 		
@@ -1688,6 +1697,15 @@ func _setup_lab_ui():
 		name_edit.text_changed.connect(func(new_text): 
 			lab_custom_data[i]["name"] = new_text
 			_update_custom_mats_in_material_grid() # Correct function to refresh HUD
+		)
+		name_edit.focus_entered.connect(func():
+			if lab_selected_slot != i:
+				lab_selected_slot = i
+				if lab_tutorial_step == 1:
+					# TUTORIAL SYNC: If they focus/type in another slot, reset it for tutorial focus
+					lab_custom_data[i]["grav"] = -1
+					lab_custom_data[i]["state"] = -1
+				_update_lab_inspector()
 		)
 		name_edit.text_submitted.connect(func(_t):
 			if lab_tutorial_step == 1:
@@ -1795,8 +1813,11 @@ func _setup_lab_ui():
 		)
 		cp.get_popup().popup_hide.connect(func():
 			if lab_tutorial_step == 2:
-				lab_tutorial_step = 3
-				_update_lab_tutorial_highlight()
+				var data = lab_custom_data[lab_selected_slot]
+				# Only advance if the user actually picked a color (Alpha > 0)
+				if data["c1"].a > 0.0 or data["c2"].a > 0.0 or data["c3"].a > 0.0:
+					lab_tutorial_step = 3
+					_update_lab_tutorial_highlight()
 		)
 		hb.add_child(cp)
 		ui_elements["lab_col_pickers"].append(cp)
@@ -1812,6 +1833,14 @@ func _setup_lab_ui():
 			var prop = "c" + str(i+1)
 			lab_custom_data[lab_selected_slot][prop] = Color(0,0,0,0) # Empty indication
 			_update_lab_preview(lab_selected_slot)
+			
+			# TUTORIAL BACK-STEP: If they delete all colors, force them back to Step 2
+			if lab_tutorial_step > 2:
+				var data = lab_custom_data[lab_selected_slot]
+				if data["c1"].a == 0.0 and data["c2"].a == 0.0 and data["c3"].a == 0.0:
+					lab_tutorial_step = 2
+					_update_lab_tutorial_highlight()
+			
 			_update_lab_inspector()
 		)
 		hb.add_child(trash)
@@ -2055,7 +2084,12 @@ func _update_lab_tutorial_highlight():
 		3: target = ui_elements.get("lab_col_grav")
 		4: target = ui_elements.get("lab_col_est")
 		5: target = ui_elements.get("lab_tags_vbox")
-		6: target = ui_elements.get("lab_first_custom_slot")
+		6: 
+			var hud_slots = ui_elements.get("lab_custom_slots_hud", [])
+			if hud_slots.size() > lab_selected_slot:
+				target = hud_slots[lab_selected_slot]
+			else:
+				target = ui_elements.get("lab_first_custom_slot")
 	
 	if not is_instance_valid(target): return
 	
@@ -2069,6 +2103,19 @@ func _update_lab_tutorial_highlight():
 	
 	var parent: Node = ui_root
 	var tr_rect = target.get_global_rect()
+	
+	# CLIPPING: Ensure the highlight doesn't spill outside the Laboratory Panel (Steps 1-5)
+	if lab_tutorial_step >= 1 and lab_tutorial_step <= 5 and is_instance_valid(lab_panel):
+		var panel_rect = lab_panel.get_global_rect()
+		tr_rect = tr_rect.intersection(panel_rect)
+		
+		# Also DISABLE scrolling during tutorial to keep things centered
+		if ui_elements.has("lab_scroll"):
+			ui_elements["lab_scroll"].vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	elif ui_elements.has("lab_scroll"):
+		# Restore scroll if tutorial is finished or at HUD step
+		ui_elements["lab_scroll"].vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		
 	var screen_size = get_viewport_rect().size
 	
 	# 4. Expand the cutout slightly for better visuals
@@ -2268,6 +2315,11 @@ func _update_custom_mats_in_material_grid():
 		
 		material_grid.add_child(slot_pnl)
 		material_grid.move_child(slot_pnl, insert_idx)
+		
+		# For tutorial Step 6 highlight tracking
+		if not ui_elements.has("lab_custom_slots_hud"): ui_elements["lab_custom_slots_hud"] = [null, null, null]
+		ui_elements["lab_custom_slots_hud"][i] = slot_pnl
+		
 		if i == 0: ui_elements["lab_first_custom_slot"] = slot_pnl
 		insert_idx += 1
 		
@@ -3053,15 +3105,19 @@ func _process(delta):
 	# LABORATORY TUTORIAL PULSE (Step 1 - Scaling Focus)
 	if lab_tutorial_step == 1 and ui_elements.has("lab_name_edits"):
 		var edits = ui_elements["lab_name_edits"]
-		if edits.size() > 0 and is_instance_valid(edits[0]):
-			var main_edit = edits[0]
+		var active_idx = lab_selected_slot
+		if edits.size() > active_idx and is_instance_valid(edits[active_idx]):
+			var main_edit = edits[active_idx]
 			main_edit.pivot_offset = main_edit.size / 2
 			var scale_val = 1.0 + 0.15 * sin(Time.get_ticks_msec() * 0.004)
 			main_edit.scale = Vector2(scale_val, scale_val)
+			
+			# Reset others
+			for j in range(edits.size()):
+				if j != active_idx and is_instance_valid(edits[j]): edits[j].scale = Vector2.ONE
 	elif ui_elements.has("lab_name_edits"):
-		var edits = ui_elements["lab_name_edits"]
-		if edits.size() > 0 and is_instance_valid(edits[0]):
-			if edits[0].scale != Vector2.ONE: edits[0].scale = Vector2.ONE
+		for edit in ui_elements["lab_name_edits"]:
+			if is_instance_valid(edit) and edit.scale != Vector2.ONE: edit.scale = Vector2.ONE
 	
 	if ui_elements.has("lab_slots_hbox"):
 		if is_instance_valid(ui_elements["lab_slots_hbox"]): ui_elements["lab_slots_hbox"].modulate.a = 1.0
