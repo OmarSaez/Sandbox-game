@@ -251,6 +251,9 @@ var last_action_times = {} # Para controlar la saturación de sonidos
 var is_volcano_active = false 
 var is_fire_active = false 
 var is_npc_mode_menu_open: bool = false
+var is_lab_tutorial_done: bool = false
+var lab_tutorial_step: int = 0 # 0: None, 1: Slots, 2: Colors, 3: Gravity, 4: State, 5: Tags
+var tutorial_rects: Array[ColorRect] = []
 var _frame_count = 0
 var _npc_id_counter = 0
 var active_metronome_indices = {} # Using Dictionary as a Set [index] -> true
@@ -1140,24 +1143,15 @@ func _setup_tools_ui():
 	ui_elements["tools_panel_title"] = title
 	main_vbox.add_child(title)
 	
-	main_vbox.add_child(scroll)
+	tools_btn.pressed.connect(_on_tools_btn_pressed)
 	
-	tools_btn.pressed.connect(func(): 
-		_play_action_sound("ui_click")
-		_close_music_menu() # Close music if opening tools
-		is_paint_tool_active = false
-		if is_instance_valid(disaster_panel): disaster_panel.visible = false
-		if is_instance_valid(npc_panel): npc_panel.visible = false
-		if is_instance_valid(save_panel): save_panel.queue_free()
-		if is_instance_valid(lab_panel): lab_panel.visible = false
-		if is_instance_valid(paint_panel): paint_panel.visible = false
-		if is_instance_valid(tools_panel): tools_panel.visible = !tools_panel.visible
-		_update_menu_highlights()
-	)
+	main_vbox.add_child(scroll)
 	
 	tools_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	tools_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 	
+
+	# DYNAMIC BOX (NOW INSIDE SCROLL)
 	var v_box = VBoxContainer.new()
 	v_box.add_theme_constant_override("separation", 15 * s)
 	v_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1616,7 +1610,17 @@ func _setup_lab_ui():
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
 		if is_instance_valid(paint_panel): paint_panel.visible = false
-		if is_instance_valid(lab_panel): lab_panel.visible = !lab_panel.visible
+		if is_instance_valid(lab_panel): 
+			lab_panel.visible = !lab_panel.visible
+			if lab_panel.visible and not is_lab_tutorial_done:
+				lab_tutorial_step = 1
+				_update_lab_tutorial_highlight()
+			elif not lab_panel.visible:
+				if lab_tutorial_step == 5:
+					lab_tutorial_step = 6
+				else:
+					lab_tutorial_step = 0
+				_update_lab_tutorial_highlight()
 	)
 	
 	lab_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
@@ -1628,9 +1632,11 @@ func _setup_lab_ui():
 	scroll.add_child(v_box)
 	
 	var slots_hbox = HBoxContainer.new()
+	slots_hbox.name = "LabSlotsHBox"
 	slots_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	slots_hbox.add_theme_constant_override("separation", 60 * s)
 	v_box.add_child(slots_hbox)
+	ui_elements["lab_slots_hbox"] = slots_hbox
 	
 	ui_elements["lab_slot_borders"] = []
 	ui_elements["lab_name_edits"] = []
@@ -1683,6 +1689,16 @@ func _setup_lab_ui():
 			lab_custom_data[i]["name"] = new_text
 			_update_custom_mats_in_material_grid() # Correct function to refresh HUD
 		)
+		name_edit.text_submitted.connect(func(_t):
+			if lab_tutorial_step == 1:
+				lab_tutorial_step = 2
+				_update_lab_tutorial_highlight()
+		)
+		name_edit.focus_exited.connect(func():
+			if lab_tutorial_step == 1 and lab_custom_data[i]["name"].length() > 1:
+				lab_tutorial_step = 2
+				_update_lab_tutorial_highlight()
+		)
 		slot_vbox.add_child(name_edit)
 		ui_elements["lab_name_edits"].append(name_edit)
 	
@@ -1732,6 +1748,10 @@ func _setup_lab_ui():
 	columns_hbox.add_child(make_v_line.call())
 	columns_hbox.add_child(col_est)
 	
+	ui_elements["lab_col_color"] = col_color
+	ui_elements["lab_col_grav"] = col_grav
+	ui_elements["lab_col_est"] = col_est
+	
 	for l in [col_color_title, col_grav_title, col_est_title]:
 		l.add_theme_font_override("font", _get_safe_font())
 		l.add_theme_font_size_override("font_size", 20 * s)
@@ -1772,6 +1792,11 @@ func _setup_lab_ui():
 			lab_custom_data[lab_selected_slot][prop] = c
 			_update_lab_preview(lab_selected_slot)
 			_update_lab_inspector()
+		)
+		cp.get_popup().popup_hide.connect(func():
+			if lab_tutorial_step == 2:
+				lab_tutorial_step = 3
+				_update_lab_tutorial_highlight()
 		)
 		hb.add_child(cp)
 		ui_elements["lab_col_pickers"].append(cp)
@@ -1837,6 +1862,9 @@ func _setup_lab_ui():
 				_play_action_sound("ui_click")
 				lab_custom_data[lab_selected_slot]["grav"] = j
 				_update_lab_inspector()
+				if lab_tutorial_step == 3:
+					lab_tutorial_step = 4
+					_update_lab_tutorial_highlight()
 		)
 		col_grav.add_child(btn)
 		ui_elements["lab_grav_buttons"].append(btn)
@@ -1862,6 +1890,9 @@ func _setup_lab_ui():
 				_play_action_sound("ui_click")
 				lab_custom_data[lab_selected_slot]["state"] = j
 				_update_lab_inspector()
+				if lab_tutorial_step == 4:
+					lab_tutorial_step = 5
+					_update_lab_tutorial_highlight()
 		)
 		col_est.add_child(btn)
 		ui_elements["lab_est_buttons"].append(btn)
@@ -1875,6 +1906,11 @@ func _setup_lab_ui():
 	car_title.add_theme_font_override("font", _get_safe_font())
 	car_title.add_theme_font_size_override("font_size", 20 * s)
 	v_box.add_child(car_title)
+	ui_elements["lab_car_title"] = car_title
+	
+	var tags_main_vbox = VBoxContainer.new()
+	v_box.add_child(tags_main_vbox)
+	ui_elements["lab_tags_vbox"] = tags_main_vbox
 	
 	# --- SECCIÓN DE CARACTERÍSTICAS DINÁMICA ---
 	var tag_sections = [
@@ -1921,7 +1957,7 @@ func _setup_lab_ui():
 	for section in tag_sections:
 		var sec_vbox = VBoxContainer.new()
 		ui_elements["lab_tag_sections"][section["id"]] = sec_vbox
-		v_box.add_child(sec_vbox)
+		tags_main_vbox.add_child(sec_vbox)
 		
 		var cat_lbl = Label.new()
 		cat_lbl.text = section["name"]
@@ -1974,6 +2010,11 @@ func _setup_lab_ui():
 					current_data["tags"].erase(tag)
 				
 				_update_lab_inspector()
+				if lab_tutorial_step == 5:
+					# Finish Lab part and move to HUD highlight
+					if is_instance_valid(lab_panel): lab_panel.visible = false
+					lab_tutorial_step = 6
+					_update_lab_tutorial_highlight()
 			)
 			flow.add_child(tb)
 			ui_elements["lab_tag_buttons"][tag] = tb
@@ -1981,6 +2022,85 @@ func _setup_lab_ui():
 	for i in range(3):
 		_update_lab_preview(i)
 	_update_lab_inspector()
+
+func _on_tools_btn_pressed():
+	_play_action_sound("ui_click")
+	_close_music_menu() # Close music if opening tools
+	is_paint_tool_active = false
+	if is_instance_valid(disaster_panel): disaster_panel.visible = false
+	if is_instance_valid(npc_panel): npc_panel.visible = false
+	if is_instance_valid(save_panel): save_panel.queue_free()
+	if is_instance_valid(lab_panel): lab_panel.visible = false
+	if is_instance_valid(paint_panel): paint_panel.visible = false
+	if is_instance_valid(tools_panel): tools_panel.visible = !tools_panel.visible
+	_update_menu_highlights()
+	
+	# Update tutorial highlight if we just opened/closed tools
+	if lab_tutorial_step == 6:
+		_update_lab_tutorial_highlight()
+
+func _update_lab_tutorial_highlight():
+	# 1. Clean old rects
+	for r in tutorial_rects:
+		if is_instance_valid(r): r.queue_free()
+	tutorial_rects.clear()
+	
+	if lab_tutorial_step == 0: return
+	
+	# 2. Find the target
+	var target: Control = null
+	match lab_tutorial_step:
+		1: target = ui_elements.get("lab_slots_hbox")
+		2: target = ui_elements.get("lab_col_color")
+		3: target = ui_elements.get("lab_col_grav")
+		4: target = ui_elements.get("lab_col_est")
+		5: target = ui_elements.get("lab_tags_vbox")
+		6: target = ui_elements.get("lab_first_custom_slot")
+	
+	if not is_instance_valid(target): return
+	
+	# Skip if Step 6 but tools panel is not visible
+	if lab_tutorial_step == 6 and (not is_instance_valid(tools_panel) or not tools_panel.visible):
+		_on_tools_btn_pressed()
+	
+	# 3. WAIT FOR GPU/LAYOUT SYNC (Crucial for correct global_rect calculation)
+	await get_tree().process_frame
+	if not is_instance_valid(target) or not target.is_inside_tree(): return
+	
+	var parent: Node = ui_root
+	var tr_rect = target.get_global_rect()
+	var screen_size = get_viewport_rect().size
+	
+	# 4. Expand the cutout slightly for better visuals
+	var cutout = tr_rect.grow(8 * _get_ui_scale())
+	
+	var create_dim = func():
+		var r = ColorRect.new()
+		r.color = Color(0, 0, 0, 0.85) # Ultra-dark for maximum focus
+		r.mouse_filter = Control.MOUSE_FILTER_STOP # Block input everywhere else
+		parent.add_child(r)
+		tutorial_rects.append(r)
+		return r
+		
+	# Area Top
+	var top = create_dim.call()
+	top.set_begin(Vector2(0, 0))
+	top.set_end(Vector2(screen_size.x, cutout.position.y))
+	
+	# Area Bottom
+	var bot = create_dim.call()
+	bot.set_begin(Vector2(0, cutout.end.y))
+	bot.set_end(Vector2(screen_size.x, screen_size.y))
+	
+	# Area Left (Middle)
+	var left = create_dim.call()
+	left.set_begin(Vector2(0, cutout.position.y))
+	left.set_end(Vector2(cutout.position.x, cutout.end.y))
+	
+	# Area Right (Middle)
+	var right = create_dim.call()
+	right.set_begin(Vector2(cutout.end.x, cutout.position.y))
+	right.set_end(Vector2(screen_size.x, cutout.end.y))
 
 func _save_lab_state():
 	var clean_data = []
@@ -1995,7 +2115,8 @@ func _save_lab_state():
 
 	var save = {
 		"expiry": lab_unlock_expiry_unix,
-		"data": clean_data
+		"data": clean_data,
+		"tutorial_done": is_lab_tutorial_done
 	}
 	var file = FileAccess.open("user://lab_state.json", FileAccess.WRITE)
 	if file:
@@ -2017,6 +2138,7 @@ func _load_lab_state():
 		var save = JSON.parse_string(json_str)
 		if typeof(save) == TYPE_DICTIONARY:
 			lab_unlock_expiry_unix = int(save.get("expiry", 0))
+			is_lab_tutorial_done = save.get("tutorial_done", false)
 			
 			if save.has("data"):
 				var loaded_data = save["data"]
@@ -2065,7 +2187,7 @@ func _update_custom_mats_in_material_grid():
 		var slot_pnl = PanelContainer.new()
 		var slot_style = StyleBoxEmpty.new()
 		slot_pnl.add_theme_stylebox_override("panel", slot_style)
-		slot_pnl.mouse_filter = Control.MOUSE_FILTER_PASS
+		slot_pnl.mouse_filter = Control.MOUSE_FILTER_STOP # STOP to reliably detect gui_input
 		slot_pnl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slot_pnl.custom_minimum_size = Vector2(110 * s, 85 * s) 
 		slot_pnl.set_meta("is_custom", true)
@@ -2127,6 +2249,17 @@ func _update_custom_mats_in_material_grid():
 				is_paint_tool_active = false
 				_update_material_highlights()
 				_update_menu_highlights()
+				
+				# TUTORIAL COMPLETION: If the user selects their first custom element
+				if lab_tutorial_step == 6:
+					is_lab_tutorial_done = true
+					lab_tutorial_step = 0
+					_update_lab_tutorial_highlight()
+					_save_lab_state()
+					
+					# CLEANUP: Close tools if it was opened by tutorial and reset any remaining pulses
+					if is_instance_valid(tools_panel) and tools_panel.visible:
+						_on_tools_btn_pressed() # Close menu to give "libertad total"
 		)
 		
 		slot_pnl.set_meta("mat_id", mat_id)
@@ -2135,6 +2268,7 @@ func _update_custom_mats_in_material_grid():
 		
 		material_grid.add_child(slot_pnl)
 		material_grid.move_child(slot_pnl, insert_idx)
+		if i == 0: ui_elements["lab_first_custom_slot"] = slot_pnl
 		insert_idx += 1
 		
 	_update_material_highlights()
@@ -2616,6 +2750,14 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 				_play_action_sound("ui_click")
 				selected_material = mat_id
 				is_paint_tool_active = false
+				
+				# TUTORIAL END: If we selected a custom material (900+)
+				if mat_id >= 900 and not is_lab_tutorial_done:
+					is_lab_tutorial_done = true
+					lab_tutorial_step = 0
+					_update_lab_tutorial_highlight()
+					_save_lab_state()
+				
 				_update_material_highlights()
 				_update_menu_highlights()
 				
@@ -2907,6 +3049,22 @@ func _process(delta):
 				if not overlay.visible:
 					overlay.visible = true
 					if is_lab_unlocked: _set_lab_unlocked(false)
+
+	# LABORATORY TUTORIAL PULSE (Step 1 - Scaling Focus)
+	if lab_tutorial_step == 1 and ui_elements.has("lab_name_edits"):
+		var edits = ui_elements["lab_name_edits"]
+		if edits.size() > 0 and is_instance_valid(edits[0]):
+			var main_edit = edits[0]
+			main_edit.pivot_offset = main_edit.size / 2
+			var scale_val = 1.0 + 0.15 * sin(Time.get_ticks_msec() * 0.004)
+			main_edit.scale = Vector2(scale_val, scale_val)
+	elif ui_elements.has("lab_name_edits"):
+		var edits = ui_elements["lab_name_edits"]
+		if edits.size() > 0 and is_instance_valid(edits[0]):
+			if edits[0].scale != Vector2.ONE: edits[0].scale = Vector2.ONE
+	
+	if ui_elements.has("lab_slots_hbox"):
+		if is_instance_valid(ui_elements["lab_slots_hbox"]): ui_elements["lab_slots_hbox"].modulate.a = 1.0
 
 	# Increment SFX timer and reset every 1 second
 	explosions_sfx_timer += delta
