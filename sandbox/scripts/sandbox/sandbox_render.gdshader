@@ -2,6 +2,7 @@ shader_type canvas_item;
 
 uniform sampler2D palette_tex : filter_nearest;
 uniform sampler2D charge_tex : filter_nearest;
+uniform sampler2D background_tex : filter_nearest;
 
 uniform float tornado_x = -100.0;
 uniform float tornado_ground_y = 1000.0;
@@ -31,6 +32,11 @@ void fragment() {
         
         // Palette Lookup with variant row offset (Now 2048 wide)
         vec4 color = texture(palette_tex, vec2((float(id) + 0.5) / 2048.0, py));
+        
+        // 4. BACKGROUND PAINTING (Apply background_tex if cell is air/ID 0)
+        if (id == 0) {
+            color = texture(background_tex, UV);
+        }
         
         // 4. Tornado Funnel for Air (ID 0)
         if (id == 0 && tornado_intensity > 0.0) {

@@ -25,6 +25,9 @@ var charge_visual_buffer: PackedByteArray # 8-bit buffer for GPU rendering
 
 # GPU Rendering Data (Primary: ID Texture | Secondary: Charge Texture)
 var charge_tex: ImageTexture 
+var background_img: Image
+var background_tex: ImageTexture
+var background_dirty: bool = false
 var charge_img: Image
 
 # Simulation Chunking
@@ -113,6 +116,7 @@ var selected_paint_color: Color = Color.WHITE
 var paint_mode: int = 0 # 0: Elements, 1: Background
 var recent_paint_colors: Array[Color] = [Color.WHITE, Color.BLACK, Color.GRAY, Color.RED, Color.GREEN, Color.BLUE]
 var paint_brush_radius_idx: int = 2 # Index for [1, 3, 5, 10, 15, 25]
+var is_paint_tool_active: bool = false
 
 @export var custom_emoji_font: Font 
 
@@ -433,6 +437,10 @@ func _ready():
 	charge_visual_buffer.resize(grid_width * grid_height)
 	charge_visual_buffer.fill(0)
 	
+	background_img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8)
+	background_img.fill(Color(0, 0, 0, 0)) # Start transparent
+	background_tex = ImageTexture.create_from_image(background_img)
+	
 	mat_colors_1.resize(2048)
 	mat_colors_2.resize(2048)
 	mat_colors_3.resize(2048)
@@ -629,6 +637,7 @@ func _ready():
 	s_mat.shader = shader
 	s_mat.set_shader_parameter("palette_tex", palette_tex)
 	s_mat.set_shader_parameter("charge_tex", charge_tex) # Dedicated link
+	s_mat.set_shader_parameter("background_tex", background_tex)
 	texture_rect.material = s_mat
 	
 	save_history_state() # Initialize first history step
@@ -1125,12 +1134,14 @@ func _setup_tools_ui():
 	tools_btn.pressed.connect(func(): 
 		_play_action_sound("ui_click")
 		_close_music_menu() # Close music if opening tools
+		is_paint_tool_active = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
 		if is_instance_valid(lab_panel): lab_panel.visible = false
 		if is_instance_valid(paint_panel): paint_panel.visible = false
 		if is_instance_valid(tools_panel): tools_panel.visible = !tools_panel.visible
+		_update_menu_highlights()
 	)
 	
 	tools_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
@@ -1588,6 +1599,7 @@ func _setup_lab_ui():
 	lab_btn.pressed.connect(func(): 
 		_play_action_sound("ui_click")
 		_close_music_menu()
+		is_paint_tool_active = false
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
@@ -2101,6 +2113,7 @@ func _update_custom_mats_in_material_grid():
 			if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 				_play_action_sound("ui_click")
 				selected_material = mat_id
+				is_paint_tool_active = false
 				_update_material_highlights()
 				_update_menu_highlights()
 		)
@@ -2390,6 +2403,7 @@ func _setup_disaster_ui():
 	disaster_btn.pressed.connect(func(): 
 		_play_action_sound("ui_click")
 		_close_music_menu() # Close music if opening disasters
+		is_paint_tool_active = false
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
@@ -2590,6 +2604,7 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 			if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 				_play_action_sound("ui_click")
 				selected_material = mat_id
+				is_paint_tool_active = false
 				_update_material_highlights()
 				_update_menu_highlights()
 				
@@ -2951,8 +2966,18 @@ func _process(delta):
 			var gx = int(m_pos.x / grid_scale)
 			var gy = int(m_pos.y / grid_scale)
 			
-			# NPC Special placement: only place on initial click
-			if (material_tags_raw[selected_material] & SandboxMaterial.Tags.NPC):
+			if is_paint_tool_active:
+				if not mouse_was_pressed and is_instance_valid(paint_panel) and paint_panel.visible:
+					paint_panel.visible = false
+				
+				if paint_mode == 1: # Pintar fondo
+					var p_diameters = [1, 3, 5, 10, 15, 25]
+					_paint_background_circle(gx, gy, p_diameters[paint_brush_radius_idx], selected_paint_color)
+				else:
+					# Pintar elementos (Usar pincel normal por ahora)
+					_manage_brush_sound(selected_material)
+					_draw_circle(gx, gy, brush_radius, selected_material)
+			elif (material_tags_raw[selected_material] & SandboxMaterial.Tags.NPC):
 				if not mouse_was_pressed:
 					_place_npc(gx, gy)
 					_play_action_sound("npc_place")
@@ -3359,6 +3384,21 @@ func _strike_lightning():
 		if target_id > 0 and target_id != 17 and target_id != 15 and target_id != 2:
 			_explode(lx, ly, 5) # Small localized explosion
 			break
+
+func _paint_background_circle(cx: int, cy: int, diameter: int, color: Color):
+	var radius = diameter / 2.0
+	var r2 = radius * radius
+	# Expand range slightly to capture all relevant pixels
+	var r_int = int(ceil(radius))
+	for x in range(cx - r_int, cx + r_int + 1):
+		for y in range(cy - r_int, cy + r_int + 1):
+			if x >= 0 and x < grid_width and y >= 0 and y < dynamic_grid_height:
+				# Use pixel-center distance (0.5 offset) for perfect circles
+				var dx = float(x - cx)
+				var dy = float(y - cy)
+				if dx*dx + dy*dy <= r2:
+					background_img.set_pixel(x, y, color)
+					background_dirty = true
 
 func _draw_circle(cx, cy, radius, mat_id):
 	if mat_id == 0:
@@ -4259,7 +4299,18 @@ func _setup_paint_ui():
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		if is_instance_valid(lab_panel): lab_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
-		if is_instance_valid(paint_panel): paint_panel.visible = !paint_panel.visible
+		
+		# EXCLUSIVE PAINT MODE
+		if is_instance_valid(paint_panel):
+			paint_panel.visible = !paint_panel.visible
+			is_paint_tool_active = true
+			if paint_panel.visible:
+				# Clear material selection
+				selected_material = -1
+				is_paint_tool_active = true
+				_update_material_highlights()
+				_update_menu_highlights()
+				_update_paint_recent_ui() # Ensure eraser is shown
 	)
 	
 	paint_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
@@ -4459,28 +4510,46 @@ func _update_paint_recent_ui():
 	for child in hbox.get_children():
 		child.queue_free()
 		
-	for c in recent_paint_colors:
+	# Show 5 colors + 1 Eraser
+	for i in range(6):
 		var btn = Button.new()
 		btn.custom_minimum_size = Vector2(60 * s, 60 * s)
 		var st = StyleBoxFlat.new()
-		st.bg_color = c
-		st.set_corner_radius_all(30 * s) # Circular
+		st.set_corner_radius_all(30 * s)
 		
-		# HIGHLIGHT ACTIVE COLOR IF MATCHED
-		if c.to_html() == selected_paint_color.to_html():
-			st.border_width_left = 8 * s; st.border_width_top = 8 * s
-			st.border_width_right = 8 * s; st.border_width_bottom = 8 * s
-			st.border_color = Color(0.2, 0.6, 1.0) # Premium Blue (8px Thick)
+		if i < 5:
+			var c = recent_paint_colors[i]
+			st.bg_color = c
+			if c.to_html() == selected_paint_color.to_html() and selected_paint_color.a > 0:
+				st.border_width_left = 8 * s; st.border_width_top = 8 * s
+				st.border_width_right = 8 * s; st.border_width_bottom = 8 * s
+				st.border_color = Color(0.2, 0.6, 1.0)
+			
+			btn.pressed.connect(func():
+				_play_action_sound("ui_click")
+				selected_paint_color = c
+				_update_paint_slider_grabber()
+				_update_paint_recent_ui()
+			)
+		else: # THE ERASER 🧼
+			btn.text = "🧼"
+			btn.add_theme_font_size_override("font_size", 30 * s)
+			st.bg_color = Color(0.1, 0.1, 0.12)
+			if selected_paint_color.a == 0:
+				st.border_width_left = 8 * s; st.border_width_top = 8 * s
+				st.border_width_right = 8 * s; st.border_width_bottom = 8 * s
+				st.border_color = Color(0.2, 0.6, 1.0)
+				
+			btn.pressed.connect(func():
+				_play_action_sound("ui_click")
+				selected_paint_color = Color(0, 0, 0, 0) # Transparent = Erase
+				_update_paint_slider_grabber()
+				_update_paint_recent_ui()
+			)
 			
 		btn.add_theme_stylebox_override("normal", st)
 		btn.add_theme_stylebox_override("hover", st)
 		btn.add_theme_stylebox_override("pressed", st)
-		btn.pressed.connect(func():
-			_play_action_sound("ui_click")
-			selected_paint_color = c
-			_update_paint_slider_grabber()
-			_update_paint_recent_ui() # Refresh highlights
-		)
 		hbox.add_child(btn)
 
 func _update_paint_slider_grabber():
@@ -4961,6 +5030,7 @@ func _setup_npc_ui():
 	npc_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
 		_close_music_menu() # Close music if opening NPCs
+		is_paint_tool_active = false
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
@@ -5060,6 +5130,7 @@ func _setup_npc_ui():
 			btn.pressed.connect(func():
 				_play_action_sound("ui_click")
 				selected_material = id # Master Warrior Material
+				is_paint_tool_active = false
 				if not is_instance_valid(controlled_npc):
 					is_selecting_npc_to_control = false
 				_update_material_highlights()
@@ -6308,6 +6379,10 @@ func _update_texture():
 	charge_tex.update(charge_img)
 	
 	texture_rect.texture.update(img)
+	
+	if background_dirty:
+		background_tex.update(background_img)
+		background_dirty = false
 
 func _launch_firework(x, y):
 	_set_cell(x, y, 0) # Clear the station
@@ -6910,6 +6985,7 @@ func _setup_music_button():
 		_play_action_sound("ui_click")
 		
 		# EXCLUSIVE SELECTION: Close all other panels
+		is_paint_tool_active = false
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
