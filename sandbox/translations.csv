@@ -189,3 +189,6 @@ STATE_GAS,Gas,Gas,Gas,Gaz,Gas,Gás
 STATE_LIQUID,Líquido,Liquid,Liquido,Liquide,Flüssigkeit,Líquido
 STATE_POWDER,Polvo,Powder,Polvere,Poudre,Pulver,Pó
 STATE_SOLID,Sólido,Solid,Solido,Solide,Festkörper,Sólido
+paint,🎨Pintado,🎨Paint,🎨Vernice,🎨Peinture,🎨Lackieren,🎨Pintura
+paint_elements,Pintar elementos,Paint elements,Dipingi elementi,Peindre éléments,Elemente bemalen,Pintar elementos
+paint_background,Pintar fondo,Paint background,Dipingi sfondo,Peindre le fond,Hintergrund bemalen,Pintar fundo

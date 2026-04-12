@@ -67,6 +67,7 @@ var is_lab_unlocked: bool = false
 var lab_unlock_expiry_unix: int = 0
 var disaster_panel: PanelContainer
 var npc_panel: PanelContainer
+var paint_panel: PanelContainer
 var selected_team: int = 0 
 var mat_id_to_key = {} # ID -> Translation Key
 var controlled_npc = null
@@ -107,6 +108,11 @@ const MUSIC_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#",
 const MUSIC_NOTES_LATIN = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si", "Do", "Do#", "Re", "Mi"]
 const MUSIC_PITCHES = [1.0, 1.05946, 1.12246, 1.18921, 1.25992, 1.33483, 1.41421, 1.49831, 1.58740, 1.68179, 1.78180, 1.88775, 2.0, 2.11893, 2.24492, 2.51984]
 
+# --- PAINT SYSTEM ---
+var selected_paint_color: Color = Color.WHITE
+var paint_mode: int = 0 # 0: Elements, 1: Background
+var recent_paint_colors: Array[Color] = [Color.WHITE, Color.BLACK, Color.GRAY, Color.RED, Color.GREEN, Color.BLUE]
+var paint_brush_radius_idx: int = 2 # Index for [1, 3, 5, 10, 15, 25]
 
 @export var custom_emoji_font: Font 
 
@@ -854,7 +860,7 @@ func _setup_main_ui_containers():
 	# 2. PURGE OLD UI CLONES & ACTION NODES
 	ui_elements.clear()
 	for child in ui_root.get_children():
-		if child.name.begins_with("ToolsPanel") or child.name.begins_with("LabPanel") or child.name.begins_with("DisasterPanel") or child.name.begins_with("NPCPanel"):
+		if child.name.begins_with("ToolsPanel") or child.name.begins_with("LabPanel") or child.name.begins_with("DisasterPanel") or child.name.begins_with("NPCPanel") or child.name.begins_with("PaintPanel"):
 			child.get_parent().remove_child(child)
 			child.queue_free()
 			
@@ -1018,12 +1024,14 @@ func _setup_main_ui_containers():
 	ui_root.set_meta("lab_v", lab_v)
 	ui_root.set_meta("disaster_v", disaster_v)
 	ui_root.set_meta("npc_v", npc_v)
+	ui_root.set_meta("paint_v", is_instance_valid(paint_panel) and paint_panel.visible)
 	
 	_setup_tools_ui()
 	_setup_lab_ui()
 	_setup_disaster_ui()
 	_setup_npc_panel_node()
 	_setup_npc_ui()         
+	_setup_paint_ui()
 	_setup_npc_control_gui() # Fresh build of the control overlay
 	
 	_setup_materials_within_grid()
@@ -1121,6 +1129,7 @@ func _setup_tools_ui():
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
 		if is_instance_valid(lab_panel): lab_panel.visible = false
+		if is_instance_valid(paint_panel): paint_panel.visible = false
 		if is_instance_valid(tools_panel): tools_panel.visible = !tools_panel.visible
 	)
 	
@@ -1583,6 +1592,7 @@ func _setup_lab_ui():
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
+		if is_instance_valid(paint_panel): paint_panel.visible = false
 		if is_instance_valid(lab_panel): lab_panel.visible = !lab_panel.visible
 	)
 	
@@ -2384,6 +2394,7 @@ func _setup_disaster_ui():
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
 		if is_instance_valid(lab_panel): lab_panel.visible = false
+		if is_instance_valid(paint_panel): paint_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = !disaster_panel.visible
 	)
 	
@@ -2758,6 +2769,8 @@ func _is_any_ui_blocking() -> bool:
 	if disaster_panel and disaster_panel.visible and disaster_panel.get_global_rect().has_point(m_pos):
 		return true
 	if npc_panel and npc_panel.visible and npc_panel.get_global_rect().has_point(m_pos):
+		return true
+	if paint_panel and paint_panel.visible and paint_panel.get_global_rect().has_point(m_pos):
 		return true
 	
 	if music_panel and music_panel.visible and music_panel.get_global_rect().has_point(m_pos):
@@ -4186,6 +4199,297 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		charge_array[idx] -= 1
 		if charge_array[idx] <= 1: _set_cell(x, y, 26) 
 
+func _setup_paint_ui():
+	var s = _get_ui_scale()
+	var paint_btn = Button.new()
+	paint_btn.name = "PaintBtn"
+	paint_btn.custom_minimum_size = Vector2(160 * s, 58 * s)
+	paint_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
+	paint_btn.text = tr("paint")
+	ui_elements["paint_btn"] = paint_btn
+	paint_btn.add_theme_font_override("font", _get_safe_font())
+	paint_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	paint_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	action_vbox.add_child(paint_btn)
+	
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.2, 0.2, 0.15, 1.0) # Dark yellow-grey
+	btn_style.border_width_left = 1; btn_style.border_width_top = 1
+	btn_style.border_width_right = 1; btn_style.border_width_bottom = 1
+	btn_style.border_color = Color(0.6, 0.6, 0.3)
+	paint_btn.add_theme_stylebox_override("normal", btn_style)
+	paint_btn.add_theme_stylebox_override("hover", btn_style)
+	paint_btn.add_theme_stylebox_override("pressed", btn_style)
+	
+	ui_root = get_parent().get_node("UI")
+	paint_panel = PanelContainer.new()
+	paint_panel.name = "PaintPanel"
+	ui_root.add_child(paint_panel)
+	
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.15, 0.15, 0.05, 0.95) # Near opaque dark yellow
+	panel_style.border_width_left = 2; panel_style.border_width_top = 2
+	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
+	panel_style.border_color = Color(0.6, 0.6, 0.3)
+	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
+	paint_panel.add_theme_stylebox_override("panel", panel_style)
+	
+	paint_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	paint_panel.anchor_left = 0.5
+	paint_panel.anchor_right = 0.5
+	paint_panel.anchor_top = 1.0
+	paint_panel.anchor_bottom = 1.0
+	
+	var p_width = 540 * s
+	var p_height = 680 * s
+	var h_hud = 340
+	var p_bottom_gap = h_hud + (5 * s)
+	
+	paint_panel.offset_left = -p_width / 2
+	paint_panel.offset_right = p_width / 2
+	paint_panel.offset_bottom = -p_bottom_gap
+	paint_panel.offset_top = -p_bottom_gap - p_height
+	paint_panel.visible = ui_root.get_meta("paint_v", false)
+	
+	paint_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		_close_music_menu()
+		if is_instance_valid(tools_panel): tools_panel.visible = false
+		if is_instance_valid(disaster_panel): disaster_panel.visible = false
+		if is_instance_valid(npc_panel): npc_panel.visible = false
+		if is_instance_valid(lab_panel): lab_panel.visible = false
+		if is_instance_valid(save_panel): save_panel.queue_free()
+		if is_instance_valid(paint_panel): paint_panel.visible = !paint_panel.visible
+	)
+	
+	paint_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	paint_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
+	
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 15 * s)
+	paint_panel.add_child(main_vbox)
+	
+	# Title
+	var title = Label.new()
+	title.text = tr("paint")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", _get_safe_font())
+	title.add_theme_font_size_override("font_size", 34 * s)
+	title.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
+	main_vbox.add_child(title)
+	
+	# Mode Buttons
+	var mode_margin = MarginContainer.new()
+	mode_margin.add_theme_constant_override("margin_left", 15 * s)
+	mode_margin.add_theme_constant_override("margin_right", 15 * s)
+	main_vbox.add_child(mode_margin)
+	
+	var mode_hbox = HBoxContainer.new()
+	mode_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_hbox.add_theme_constant_override("separation", 20 * s)
+	mode_margin.add_child(mode_hbox)
+	
+	var create_mode_btn = func(text_key: String, mode_idx: int):
+		var btn = Button.new()
+		btn.text = tr(text_key)
+		btn.toggle_mode = true
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.custom_minimum_size = Vector2(0, 50 * s)
+		btn.add_theme_font_override("font", _get_safe_font())
+		btn.add_theme_font_size_override("font_size", 22 * s)
+		
+		var st_n = StyleBoxFlat.new()
+		st_n.bg_color = Color(0.12, 0.12, 0.15, 0.8)
+		st_n.border_width_left = 1; st_n.border_width_top = 1
+		st_n.border_width_right = 1; st_n.border_width_bottom = 1
+		st_n.border_color = Color(0.3, 0.3, 0.4)
+		st_n.set_corner_radius_all(12 * s)
+		btn.add_theme_stylebox_override("normal", st_n)
+		
+		var st_p = StyleBoxFlat.new()
+		st_p.bg_color = Color(0.2, 0.5, 1.0) # Premium Blue
+		st_p.set_corner_radius_all(12 * s)
+		st_p.border_width_bottom = 4 * s
+		st_p.border_color = Color(0.5, 0.8, 1.0) # Light blue accent
+		btn.add_theme_stylebox_override("pressed", st_p)
+		btn.add_theme_stylebox_override("hover", st_p) # Keep highlight on hover if active
+		
+		btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			paint_mode = mode_idx
+			# Refresh highlights
+			for b in mode_hbox.get_children():
+				if b != btn: b.button_pressed = false
+			btn.button_pressed = true
+		)
+		
+		btn.button_pressed = (paint_mode == mode_idx)
+		mode_hbox.add_child(btn)
+		return btn
+		
+	create_mode_btn.call("paint_elements", 0)
+	create_mode_btn.call("paint_background", 1)
+	
+	# Color Grid 6x4
+	var color_grid = GridContainer.new()
+	color_grid.columns = 6
+	color_grid.add_theme_constant_override("h_separation", 10 * s)
+	color_grid.add_theme_constant_override("v_separation", 10 * s)
+	color_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	main_vbox.add_child(color_grid)
+	
+	var base_colors = [
+		Color("#ffffff"), Color("#616161"), Color("#000000"), Color("#FF0000"), Color("#FF4C00"), Color("#FF8800"),
+		Color("#FFE900"), Color("#E1FF00"), Color("#A5FF00"), Color("#55FF00"), Color("#00FF61"), Color("#00FFC3"),
+		Color("#00EEFF"), Color("#00BFFF"), Color("#0083FF"), Color("#005DFF"), Color("#003cffff"), Color("#4c00ffff"),
+		Color("#A900FF"), Color("#DD00FF"), Color("#FF00C3"), Color("#FF0083"), Color("#FF79A1"), Color("#FFA579")
+	]
+	
+	for c in base_colors:
+		var btn = Button.new()
+		btn.custom_minimum_size = Vector2(70 * s, 70 * s)
+		var st = StyleBoxFlat.new()
+		st.bg_color = c
+		st.set_corner_radius_all(10 * s)
+		# NO BORDERS AS REQUESTED
+		btn.add_theme_stylebox_override("normal", st)
+		btn.add_theme_stylebox_override("hover", st)
+		btn.add_theme_stylebox_override("pressed", st)
+		
+		btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			selected_paint_color = c
+			_update_paint_slider_grabber()
+			_add_recent_paint_color(c)
+		)
+		color_grid.add_child(btn)
+	
+	# Custom Color Picker
+	var custom_hbox = HBoxContainer.new()
+	custom_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	main_vbox.add_child(custom_hbox)
+	
+	var custom_cp = ColorPickerButton.new()
+	custom_cp.text = "Color Personalizado"
+	custom_cp.custom_minimum_size = Vector2(300 * s, 50 * s)
+	custom_cp.add_theme_font_override("font", _get_safe_font())
+	custom_cp.add_theme_font_size_override("font_size", 20 * s)
+	custom_cp.color_changed.connect(func(c):
+		selected_paint_color = c
+		_update_paint_slider_grabber()
+	)
+	custom_cp.popup_closed.connect(func():
+		_add_recent_paint_color(custom_cp.color)
+	)
+	custom_hbox.add_child(custom_cp)
+	
+	# Recent Colors
+	var recent_hbox = HBoxContainer.new()
+	recent_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	recent_hbox.add_theme_constant_override("separation", 15 * s)
+	main_vbox.add_child(recent_hbox)
+	ui_elements["paint_recent_colors"] = recent_hbox
+	_update_paint_recent_ui()
+	
+	# Brush Slider
+	var slider_vbox = VBoxContainer.new()
+	slider_vbox.add_theme_constant_override("separation", 5 * s)
+	main_vbox.add_child(slider_vbox)
+	
+	var slider_label = Label.new()
+	slider_label.text = tr("brush")
+	slider_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	slider_label.add_theme_font_override("font", _get_safe_font())
+	slider_label.add_theme_font_size_override("font_size", 20 * s)
+	slider_vbox.add_child(slider_label)
+	
+	var slider = HSlider.new()
+	slider.min_value = 0
+	slider.max_value = 5
+	slider.step = 1
+	slider.value = paint_brush_radius_idx
+	slider.custom_minimum_size = Vector2(400 * s, 40 * s)
+	slider.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	
+	# Stylized Slider
+	var slider_style = StyleBoxFlat.new()
+	slider_style.bg_color = Color(0.3, 0.3, 0.3)
+	slider_style.content_margin_top = 8 * s
+	slider_style.content_margin_bottom = 8 * s
+	slider_style.set_corner_radius_all(8 * s)
+	slider.add_theme_stylebox_override("slider", slider_style)
+	
+	var grabber_style = StyleBoxFlat.new()
+	grabber_style.bg_color = selected_paint_color
+	grabber_style.border_width_left = 2; grabber_style.border_width_top = 2
+	grabber_style.border_width_right = 2; grabber_style.border_width_bottom = 2
+	grabber_style.border_color = Color.BLACK
+	grabber_style.set_corner_radius_all(15 * s)
+	grabber_style.expand_margin_left = 10 * s; grabber_style.expand_margin_right = 10 * s
+	grabber_style.expand_margin_top = 10 * s; grabber_style.expand_margin_bottom = 10 * s
+	
+	ui_elements["paint_grabber_style"] = grabber_style
+	slider.add_theme_stylebox_override("grabber_area", StyleBoxEmpty.new())
+	slider.add_theme_stylebox_override("grabber_area_highlight", StyleBoxEmpty.new())
+	
+	slider.value_changed.connect(func(v):
+		_play_action_sound("ui_click")
+		paint_brush_radius_idx = int(v)
+		var sizes = [1, 3, 5, 10, 15, 25]
+		slider_label.text = tr("brush") + ": " + str(sizes[paint_brush_radius_idx])
+	)
+	slider_vbox.add_child(slider)
+	
+	var sizes = [1, 3, 5, 10, 15, 25]
+	slider_label.text = tr("brush") + ": " + str(sizes[paint_brush_radius_idx])
+
+func _add_recent_paint_color(c: Color):
+	if recent_paint_colors.has(c):
+		recent_paint_colors.erase(c)
+	recent_paint_colors.insert(0, c)
+	if recent_paint_colors.size() > 6:
+		recent_paint_colors.pop_back()
+	_update_paint_recent_ui()
+
+func _update_paint_recent_ui():
+	var s = _get_ui_scale()
+	var hbox = ui_elements.get("paint_recent_colors")
+	if not is_instance_valid(hbox): return
+	
+	for child in hbox.get_children():
+		child.queue_free()
+		
+	for c in recent_paint_colors:
+		var btn = Button.new()
+		btn.custom_minimum_size = Vector2(60 * s, 60 * s)
+		var st = StyleBoxFlat.new()
+		st.bg_color = c
+		st.set_corner_radius_all(30 * s) # Circular
+		
+		# HIGHLIGHT ACTIVE COLOR IF MATCHED
+		if c.to_html() == selected_paint_color.to_html():
+			st.border_width_left = 8 * s; st.border_width_top = 8 * s
+			st.border_width_right = 8 * s; st.border_width_bottom = 8 * s
+			st.border_color = Color(0.2, 0.6, 1.0) # Premium Blue (8px Thick)
+			
+		btn.add_theme_stylebox_override("normal", st)
+		btn.add_theme_stylebox_override("hover", st)
+		btn.add_theme_stylebox_override("pressed", st)
+		btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			selected_paint_color = c
+			_update_paint_slider_grabber()
+			_update_paint_recent_ui() # Refresh highlights
+		)
+		hbox.add_child(btn)
+
+func _update_paint_slider_grabber():
+	var st = ui_elements.get("paint_grabber_style")
+	if st is StyleBoxFlat:
+		st.bg_color = selected_paint_color
+	# Refresh recent UI to update borders if needed
+	_update_paint_recent_ui()
+
 func _setup_npc_panel_node():
 	# If it exists but was lost during a UI refresh, we need to ensure it's in the tree
 	ui_root = get_parent().get_node("UI")
@@ -4661,6 +4965,7 @@ func _setup_npc_ui():
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
 		if is_instance_valid(lab_panel): lab_panel.visible = false
+		if is_instance_valid(paint_panel): paint_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = !npc_panel.visible
 	)
 	
@@ -6608,6 +6913,7 @@ func _setup_music_button():
 		if is_instance_valid(tools_panel): tools_panel.visible = false
 		if is_instance_valid(disaster_panel): disaster_panel.visible = false
 		if is_instance_valid(npc_panel): npc_panel.visible = false
+		if is_instance_valid(paint_panel): paint_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
 		
 		_setup_music_ui()
