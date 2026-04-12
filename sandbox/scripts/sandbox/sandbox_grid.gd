@@ -625,6 +625,14 @@ func _ready():
 			lab_unlock_expiry_unix = now + (12 * 3600)
 			_set_lab_unlocked(true)
 			_save_lab_state()
+			
+			# TUTORIAL CAUGHT: If they just unlocked it and it's open, start tutorial
+			if not is_lab_tutorial_done and is_instance_valid(lab_panel) and lab_panel.visible:
+				lab_tutorial_step = 1
+				lab_custom_data[0]["grav"] = -1
+				lab_custom_data[0]["state"] = -1
+				_update_lab_inspector()
+				_update_lab_tutorial_highlight()
 		)
 	
 	
@@ -1613,7 +1621,7 @@ func _setup_lab_ui():
 		if is_instance_valid(paint_panel): paint_panel.visible = false
 		if is_instance_valid(lab_panel): 
 			lab_panel.visible = !lab_panel.visible
-			if lab_panel.visible and not is_lab_tutorial_done:
+			if lab_panel.visible and not is_lab_tutorial_done and is_lab_unlocked:
 				lab_tutorial_step = 1
 				# TUTORIAL RESET: Start with no selection to force the user to pick
 				lab_custom_data[0]["grav"] = -1
@@ -2106,20 +2114,24 @@ func _update_lab_tutorial_highlight():
 	
 	# CLIPPING: Ensure the highlight doesn't spill outside the Laboratory Panel (Steps 1-5)
 	if lab_tutorial_step >= 1 and lab_tutorial_step <= 5 and is_instance_valid(lab_panel):
-		var panel_rect = lab_panel.get_global_rect()
-		tr_rect = tr_rect.intersection(panel_rect)
-		
-		# Also DISABLE scrolling during tutorial to keep things centered
 		if ui_elements.has("lab_scroll"):
 			ui_elements["lab_scroll"].vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	elif ui_elements.has("lab_scroll"):
-		# Restore scroll if tutorial is finished or at HUD step
 		ui_elements["lab_scroll"].vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 		
 	var screen_size = get_viewport_rect().size
 	
-	# 4. Expand the cutout slightly for better visuals
-	var cutout = tr_rect.grow(8 * _get_ui_scale())
+	# 4. Expand and Clip the cutout for ultra-precise visuals
+	var margin = 8 * _get_ui_scale()
+	if lab_tutorial_step == 5: margin = 4 * _get_ui_scale() # Tighter for tags
+	var cutout = tr_rect.grow(margin)
+	
+	# Final CLIP: Keep the "hole" strictly inside the viewable area (prevent spilling into HUD)
+	if lab_tutorial_step >= 1 and lab_tutorial_step <= 5:
+		var clip_rect = lab_panel.get_global_rect()
+		if ui_elements.has("lab_scroll") and is_instance_valid(ui_elements["lab_scroll"]):
+			clip_rect = ui_elements["lab_scroll"].get_global_rect()
+		cutout = cutout.intersection(clip_rect)
 	
 	var create_dim = func():
 		var r = ColorRect.new()
