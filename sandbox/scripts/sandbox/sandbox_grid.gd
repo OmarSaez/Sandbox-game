@@ -539,9 +539,9 @@ func _ready():
 	
 	# --- STATES AND VFX ---
 	# 7: TNT Flash (Blanco)
-	_register_material(7, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC) # TNT Flashing (Normal)
+	_register_material(7, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.EXPLOSIVE) # TNT Flashing (Normal)
 	# 77: TNT Flash (Rojo)
-	_register_material(77, Color("FF0000"), SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # TNT Flashing (Red)
+	_register_material(77, Color("FF0000"), SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE | SandboxMaterial.Tags.EXPLOSIVE) # TNT Flashing (Red)
 	# 43: Chispa
 	_register_material(43, Color("#FFFF00"), SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.VOLATILE | SandboxMaterial.Tags.GRAV_STATIC) # Chispa Amarilla
 	# 44: Proyectil Acido
@@ -605,8 +605,8 @@ func _ready():
 
 	# --- CRYOGENIC SYSTEM (70-72) ---
 	_register_material(70, Color("#bbe0fcff"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
-	_register_material(71, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC)
-	_register_material(72, Color("#6B6A66"), SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(71, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.EXPLOSIVE)
+	_register_material(72, Color("#CCFF00"), SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.EXPLOSIVE)
 
 	# UI AND TEXTURE SETUP (Must happen AFTER materials are registered)
 	texture_rect.texture = ImageTexture.create_from_image(img)
@@ -3821,7 +3821,8 @@ func _step_simulation():
 						continue
 
 					if (tags & SandboxMaterial.Tags.GRAV_UP):
-						if (tags & TAGS_INTERACTIVE) != 0 or pure_id >= 20:
+						# ID 28 is Volcano projectile, always interact
+						if (tags & TAGS_INTERACTIVE) != 0 or pure_id >= 18:
 							_process_interactions(x, y, idx, raw_id, pure_id, tags)
 							
 						if cells[idx] == raw_id and pure_id != 28:
@@ -3852,8 +3853,10 @@ func _step_simulation():
 						var tags = tags_array[idx]
 						
 						# PASS 3.1: INTERACTIONS (Only for reactive materials)
-						if not (tags & SandboxMaterial.Tags.GRAV_UP): 
-							if (tags & TAGS_INTERACTIVE) != 0 or pure_id >= 20: 
+						if (not (tags & SandboxMaterial.Tags.GRAV_UP)): 
+							# Check IDs >= 18 to include TNT(77), Fireworks(18,19), and Lab(20+)
+							# Special check for ID 7, 9, 13 (Tnt-prime, Elec, Acid)
+							if (tags & TAGS_INTERACTIVE) != 0 or pure_id >= 18 or pure_id == 7 or pure_id == 9 or pure_id == 13: 
 								_process_interactions(x, y, idx, raw_id, pure_id, tags)
 								
 							# 3.2: GRAVITY (If still exists after interaction)
