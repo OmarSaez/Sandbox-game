@@ -323,6 +323,14 @@ var charge_queued_frame := PackedInt32Array()
 @onready var texture_rect: TextureRect = $Display
 var img: Image
 
+# INTERACTIVE TAGS MASK (Used to skip inert materials in _process_interactions)
+const TAGS_INTERACTIVE = SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.FLAMMABLE | \
+	SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.CONDUCTOR | \
+	SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.PLANT | \
+	SandboxMaterial.Tags.VIRUS | SandboxMaterial.Tags.RADIOACTIVE | SandboxMaterial.Tags.VORTEX | \
+	SandboxMaterial.Tags.REPEL | SandboxMaterial.Tags.VOLATILE | SandboxMaterial.Tags.FERTILE | \
+	SandboxMaterial.Tags.MUSIC
+
 func _ready():
 	_load_lab_state() # LOAD DATA FIRST
 	
@@ -3796,22 +3804,26 @@ func _step_simulation():
 			var y_end = min(y_start + CHUNK_SIZE, dynamic_grid_height)
 			
 			for y in range(y_start, y_end):
+				var row_idx = y * grid_width
 				var sweep = range(x_start, x_end)
-				if Engine.get_frames_drawn() % 2 == 0: sweep = range(x_end - 1, x_start - 1, -1)
+				if (Engine.get_frames_drawn() + y) % 2 == 0: sweep = range(x_end - 1, x_start - 1, -1)
+				
 				for x in sweep:
-					var idx = y * grid_width + x
+					var idx = row_idx + x
 					var raw_id = cells[idx]
 					var pure_id = raw_id & 0xFFFF
 					if pure_id == 0: continue
 					
 					var tags = tags_array[idx]
 					
-					if pure_id == 7: # Primed Explosives (Processed in Pass 3)
-						_activate_chunk(x, y) # Keep alive for timer
+					if pure_id == 7: # Primed Explosives
+						_activate_chunk(x, y)
 						continue
 
 					if (tags & SandboxMaterial.Tags.GRAV_UP):
-						_process_interactions(x, y, idx, raw_id, pure_id, tags)
+						if (tags & TAGS_INTERACTIVE) != 0 or pure_id >= 20:
+							_process_interactions(x, y, idx, raw_id, pure_id, tags)
+							
 						if cells[idx] == raw_id and pure_id != 28:
 							_move_particle(x, y, raw_id, tags, -1)
 
@@ -3826,56 +3838,46 @@ func _step_simulation():
 			var x_end = min(x_start + CHUNK_SIZE, grid_width)
 			var y_end = min(y_start + CHUNK_SIZE, dynamic_grid_height)
 			
-			var y = y_end - 1
-			while y >= y_start:
-				var x_start_row = x_start
-				var x_dir = 1
-				if Engine.get_frames_drawn() % 2 == 0:
-					x_start_row = x_end - 1
-					x_dir = -1
+			for y in range(y_end - 1, y_start - 1, -1):
+				var row_idx = y * grid_width
+				var sweep = range(x_start, x_end)
+				if (Engine.get_frames_drawn() + y) % 2 == 0: sweep = range(x_end - 1, x_start - 1, -1)
 				
-				var x = x_start_row
-				var count = x_end - x_start
-				while count > 0:
-					var idx = y * grid_width + x
+				for x in sweep:
+					var idx = row_idx + x
 					var raw_id = cells[idx]
 					var pure_id = raw_id & 0xFFFF
 					
-					# FASTER INLINE FLOW (Avoid most calls)
 					if pure_id > 0: # Process all active materials
 						var tags = tags_array[idx]
+						
+						# PASS 3.1: INTERACTIONS (Only for reactive materials)
 						if not (tags & SandboxMaterial.Tags.GRAV_UP): 
-							_process_interactions(x, y, idx, raw_id, pure_id, tags)
+							if (tags & TAGS_INTERACTIVE) != 0 or pure_id >= 20: 
+								_process_interactions(x, y, idx, raw_id, pure_id, tags)
+								
+							# 3.2: GRAVITY (If still exists after interaction)
 							if cells[idx] == raw_id and not (tags & SandboxMaterial.Tags.GRAV_STATIC):
-								# GRAVITY INLINED for speed
 								var should_move = true
 								if (tags & SandboxMaterial.Tags.GRAV_SLOW) and randf() > 0.3:
 									should_move = false
 								
 								if should_move:
-									# Basic Move try
 									var ny = y + 1
 									if ny < dynamic_grid_height:
-										var n_idx = ny * grid_width + x
+										var n_idx = row_idx + grid_width + x
 										if (cells[n_idx] & 0xFFFF) == 0: # Down
 											_swap_cells(x, y, x, ny)
 										elif (tags & SandboxMaterial.Tags.LIQUID):
-											# Liquis flow side-ways too
 											if randf() > 0.5:
 												if x < grid_width - 1 and (cells[idx + 1] & 0xFFFF) == 0: _swap_cells(x, y, x + 1, y)
 												elif x > 0 and (cells[idx - 1] & 0xFFFF) == 0: _swap_cells(x, y, x - 1, y)
 										elif (tags & SandboxMaterial.Tags.POWDER):
-											# Powders move diagonally
 											var dx = 1 if randf() > 0.5 else -1
 											var nx = x + dx
 											if nx >= 0 and nx < grid_width:
-												var ni = ny * grid_width + nx
+												var ni = row_idx + grid_width + nx
 												if (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
-
-								pass # Interaction already processed at top
-					x += x_dir
-					count -= 1
-				y -= 1
 	
 	# === GESTIÓN GLOBAL DE SONIDOS AMBIENTALES ===
 	if is_volcano_active: 
@@ -4056,11 +4058,11 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		
 	# VIRUS / EXPAND LOGIC (Laboratory Exclusive)
 	if (tags & SandboxMaterial.Tags.VIRUS):
-		if randf() < 0.15: # High spread speed for dynamic laboratory battles
+		if randf() < 0.05: # Reduced probability for better performance (from 0.15)
 			var nx = x + randi_range(-1, 1)
 			var ny = y + randi_range(-1, 1)
 			if nx >= 0 and nx < grid_width and ny >= 0 and ny < dynamic_grid_height:
-				var nid = _get_cell(nx, ny)
+				var nid = cells[ny * grid_width + nx] & 0xFFFF # Faster than _get_cell
 				# RANGE FIX: Allow infecting up to ID 1000 to include Lab Experiments (900+)
 				if nid > 0 and nid != pure_id and nid < 1000: 
 					var n_tags = material_tags_raw[nid]
@@ -4075,7 +4077,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 						
 	# RADIOACTIVE LOGIC (Laboratory Exclusive - Constant Energy Reactor)
 	if (tags & SandboxMaterial.Tags.RADIOACTIVE):
-		if randf() < 0.02: # Frequency of energy leaks
+		if randf() < 0.005: # Reduced frequency (from 0.02)
 			for ny in range(y - 1, y + 2):
 				for nx in range(x - 1, x + 2):
 					if nx == x and ny == y: continue
@@ -4090,89 +4092,91 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				
 	# VORTEX LOGIC (Laboratory Exclusive - Black Hole Effect)
 	if (tags & SandboxMaterial.Tags.VORTEX):
-		# SUPER VORTEX: Higher frequency and density
-		if randf() < 0.65:
+		# SUPER VORTEX: Optimized processing (10% chance per pixel, but high density pulse)
+		if randf() < 0.1:
 			# 1. MATERIAL SUCTION & CONSUMPTION
-			for i in range(20): # Doubled suction density
-				var dist = randi_range(1, 45) # Wider reach
-				var ang = randf() * 6.28
-				var vx = x + int(cos(ang) * dist)
-				var vy = y + int(sin(ang) * dist)
+			for i in range(4): # Reduced from 20 to 4 rays per active pixel
+				var l_idx = randi() % LUT_SIZE
+				var dist = int(_get_lut_rand() * 45)
+				var vx = x + int(cos_lut[l_idx] * dist)
+				var vy = y + int(sin_lut[l_idx] * dist)
 				
 				if vx >= 0 and vx < grid_width and vy >= 0 and vy < dynamic_grid_height:
 					if vx == x and vy == y: continue
-					var vid = _get_cell(vx, vy)
-					# Only suck non-empty, non-vortex, non-HUD, non-invincible materials
+					var vid = cells[vy * grid_width + vx] & 0xFFFF
 					if vid > 0 and vid != pure_id and vid < 500:
 						var n_tags = material_tags_raw[vid]
 						if not (n_tags & SandboxMaterial.Tags.INVINCIBLE):
-							var dist_to_center = (Vector2(x, y) - Vector2(vx, vy)).length()
-							if dist_to_center <= 6:
-								# MEGA CONSUME: Event Horizon is now double (6px)
+							# Use squared distance to avoid sqrt in inner loop
+							var dx_v = x - vx
+							var dy_v = y - vy
+							var d_sq = dx_v*dx_v + dy_v*dy_v
+							
+							if d_sq <= 36: # dist <= 6
 								_set_cell(vx, vy, 0)
-								if randf() < 0.1: _add_spark(float(vx), float(vy), 0, 0, Color.BLACK, 0.4)
+								if randf() < 0.05: _add_spark(float(vx), float(vy), 0, 0, Color.BLACK, 0.4)
 							elif not (n_tags & SandboxMaterial.Tags.GRAV_STATIC): # Move mobile things
-								var dx = sign(x - vx)
-								var dy = sign(y - vy)
-								# TRACTOR BEAM: Max power for objects below
-								if dy < 0: 
-									if randf() < 0.4: dy = -1 
+								var dx = sign(dx_v)
+								var dy = sign(dy_v)
+								if dy < 0 and randf() < 0.4: dy = -1 
 								
 								var tx = vx + dx; var ty = vy + dy
-								var tid = _get_cell(tx, ty)
-								if tid == 0 or tid < 500: 
-									_swap_cells(vx, vy, tx, ty)
+								if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+									var tid = cells[ty * grid_width + tx] & 0xFFFF
+									if tid == 0 or tid < 500: 
+										_swap_cells(vx, vy, tx, ty)
 			
-			# 2. NPC PULL (Extreme drag)
-			var nearby_npcs = _get_nearby_npcs(x, y, 50.0)
-			for npc in nearby_npcs:
-				var pull_dir = Vector2(x - npc.pos.x, y - npc.pos.y).normalized()
-				npc.vx += pull_dir.x * 0.1 # Tripled pull force
-				npc.vy += pull_dir.y * 0.1
-				if (npc.pos.x - x)**2 + (npc.pos.y - y)**2 < 36: # High gravity crush
-					npc.hp -= 10.0 
+			# 2. NPC PULL (Sparse calculation: 20% of vortex pixels pull NPCs)
+			if randf() < 0.2:
+				var nearby_npcs = _get_nearby_npcs(x, y, 50.0)
+				for npc in nearby_npcs:
+					var dx_n = x - npc.pos.x
+					var dy_n = y - npc.pos.y
+					var d_inv = 1.0 / max(1.0, sqrt(dx_n*dx_n + dy_n*dy_n))
+					npc.vx += dx_n * d_inv * 0.1
+					npc.vy += dy_n * d_inv * 0.1
+					if (dx_n*dx_n + dy_n*dy_n) < 36: 
+						npc.hp -= 10.0 
 		
 	# REPEL LOGIC (Laboratory Exclusive - Fan/Wind effect)
 	if (tags & SandboxMaterial.Tags.REPEL):
-		if randf() < 0.6: # High reaction speed
+		if randf() < 0.1: # Reduced from 0.6
 			# 1. MEGA MATERIAL REPULSION (Blast Away)
-			for i in range(15): # More processing points
-				var dist = randi_range(1, 30) # Wider impact zone
-				var ang = randf() * 6.28
-				var vx = x + int(cos(ang) * dist)
-				var vy = y + int(sin(ang) * dist)
+			for i in range(3): # Reduced from 15 to 3 rays
+				var l_idx = randi() % LUT_SIZE
+				var dist = int(_get_lut_rand() * 30)
+				var vx = x + int(cos_lut[l_idx] * dist)
+				var vy = y + int(sin_lut[l_idx] * dist)
 				
 				if vx >= 0 and vx < grid_width and vy >= 0 and vy < dynamic_grid_height:
 					if vx == x and vy == y: continue
-					var vid = _get_cell(vx, vy)
+					var vid = cells[vy * grid_width + vx] & 0xFFFF
 					if vid > 0 and vid != pure_id and vid < 1000:
 						var n_tags = material_tags_raw[vid]
 						if not (n_tags & SandboxMaterial.Tags.GRAV_STATIC):
-							# TELEPORT PUSH: Move items multiple pixels at once for high-velocity feel
 							var dx = sign(vx - x) * randi_range(2, 6)
 							var dy = sign(vy - y) * randi_range(1, 4)
-							if dy == 0: dy = -1 # Add constant "lift" to send things flying
+							if dy == 0: dy = -1 
 							
 							var tx = vx + dx; var ty = vy + dy
 							if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-								if _get_cell(tx, ty) == 0:
+								if (cells[ty * grid_width + tx] & 0xFFFF) == 0:
 									_swap_cells(vx, vy, tx, ty)
-									# Occasional visual pressure sparks
 									if randf() < 0.05: _add_spark(float(vx), float(vy), float(dx), float(dy), Color.WHITE, 0.4)
 			
-			# 2. NPC PUSH
-			var nearby_npcs = _get_nearby_npcs(x, y, 40.0)
-			for npc in nearby_npcs:
-				var diff = Vector2(npc.pos.x - x, npc.pos.y - y)
-				var d_sq = diff.length_squared()
-				if d_sq < 9.0: d_sq = 9.0 # Cap max force
-				var push_dir = diff.normalized()
-				
-				# MEGA FORCE: Violent propulsion
-				var force = 35.0 / sqrt(d_sq)
-				npc.vx += push_dir.x * force * 1.5
-				npc.vy += (push_dir.y * force) - 3.5 # Massive upward lift
-				if randf() < 0.1: npc.hp -= 1.0 # Kinetic impact damage
+			# 2. NPC PUSH (Sparse calculation: 20% of repel pixels push NPCs)
+			if randf() < 0.2:
+				var nearby_npcs = _get_nearby_npcs(x, y, 40.0)
+				for npc in nearby_npcs:
+					var dx_n = npc.pos.x - x
+					var dy_n = npc.pos.y - y
+					var d_sq = dx_n*dx_n + dy_n*dy_n
+					if d_sq < 9.0: d_sq = 9.0 
+					var force = 35.0 / sqrt(d_sq)
+					var d_inv = 1.0 / sqrt(d_sq)
+					npc.vx += dx_n * d_inv * force * 1.5
+					npc.vy += (dy_n * d_inv * force) - 3.5 
+					if randf() < 0.05: npc.hp -= 1.0 
 		
 	# FIRE AND HEAT REACTIONS
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
@@ -4376,62 +4380,58 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 								return
 
 	# --- BIOLOGICAL INTERACTIONS (PLANTS & SEEDS) ---
-	# OPTIMIZATION: Only process 5% of biological pixels per frame to save FPS
-	if randf() < 0.05:
+	# OPTIMIZATION: Only process 2% of biological pixels per frame (from 5%)
+	if randf() < 0.02:
 		# 2. PLANT GROWTH (pure_id 21 - Grass)
 		if pure_id == 21:
-			# STRICT: Must detect water to grow
-			if _has_id_within_oval(x, y, 2, 20, 10) or current_weather > 0:
+			# Optimized search (smaller radius 12x6 instead of 20x10)
+			if _has_id_within_oval(x, y, 2, 12, 6) or current_weather > 0:
 				if randf() < 0.3:
-					var gx = x + randi_range(-2, 2)
-					var gy = y + randi_range(-2, 1)
-					var tid = _get_cell(gx, gy)
-					# BALANCE: Spaced out growth (< 4 neighbors)
-					if (tid == 0 or tid == 2) and _has_tag_neighbor(gx, gy, SandboxMaterial.Tags.FERTILE):
+					var gx = x + (randi() % 5 - 2)
+					var gy = y + (randi() % 3 - 2)
+					if gx < 0 or gx >= grid_width or gy < 0 or gy >= dynamic_grid_height: return
+					var tid = cells[gy * grid_width + gx] & 0xFFFF
+					if (tid == 0 or tid == 2) and (material_tags_raw[tid] & SandboxMaterial.Tags.FERTILE):
 						if _count_neighbor_id(gx, gy, 21) < 4:
 							_set_cell(gx, gy, 21)
 	
 		# 3. MOISTURE ABSORPTION (ID 1 -> 22, ID 6 -> 23)
 		elif pure_id == 1 or pure_id == 6:
-			# Spread moisture more horizontally
-			if current_weather > 0 or _has_id_within_oval(x, y, 2, 20, 10):
-				_set_cell(x, y, 22 if pure_id == 1 else 23) # Transition to wet
+			if current_weather > 0 or _has_id_within_oval(x, y, 2, 8, 4):
+				_set_cell(x, y, 22 if pure_id == 1 else 23) 
 		
 		# 4. SPONTANEOUS GROWTH ON WET SOIL
 		elif pure_id == 22 or pure_id == 23:
-			var has_water = _has_id_within_oval(x, y, 2, 15, 10) or current_weather > 0
-			if has_water:
-				# ROOT LOGIC: Soil only turns to Grass if connected AND NOT crowded (< 3 neighbours)
+			if current_weather > 0 or _has_id_within_oval(x, y, 2, 10, 5):
 				if randf() < 0.05 and _has_tag_neighbor(x, y, SandboxMaterial.Tags.PLANT):
 					if _count_neighbor_id(x, y, 21) < 3:
-						_set_cell(x, y, 21) # Transmute to Grass
+						_set_cell(x, y, 21) 
 				
-				# Spontaneous VINE sprout (More frequent, Shorter 4-8px)
 				if randf() < 0.15:
-					if _get_cell(x, y-1) == 0 and _count_neighbor_id_radius(x, y, 24, 5) < 1:
+					if y > 0 and (cells[(y-1)*grid_width + x] & 0xFFFF) == 0 and _count_neighbor_id_radius(x, y, 24, 5) < 1:
 						_set_cell(x, y-1, 24)
-						charge_array[idx - grid_width] = randi_range(4, 8)
+						charge_array[(y-1)*grid_width + x] = randi() % 5 + 4
 
-				# Or grow upward into space/water (Grass) if connected and not crowded
 				if randf() < 0.1:
-					var tid = _get_cell(x, y-1)
-					if (tid == 0 or tid == 2) and _has_tag_neighbor(x, y, SandboxMaterial.Tags.PLANT):
-						if _count_neighbor_id(x, y-1, 21) < 3:
-							_set_cell(x, y-1, 21)
+					if y > 0:
+						var tid = cells[(y-1)*grid_width + x] & 0xFFFF
+						if (tid == 0 or tid == 2) and _has_tag_neighbor(x, y, SandboxMaterial.Tags.PLANT):
+							if _count_neighbor_id(x, y-1, 21) < 3:
+								_set_cell(x, y-1, 21)
 			else:
-				# Dry out
-				if current_weather == 0:
-					if randf() < 0.1: _set_cell(x, y, 1 if pure_id == 22 else 6)
+				if current_weather == 0 and randf() < 0.1:
+					_set_cell(x, y, 1 if pure_id == 22 else 6)
 
-		# 5. VINE GROWTH (pure_id 24) - Vertical upward growth
+		# 5. VINE GROWTH (pure_id 24)
 		elif pure_id == 24:
 			var h_left = charge_array[idx]
-			if h_left > 0 and randf() < 0.3: # Faster growth speed
-				var tid_up = _get_cell(x, y-1)
-				if (tid_up == 0 or tid_up == 2):
-					_set_cell(x, y-1, 24)
-					charge_array[idx - grid_width] = h_left - 1 # Pass height gene (4-8)
-					charge_array[idx] = 0 # Vine is now "mature"
+			if h_left > 0 and randf() < 0.3: 
+				if y > 0:
+					var tid_up = cells[(y-1)*grid_width + x] & 0xFFFF
+					if (tid_up == 0 or tid_up == 2):
+						_set_cell(x, y-1, 24)
+						charge_array[(y-1) * grid_width + x] = h_left - 1 
+						charge_array[idx] = 0 
 		
 	# 6. VOLCANO LOGIC (pure_id 27, 28, 29)
 	if pure_id == 27: # Static block
@@ -6302,10 +6302,18 @@ func _has_tag_within_oval(x, y, tag, rx, ry):
 	return false
 
 func _has_id_within_oval(x, y, target_id, rx, ry):
-	for oy in range(-ry, ry + 1, 3): 
-		for ox in range(-rx, rx + 1, 3):
-			if (float(ox*ox)/(rx*rx) + float(oy*oy)/(ry*ry)) <= 1.0:
-				if _get_cell(x + ox, y + oy) == target_id: return true
+	# ULTRA-OPTIMIZED: Use larger steps (4px) and avoid float math if possible
+	var rx_sq = float(rx * rx)
+	var ry_sq = float(ry * ry)
+	for oy in range(-ry, ry + 1, 4): 
+		var row_idx = (y + oy) * grid_width
+		if row_idx < 0 or row_idx >= cells.size(): continue
+		var oy_sq_norm = float(oy * oy) / ry_sq
+		for ox in range(-rx, rx + 1, 4):
+			if (float(ox * ox) / rx_sq + oy_sq_norm) <= 1.0:
+				var target_x = x + ox
+				if target_x >= 0 and target_x < grid_width:
+					if (cells[row_idx + target_x] & 0xFFFF) == target_id: return true
 	return false
 
 func _consume_neighbor_tag(x, y, tag):
@@ -6614,42 +6622,40 @@ func _update_texture():
 		s_mat.set_shader_parameter("tornado_ground_y", float(tornado_ground_y))
 		s_mat.set_shader_parameter("tornado_intensity", float(tornado_intensity))
 		
-	# 2. BULK DATA TRANSFER (ID Map -> GPU)
-	img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cells.to_byte_array())
+	# 3. BULK DATA TRANSFER (ID Map -> GPU)
+	var final_img = texture_rect.texture.get_image()
+	final_img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cells.to_byte_array())
 	
-	# 3. VISUAL OVERLAY (Paint sparks over the physical grid)
-	for i in range(MAX_VISUAL_SPARKS):
-		var life = vs_life[i]
-		if life <= 0.2: continue # Marker for active
-		
-		var sx = int(vs_x[i]); var sy = int(vs_y[i])
-		if sx >= 0 and sx < grid_width and sy >= 0 and sy < grid_height:
-			var sc = vs_color[i]; sc.a = life
-			sc.b = max(0.02, sc.b) # Visual Marker
-			img.set_pixel(sx, sy, sc)
-			
-	for fw in active_fireworks:
-		var fx = int(fw.x); var fy = int(fw.y)
-		if fx >= 0 and fx < grid_width and fy >= 0 and fy < grid_height:
-			var fc = fw.color
-			fc.b = max(0.02, fc.b) # Bypass ID lookup (Visual Marker)
-			img.set_pixel(fx, fy, fc) # Bright head
-			
-	# Update Charge Texture for Shader effects
+	# 4. VISUAL OVERLAY (Only process if needed)
+	if vs_ptr > 0 or active_fireworks.size() > 0:
+		for i in range(MAX_VISUAL_SPARKS):
+			var life = vs_life[i]
+			if life <= 0.2: continue
+			var sx = int(vs_x[i]); var sy = int(vs_y[i])
+			if sx >= 0 and sx < grid_width and sy >= 0 and sy < grid_height:
+				var sc = vs_color[i]; sc.a = life; sc.b = max(0.02, sc.b)
+				final_img.set_pixel(sx, sy, sc)
+				
+		for fw in active_fireworks:
+			var fx = int(fw.x); var fy = int(fw.y)
+			if fx >= 0 and fx < grid_width and fy >= 0 and fy < grid_height:
+				var fc = fw.color; fc.b = max(0.02, fc.b)
+				final_img.set_pixel(fx, fy, fc)
+	
+	texture_rect.texture.update(final_img)
+	
+	# 5. AUXILIARY TEXTURES
 	charge_img.set_data(grid_width, grid_height, false, Image.FORMAT_L8, charge_visual_buffer)
 	charge_tex.update(charge_img)
 	
-	texture_rect.texture.update(img)
+	# SYNC SIMULATION COLORS (Only every 2 frames or if painting)
+	if is_paint_tool_active or _frame_count % 2 == 0:
+		element_paint_img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cell_paint_colors.to_byte_array())
+		element_paint_tex.update(element_paint_img)
 	
 	if background_dirty:
 		background_tex.update(background_img)
 		background_dirty = false
-		
-	# SYNC SIMULATION COLORS (DYNAMIC)
-	# Optimized: Always sync if simulation is moving? (Or just rely on dirty flag from painting)
-	# BUT since particles move cell_paint_colors every frame, we MUST update the texture every frame
-	element_paint_img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cell_paint_colors.to_byte_array())
-	element_paint_tex.update(element_paint_img)
 
 func _launch_firework(x, y):
 	_set_cell(x, y, 0) # Clear the station
