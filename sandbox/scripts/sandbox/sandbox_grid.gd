@@ -323,7 +323,13 @@ var charge_queued_frame := PackedInt32Array()
 @onready var texture_rect: TextureRect = $Display
 var img: Image
 
-# INTERACTIVE TAGS MASK (Used to skip inert materials in _process_interactions)
+# OPTIMIZATION TABLES
+var oval_lookup_10x5: PackedInt32Array = []
+var oval_lookup_20x10: PackedInt32Array = []
+var oval_lookup_16x8: PackedInt32Array = []
+var neighbor_offsets: PackedInt32Array = []
+
+# INTERACTIVE TAGS MASK
 const TAGS_INTERACTIVE = SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.FLAMMABLE | \
 	SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.CONDUCTOR | \
 	SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.PLANT | \
@@ -332,6 +338,8 @@ const TAGS_INTERACTIVE = SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.
 	SandboxMaterial.Tags.MUSIC
 
 func _ready():
+	_precalculate_optimization_tables()
+	
 	_load_lab_state() # LOAD DATA FIRST
 	
 	# 0. GLOBAL VISUAL STABILITY (Fixes grey margins on Tablets/Modern Devices)
@@ -4383,58 +4391,46 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 								return
 
 	# --- BIOLOGICAL INTERACTIONS (PLANTS & SEEDS) ---
-	# OPTIMIZATION: Only process 2% of biological pixels per frame (from 5%)
 	if randf() < 0.02:
-		# 2. PLANT GROWTH (pure_id 21 - Grass)
-		if pure_id == 21:
-			# Optimized search (smaller radius 12x6 instead of 20x10)
-			if _has_id_within_oval(x, y, 2, 12, 6) or current_weather > 0:
-				if randf() < 0.3:
-					var gx = x + (randi() % 5 - 2)
-					var gy = y + (randi() % 3 - 2)
-					if gx < 0 or gx >= grid_width or gy < 0 or gy >= dynamic_grid_height: return
-					var tid = cells[gy * grid_width + gx] & 0xFFFF
-					if (tid == 0 or tid == 2) and (material_tags_raw[tid] & SandboxMaterial.Tags.FERTILE):
-						if _count_neighbor_id(gx, gy, 21) < 4:
-							_set_cell(gx, gy, 21)
-	
-		# 3. MOISTURE ABSORPTION (ID 1 -> 22, ID 6 -> 23)
-		elif pure_id == 1 or pure_id == 6:
-			if current_weather > 0 or _has_id_within_oval(x, y, 2, 8, 4):
-				_set_cell(x, y, 22 if pure_id == 1 else 23) 
-		
-		# 4. SPONTANEOUS GROWTH ON WET SOIL
-		elif pure_id == 22 or pure_id == 23:
-			if current_weather > 0 or _has_id_within_oval(x, y, 2, 10, 5):
-				if randf() < 0.05 and _has_tag_neighbor(x, y, SandboxMaterial.Tags.PLANT):
-					if _count_neighbor_id(x, y, 21) < 3:
-						_set_cell(x, y, 21) 
-				
-				if randf() < 0.15:
-					if y > 0 and (cells[(y-1)*grid_width + x] & 0xFFFF) == 0 and _count_neighbor_id_radius(x, y, 24, 5) < 1:
-						_set_cell(x, y-1, 24)
-						charge_array[(y-1)*grid_width + x] = randi() % 5 + 4
-
-				if randf() < 0.1:
-					if y > 0:
-						var tid = cells[(y-1)*grid_width + x] & 0xFFFF
-						if (tid == 0 or tid == 2) and _has_tag_neighbor(x, y, SandboxMaterial.Tags.PLANT):
-							if _count_neighbor_id(x, y-1, 21) < 3:
-								_set_cell(x, y-1, 21)
-			else:
-				if current_weather == 0 and randf() < 0.1:
-					_set_cell(x, y, 1 if pure_id == 22 else 6)
-
-		# 5. VINE GROWTH (pure_id 24)
-		elif pure_id == 24:
-			var h_left = charge_array[idx]
-			if h_left > 0 and randf() < 0.3: 
-				if y > 0:
-					var tid_up = cells[(y-1)*grid_width + x] & 0xFFFF
-					if (tid_up == 0 or tid_up == 2):
-						_set_cell(x, y-1, 24)
-						charge_array[(y-1) * grid_width + x] = h_left - 1 
-						charge_array[idx] = 0 
+		match pure_id:
+			21: # Grass
+				# WIDE SEARCH: Grass now feels water from further away (20x10)
+				if current_weather > 0 or _has_id_in_lookup(idx, 2, oval_lookup_20x10):
+					if randf() < 0.3:
+						var gx = x + (randi() % 5 - 2)
+						var gy = y + (randi() % 5 - 2)
+						if gx >= 0 and gx < grid_width and gy >= 0 and gy < dynamic_grid_height:
+							var g_idx = gy * grid_width + gx
+							var tid = cells[g_idx] & 0xFFFF
+							if (tid == 0 or tid == 2) and (material_tags_raw[tid] & SandboxMaterial.Tags.FERTILE):
+								if _count_neighbor_id_fast(g_idx, 21) < 4:
+									_set_cell(gx, gy, 21)
+			1, 6: # Fertile Soil
+				if current_weather > 0 or _has_id_in_lookup(idx, 2, oval_lookup_16x8):
+					_set_cell(x, y, 22 if pure_id == 1 else 23)
+			22, 23: # Wet Soil
+				if current_weather > 0 or _has_id_in_lookup(idx, 2, oval_lookup_20x10):
+					if randf() < 0.05 and _has_tag_neighbor(x, y, SandboxMaterial.Tags.PLANT):
+						if _count_neighbor_id_fast(idx, 21) < 4:
+							_set_cell(x, y, 21)
+					elif randf() < 0.15: # Sprout vines
+						if y > 0 and (cells[idx - grid_width] & 0xFFFF) == 0:
+							# DENSITY FIX: Only sprout vines if no other vines are nearby (Separation)
+							if _count_neighbor_id_radius(x, y, 24, 4) < 1:
+								_set_cell(x, y-1, 24)
+								charge_array[idx - grid_width] = randi() % 5 + 4
+				else:
+					if current_weather == 0 and randf() < 0.1:
+						_set_cell(x, y, 1 if pure_id == 22 else 6)
+			24: # Vines
+				var h_left = charge_array[idx]
+				if h_left > 0 and randf() < 0.3 and y > 0:
+					if (cells[idx - grid_width] & 0xFFFF) == 0:
+						# Keep vines single-column (Don't clump)
+						if _count_neighbor_id_fast(idx - grid_width, 24) < 2:
+							_set_cell(x, y-1, 24)
+							charge_array[idx - grid_width] = h_left - 1
+							charge_array[idx] = 0
 		
 	# 6. VOLCANO LOGIC (pure_id 27, 28, 29)
 	if pure_id == 27: # Static block
@@ -6303,6 +6299,47 @@ func _has_tag_within_oval(x, y, tag, rx, ry):
 				var nid = _get_cell(x + ox, y + oy)
 				if nid > 0 and (material_tags_raw[nid] & tag): return true
 	return false
+
+func _precalculate_optimization_tables():
+	# 1. Neighbor Offsets (3x3 relative indices)
+	neighbor_offsets = PackedInt32Array([
+		-grid_width - 1, -grid_width, -grid_width + 1,
+		-1, 1,
+		grid_width - 1, grid_width, grid_width + 1
+	])
+	
+	# 2. Oval Lookups (Offsets to the center)
+	# Increased ranges (20x10 and 16x8) with larger steps (5px) for high-performance ecology
+	oval_lookup_10x5 = _get_oval_offsets(10, 5, 3) # Fine search
+	oval_lookup_20x10 = _get_oval_offsets(20, 10, 5) # Wide search (Water)
+	oval_lookup_16x8 = _get_oval_offsets(16, 8, 4) # Medium search
+
+func _get_oval_offsets(rx: int, ry: int, step: int) -> PackedInt32Array:
+	var offsets = PackedInt32Array()
+	var rx_sq = float(rx * rx)
+	var ry_sq = float(ry * ry)
+	for oy in range(-ry, ry + 1, step):
+		var row_offset = oy * grid_width
+		var oy_norm = float(oy * oy) / ry_sq
+		for ox in range(-rx, rx + 1, step):
+			if (float(ox * ox) / rx_sq + oy_norm) <= 1.0:
+				offsets.append(row_offset + ox)
+	return offsets
+
+func _has_id_in_lookup(idx: int, target_id: int, lookup: PackedInt32Array) -> bool:
+	for offset in lookup:
+		var n_idx = idx + offset
+		if n_idx >= 0 and n_idx < cells.size():
+			if (cells[n_idx] & 0xFFFF) == target_id: return true
+	return false
+
+func _count_neighbor_id_fast(idx: int, target_id: int) -> int:
+	var count = 0
+	for offset in neighbor_offsets:
+		var n_idx = idx + offset
+		if n_idx >= 0 and n_idx < cells.size():
+			if (cells[n_idx] & 0xFFFF) == target_id: count += 1
+	return count
 
 func _has_id_within_oval(x, y, target_id, rx, ry):
 	# ULTRA-OPTIMIZED: Use larger steps (4px) and avoid float math if possible
