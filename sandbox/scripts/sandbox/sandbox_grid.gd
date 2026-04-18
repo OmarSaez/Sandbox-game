@@ -3692,6 +3692,15 @@ func _draw_circle(cx, cy, radius, mat_id):
 			if x*x + y*y <= radius*radius:
 				_set_cell(cx + x, cy + y, mat_id)
 
+func _set_cell_by_idx(idx: int, mat_id: int):
+	if idx < 0 or idx >= cells.size(): return
+	var x = idx % grid_width
+	var y = int(idx / grid_width)
+	_set_cell(x, y, mat_id)
+
+func _prime_explosive_by_idx(idx: int, id: int, manual_flags: int = -1):
+	_prime_explosive(idx % grid_width, int(idx / grid_width), id, manual_flags)
+
 func _register_material(id: int, color1: Color, tags: int, color2 = null, color3 = null):
 	mat_colors_1[id] = color1
 	mat_colors_2[id] = color2 if color2 != null else color1
@@ -3880,11 +3889,15 @@ func _step_simulation():
 										if (cells[n_idx] & 0xFFFF) == 0: # Down
 											_swap_cells(x, y, x, ny)
 										elif (tags & SandboxMaterial.Tags.LIQUID):
-											if randf() > 0.5:
-												if x < grid_width - 1 and (cells[idx + 1] & 0xFFFF) == 0: _swap_cells(x, y, x + 1, y)
-												elif x > 0 and (cells[idx - 1] & 0xFFFF) == 0: _swap_cells(x, y, x - 1, y)
+											# Use Pre-calculated LUT for probability (Esthetic flow)
+											if _get_lut_rand() > 0.45: 
+												var side = 1 if _get_lut_rand() > 0.5 else -1
+												if x + side >= 0 and x + side < grid_width and (cells[idx + side] & 0xFFFF) == 0:
+													_swap_cells(x, y, x + side, y)
+												elif x - side >= 0 and x - side < grid_width and (cells[idx - side] & 0xFFFF) == 0:
+													_swap_cells(x, y, x - side, y)
 										elif (tags & SandboxMaterial.Tags.POWDER):
-											var dx = 1 if randf() > 0.5 else -1
+											var dx = 1 if _get_lut_rand() > 0.5 else -1
 											var nx = x + dx
 											if nx >= 0 and nx < grid_width:
 												var ni = row_idx + grid_width + nx
@@ -4015,30 +4028,31 @@ func _swap_cells(x1, y1, x2, y2):
 	var idx2 = y2 * grid_width + x2
 	var m1 = cells[idx1]
 	var m2 = cells[idx2]
-	var c1 = charge_array[idx1]
-	var c2 = charge_array[idx2]
-	var cv1 = charge_visual_buffer[idx1]
-	var cv2 = charge_visual_buffer[idx2]
 	
 	cells[idx1] = m2
 	tags_array[idx1] = material_tags_raw[m2 & 0xFFFF]
-	charge_array[idx1] = c2
-	charge_visual_buffer[idx1] = cv2
-	
 	cells[idx2] = m1
 	tags_array[idx2] = material_tags_raw[m1 & 0xFFFF]
-	charge_array[idx2] = c1
-	charge_visual_buffer[idx2] = cv1
 	
-	# MOVE PAINT COLOR WITH PARTICLE
+	# LAZY UPDATE: Only swap extra arrays if they contain data (Huge memory bandwidth save)
+	var c1 = charge_array[idx1]
+	var c2 = charge_array[idx2]
+	if c1 > 0 or c2 > 0:
+		charge_array[idx1] = c2
+		charge_array[idx2] = c1
+		var cv1 = charge_visual_buffer[idx1]
+		var cv2 = charge_visual_buffer[idx2]
+		charge_visual_buffer[idx1] = cv2
+		charge_visual_buffer[idx2] = cv1
+		if c1 > 0: _register_charge(idx2)
+		if c2 > 0: _register_charge(idx1)
+	
 	var color1 = cell_paint_colors[idx1]
-	cell_paint_colors[idx1] = cell_paint_colors[idx2]
-	cell_paint_colors[idx2] = color1
+	var color2 = cell_paint_colors[idx2]
+	if color1 > 0 or color2 > 0:
+		cell_paint_colors[idx1] = color2
+		cell_paint_colors[idx2] = color1
 	
-	if c1 > 0: _register_charge(idx2)
-	if c2 > 0: _register_charge(idx1)
-	
-	# Wake up chunks
 	_activate_chunk(x1, y1)
 	_activate_chunk(x2, y2)
 
@@ -4202,7 +4216,9 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			if randf() < 0.1 and _get_cell(x, y-1) == 0:
 				_set_cell(x, y - 1, 3)
 		
-		_check_neighbors_for_reaction(x, y, true)
+		# SPARSE SAMPLING: Only check reactions for Fire/Heat in 50% of frames (Huge CPU save for big fires)
+		if randf() < 0.5:
+			_check_neighbors_for_reaction(x, y, true)
 
 	# FLAMMABLE / REACTIVE MATERIALS
 	if (tags & SandboxMaterial.Tags.FLAMMABLE) or (tags & SandboxMaterial.Tags.EXPLOSIVE):
@@ -4370,25 +4386,16 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 	# --- CORROSION (ACID) ---
 	if (tags & SandboxMaterial.Tags.ACID):
 		if randf() < 0.4: # Reaction Speed
-			for ny in range(y - 1, y + 2):
-				for nx in range(x - 1, x + 2):
-					if nx == x and ny == y: continue
-					var nid = _get_cell(nx, ny)
-					if nid > 0:
+			for offset in neighbor_offsets:
+				var n_idx = idx + offset
+				if n_idx >= 0 and n_idx < cells.size():
+					var nid = cells[n_idx] & 0xFFFF
+					if nid > 0 and nid != pure_id:
 						var n_tags = material_tags_raw[nid]
 						if not (n_tags & (SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.INVINCIBLE)):
-							# CORROSION: Destroy material and spark CORROSIVE ACID (ID 44)
-							_set_cell(nx, ny, 44) 
-							
-							# Acid has 30% chance to evaporate upon reaction
-							if randf() < 0.3:
-								_set_cell(x, y, 0)
-								return # Evaporated into gas/nothing
-							
-							# If eating a SOLID, it's harder work (10% extra consumption)
-							if (n_tags & SandboxMaterial.Tags.SOLID) and randf() < 0.1:
-								_set_cell(x, y, 0)
-								return
+							_set_cell_by_idx(n_idx, 44) 
+							if randf() < 0.3: _set_cell(x, y, 0); return
+							if (n_tags & SandboxMaterial.Tags.SOLID) and randf() < 0.1: _set_cell(x, y, 0); return
 
 	# --- BIOLOGICAL INTERACTIONS (PLANTS & SEEDS) ---
 	if randf() < 0.02:
