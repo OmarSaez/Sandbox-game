@@ -3248,7 +3248,7 @@ func _process(delta):
 						if selected_material == 600:
 							_play_music_note(5, 0)
 						else:
-							var inst = int(float(selected_material - MUSIC_ID_START) / 16.0)
+							var inst = (selected_material - MUSIC_ID_START) / 16
 							var note = (selected_material - MUSIC_ID_START) % 16
 							_play_music_note(inst, note)
 					
@@ -3665,8 +3665,10 @@ func _paint_elements_circle(cx: int, cy: int, diameter: int, color: Color):
 				var dy = float(y - cy)
 				if dx*dx + dy*dy <= r2:
 					var idx = y * grid_width + x
-					cell_paint_colors[idx] = color_int
-					element_paint_dirty = true
+					# ONLY paint if there is a material (NOT air)
+					if (cells[idx] & 0xFFFF) != 0:
+						cell_paint_colors[idx] = color_int
+						element_paint_dirty = true
 
 func _draw_circle(cx, cy, radius, mat_id):
 	if mat_id == 0:
@@ -3715,7 +3717,9 @@ func _set_cell(x, y, mat_id):
 		if mat_id == 0:
 			if cells[idx] == 0: return # Already air, no work needed
 			cells[idx] = 0
-			cell_paint_colors[idx] = 0 # Clear paint when clearing element
+			if cell_paint_colors[idx] != 0:
+				cell_paint_colors[idx] = 0
+				element_paint_dirty = true
 			tags_array[idx] = 0
 			charge_array[idx] = 0
 			charge_visual_buffer[idx] = 0
@@ -3753,6 +3757,12 @@ func _set_cell(x, y, mat_id):
 		# CLEANUP GLOW: Prevent ghost colors when painting over old explosions
 		charge_array[idx] = 0
 		charge_visual_buffer[idx] = 0
+		
+		# CLEAR PAINT on material change to avoid "phantom" colors
+		if cell_paint_colors[idx] != 0:
+			cell_paint_colors[idx] = 0
+			element_paint_dirty = true
+			
 		_activate_chunk(x, y)
 
 		if (tags & SandboxMaterial.Tags.ELECTRICITY): 
@@ -3820,12 +3830,15 @@ func _step_simulation():
 			var x_end = min(x_start + CHUNK_SIZE, grid_width)
 			var y_end = min(y_start + CHUNK_SIZE, dynamic_grid_height)
 			
+			var x_range = x_end - x_start
+			var sweep_reverse_base = (Engine.get_frames_drawn()) % 2 == 0
+			
 			for y in range(y_start, y_end):
 				var row_idx = y * grid_width
-				var sweep = range(x_start, x_end)
-				if (Engine.get_frames_drawn() + y) % 2 == 0: sweep = range(x_end - 1, x_start - 1, -1)
+				var sweep_reverse = (sweep_reverse_base != (y % 2 == 0))
 				
-				for x in sweep:
+				for i in range(x_range):
+					var x = (x_end - 1 - i) if sweep_reverse else (x_start + i)
 					var idx = row_idx + x
 					var raw_id = cells[idx]
 					var pure_id = raw_id & 0xFFFF
@@ -3856,12 +3869,15 @@ func _step_simulation():
 			var x_end = min(x_start + CHUNK_SIZE, grid_width)
 			var y_end = min(y_start + CHUNK_SIZE, dynamic_grid_height)
 			
+			var x_range = x_end - x_start
+			var sweep_reverse_base = (Engine.get_frames_drawn()) % 2 == 0
+			
 			for y in range(y_end - 1, y_start - 1, -1):
 				var row_idx = y * grid_width
-				var sweep = range(x_start, x_end)
-				if (Engine.get_frames_drawn() + y) % 2 == 0: sweep = range(x_end - 1, x_start - 1, -1)
+				var sweep_reverse = (sweep_reverse_base != (y % 2 == 0))
 				
-				for x in sweep:
+				for i in range(x_range):
+					var x = (x_end - 1 - i) if sweep_reverse else (x_start + i)
 					var idx = row_idx + x
 					var raw_id = cells[idx]
 					var pure_id = raw_id & 0xFFFF
@@ -3892,7 +3908,8 @@ func _step_simulation():
 											# Use Pre-calculated LUT for probability (Esthetic flow)
 											if _get_lut_rand() > 0.45: 
 												var side = 1 if _get_lut_rand() > 0.5 else -1
-												if x + side >= 0 and x + side < grid_width and (cells[idx + side] & 0xFFFF) == 0:
+												var side_idx = idx + side
+												if x + side >= 0 and x + side < grid_width and (cells[side_idx] & 0xFFFF) == 0:
 													_swap_cells(x, y, x + side, y)
 												elif x - side >= 0 and x - side < grid_width and (cells[idx - side] & 0xFFFF) == 0:
 													_swap_cells(x, y, x - side, y)
@@ -3935,15 +3952,14 @@ func _process_electricity():
 			# MUSIC TRIGGER: Automatic activation for music blocks
 			if (material_tags_raw[mid] & SandboxMaterial.Tags.MUSIC):
 				var gx = idx % grid_width
-				var gy = int(float(idx) / grid_width)
+				var gy = idx / grid_width
 				
 				# 2x2 DUPES FILTER: Only trigger for the "top-left" pixel of the 2x2 block
-				# This ensures 1 block = 1 voice, saving pool and preventing saturation
 				if (gx % 2 == 0 and gy % 2 == 0):
 					if mid == 600: # Metronome sound
 						_play_music_note(5, 0)
 					else:
-						var inst = int(float(mid - MUSIC_ID_START) / 16.0)
+						var inst = (mid - MUSIC_ID_START) / 16
 						var note = (mid - MUSIC_ID_START) % 16
 						_play_music_note(inst, note)
 			
@@ -3951,16 +3967,17 @@ func _process_electricity():
 		
 		if charge == 100:
 			var x = idx % grid_width
-			var y = int(float(idx) / grid_width)
+			var y = idx / grid_width
 			var my_tags = material_tags_raw[mid]
 			# Only CONDUCTOR and pure ELECTRICITY can SPREAD energy to neighbors
 			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY)):
 				for ny in range(y - 1, y + 2):
 					if ny < 0 or ny >= grid_height: continue
+					var row_offset = ny * grid_width
 					for nx in range(x - 1, x + 2):
 						if nx < 0 or nx >= grid_width: continue
 						if nx == x and ny == y: continue
-						var n_idx = ny * grid_width + nx
+						var n_idx = row_offset + nx
 						var n_pid = cells[n_idx] & 0xFFFF
 						if n_pid <= 0: continue
 						var n_tags = tags_array[n_idx]
@@ -3978,12 +3995,12 @@ func _process_electricity():
 			charge_visual_buffer[idx] = clampi(charge_array[idx], 0, 255)
 			if charge_array[idx] > 0:
 				_register_charge(idx)
-				_activate_chunk(idx % grid_width, int(float(idx) / grid_width))
+				_activate_chunk(idx % grid_width, idx / grid_width)
 		elif mid == 7 or mid == 71 or mid == 77 or mid == 72: # TNT/Primed logic
 			charge_array[idx] -= 1 
 			if charge_array[idx] > 0:
 				_register_charge(idx)
-				_activate_chunk(idx % grid_width, int(float(idx) / grid_width))
+				_activate_chunk(idx % grid_width, idx / grid_width)
 
 
 
@@ -4049,9 +4066,10 @@ func _swap_cells(x1, y1, x2, y2):
 	
 	var color1 = cell_paint_colors[idx1]
 	var color2 = cell_paint_colors[idx2]
-	if color1 > 0 or color2 > 0:
+	if color1 != 0 or color2 != 0:
 		cell_paint_colors[idx1] = color2
 		cell_paint_colors[idx2] = color1
+		element_paint_dirty = true
 	
 	_activate_chunk(x1, y1)
 	_activate_chunk(x2, y2)
@@ -4120,7 +4138,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		# SUPER VORTEX: Optimized processing (10% chance per pixel, but high density pulse)
 		if randf() < 0.1:
 			# 1. MATERIAL SUCTION & CONSUMPTION
-			for i in range(4): # Reduced from 20 to 4 rays per active pixel
+			for i in range(20): # from 20 power
 				var l_idx = randi() % LUT_SIZE
 				var dist = int(_get_lut_rand() * 45)
 				var vx = x + int(cos_lut[l_idx] * dist)
@@ -4152,8 +4170,8 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 										_swap_cells(vx, vy, tx, ty)
 			
 			# 2. NPC PULL (Sparse calculation: 20% of vortex pixels pull NPCs)
-			if randf() < 0.2:
-				var nearby_npcs = _get_nearby_npcs(x, y, 50.0)
+			if randf() < 0.1:
+				var nearby_npcs = _get_nearby_npcs(x, y, 30.0)
 				for npc in nearby_npcs:
 					var dx_n = x - npc.pos.x
 					var dy_n = y - npc.pos.y
@@ -4165,11 +4183,11 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		
 	# REPEL LOGIC (Laboratory Exclusive - Fan/Wind effect)
 	if (tags & SandboxMaterial.Tags.REPEL):
-		if randf() < 0.1: # Reduced from 0.6
+		if randf() < 0.1: # Reduced from 0.1
 			# 1. MEGA MATERIAL REPULSION (Blast Away)
-			for i in range(3): # Reduced from 15 to 3 rays
+			for i in range(30): # 20 POWER
 				var l_idx = randi() % LUT_SIZE
-				var dist = int(_get_lut_rand() * 30)
+				var dist = int(_get_lut_rand() * 35)
 				var vx = x + int(cos_lut[l_idx] * dist)
 				var vy = y + int(sin_lut[l_idx] * dist)
 				
@@ -4190,8 +4208,8 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 									if randf() < 0.05: _add_spark(float(vx), float(vy), float(dx), float(dy), Color.WHITE, 0.4)
 			
 			# 2. NPC PUSH (Sparse calculation: 20% of repel pixels push NPCs)
-			if randf() < 0.2:
-				var nearby_npcs = _get_nearby_npcs(x, y, 40.0)
+			if randf() < 0.02:
+				var nearby_npcs = _get_nearby_npcs(x, y, 5.0)
 				for npc in nearby_npcs:
 					var dx_n = npc.pos.x - x
 					var dy_n = npc.pos.y - y
@@ -4263,7 +4281,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		# Trigger only on neighbor heat (electricity check removed as it's handled in _process_electricity)
 		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY):
 			var gx = idx % grid_width
-			var gy = int(float(idx) / grid_width)
+			var gy = idx / grid_width
 			# 2x2 DUPES FILTER: Only trigger for the "top-left" pixel of the 2x2 block
 			if (gx % 2 == 0 and gy % 2 == 0):
 				if pure_id == 600:
@@ -5683,13 +5701,15 @@ func _update_npc_spatial_hash():
 func _get_nearby_npcs(px, py, radius) -> Array:
 	var results = []
 	if npc_spatial_grid.is_empty(): return results
-	var x_min = clampi(int((px - radius) / SPATIAL_CELL_SIZE), 0, spatial_grid_w - 1)
-	var x_max = clampi(int((px + radius) / SPATIAL_CELL_SIZE), 0, spatial_grid_w - 1)
-	var y_min = clampi(int((py - radius) / SPATIAL_CELL_SIZE), 0, spatial_grid_h - 1)
-	var y_max = clampi(int((py + radius) / SPATIAL_CELL_SIZE), 0, spatial_grid_h - 1)
+	var inv_cell_size = 1.0 / float(SPATIAL_CELL_SIZE)
+	var x_min = clampi(int((px - radius) * inv_cell_size), 0, spatial_grid_w - 1)
+	var x_max = clampi(int((px + radius) * inv_cell_size), 0, spatial_grid_w - 1)
+	var y_min = clampi(int((py - radius) * inv_cell_size), 0, spatial_grid_h - 1)
+	var y_max = clampi(int((py + radius) * inv_cell_size), 0, spatial_grid_h - 1)
 	for gy in range(y_min, y_max + 1):
+		var row_offset = gy * spatial_grid_w
 		for gx in range(x_min, x_max + 1):
-			results.append_array(npc_spatial_grid[gy * spatial_grid_w + gx])
+			results.append_array(npc_spatial_grid[row_offset + gx])
 	return results
 
 func _process_npcs(delta):
@@ -6203,12 +6223,12 @@ func _process_projectiles(delta):
 	for idx in to_remove: active_projectiles.remove_at(idx)
 
 func _find_closest_enemy(me, radar_range):
-	var closest = null; var min_dist = radar_range
+	var closest = null; var min_dist_sq = radar_range * radar_range
 	var nearby = _get_nearby_npcs(me.pos.x, me.pos.y, radar_range)
 	for other in nearby:
 		if other.team != me.team and other.hp > 0:
-			var d = me.pos.distance_to(other.pos)
-			if d < min_dist: min_dist = d; closest = other
+			var d_sq = me.pos.distance_squared_to(other.pos)
+			if d_sq < min_dist_sq: min_dist_sq = d_sq; closest = other
 	return closest
 
 func _attack_npc(attacker, victim):
@@ -6237,7 +6257,8 @@ func _check_npc_environment_damage(npc) -> bool:
 	var check_points = [p, p + Vector2i(1, 2), p + Vector2i(0, 4), p + Vector2i(0, 5), p + Vector2i(1, 5), p + Vector2i(-1, 2), p + Vector2i(2, 2)]
 	for pt in check_points:
 		if pt.x < 0 or pt.x >= grid_width or pt.y < 0 or pt.y >= dynamic_grid_height: continue
-		var tid = cells[pt.y * grid_width + pt.x] & 0xFFFF
+		var cell_idx = pt.y * grid_width + pt.x
+		var tid = cells[cell_idx] & 0xFFFF
 		var t_tags = material_tags_raw[tid]
 		if (t_tags & SandboxMaterial.Tags.ACID):
 			npc.hp -= 3.5; npc.hit_flash = 5; npc.hit_type = "acid"; took_damage = true
@@ -6247,16 +6268,19 @@ func _check_npc_environment_damage(npc) -> bool:
 			if randf() < 0.3: _add_spark(float(pt.x),float(pt.y),randf_range(-15,15),randf_range(-35,-15),Color("#FF8200"),0.5)
 		
 		# Electricity Damage
-		if charge_array[pt.y * grid_width + pt.x] > 50:
+		if charge_array[cell_idx] > 50:
 			npc.hp -= 2.5; took_damage = true; npc.hit_flash = 5; npc.hit_type = "electric"
 			if randf() < 0.4: _add_spark(float(pt.x),float(pt.y),randf_range(-20,20),randf_range(-40,-10),Color.CYAN,0.4)
 	var air_found = false
 	for oy in range(-1, 6):
+		var ty = npc.pos.y + oy
+		if ty < 0 or ty >= dynamic_grid_height: continue
+		var row_offset = ty * grid_width
 		for ox in range(-1, 3):
 			if oy >= 0 and oy <= 4 and ox >= 0 and ox <= 1: continue
-			var tx = npc.pos.x + ox; var ty = npc.pos.y + oy
-			if tx < 0 or tx >= grid_width or ty < 0 or ty >= dynamic_grid_height: continue
-			var nid = cells[ty * grid_width + tx] & 0xFFFF
+			var tx = npc.pos.x + ox
+			if tx < 0 or tx >= grid_width: continue
+			var nid = cells[row_offset + tx] & 0xFFFF
 			if nid == 0 or nid == 15 or nid == 17: air_found = true; break
 		if air_found: break
 	if !air_found: npc.hp -= 3.0; npc.hit_flash = 4; took_damage = true
@@ -6273,8 +6297,9 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 	
 	# Chequeo de píxeles: Ignorar Plantas y NPCs para fluidez
 	for oy in range(5):
+		var row_offset = (gy + oy) * grid_width
 		for ox in range(2):
-			var tid = _get_cell(gx + ox, gy + oy)
+			var tid = cells[row_offset + gx + ox] & 0xFFFF
 			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
 				# Si es sólido, pero es una PLANTA, permitimos el paso (los soldados las pisan/atraviesan)
 				var tags = material_tags_raw[tid]
@@ -6292,10 +6317,11 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 	return true
 
 func _has_tag_neighbor(x, y, tag):
-	for ny in range(y - 1, y + 2):
-		for nx in range(x - 1, x + 2):
-			if nx == x and ny == y: continue
-			var nid = _get_cell(nx, ny)
+	var idx = y * grid_width + x
+	for offset in neighbor_offsets:
+		var n_idx = idx + offset
+		if n_idx >= 0 and n_idx < cells.size():
+			var nid = cells[n_idx] & 0xFFFF
 			if nid > 0 and (material_tags_raw[nid] & tag): return true
 	return false
 
@@ -6661,7 +6687,6 @@ func _push_particle(x, y, dx, dy):
 		if _get_cell(tx, ty) == 0: _swap_cells(x, y, tx, ty)
 
 func _update_texture():
-	# ZERO-COPY GPU RENDER PASS (Peak GDScript Performance)
 	# 1. Update Tornado Parameters
 	var s_mat = texture_rect.material as ShaderMaterial
 	if s_mat:
@@ -6669,36 +6694,46 @@ func _update_texture():
 		s_mat.set_shader_parameter("tornado_ground_y", float(tornado_ground_y))
 		s_mat.set_shader_parameter("tornado_intensity", float(tornado_intensity))
 		
-	# 3. BULK DATA TRANSFER (ID Map -> GPU)
-	var final_img = texture_rect.texture.get_image()
-	final_img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cells.to_byte_array())
+	# 2. BULK DATA TRANSFER (Cells -> Raw Bytes)
+	var raw_data = cells.to_byte_array()
 	
-	# 4. VISUAL OVERLAY (Only process if needed)
+	# 3. OPTIMIZED VISUAL OVERLAY (Write directly to raw_data buffer)
+	# This is MUCH faster than img.set_pixel()
 	if vs_ptr > 0 or active_fireworks.size() > 0:
+		var bytes_per_row = grid_width * 4
 		for i in range(MAX_VISUAL_SPARKS):
 			var life = vs_life[i]
 			if life <= 0.2: continue
 			var sx = int(vs_x[i]); var sy = int(vs_y[i])
 			if sx >= 0 and sx < grid_width and sy >= 0 and sy < grid_height:
-				var sc = vs_color[i]; sc.a = life; sc.b = max(0.02, sc.b)
-				final_img.set_pixel(sx, sy, sc)
+				var sc = vs_color[i]
+				sc.a = life
+				sc.b = max(0.02, sc.b) # Hybrid shader marker
+				var color_u32 = sc.to_abgr32()
+				raw_data.encode_u32((sy * grid_width + sx) * 4, color_u32)
 				
 		for fw in active_fireworks:
 			var fx = int(fw.x); var fy = int(fw.y)
 			if fx >= 0 and fx < grid_width and fy >= 0 and fy < grid_height:
-				var fc = fw.color; fc.b = max(0.02, fc.b)
-				final_img.set_pixel(fx, fy, fc)
+				var fc = fw.color
+				fc.b = max(0.02, fc.b)
+				raw_data.encode_u32((fy * grid_width + fx) * 4, fc.to_abgr32())
 	
-	texture_rect.texture.update(final_img)
+	# Update persistent image object
+	img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, raw_data)
+	texture_rect.texture.update(img)
 	
-	# 5. AUXILIARY TEXTURES
-	charge_img.set_data(grid_width, grid_height, false, Image.FORMAT_L8, charge_visual_buffer)
-	charge_tex.update(charge_img)
+	# 4. CONDITIONAL AUXILIARY UPDATES
+	# Only update charge texture if there are active charges to save GPU bandwidth
+	if active_charge_indices.size() > 0 or _frame_count % 30 == 0:
+		charge_img.set_data(grid_width, grid_height, false, Image.FORMAT_L8, charge_visual_buffer)
+		charge_tex.update(charge_img)
 	
-	# SYNC SIMULATION COLORS (Only every 2 frames or if painting)
-	if is_paint_tool_active or _frame_count % 2 == 0:
+	# Only update paint texture if dirty or actively painting
+	if is_paint_tool_active or element_paint_dirty:
 		element_paint_img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cell_paint_colors.to_byte_array())
 		element_paint_tex.update(element_paint_img)
+		element_paint_dirty = false
 	
 	if background_dirty:
 		background_tex.update(background_img)
