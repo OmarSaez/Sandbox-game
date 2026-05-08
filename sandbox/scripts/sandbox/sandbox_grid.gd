@@ -3784,10 +3784,28 @@ func _draw_circle(cx, cy, radius, mat_id):
 				npc.hp = 0 # Instant kill
 				npc.hit_flash = 1 # Minimal flash to trigger removal next frame
 	
+	var r2 = radius * radius
+	# BATCH OPTIMIZATION: We will manually activate the entire bounding box area once
+	# to avoid redundant neighbor-checks in _set_cell/_activate_chunk
+	var min_cx = int(float(cx - radius) / CHUNK_SIZE)
+	var max_cx = int(float(cx + radius) / CHUNK_SIZE)
+	var min_cy = int(float(cy - radius) / CHUNK_SIZE)
+	var max_cy = int(float(cy + radius) / CHUNK_SIZE)
+	
+	for acy in range(min_cy - 1, max_cy + 2):
+		if acy < 0 or acy >= chunks_y: continue
+		var row = acy * chunks_x
+		for acx in range(min_cx - 1, max_cx + 2):
+			if acx >= 0 and acx < chunks_x:
+				next_chunks_active[row + acx] = 60
+
 	for y in range(-radius, radius + 1):
+		var y2 = y * y
+		var gy = cy + y
+		if gy < 0 or gy >= dynamic_grid_height: continue
 		for x in range(-radius, radius + 1):
-			if x*x + y*y <= radius*radius:
-				_set_cell(cx + x, cy + y, mat_id)
+			if x*x + y2 <= r2:
+				_set_cell(cx + x, gy, mat_id)
 
 func _set_cell_by_idx(idx: int, mat_id: int):
 	if idx < 0 or idx >= cells.size(): return
@@ -3814,7 +3832,7 @@ func _set_cell(x, y, mat_id):
 			cells[idx] = 0
 			if cell_paint_colors[idx] != 0:
 				cell_paint_colors[idx] = 0
-				element_paint_dirty = true
+				if not element_paint_dirty: element_paint_dirty = true
 			tags_array[idx] = 0
 			charge_array[idx] = 0
 			charge_visual_buffer[idx] = 0
@@ -3824,6 +3842,10 @@ func _set_cell(x, y, mat_id):
 		# ENSURE mat_id is just the base material ID for lookup (Strip variants/data)
 		var pure_id = mat_id & 0xFFFF
 		if pure_id < 0 or pure_id >= material_tags_raw.size(): return
+		
+		# PERFORMANCE: Early exit if the material is already exactly the same
+		# This prevents redundant work and mass-activation of chunks when painting over the same area
+		if (cells[idx] & 0xFFFF) == pure_id: return
 		
 		var tags = material_tags_raw[pure_id]
 		
@@ -3856,7 +3878,7 @@ func _set_cell(x, y, mat_id):
 		# CLEAR PAINT on material change to avoid "phantom" colors
 		if cell_paint_colors[idx] != 0:
 			cell_paint_colors[idx] = 0
-			element_paint_dirty = true
+			if not element_paint_dirty: element_paint_dirty = true
 			
 		_activate_chunk(x, y)
 
