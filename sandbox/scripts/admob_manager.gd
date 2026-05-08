@@ -16,6 +16,8 @@ var _interstitial_loading : bool = false
 var _rewarded_loading : bool = false
 var _lab_rewarded_loading : bool = false
 signal lab_unlocked
+signal banner_finished_loading
+var _initial_banner_loaded : bool = false
 var ad_free_time : float = 0.0 # Segundos restantes sin anuncios
 var first_pause_used : bool = false
 var first_reset_used : bool = false
@@ -53,14 +55,17 @@ func _initialize_sdk():
 		print("ADMOB: SDK Inicializado. Iniciando carga escalonada...")
 		_create_banner()
 		
-		# Escalonar cargas para evitar saturación de memoria en dispositivos Quad-core
-		await get_tree().create_timer(5.0).timeout
+		# PRIORITY: Wait for the banner to finish loading before starting other network requests!
+		await self.banner_finished_loading
+		
+		# Continue staggered loading for the rest
+		await get_tree().create_timer(3.0).timeout
 		_load_interstitial()
 		
-		await get_tree().create_timer(10.0).timeout
+		await get_tree().create_timer(6.0).timeout
 		_load_rewarded()
 		
-		await get_tree().create_timer(10.0).timeout
+		await get_tree().create_timer(6.0).timeout
 		_load_lab_rewarded()
 	
 	MobileAds.initialize(init_listener)
@@ -76,9 +81,15 @@ func _create_banner():
 	ad_listener.on_ad_loaded = func():
 		print("ADMOB: ¡Banner cargado con éxito!")
 		_banner_view.show()
+		if not _initial_banner_loaded:
+			_initial_banner_loaded = true
+			banner_finished_loading.emit()
 	
 	ad_listener.on_ad_failed_to_load = func(error : LoadAdError):
 		print("ADMOB: Fallo de carga -> ", error.message)
+		if not _initial_banner_loaded:
+			_initial_banner_loaded = true
+			banner_finished_loading.emit()
 		
 	_banner_view.ad_listener = ad_listener
 	_banner_view.load_ad(AdRequest.new())
