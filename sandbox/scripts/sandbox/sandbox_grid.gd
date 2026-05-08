@@ -3643,8 +3643,8 @@ func _process_tornado(delta):
 			var rad_s = (25.0 + tornado_intensity * 15.0) + (50.0 * tornado_intensity * rel_y_s)
 			_set_cell(int(tornado_x + randf_range(-rad_s * 0.4, rad_s * 0.4)), spawn_y, 15)
 	
-	# INCREASED ITERATIONS for brutal consistency (3000 -> 5000 for level 3)
-	var points_to_process = 3000 * tornado_intensity if tornado_intensity < 3 else 5000 * 3
+	# OPTIMIZED ITERATIONS: 2,000 focused samples are better than 15,000 random ones
+	var points_to_process = 1000 * tornado_intensity if tornado_intensity < 3 else 2000
 	
 	for i in range(points_to_process):
 		# Sample with bias: 60% of samples focus on the area near the ground
@@ -3659,28 +3659,28 @@ func _process_tornado(delta):
 		# Variable Radius relative to current GROUND level
 		var rel_y = 1.0 - (float(ry) / tornado_ground_y) if tornado_ground_y > 0 else 1.0
 		
-		# WIDER BASE: Increased from 4 to 25 to make it much easier to "catch" materials
+		# Variable Radius calculation
 		var current_radius = 0.0
 		if ry <= tornado_ground_y:
 			current_radius = (25.0 + tornado_intensity * 15.0) + (50.0 * tornado_intensity * rel_y)
 		else:
 			# Dig slightly into the ground
 			current_radius = max(0, (25.0 + tornado_intensity * 15.0) - (ry - tornado_ground_y))
+			
+		# OPTIMIZED SAMPLING: Only sample within the area that passes the suction_threshold
+		var suction_threshold = 0.4 if ry < tornado_ground_y - 80 else 0.6
+		var max_dist_x = current_radius * (1.0 - suction_threshold)
 		
-		var rx = int(tornado_x + randf_range(-current_radius, current_radius))
+		var rx = int(tornado_x + randf_range(-max_dist_x, max_dist_x))
 		
 		if rx < 0 or rx >= grid_width or ry < 0 or ry >= grid_height: continue
 		
-		var tid = _get_cell(rx, ry)
+		var tid = cells[ry * grid_width + rx] & 0xFFFF # Inline fast lookup
 		if tid == 0 or tid == 17: continue 
 		
-		# Vortex Forces: Focus suction at the core
+		# Vortex Forces
 		var dist_x_abs = abs(tornado_x - rx)
 		var pull_strength = 1.0 - (dist_x_abs / (current_radius + 1.0))
-		
-		# SUCTION THRESHOLD: Slightly more forgiving to catch more materials
-		var suction_threshold = 0.4 if ry < tornado_ground_y - 80 else 0.6
-		if pull_strength < suction_threshold: continue
 
 		var target_x = tornado_x + randf_range(-current_radius * 0.7, current_radius * 0.7)
 		var dx = sign(target_x - rx)
@@ -3939,7 +3939,8 @@ func _set_cell(x, y, mat_id):
 		tags_array[idx] = tags
 		# CLEANUP GLOW: Prevent ghost colors when painting over old explosions
 		charge_array[idx] = 0
-		charge_visual_buffer[idx] = 0
+		if idx < charge_visual_buffer.size():
+			charge_visual_buffer[idx] = 0
 		charge_dirty = true
 		
 		# CLEAR PAINT on material change to avoid "phantom" colors
@@ -3974,6 +3975,16 @@ func _get_cell(x, y):
 	return -1
 
 func _step_simulation():
+	# --- FIX GODOT 4 COW THREADING BUG ---
+	# Force copy-on-write on the main thread before workers start. 
+	# If save_history_state() duplicated the arrays, the first write detaches the buffer.
+	# Doing this in a worker thread concurrently causes engine-level memory crashes!
+	if cells.size() > 0:
+		cells[0] = cells[0]
+		tags_array[0] = tags_array[0]
+		charge_array[0] = charge_array[0]
+		if charge_visual_buffer.size() > 0: charge_visual_buffer[0] = charge_visual_buffer[0]
+		
 	# Reset flags de sonidos ambientales
 	is_volcano_active = false
 	is_fire_active = false
@@ -4060,6 +4071,7 @@ func _thread_pass2(i: int, process_evens: bool):
 			for xi in range(x_range):
 				var x = (x_end - 1 - xi) if sweep_reverse else (x_start + xi)
 				var idx = row_idx + x
+				if idx >= cells.size() or idx >= tags_array.size(): continue
 				var raw_id = cells[idx]
 				var pure_id = raw_id & 0xFFFF
 				if pure_id == 0: continue
@@ -4098,6 +4110,7 @@ func _thread_pass3(i: int, process_evens: bool):
 			for xi in range(x_range):
 				var x = (x_end - 1 - xi) if sweep_reverse else (x_start + xi)
 				var idx = row_idx + x
+				if idx >= cells.size() or idx >= tags_array.size(): continue
 				var raw_id = cells[idx]
 				var pure_id = raw_id & 0xFFFF
 				
@@ -4117,22 +4130,22 @@ func _thread_pass3(i: int, process_evens: bool):
 								var ny = y + 1
 								if ny < dynamic_grid_height:
 									var n_idx = row_idx + grid_width + x
-									if (cells[n_idx] & 0xFFFF) == 0: # Down
+									if n_idx < cells.size() and (cells[n_idx] & 0xFFFF) == 0: # Down
 										_swap_cells(x, y, x, ny)
 									elif (tags & SandboxMaterial.Tags.LIQUID):
 										if _get_lut_rand() > 0.45: 
 											var side = 1 if _get_lut_rand() > 0.5 else -1
 											var side_idx = idx + side
-											if x + side >= 0 and x + side < grid_width and (cells[side_idx] & 0xFFFF) == 0:
+											if x + side >= 0 and x + side < grid_width and side_idx < cells.size() and (cells[side_idx] & 0xFFFF) == 0:
 												_swap_cells(x, y, x + side, y)
-											elif x - side >= 0 and x - side < grid_width and (cells[idx - side] & 0xFFFF) == 0:
+											elif x - side >= 0 and x - side < grid_width and (idx - side) < cells.size() and (cells[idx - side] & 0xFFFF) == 0:
 												_swap_cells(x, y, x - side, y)
 									elif (tags & SandboxMaterial.Tags.POWDER):
 										var dx = 1 if _get_lut_rand() > 0.5 else -1
 										var nx = x + dx
 										if nx >= 0 and nx < grid_width:
 											var ni = row_idx + grid_width + nx
-											if (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
+											if ni < cells.size() and (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
 
 func _process_electricity():
 	for idx in active_charge_indices:
@@ -4247,6 +4260,9 @@ func _swap_cells(x1, y1, x2, y2):
 	
 	var idx1 = y1 * grid_width + x1
 	var idx2 = y2 * grid_width + x2
+	
+	if idx1 >= cells.size() or idx2 >= cells.size() or idx1 >= tags_array.size() or idx2 >= tags_array.size(): return
+	
 	var m1 = cells[idx1]
 	var m2 = cells[idx2]
 	
@@ -6613,8 +6629,9 @@ func _has_id_in_lookup(idx: int, target_id: int, lookup: PackedInt32Array) -> bo
 	for offset in lookup:
 		var n_idx = idx + offset
 		if n_idx >= 0 and n_idx < cells.size():
-			if abs(cx - (n_idx % grid_width)) <= 30:
-				if (cells[n_idx] & 0xFFFF) == target_id: return true
+			if grid_width > 0 and abs(cx - (n_idx % grid_width)) <= 30:
+				if n_idx < cells.size(): # Double check for race conditions
+					if (cells[n_idx] & 0xFFFF) == target_id: return true
 	return false
 
 func _count_neighbor_id_fast(idx: int, target_id: int) -> int:

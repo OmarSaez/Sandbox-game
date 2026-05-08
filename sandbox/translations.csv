@@ -193,3 +193,5 @@ STATE_SOLID,Sólido,Solid,Solido,Solide,Festkörper,Sólido
 paint,🎨Pintura,🎨Paint,🎨Pittura,🎨Peinture,🎨Malen,🎨Pintura
 paint_elements,Pintar elementos,Paint elements,Dipingi elementi,Peindre éléments,Elemente bemalen,Pintar elementos
 paint_background,Pintar fondo,Paint background,Dipingi sfondo,Peindre le fond,Hintergrund bemalen,Pintar fundo
+ad_not_ready,Anuncio no disponible aún. Intenta en unos segundos.,Ad not available yet. Try in a few seconds.,Annuncio non ancora disponibile. Riprova tra qualche segundo.,Publicité non disponible pour le moment. Réessayez dans quelques secondes.,Anzeige noch nicht verfügbar. Versuchen Sie es in ein paar Sekunden erneut.,Anúncio ainda não disponível. Tente em alguns segundos.
+lab_ad_not_ready,Anuncio del Laboratorio no listo. Reintenta pronto.,Laboratory ad not ready. Retry soon.,Annuncio del Laboratorio non pronto. Riprova presto.,Publicité du laboratoire pas prête. Réessayez bientôt.,Laboranzeige nicht bereit. Versuchen Sie es bald erneut.,Anúncio do Laboratório não está pronto. Tente novamente em breve.

@@ -50,11 +50,18 @@ func _initialize_sdk():
 	
 	var init_listener = OnInitializationCompleteListener.new()
 	init_listener.on_initialization_complete = func(_status):
-		print("ADMOB: SDK Inicializado.")
+		print("ADMOB: SDK Inicializado. Iniciando carga escalonada...")
 		_create_banner()
-		_load_interstitial() # Pre-cargar el de sistema
-		_load_rewarded()     # Pre-cargar el de apoyo
-		_load_lab_rewarded() # Pre-cargar el del laboratorio
+		
+		# Escalonar cargas para evitar saturación de memoria en dispositivos Quad-core
+		await get_tree().create_timer(5.0).timeout
+		_load_interstitial()
+		
+		await get_tree().create_timer(10.0).timeout
+		_load_rewarded()
+		
+		await get_tree().create_timer(10.0).timeout
+		_load_lab_rewarded()
 	
 	MobileAds.initialize(init_listener)
 
@@ -75,6 +82,30 @@ func _create_banner():
 		
 	_banner_view.ad_listener = ad_listener
 	_banner_view.load_ad(AdRequest.new())
+
+func show_toast(text: String):
+	# Intenta encontrar el CanvasLayer de la UI para mostrar un mensaje temporal
+	var canvas = get_tree().root.find_child("UI", true, false)
+	if not canvas:
+		# Fallback a alerta de sistema si no hay UI
+		OS.alert(text, "AdMob")
+		return
+		
+	var label = Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 8)
+	label.add_theme_font_size_override("font_size", 40)
+	canvas.add_child(label)
+	
+	# Animación simple de desaparición
+	var timer = get_tree().create_timer(2.5)
+	await timer.timeout
+	if is_instance_valid(label):
+		label.queue_free()
 
 # --- SISTEMA DE REWARDED (APOYO AL CREADOR) ---
 
@@ -121,6 +152,7 @@ func show_rewarded() -> bool:
 		return true
 	else:
 		print("ADMOB: Rewarded no listo.")
+		show_toast(tr("ad_not_ready"))
 		_load_rewarded()
 		return false
 
@@ -175,6 +207,7 @@ func show_lab_rewarded() -> bool:
 		return true
 	else:
 		print("ADMOB: Lab Rewarded no listo.")
+		show_toast(tr("lab_ad_not_ready"))
 		_load_lab_rewarded()
 		return false
 
