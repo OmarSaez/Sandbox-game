@@ -31,6 +31,7 @@ var background_dirty: bool = false
 var element_paint_img: Image
 var element_paint_tex: ImageTexture
 var element_paint_dirty: bool = false
+var charge_dirty: bool = false
 var cell_paint_colors: PackedInt32Array # Stores per-pixel custom color (ABGR32)
 var charge_img: Image
 
@@ -308,7 +309,7 @@ var sin_lut := PackedFloat32Array()
 var lut_ptr := 0
 
 func _get_lut_rand() -> float:
-	lut_ptr = (lut_ptr + 1) % LUT_SIZE
+	lut_ptr = (lut_ptr + 1) & 4095 # Faster than modulo for power-of-2 sizes
 	return random_lut[lut_ptr]
 
 func _get_lut_rand_range(from: float, to: float) -> float:
@@ -3836,6 +3837,7 @@ func _set_cell(x, y, mat_id):
 			tags_array[idx] = 0
 			charge_array[idx] = 0
 			charge_visual_buffer[idx] = 0
+			charge_dirty = true
 			_activate_chunk(x, y)
 			return
 
@@ -3874,6 +3876,7 @@ func _set_cell(x, y, mat_id):
 		# CLEANUP GLOW: Prevent ghost colors when painting over old explosions
 		charge_array[idx] = 0
 		charge_visual_buffer[idx] = 0
+		charge_dirty = true
 		
 		# CLEAR PAINT on material change to avoid "phantom" colors
 		if cell_paint_colors[idx] != 0:
@@ -3885,6 +3888,7 @@ func _set_cell(x, y, mat_id):
 		if (tags & SandboxMaterial.Tags.ELECTRICITY): 
 			charge_array[idx] = 101
 			_register_charge(idx)
+			charge_dirty = true
 
 func _activate_chunk(gx, gy):
 	var cx = int(gx / CHUNK_SIZE)
@@ -3920,11 +3924,17 @@ func _step_simulation():
 			_register_charge(idx)
 			_activate_chunk(idx % grid_width, int(idx / float(grid_width)))
 	
-	# Update active chunk countdowns
-	chunks_active = next_chunks_active.duplicate()
-	for i in range(next_chunks_active.size()):
-		if next_chunks_active[i] > 0:
-			next_chunks_active[i] -= 1
+	# Pass 0.2: Swap and Decay Chunks (Memory efficient)
+	var tmp = chunks_active
+	chunks_active = next_chunks_active
+	next_chunks_active = tmp # Swap buffers
+	
+	for i in range(chunks_active.size()):
+		var val = chunks_active[i]
+		if val > 0:
+			next_chunks_active[i] = val - 1
+		else:
+			next_chunks_active[i] = 0
 	
 	# Pass 1: Electricity Pulse Processing (SPARSE)
 	_process_electricity()
@@ -4110,6 +4120,7 @@ func _process_electricity():
 			if charge_array[idx] < 0: charge_array[idx] = 0
 			
 			charge_visual_buffer[idx] = clampi(charge_array[idx], 0, 255)
+			charge_dirty = true
 			if charge_array[idx] > 0:
 				_register_charge(idx)
 				_activate_chunk(idx % grid_width, int(idx / float(grid_width)))
@@ -4178,6 +4189,7 @@ func _swap_cells(x1, y1, x2, y2):
 		var cv2 = charge_visual_buffer[idx2]
 		charge_visual_buffer[idx1] = cv2
 		charge_visual_buffer[idx2] = cv1
+		charge_dirty = true
 		if c1 > 0: _register_charge(idx2)
 		if c2 > 0: _register_charge(idx1)
 	
@@ -6846,10 +6858,11 @@ func _update_texture():
 	texture_rect.texture.update(img)
 	
 	# 4. CONDITIONAL AUXILIARY UPDATES
-	# Only update charge texture if there are active charges to save GPU bandwidth
-	if active_charge_indices.size() > 0 or _frame_count % 30 == 0:
+	# Only update charge texture if there are active charges OR if something changed (decay/movement)
+	if active_charge_indices.size() > 0 or charge_dirty or _frame_count % 60 == 0:
 		charge_img.set_data(grid_width, grid_height, false, Image.FORMAT_L8, charge_visual_buffer)
 		charge_tex.update(charge_img)
+		charge_dirty = false
 	
 	# Only update paint texture if dirty or actively painting
 	if is_paint_tool_active or element_paint_dirty:
@@ -6950,10 +6963,13 @@ func _explode_firework(ex, ey, p_color):
 func _clear_all():
 	cells.fill(0)
 	charge_array.fill(0)
+	charge_visual_buffer.fill(0)
+	charge_dirty = true
 	tags_array.fill(0)
 	surface_cache.fill(0)
 	active_npcs.clear()
 	active_projectiles.clear()
+	active_metronome_indices.clear()
 	vs_life.fill(0.0)
 	active_charge_indices.clear()
 	next_charge_indices.clear()
