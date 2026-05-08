@@ -2823,6 +2823,7 @@ func _setup_disaster_ui():
 		tornado_intensity = l
 		if l > 0: 
 			tornado_timer = 15.0; tornado_x = randf()*grid_width; tornado_target_x = randf()*grid_width
+			tornado_ground_y = 0.0 # Start from the sky for landing animation
 			_play_action_sound("tornado")
 		else:
 			tornado_timer = 0 # Apagar instantáneamente
@@ -3593,19 +3594,26 @@ func _process_tornado(delta):
 	# 1.5 Ground Tracking (Find the surface)
 	var tx = int(tornado_x)
 	var detected_y = grid_height - 1 # Default bottom
-	# SCAN FROM TOP DOWN but require high density to identify 'ground'
-	# This ignores sparse airborne debris
-	for gy in range(40, grid_height - 15):
-		var c1 = _get_cell(tx, gy)
-		if c1 > 0 and c1 != 17 and c1 != 15:
-			# GROUND IDENTIFICATION: Must have at least 8 solid pixels below to be ground
-			# Debris in the air is rarely this vertically dense
-			if _get_cell(tx, gy + 4) > 0 and _get_cell(tx, gy + 8) > 0:
-				detected_y = gy
+	# SCAN FROM BOTTOM UP: Find the first solid mass connected to the floor
+	# and then find the 'air gap' above it to identify the true surface.
+	var found_floor = false
+	for gy in range(grid_height - 1, 40, -1):
+		var c = _get_cell(tx, gy)
+		var is_solid = (c > 0 and c != 17 and c != 15)
+		
+		if not found_floor:
+			if is_solid: found_floor = true
+		else:
+			if not is_solid:
+				# This is the air gap above the main ground mass
+				detected_y = gy + 1
 				break
 	
-	# Smoothly interpolate height to avoid jittering when debris passes
-	tornado_ground_y = lerp(tornado_ground_y, float(detected_y), 0.1)
+	# If we are in intensity 3, the tornado is more 'sticky' to its height
+	# Landing Animation: Faster lerp when descending from sky
+	var is_landing = tornado_ground_y < detected_y - 50
+	var lerp_val = 0.15 if is_landing else (0.05 if tornado_intensity < 3 else 0.02)
+	tornado_ground_y = lerp(tornado_ground_y, float(detected_y), lerp_val)
 	
 	# Update Dedicated Visual Node
 	if tornado_intensity > 0:
@@ -3618,6 +3626,10 @@ func _process_tornado(delta):
 		tornado_visual.visible = false
 	
 	# 2. Conical Vortex Physics & Clouds
+	# DELAY PHYSICS until the tornado touches the ground
+	if is_landing:
+		return
+		
 	# Spawn clouds at the top and internal dust to ensure it's always visible
 	if randf() < 0.3:
 		_set_cell(int(tornado_x + randf_range(-40, 40)), 2, 17)
