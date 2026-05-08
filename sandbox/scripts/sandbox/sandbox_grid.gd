@@ -253,7 +253,7 @@ var is_fire_active = false
 var is_npc_mode_menu_open: bool = false
 var is_lab_tutorial_done: bool = false
 var lab_tutorial_step: int = 0 # 0: None, 1: Slots, 2: Colors, 3: Gravity, 4: State, 5: Tags
-var tutorial_rects: Array[ColorRect] = []
+var tutorial_rects: Array[Control] = []
 var _frame_count = 0
 var _npc_id_counter = 0
 var active_metronome_indices = {} # Using Dictionary as a Set [index] -> true
@@ -322,6 +322,11 @@ var charge_queued_frame := PackedInt32Array()
 # Display
 @onready var texture_rect: TextureRect = $Display
 var img: Image
+
+# VOLUME SYSTEM
+var game_volume: float = 1.0
+var pre_mute_volume: float = 1.0
+var is_muted: bool = false
 
 # OPTIMIZATION TABLES
 var oval_lookup_10x5: PackedInt32Array = []
@@ -1437,6 +1442,67 @@ func _setup_tools_ui():
 	ui_elements["reset_btn"] = reset_btn_node
 	v_box.add_child(reset_btn_node)
 	
+	# 4. VOLUME CONTROL ROW
+	var vol_lbl = Label.new()
+	vol_lbl.text = tr("volumen")
+	vol_lbl.add_theme_font_size_override("font_size", 22 * s)
+	vol_lbl.add_theme_font_override("font", _get_safe_font())
+	vol_lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9))
+	v_box.add_child(vol_lbl)
+	
+	var vol_hbox = HBoxContainer.new()
+	vol_hbox.add_theme_constant_override("separation", 15 * s)
+	v_box.add_child(vol_hbox)
+	
+	var vol_slider = HSlider.new()
+	vol_slider.min_value = 0.0
+	vol_slider.max_value = 1.5
+	vol_slider.step = 0.01
+	vol_slider.value = game_volume
+	vol_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vol_slider.custom_minimum_size = Vector2(0, 50 * s)
+	vol_hbox.add_child(vol_slider)
+	
+	var mute_btn = Button.new()
+	mute_btn.custom_minimum_size = Vector2(60 * s, 60 * s)
+	mute_btn.add_theme_font_size_override("font_size", 30 * s)
+	mute_btn.add_theme_font_override("font", _get_safe_font())
+	vol_hbox.add_child(mute_btn)
+	
+	var update_mute_icon = func(val):
+		if val == 0: mute_btn.text = "🔇"
+		elif val <= 0.5: mute_btn.text = "🔈"
+		elif val <= 1.0: mute_btn.text = "🔉"
+		else: mute_btn.text = "🔊"
+	
+	update_mute_icon.call(game_volume)
+	
+	vol_slider.value_changed.connect(func(val):
+		game_volume = val
+		if val > 0: 
+			is_muted = false
+			pre_mute_volume = val
+		else:
+			is_muted = true
+		_update_game_volume(val)
+		update_mute_icon.call(val)
+	)
+	
+	mute_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		if is_muted:
+			is_muted = false
+			game_volume = pre_mute_volume if pre_mute_volume > 0 else 1.0
+		else:
+			is_muted = true
+			pre_mute_volume = game_volume
+			game_volume = 0.0
+		
+		vol_slider.value = game_volume
+		_update_game_volume(game_volume)
+		update_mute_icon.call(game_volume)
+	)
+
 	_add_ui_header(v_box, "coming_soon")
 	
 	create_row.call("speed", ["x0.2", "x0.5", "x0.8", "x1", "x2", "x4"], func(_l): pass, true)
@@ -1446,6 +1512,13 @@ func _setup_tools_ui():
 		tr("circ"),
 		tr("tria")
 	], func(_l): pass, true)
+
+func _update_game_volume(value: float):
+	# Convert linear 0.0 - 1.5 to dB. Master is bus index 0.
+	var db = linear_to_db(value)
+	AudioServer.set_bus_volume_db(0, db)
+	# Mute completely if 0 to save processing
+	AudioServer.set_bus_mute(0, value <= 0)
 
 func _setup_lab_ui():
 	var s = _get_ui_scale()
@@ -2103,7 +2176,12 @@ func _update_lab_tutorial_highlight():
 	# 2. Find the target
 	var target: Control = null
 	match lab_tutorial_step:
-		1: target = ui_elements.get("lab_slots_hbox")
+		1: 
+			var name_edits = ui_elements.get("lab_name_edits", [])
+			if name_edits.size() > lab_selected_slot:
+				target = name_edits[lab_selected_slot]
+			else:
+				target = ui_elements.get("lab_slots_hbox")
 		2: target = ui_elements.get("lab_col_color")
 		3: target = ui_elements.get("lab_col_grav")
 		4: target = ui_elements.get("lab_col_est")
@@ -2177,6 +2255,23 @@ func _update_lab_tutorial_highlight():
 	right.set_begin(Vector2(cutout.end.x, cutout.position.y))
 	right.set_end(Vector2(screen_size.x, cutout.end.y))
 
+	# VISUAL HINT FOR STEP 1 (Type Name)
+	if lab_tutorial_step == 1:
+		var s = _get_ui_scale()
+		var icon = Label.new()
+		icon.text = "✏️"
+		icon.add_theme_font_size_override("font_size", 40 * s)
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# Place icon directly above the highlighted name box
+		icon.position = Vector2(cutout.position.x + cutout.size.x / 2.0 - 20 * s, cutout.position.y - 50 * s)
+		parent.add_child(icon)
+		tutorial_rects.append(icon)
+		
+		var tw = icon.create_tween()
+		tw.tween_property(icon, "position:y", icon.position.y - 10 * s, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tw.tween_property(icon, "position:y", icon.position.y, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tw.set_loops() # Infinite loop safely managed by icon lifecycle
+
 func _save_lab_state():
 	var clean_data = []
 	for d in lab_custom_data:
@@ -2239,13 +2334,13 @@ func _set_lab_unlocked(unlocked: bool):
 
 func _update_custom_mats_in_material_grid():
 	if not is_instance_valid(main_controls): return
-	var material_grid = main_controls.find_child("MaterialGrid", true, false)
-	if not is_instance_valid(material_grid): return
+	var mat_grid_node = main_controls.find_child("MaterialGrid", true, false)
+	if not is_instance_valid(mat_grid_node): return
 	
 	# Clean up old custom generated items
-	for c in material_grid.get_children():
+	for c in mat_grid_node.get_children():
 		if c.has_meta("is_custom"):
-			material_grid.remove_child(c)
+			mat_grid_node.remove_child(c)
 			c.queue_free()
 			
 	if not is_lab_unlocked: 
@@ -2341,8 +2436,8 @@ func _update_custom_mats_in_material_grid():
 		slot_pnl.set_meta("overlay", selection_overlay)
 		slot_pnl.set_meta("label", btn_lbl)
 		
-		material_grid.add_child(slot_pnl)
-		material_grid.move_child(slot_pnl, insert_idx)
+		mat_grid_node.add_child(slot_pnl)
+		mat_grid_node.move_child(slot_pnl, insert_idx)
 		
 		# For tutorial Step 6 highlight tracking
 		if not ui_elements.has("lab_custom_slots_hud"): ui_elements["lab_custom_slots_hud"] = [null, null, null]
@@ -2515,7 +2610,7 @@ func _update_lab_preview(idx: int):
 	
 	var tex_rect = data["node"]
 	
-	var img = Image.create(10, 10, false, Image.FORMAT_RGBA8)
+	var preview_img = Image.create(10, 10, false, Image.FORMAT_RGBA8)
 	var c1 = data["c1"]
 	var c2 = data["c2"]
 	var c3 = data["c3"]
@@ -2541,9 +2636,9 @@ func _update_lab_preview(idx: int):
 				if val < mix_factor:
 					p_color = c2
 					
-			img.set_pixel(x,y, p_color)
+			preview_img.set_pixel(x,y, p_color)
 			
-	var tex = ImageTexture.create_from_image(img)
+	var tex = ImageTexture.create_from_image(preview_img)
 	tex_rect.texture = tex
 
 func _setup_disaster_ui():
@@ -3115,7 +3210,7 @@ func _process(delta):
 		var left = lab_unlock_expiry_unix - now
 		if ui_elements.has("lab_time_lbl") and is_instance_valid(ui_elements["lab_time_lbl"]):
 			if left > 0:
-				ui_elements["lab_time_lbl"].text = "Tiempo: %02d:%02d:%02d" % [left / 3600, (left % 3600) / 60, left % 60]
+				ui_elements["lab_time_lbl"].text = "Tiempo: %02d:%02d:%02d" % [int(left / 3600.0), int((left % 3600) / 60.0), left % 60]
 			else:
 				ui_elements["lab_time_lbl"].text = "Bloqueado"
 
@@ -3248,7 +3343,7 @@ func _process(delta):
 						if selected_material == 600:
 							_play_music_note(5, 0)
 						else:
-							var inst = (selected_material - MUSIC_ID_START) / 16
+							var inst = int((selected_material - MUSIC_ID_START) / 16.0)
 							var note = (selected_material - MUSIC_ID_START) % 16
 							_play_music_note(inst, note)
 					
@@ -3697,11 +3792,11 @@ func _draw_circle(cx, cy, radius, mat_id):
 func _set_cell_by_idx(idx: int, mat_id: int):
 	if idx < 0 or idx >= cells.size(): return
 	var x = idx % grid_width
-	var y = int(idx / grid_width)
+	var y = int(idx / float(grid_width))
 	_set_cell(x, y, mat_id)
 
 func _prime_explosive_by_idx(idx: int, id: int, manual_flags: int = -1):
-	_prime_explosive(idx % grid_width, int(idx / grid_width), id, manual_flags)
+	_prime_explosive(idx % grid_width, int(idx / float(grid_width)), id, manual_flags)
 
 func _register_material(id: int, color1: Color, tags: int, color2 = null, color3 = null):
 	mat_colors_1[id] = color1
@@ -3801,7 +3896,7 @@ func _step_simulation():
 		for idx in active_metronome_indices:
 			charge_array[idx] = 101
 			_register_charge(idx)
-			_activate_chunk(idx % grid_width, int(idx / grid_width))
+			_activate_chunk(idx % grid_width, int(idx / float(grid_width)))
 	
 	# Update active chunk countdowns
 	chunks_active = next_chunks_active.duplicate()
@@ -3952,14 +4047,14 @@ func _process_electricity():
 			# MUSIC TRIGGER: Automatic activation for music blocks
 			if (material_tags_raw[mid] & SandboxMaterial.Tags.MUSIC):
 				var gx = idx % grid_width
-				var gy = idx / grid_width
+				var gy = int(idx / float(grid_width))
 				
 				# 2x2 DUPES FILTER: Only trigger for the "top-left" pixel of the 2x2 block
 				if (gx % 2 == 0 and gy % 2 == 0):
 					if mid == 600: # Metronome sound
 						_play_music_note(5, 0)
 					else:
-						var inst = (mid - MUSIC_ID_START) / 16
+						var inst = int((mid - MUSIC_ID_START) / 16.0)
 						var note = (mid - MUSIC_ID_START) % 16
 						_play_music_note(inst, note)
 			
@@ -3967,7 +4062,7 @@ func _process_electricity():
 		
 		if charge == 100:
 			var x = idx % grid_width
-			var y = idx / grid_width
+			var y = int(idx / float(grid_width))
 			var my_tags = material_tags_raw[mid]
 			# Only CONDUCTOR and pure ELECTRICITY can SPREAD energy to neighbors
 			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY)):
@@ -3995,12 +4090,12 @@ func _process_electricity():
 			charge_visual_buffer[idx] = clampi(charge_array[idx], 0, 255)
 			if charge_array[idx] > 0:
 				_register_charge(idx)
-				_activate_chunk(idx % grid_width, idx / grid_width)
+				_activate_chunk(idx % grid_width, int(idx / float(grid_width)))
 		elif mid == 7 or mid == 71 or mid == 77 or mid == 72: # TNT/Primed logic
 			charge_array[idx] -= 1 
 			if charge_array[idx] > 0:
 				_register_charge(idx)
-				_activate_chunk(idx % grid_width, idx / grid_width)
+				_activate_chunk(idx % grid_width, int(idx / float(grid_width)))
 
 
 
@@ -4427,7 +4522,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 						if gx >= 0 and gx < grid_width and gy >= 0 and gy < dynamic_grid_height:
 							var g_idx = gy * grid_width + gx
 							var tid = cells[g_idx] & 0xFFFF
-							if (tid == 0 or tid == 2) and (material_tags_raw[tid] & SandboxMaterial.Tags.FERTILE):
+							if (material_tags_raw[tid] & SandboxMaterial.Tags.FERTILE):
 								if _count_neighbor_id_fast(g_idx, 21) < 4:
 									_set_cell(gx, gy, 21)
 			1, 6: # Fertile Soil
@@ -4771,8 +4866,8 @@ func _setup_paint_ui():
 	slider.value_changed.connect(func(v):
 		_play_action_sound("ui_click")
 		paint_brush_radius_idx = int(v)
-		var sizes = [1, 3, 5, 10, 15, 25]
-		slider_label.text = tr("brush") + ": " + str(sizes[paint_brush_radius_idx])
+		var _sizes = [1, 3, 5, 10, 15, 25]
+		slider_label.text = tr("brush") + ": " + str(_sizes[paint_brush_radius_idx])
 	)
 	slider_vbox.add_child(slider)
 	
@@ -6351,19 +6446,24 @@ func _get_oval_offsets(rx: int, ry: int, step: int) -> PackedInt32Array:
 	var offsets = PackedInt32Array()
 	var rx_sq = float(rx * rx)
 	var ry_sq = float(ry * ry)
-	for oy in range(-ry, ry + 1, step):
+	for oy in range(-ry, ry + 1):
 		var row_offset = oy * grid_width
 		var oy_norm = float(oy * oy) / ry_sq
-		for ox in range(-rx, rx + 1, step):
+		for ox in range(-rx, rx + 1):
 			if (float(ox * ox) / rx_sq + oy_norm) <= 1.0:
-				offsets.append(row_offset + ox)
+				var dist_sq = ox * ox + oy * oy
+				# Dense core (radius 4) or matches the sparse step
+				if dist_sq <= 16 or (abs(ox) % step == 0 and abs(oy) % step == 0):
+					offsets.append(row_offset + ox)
 	return offsets
 
 func _has_id_in_lookup(idx: int, target_id: int, lookup: PackedInt32Array) -> bool:
+	var cx = idx % grid_width
 	for offset in lookup:
 		var n_idx = idx + offset
 		if n_idx >= 0 and n_idx < cells.size():
-			if (cells[n_idx] & 0xFFFF) == target_id: return true
+			if abs(cx - (n_idx % grid_width)) <= 30:
+				if (cells[n_idx] & 0xFFFF) == target_id: return true
 	return false
 
 func _count_neighbor_id_fast(idx: int, target_id: int) -> int:
@@ -6700,7 +6800,7 @@ func _update_texture():
 	# 3. OPTIMIZED VISUAL OVERLAY (Write directly to raw_data buffer)
 	# This is MUCH faster than img.set_pixel()
 	if vs_ptr > 0 or active_fireworks.size() > 0:
-		var bytes_per_row = grid_width * 4
+		# Visual sparks processing
 		for i in range(MAX_VISUAL_SPARKS):
 			var life = vs_life[i]
 			if life <= 0.2: continue
