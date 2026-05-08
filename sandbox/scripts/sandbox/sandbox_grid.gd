@@ -162,6 +162,7 @@ func _get_safe_font() -> Font:
 			
 	return _combined_font
 var touch_started_on_ui: bool = false # NEW: Track if the touch session began over UI
+var sim_mutex := Mutex.new() # Protects global arrays from parallel threads
 var active_npcs = [] # Array of dicts: { "pos": Vector2i, "team": int, "dir": int, "type": string, "hp": float, etc }
 const SPATIAL_CELL_SIZE = 32
 var npc_spatial_grid = [] 
@@ -3150,12 +3151,15 @@ func _play_sfx(sfx_name: String):
 	# Force loop OFF for general one-shots from pool
 	if "loop" in stream: stream.loop = false 
 
+	sim_mutex.lock()
 	# Play using next available player in pool
 	var player = sfx_pool[next_sfx_idx]
-	player.stream = stream
-	player.play()
-	
 	next_sfx_idx = (next_sfx_idx + 1) % SFX_POOL_SIZE
+	sim_mutex.unlock()
+	
+	# DEFER to main thread to prevent Node access errors from WorkerThreadPool!
+	player.set_deferred("stream", stream)
+	player.call_deferred("play")
 
 func _manage_brush_sound(id: int):
 	# Si no hay ID, es un NPC o está sobre la UI -> DETENER SONIDO
@@ -3946,107 +3950,23 @@ func _step_simulation():
 	# Pass 2 & 3: Movement and Interactions (Calculated)
 	# ... after main loops conclude, manage the persistent sounds once ...
 	
+	var is_even_frame = (_frame_count % 2 == 0)
+	var pass_groups = ceil(float(chunks_x) / 2.0)
+	
 	# Pass 2: RISING and SPECIAL particles (Top-to-Bottom by Active Chunks)
-	for cy in range(chunks_y):
-		for cx in range(chunks_x):
-			var c_idx = cy * chunks_x + cx
-			if chunks_active[c_idx] == 0: continue
-			
-			var x_start = cx * CHUNK_SIZE
-			var y_start = cy * CHUNK_SIZE
-			var x_end = min(x_start + CHUNK_SIZE, grid_width)
-			var y_end = min(y_start + CHUNK_SIZE, dynamic_grid_height)
-			
-			var x_range = x_end - x_start
-			var sweep_reverse_base = (Engine.get_frames_drawn()) % 2 == 0
-			
-			for y in range(y_start, y_end):
-				var row_idx = y * grid_width
-				var sweep_reverse = (sweep_reverse_base != (y % 2 == 0))
-				
-				for i in range(x_range):
-					var x = (x_end - 1 - i) if sweep_reverse else (x_start + i)
-					var idx = row_idx + x
-					var raw_id = cells[idx]
-					var pure_id = raw_id & 0xFFFF
-					if pure_id == 0: continue
-					
-					var tags = tags_array[idx]
-					
-					if pure_id == 7: # Primed Explosives
-						_activate_chunk(x, y)
-						continue
-
-					if (tags & SandboxMaterial.Tags.GRAV_UP):
-						# ID 28 is Volcano projectile, always interact
-						if (tags & TAGS_INTERACTIVE) != 0 or pure_id >= 18:
-							_process_interactions(x, y, idx, raw_id, pure_id, tags)
-							
-						if cells[idx] == raw_id and pure_id != 28:
-							_move_particle(x, y, raw_id, tags, -1)
+	var g1 = WorkerThreadPool.add_group_task(_thread_pass2.bind(is_even_frame), pass_groups, -1, false, "SimP2E")
+	WorkerThreadPool.wait_for_group_task_completion(g1)
+	
+	var g2 = WorkerThreadPool.add_group_task(_thread_pass2.bind(not is_even_frame), pass_groups, -1, false, "SimP2O")
+	WorkerThreadPool.wait_for_group_task_completion(g2)
 
 	# Pass 3: FALLING/STATIC particles (Bottom-to-Top by Active Chunks)
-	for cy in range(chunks_y - 1, -1, -1):
-		for cx in range(chunks_x):
-			var c_idx = cy * chunks_x + cx
-			if chunks_active[c_idx] == 0: continue
-			
-			var x_start = cx * CHUNK_SIZE
-			var y_start = cy * CHUNK_SIZE
-			var x_end = min(x_start + CHUNK_SIZE, grid_width)
-			var y_end = min(y_start + CHUNK_SIZE, dynamic_grid_height)
-			
-			var x_range = x_end - x_start
-			var sweep_reverse_base = (Engine.get_frames_drawn()) % 2 == 0
-			
-			for y in range(y_end - 1, y_start - 1, -1):
-				var row_idx = y * grid_width
-				var sweep_reverse = (sweep_reverse_base != (y % 2 == 0))
-				
-				for i in range(x_range):
-					var x = (x_end - 1 - i) if sweep_reverse else (x_start + i)
-					var idx = row_idx + x
-					var raw_id = cells[idx]
-					var pure_id = raw_id & 0xFFFF
-					
-					if pure_id > 0: # Process all active materials
-						var tags = tags_array[idx]
-						
-						# PASS 3.1: INTERACTIONS (Only for reactive materials)
-						if (not (tags & SandboxMaterial.Tags.GRAV_UP)): 
-							# Check IDs >= 18 to include TNT(77), Fireworks(18,19), and Lab(20+)
-							# Special check for ID 7, 9, 13 (Tnt-prime, Elec, Acid)
-							if (tags & TAGS_INTERACTIVE) != 0 or pure_id >= 18 or pure_id == 7 or pure_id == 9 or pure_id == 13: 
-								_process_interactions(x, y, idx, raw_id, pure_id, tags)
-								
-							# 3.2: GRAVITY (If still exists after interaction)
-							if cells[idx] == raw_id and not (tags & SandboxMaterial.Tags.GRAV_STATIC):
-								var should_move = true
-								if (tags & SandboxMaterial.Tags.GRAV_SLOW) and randf() > 0.3:
-									should_move = false
-								
-								if should_move:
-									var ny = y + 1
-									if ny < dynamic_grid_height:
-										var n_idx = row_idx + grid_width + x
-										if (cells[n_idx] & 0xFFFF) == 0: # Down
-											_swap_cells(x, y, x, ny)
-										elif (tags & SandboxMaterial.Tags.LIQUID):
-											# Use Pre-calculated LUT for probability (Esthetic flow)
-											if _get_lut_rand() > 0.45: 
-												var side = 1 if _get_lut_rand() > 0.5 else -1
-												var side_idx = idx + side
-												if x + side >= 0 and x + side < grid_width and (cells[side_idx] & 0xFFFF) == 0:
-													_swap_cells(x, y, x + side, y)
-												elif x - side >= 0 and x - side < grid_width and (cells[idx - side] & 0xFFFF) == 0:
-													_swap_cells(x, y, x - side, y)
-										elif (tags & SandboxMaterial.Tags.POWDER):
-											var dx = 1 if _get_lut_rand() > 0.5 else -1
-											var nx = x + dx
-											if nx >= 0 and nx < grid_width:
-												var ni = row_idx + grid_width + nx
-												if (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
+	var g3 = WorkerThreadPool.add_group_task(_thread_pass3.bind(is_even_frame), pass_groups, -1, false, "SimP3E")
+	WorkerThreadPool.wait_for_group_task_completion(g3)
 	
+	var g4 = WorkerThreadPool.add_group_task(_thread_pass3.bind(not is_even_frame), pass_groups, -1, false, "SimP3O")
+	WorkerThreadPool.wait_for_group_task_completion(g4)
+
 	# === GESTIÓN GLOBAL DE SONIDOS AMBIENTALES ===
 	if is_volcano_active: 
 		_manage_looping_player(volcano_loop_player, "volcan_active")
@@ -4057,6 +3977,102 @@ func _step_simulation():
 		_manage_looping_player(fire_loop_player, "burn_loop")
 	else:
 		if fire_loop_player.playing: fire_loop_player.stop()
+
+func _thread_pass2(i: int, process_evens: bool):
+	var cx = (i * 2) if process_evens else (i * 2 + 1)
+	if cx >= chunks_x: return
+	
+	var sweep_reverse_base = (Engine.get_frames_drawn()) % 2 == 0
+	var x_start = cx * CHUNK_SIZE
+	var x_end = min(x_start + CHUNK_SIZE, grid_width)
+	var x_range = x_end - x_start
+	
+	for cy in range(chunks_y):
+		var c_idx = cy * chunks_x + cx
+		if chunks_active[c_idx] == 0: continue
+		var y_start = cy * CHUNK_SIZE
+		var y_end = min(y_start + CHUNK_SIZE, dynamic_grid_height)
+		
+		for y in range(y_start, y_end):
+			var row_idx = y * grid_width
+			var sweep_reverse = (sweep_reverse_base != (y % 2 == 0))
+			
+			for xi in range(x_range):
+				var x = (x_end - 1 - xi) if sweep_reverse else (x_start + xi)
+				var idx = row_idx + x
+				var raw_id = cells[idx]
+				var pure_id = raw_id & 0xFFFF
+				if pure_id == 0: continue
+				
+				var tags = tags_array[idx]
+				if pure_id == 7: # Primed Explosives
+					_activate_chunk(x, y)
+					continue
+
+				if (tags & SandboxMaterial.Tags.GRAV_UP):
+					if (tags & TAGS_INTERACTIVE) != 0 or pure_id >= 18:
+						_process_interactions(x, y, idx, raw_id, pure_id, tags)
+						
+					if cells[idx] == raw_id and pure_id != 28:
+						_move_particle(x, y, raw_id, tags, -1)
+
+func _thread_pass3(i: int, process_evens: bool):
+	var cx = (i * 2) if process_evens else (i * 2 + 1)
+	if cx >= chunks_x: return
+	
+	var sweep_reverse_base = (Engine.get_frames_drawn()) % 2 == 0
+	var x_start = cx * CHUNK_SIZE
+	var x_end = min(x_start + CHUNK_SIZE, grid_width)
+	var x_range = x_end - x_start
+	
+	for cy in range(chunks_y - 1, -1, -1):
+		var c_idx = cy * chunks_x + cx
+		if chunks_active[c_idx] == 0: continue
+		var y_start = cy * CHUNK_SIZE
+		var y_end = min(y_start + CHUNK_SIZE, dynamic_grid_height)
+		
+		for y in range(y_end - 1, y_start - 1, -1):
+			var row_idx = y * grid_width
+			var sweep_reverse = (sweep_reverse_base != (y % 2 == 0))
+			
+			for xi in range(x_range):
+				var x = (x_end - 1 - xi) if sweep_reverse else (x_start + xi)
+				var idx = row_idx + x
+				var raw_id = cells[idx]
+				var pure_id = raw_id & 0xFFFF
+				
+				if pure_id > 0:
+					var tags = tags_array[idx]
+					
+					if (not (tags & SandboxMaterial.Tags.GRAV_UP)): 
+						if (tags & TAGS_INTERACTIVE) != 0 or pure_id >= 18 or pure_id == 7 or pure_id == 9 or pure_id == 13: 
+							_process_interactions(x, y, idx, raw_id, pure_id, tags)
+							
+						if cells[idx] == raw_id and not (tags & SandboxMaterial.Tags.GRAV_STATIC):
+							var should_move = true
+							if (tags & SandboxMaterial.Tags.GRAV_SLOW) and randf() > 0.3:
+								should_move = false
+							
+							if should_move:
+								var ny = y + 1
+								if ny < dynamic_grid_height:
+									var n_idx = row_idx + grid_width + x
+									if (cells[n_idx] & 0xFFFF) == 0: # Down
+										_swap_cells(x, y, x, ny)
+									elif (tags & SandboxMaterial.Tags.LIQUID):
+										if _get_lut_rand() > 0.45: 
+											var side = 1 if _get_lut_rand() > 0.5 else -1
+											var side_idx = idx + side
+											if x + side >= 0 and x + side < grid_width and (cells[side_idx] & 0xFFFF) == 0:
+												_swap_cells(x, y, x + side, y)
+											elif x - side >= 0 and x - side < grid_width and (cells[idx - side] & 0xFFFF) == 0:
+												_swap_cells(x, y, x - side, y)
+									elif (tags & SandboxMaterial.Tags.POWDER):
+										var dx = 1 if _get_lut_rand() > 0.5 else -1
+										var nx = x + dx
+										if nx >= 0 and nx < grid_width:
+											var ni = row_idx + grid_width + nx
+											if (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
 
 func _process_electricity():
 	for idx in active_charge_indices:
@@ -4206,8 +4222,11 @@ func _swap_cells(x1, y1, x2, y2):
 func _register_charge(idx):
 	var frame = Engine.get_frames_drawn()
 	if charge_queued_frame[idx] != frame:
-		charge_queued_frame[idx] = frame
-		next_charge_indices.append(idx)
+		sim_mutex.lock()
+		if charge_queued_frame[idx] != frame:
+			charge_queued_frame[idx] = frame
+			next_charge_indices.append(idx)
+		sim_mutex.unlock()
 
 func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 	# PULSANT ELECTRICAL SOURCE
@@ -6656,14 +6675,17 @@ var explosions_sfx_budget = 0
 var explosions_sfx_timer = 0.0
 
 func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0, ignore_budget = false):
+	sim_mutex.lock()
 	# BUDGET CHECK: If we exceed limit, queue for next frame
 	if not ignore_budget and explosions_this_frame >= MAX_EXPLOSIONS_PER_FRAME:
 		_explosion_queue.append([x, y, radius, sfx_action, ignition_flags])
 		_set_cell(x, y, 0) # Clear the trigger pixel immediately to prevent double-triggering
+		sim_mutex.unlock()
 		return
 		
 	explosions_this_frame += 1
 	var is_heavy_load = explosions_this_frame > 10
+	sim_mutex.unlock()
 	
 	# CLEAR the trigger cell immediately
 	_set_cell(x, y, 0)
@@ -6875,6 +6897,7 @@ func _update_texture():
 		background_dirty = false
 
 func _launch_firework(x, y):
+	sim_mutex.lock()
 	_set_cell(x, y, 0) # Clear the station
 	_play_action_sound("firework_launch")
 	# Neon Palette for launch selection
@@ -6886,6 +6909,7 @@ func _launch_firework(x, y):
 		"color": neon_colors[randi() % neon_colors.size()] # Lock color at launch!
 	}
 	active_fireworks.append(fw)
+	sim_mutex.unlock()
 
 func _update_active_fireworks(delta):
 	if active_fireworks.size() > 0:
@@ -6922,9 +6946,11 @@ func _update_active_fireworks(delta):
 		active_fireworks.remove_at(i)
 
 func _add_spark(px, py, p_vx, p_vy, p_color, p_life):
+	sim_mutex.lock()
 	vs_x[vs_ptr] = px; vs_y[vs_ptr] = py; vs_vx[vs_ptr] = p_vx; vs_vy[vs_ptr] = p_vy
 	vs_color[vs_ptr] = p_color; vs_life[vs_ptr] = p_life
 	vs_ptr = (vs_ptr + 1) % MAX_VISUAL_SPARKS
+	sim_mutex.unlock()
 
 func _update_visual_sparks(delta):
 	# OPTIMIZATION: Process only active sparks with cached life
@@ -7177,6 +7203,7 @@ func _place_music_block(gx, gy, mat_id):
 			_set_cell(gx + ox, gy + oy, mat_id)
 
 func _play_music_note(inst_idx, note_idx):
+	sim_mutex.lock()
 	var s_name = MUSIC_INSTRUMENTS[inst_idx]
 	var p_scale = MUSIC_PITCHES[note_idx % 16]
 	
@@ -7192,11 +7219,13 @@ func _play_music_note(inst_idx, note_idx):
 	if stream:
 		# POLYPHONY: Use next available player in the music pool
 		var p = music_player_pool[music_next_idx]
-		p.stream = stream
-		p.pitch_scale = p_scale
-		p.volume_db = -5.0 # Lower base volume per note to allow headroom for chords
-		p.play()
 		music_next_idx = (music_next_idx + 1) % 32
+		
+		p.set_deferred("stream", stream)
+		p.set_deferred("pitch_scale", p_scale)
+		p.set_deferred("volume_db", -5.0) # Lower base volume per note to allow headroom for chords
+		p.call_deferred("play")
+	sim_mutex.unlock()
 
 func _setup_music_ui(force_refresh: bool = false):
 	var s = _get_ui_scale()
