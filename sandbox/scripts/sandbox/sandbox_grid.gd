@@ -274,6 +274,7 @@ var tornado_timer: float = 0.0
 var tornado_x: float = 0.0
 var tornado_target_x: float = 0.0
 var tornado_ground_y: float = 0.0
+var tornado_visual: ColorRect # Dedicated visual node for the triangle look
 
 # Tsunami settings
 var tsunami_intensity: int = 0
@@ -448,6 +449,16 @@ func _ready():
 	cell_paint_colors.fill(0)
 	img = Image.create(grid_width, grid_height, false, Image.FORMAT_RGBA8)
 	color_buffer.resize(grid_width * grid_height * 4)
+	
+	# --- TORNADO VISUAL NODE ---
+	tornado_visual = ColorRect.new()
+	tornado_visual.visible = false
+	tornado_visual.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(tornado_visual)
+	
+	var t_mat = ShaderMaterial.new()
+	t_mat.shader = load("res://scripts/sandbox/tornado_visual.gdshader")
+	tornado_visual.material = t_mat
 	surface_cache.resize(grid_width)
 	
 	material_colors_bytes.resize(2048 * 4)
@@ -3563,6 +3574,7 @@ func _process_tsunami(delta):
 func _process_tornado(delta):
 	if tornado_timer <= 0:
 		tornado_intensity = 0
+		tornado_visual.visible = false # Ensure visual disappears
 		if tornado_player.playing: tornado_player.stop()
 		_update_menu_highlights()
 		return
@@ -3581,40 +3593,67 @@ func _process_tornado(delta):
 	# 1.5 Ground Tracking (Find the surface)
 	var tx = int(tornado_x)
 	var detected_y = grid_height - 1 # Default bottom
-	for gy in range(2, grid_height - 4):
-		# Look for a VERY DENSE surface (at least 4 pixels deep)
+	# SCAN FROM TOP DOWN but require high density to identify 'ground'
+	# This ignores sparse airborne debris
+	for gy in range(40, grid_height - 15):
 		var c1 = _get_cell(tx, gy)
 		if c1 > 0 and c1 != 17 and c1 != 15:
-			# Check 3 more pixels below to confirm it's ground
-			if _get_cell(tx, gy + 1) > 0 and _get_cell(tx, gy + 2) > 0 and _get_cell(tx, gy + 3) > 0:
+			# GROUND IDENTIFICATION: Must have at least 8 solid pixels below to be ground
+			# Debris in the air is rarely this vertically dense
+			if _get_cell(tx, gy + 4) > 0 and _get_cell(tx, gy + 8) > 0:
 				detected_y = gy
 				break
 	
 	# Smoothly interpolate height to avoid jittering when debris passes
 	tornado_ground_y = lerp(tornado_ground_y, float(detected_y), 0.1)
 	
+	# Update Dedicated Visual Node
+	if tornado_intensity > 0:
+		tornado_visual.visible = true
+		var t_width = (80.0 + tornado_intensity * 60.0) * grid_scale
+		tornado_visual.size = Vector2(t_width, tornado_ground_y * grid_scale)
+		tornado_visual.position = Vector2(tornado_x * grid_scale - t_width * 0.5, 0)
+		tornado_visual.material.set_shader_parameter("intensity", float(tornado_intensity))
+	else:
+		tornado_visual.visible = false
+	
 	# 2. Conical Vortex Physics & Clouds
-	# Spawn clouds at the top of the funnel
-	if randf() < 0.2:
+	# Spawn clouds at the top and internal dust to ensure it's always visible
+	if randf() < 0.3:
 		_set_cell(int(tornado_x + randf_range(-40, 40)), 2, 17)
 		_set_cell(int(tornado_x + randf_range(-20, 20)), 1, 17)
 	
-	# REDUCED ITERATIONS (3000 -> 1500) for performance
-	var points_to_process = 1500 * tornado_intensity
+	# INTERNAL DUST: Always spawn some particles inside the funnel so it's not 'empty'
+	if randf() < 0.4:
+		var spawn_y = int(tornado_ground_y - randf() * 150.0)
+		if spawn_y > 0 and spawn_y < grid_height:
+			var rel_y_s = 1.0 - (float(spawn_y) / tornado_ground_y) if tornado_ground_y > 0 else 1.0
+			var rad_s = (25.0 + tornado_intensity * 15.0) + (50.0 * tornado_intensity * rel_y_s)
+			_set_cell(int(tornado_x + randf_range(-rad_s * 0.4, rad_s * 0.4)), spawn_y, 15)
+	
+	# INCREASED ITERATIONS for brutal consistency (3000 -> 5000 for level 3)
+	var points_to_process = 3000 * tornado_intensity if tornado_intensity < 3 else 5000 * 3
 	
 	for i in range(points_to_process):
-		# Sample randomly in the grid (biased towards tornado column)
-		var ry = randi() % grid_height
+		# Sample with bias: 60% of samples focus on the area near the ground
+		var ry: int
+		if randf() < 0.6:
+			ry = int(tornado_ground_y + randf_range(-40, 100))
+		else:
+			ry = randi() % grid_height
 		
+		if ry < 0 or ry >= grid_height: continue
+
 		# Variable Radius relative to current GROUND level
 		var rel_y = 1.0 - (float(ry) / tornado_ground_y) if tornado_ground_y > 0 else 1.0
-		# Funnel only above ground, but with a small chaotic bit below
+		
+		# WIDER BASE: Increased from 4 to 25 to make it much easier to "catch" materials
 		var current_radius = 0.0
 		if ry <= tornado_ground_y:
-			current_radius = (4 + tornado_intensity) + (40.0 * tornado_intensity * rel_y)
+			current_radius = (25.0 + tornado_intensity * 15.0) + (50.0 * tornado_intensity * rel_y)
 		else:
-			# Dig slightly into the ground (radius narrows downward)
-			current_radius = max(0, (4 + tornado_intensity) - (ry - tornado_ground_y))
+			# Dig slightly into the ground
+			current_radius = max(0, (25.0 + tornado_intensity * 15.0) - (ry - tornado_ground_y))
 		
 		var rx = int(tornado_x + randf_range(-current_radius, current_radius))
 		
@@ -3623,19 +3662,28 @@ func _process_tornado(delta):
 		var tid = _get_cell(rx, ry)
 		if tid == 0 or tid == 17: continue 
 		
-		# Vortex Forces
-		var dist_x = tornado_x - rx
-		var pull_strength = 1.0 - (abs(dist_x) / (current_radius + 1))
+		# Vortex Forces: Focus suction at the core
+		var dist_x_abs = abs(tornado_x - rx)
+		var pull_strength = 1.0 - (dist_x_abs / (current_radius + 1.0))
 		
-		var dx = sign(dist_x)
-		# Pull up above ground, swirl/chaos below ground
-		var dy = -2 if tornado_intensity < 3 else -4 
+		# SUCTION THRESHOLD: Slightly more forgiving to catch more materials
+		var suction_threshold = 0.4 if ry < tornado_ground_y - 80 else 0.6
+		if pull_strength < suction_threshold: continue
+
+		var target_x = tornado_x + randf_range(-current_radius * 0.7, current_radius * 0.7)
+		var dx = sign(target_x - rx)
+		
+		# Pull up FORCE: Increased significantly for level 3
+		var base_up = -3 if tornado_intensity < 2 else (-6 if tornado_intensity == 2 else -12)
+		var dy = int(base_up * pull_strength)
+		if dy >= 0: dy = -1 # Ensure it always moves up if caught
+		
 		if ry > tornado_ground_y: dy = 1 if randf() < 0.5 else -1 # Chaos/digging
 		
-		# Swirl/Orbital effect
-		if randf() < 0.4: dx = -dx 
+		# Swirl/Orbital chance
+		if randf() < 0.3: dx = -dx 
 		
-		# Apply force with probability
+		# Suction Chance
 		if randf() < pull_strength:
 			var nx = rx + dx
 			var ny = ry + dy

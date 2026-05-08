@@ -45,18 +45,7 @@ void fragment() {
             }
         }
         
-        // 4. Tornado Funnel for Air (ID 0)
-        if (id == 0 && tornado_intensity > 0.0) {
-            vec2 tex_size = vec2(textureSize(TEXTURE, 0));
-            vec2 grid_pos = UV * tex_size;
-            if (grid_pos.y <= tornado_ground_y) {
-                float rel_y = 1.0 - (grid_pos.y / tornado_ground_y);
-                float cur_rad = (5.0 + tornado_intensity * 5.0) + (40.0 * tornado_intensity * rel_y);
-                if (abs(grid_pos.x - tornado_x) < cur_rad) {
-                    color = vec4(0.4, 0.4, 0.4, 0.4);
-                }
-            }
-        }
+
         
         // 5. ELECTRIC GLOW (High Intensity Sparks with Amber Contrast)
         if (charge > 0.05 && id > 0 && id != 13 && id != 25 && id != 5 && id != 7 && id != 20 && id != 71 && id != 72 && id != 77) {
