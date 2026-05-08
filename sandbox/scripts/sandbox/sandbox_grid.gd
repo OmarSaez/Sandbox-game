@@ -4623,7 +4623,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			if n_id != 13 and n_id != 26 and n_id != 5 and n_id != 27:
 				_explode(x, y-1, 2, "volcan_burst") # PUSH the plug out of the way!
 				_set_cell(tx, y-1, 28)
-				charge_array[(y-1) * grid_width + tx] = randi_range(30, 60) # Projectile fuel
+				charge_array[(y-1) * grid_width + tx] = randi_range(80, 150) # Projectile fuel (increased for devastating penetration)
 		
 		# Smoking Base + LAVA PUDDLES (Triple effect)
 		if randf() < 0.3: # Reduced from 0.6
@@ -4643,25 +4643,63 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		var current_fuel = charge_array[idx]
 		for i in range(3):
 			if current_fuel <= 0:
-				_draw_circle(x, y, 6, 11) 
-				_draw_circle(x, y, 5, 15) 
-				_explode(x, y, 12, "volcan_burst")
+				_draw_circle(x, y, 8, 11) # Bigger burnout crater
+				_draw_circle(x, y, 6, 15) 
+				_explode(x, y, 15, "volcan_burst") # Massive explosion at the top
 				for _j in range(50):
-					_add_spark(float(x), float(y), randf_range(-120, 120), randf_range(-150, 50), [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(), randf_range(0.4, 0.8))
+					_add_spark(float(x), float(y), randf_range(-150, 150), randf_range(-200, 50), [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(), randf_range(0.4, 0.8))
 				return
 			var next_y = y - 1
 			if next_y < 5: _set_cell(x, y, 11); _explode(x, y, 6); return
+			
 			var next_id = _get_cell(x, next_y)
-			if next_id == 0 or next_id == 3 or next_id == 9 or next_id == 11 or next_id == 15:
+			var n_tags = material_tags_raw[next_id & 0xFFFF] if next_id > 0 else 0
+			
+			# DEVASTATING ERUPTION: Penetrate all non-invincible materials
+			if next_id == 0 or not (n_tags & SandboxMaterial.Tags.INVINCIBLE):
+				var is_solid = (next_id > 0 and next_id != 11 and next_id != 15 and next_id != 3 and next_id != 9)
+				
+				if is_solid:
+					# RESISTENCIA: 30% de probabilidad de luchar contra el material sólido
+					if randf() < 0.30:
+						current_fuel -= 1 # Gasta combustible intentando romper
+						charge_array[idx] = current_fuel
+						# Crear efecto visual de lucha (chisporroteo lateral)
+						if randf() < 0.4:
+							for _k in range(3):
+								_add_spark(float(x), float(y), randf_range(-60, 60), randf_range(-20, 20), [Color.RED, Color.ORANGE].pick_random(), 0.3)
+						break # Frena el avance este frame, dando efecto de destrucción lenta pero imparable
+						
+					current_fuel -= 2 # Small penalty for drilling, allows deep penetration
+					if randf() < 0.2:
+						_add_spark(float(x), float(y), randf_range(-50, 50), randf_range(-50, 50), Color.RED, 0.3)
+						
 				_swap_cells(x, y, x, next_y)
-				var trail_id = 15 if randf() < 0.2 else (9 if randf() < 0.5 else 3)
-				_set_cell(x, y, trail_id)
-				for j in range(3):
-					var lx = x + randi_range(-2, 2); var ly = y + randi_range(-1, 1)
-					if _get_cell(lx, ly) == 0 or _get_cell(lx, ly) == 15: _set_cell(lx, ly, 11)
+				_set_cell(x, y, 11 if randf() < 0.8 else 15) # Leave lava 80% of the time for a fiery trail
+				
+				# Drill a chimney (radius 2)
+				for dx in range(-2, 3):
+					for dy in range(-2, 2):
+						if dx == 0 and dy == 0: continue
+						if abs(dx) + abs(dy) > 3: continue # Diamond shape to look natural
+						var cx = x + dx; var cy = next_y + dy
+						var cid = _get_cell(cx, cy)
+						if cid > 0 and cid != 28:
+							var ctags = material_tags_raw[cid & 0xFFFF]
+							if not (ctags & SandboxMaterial.Tags.INVINCIBLE):
+								var rand_val = randf()
+								if rand_val < 0.35: # 35% lava (Creates a massive flow down the chimney)
+									_set_cell(cx, cy, 11)
+								elif rand_val < 0.60: # 25% smoke
+									_set_cell(cx, cy, 15)
+								else: # 40% empty (carving the hole)
+									_set_cell(cx, cy, 0)
+									
 				y = next_y; idx = y * grid_width + x; current_fuel -= 1; charge_array[idx] = current_fuel
 				for _j in range(12): _add_spark(float(x) + randf_range(-6, 6), float(y) + randf_range(0, 10), randf_range(-60, 60), randi_range(40, 100), [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(), randf_range(0.2, 0.5))
-			else: current_fuel = 0; break
+			else: 
+				current_fuel = 0; break # Hit invincible wall
+				
 		if randf() < 0.8:
 			var e_colors = [Color.YELLOW, Color.CYAN, Color.WHITE, Color("#FFFF33")]
 			for _i in range(4): _add_spark(float(x) + randf_range(-3, 3), float(y + 1), randf_range(-50, 50), randf_range(20, 80), e_colors[randi() % e_colors.size()], randf_range(0.1, 0.4))
