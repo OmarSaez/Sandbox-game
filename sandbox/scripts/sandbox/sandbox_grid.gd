@@ -1012,6 +1012,80 @@ func _show_main_tutorial_step():
 		panel.position = Vector2(screen_size.x / 2 - p_size.x / 2, screen_size.y / 2 - p_size.y / 2)
 
 
+func _show_menu_reminder(menu_id: String, parent_vbox: VBoxContainer, text_key: String):
+	var save_path = "user://reminder_seen_" + menu_id + ".save"
+	if FileAccess.file_exists(save_path):
+		return
+		
+	# Si ya hay un recordatorio activo en este vbox, no duplicar
+	if parent_vbox.has_node("MenuReminder"):
+		return
+
+	var s = _get_ui_scale()
+	var pnl = PanelContainer.new()
+	pnl.name = "MenuReminder"
+	
+	var st = StyleBoxFlat.new()
+	st.bg_color = Color(0.1, 0.3, 0.5, 0.95) # Azul informativo premium
+	st.border_width_left = 2; st.border_width_top = 2
+	st.border_width_right = 2; st.border_width_bottom = 2
+	st.border_color = Color(0.3, 0.6, 1.0)
+	st.set_corner_radius_all(15 * s)
+	pnl.add_theme_stylebox_override("panel", st)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 20 * s)
+	margin.add_theme_constant_override("margin_right", 20 * s)
+	margin.add_theme_constant_override("margin_top", 15 * s)
+	margin.add_theme_constant_override("margin_bottom", 15 * s)
+	pnl.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10 * s)
+	margin.add_child(vbox)
+	
+	var tip_lbl = Label.new()
+	tip_lbl.text = "💡 INFO"
+	tip_lbl.add_theme_font_override("font", _get_safe_font())
+	tip_lbl.add_theme_font_size_override("font_size", 18 * s)
+	tip_lbl.add_theme_color_override("font_color", Color.YELLOW)
+	vbox.add_child(tip_lbl)
+	
+	var lbl = Label.new()
+	lbl.text = tr(text_key)
+	lbl.add_theme_font_override("font", _get_safe_font())
+	lbl.add_theme_font_size_override("font_size", 21 * s)
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(lbl)
+	
+	var btn = Button.new()
+	btn.text = "Entendido"
+	btn.add_theme_font_override("font", _get_safe_font())
+	btn.add_theme_font_size_override("font_size", 22 * s)
+	btn.custom_minimum_size = Vector2(150 * s, 45 * s)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	
+	var bst = StyleBoxFlat.new()
+	bst.bg_color = Color(0.2, 0.6, 0.3)
+	bst.set_corner_radius_all(10 * s)
+	btn.add_theme_stylebox_override("normal", bst)
+	
+	btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		var file = FileAccess.open(save_path, FileAccess.WRITE)
+		if file:
+			file.store_string("seen")
+			file.close()
+		pnl.queue_free()
+	)
+	vbox.add_child(btn)
+	
+	# Insertar debajo del título (asumimos que el título es el hijo 0)
+	parent_vbox.add_child(pnl)
+	parent_vbox.move_child(pnl, 1)
+
+
 func _setup_materials_within_grid():
 	var has_standard = false
 	if material_grid.get_child_count() > 0:
@@ -1889,13 +1963,15 @@ func _setup_lab_ui():
 		if is_instance_valid(paint_panel): paint_panel.visible = false
 		if is_instance_valid(lab_panel): 
 			lab_panel.visible = !lab_panel.visible
-			if lab_panel.visible and not is_lab_tutorial_done and is_lab_unlocked:
-				lab_tutorial_step = 1
-				# TUTORIAL RESET: Start with no selection to force the user to pick
-				lab_custom_data[0]["grav"] = -1
-				lab_custom_data[0]["state"] = -1
-				_update_lab_inspector()
-				_update_lab_tutorial_highlight()
+			if lab_panel.visible:
+				_show_menu_reminder("lab", lab_panel.get_child(0), "TUTORIAL_STEP_3")
+				if not is_lab_tutorial_done and is_lab_unlocked:
+					lab_tutorial_step = 1
+					# TUTORIAL RESET: Start with no selection to force the user to pick
+					lab_custom_data[0]["grav"] = -1
+					lab_custom_data[0]["state"] = -1
+					_update_lab_inspector()
+					_update_lab_tutorial_highlight()
 			elif not lab_panel.visible:
 				if lab_tutorial_step == 5:
 					lab_tutorial_step = 6
@@ -2337,7 +2413,10 @@ func _on_tools_btn_pressed():
 	if is_instance_valid(save_panel): save_panel.queue_free()
 	if is_instance_valid(lab_panel): lab_panel.visible = false
 	if is_instance_valid(paint_panel): paint_panel.visible = false
-	if is_instance_valid(tools_panel): tools_panel.visible = !tools_panel.visible
+	if is_instance_valid(tools_panel): 
+		tools_panel.visible = !tools_panel.visible
+		if tools_panel.visible:
+			_show_menu_reminder("tools", tools_panel.get_child(0), "TUTORIAL_STEP_2")
 	_update_menu_highlights()
 	
 	# Update tutorial highlight if we just opened/closed tools
@@ -2908,7 +2987,10 @@ func _setup_disaster_ui():
 		if is_instance_valid(save_panel): save_panel.queue_free()
 		if is_instance_valid(lab_panel): lab_panel.visible = false
 		if is_instance_valid(paint_panel): paint_panel.visible = false
-		if is_instance_valid(disaster_panel): disaster_panel.visible = !disaster_panel.visible
+		if is_instance_valid(disaster_panel): 
+			disaster_panel.visible = !disaster_panel.visible
+			if disaster_panel.visible:
+				_show_menu_reminder("disaster", disaster_panel.get_child(0), "TUTORIAL_STEP_4")
 	)
 	
 	disaster_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
@@ -5016,7 +5098,9 @@ func _setup_paint_ui():
 		# EXCLUSIVE PAINT MODE
 		if is_instance_valid(paint_panel):
 			paint_panel.visible = !paint_panel.visible
-			is_paint_tool_active = true
+			is_paint_tool_active = paint_panel.visible
+			if paint_panel.visible:
+				_show_menu_reminder("paint", paint_panel.get_child(0), "TUTORIAL_STEP_6")
 			if paint_panel.visible:
 				# Clear material selection
 				selected_material = -1
@@ -5749,7 +5833,10 @@ func _setup_npc_ui():
 		if is_instance_valid(save_panel): save_panel.queue_free()
 		if is_instance_valid(lab_panel): lab_panel.visible = false
 		if is_instance_valid(paint_panel): paint_panel.visible = false
-		if is_instance_valid(npc_panel): npc_panel.visible = !npc_panel.visible
+		if is_instance_valid(npc_panel): 
+			npc_panel.visible = !npc_panel.visible
+			if npc_panel.visible:
+				_show_menu_reminder("npc", npc_panel.get_child(0), "TUTORIAL_STEP_5")
 	)
 	
 	# Clear and Fill
@@ -7567,6 +7654,8 @@ func _setup_music_ui(force_refresh: bool = false):
 	main_vbox.add_theme_constant_override("separation", 15 * s) # Tighter spacing to pull content up
 	main_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(main_vbox)
+	
+	_show_menu_reminder("music", main_vbox, "TUTORIAL_STEP_7")
 	
 	# Title
 	var title = Label.new()
