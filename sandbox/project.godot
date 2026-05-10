@@ -22,6 +22,8 @@ config/icon="res://icon.svg"
 [autoload]
 
 AdMobManager="*res://scripts/admob_manager.gd"
+NotificationScheduler="*res://addons/NotificationSchedulerPlugin/NotificationScheduler.gd"
+NotificationManager="*res://scripts/notification_manager.gd"
 
 [display]
 
@@ -35,7 +37,7 @@ window/handheld/orientation=1
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/admob/plugin.cfg")
+enabled=PackedStringArray("res://addons/NotificationSchedulerPlugin/plugin.cfg", "res://addons/admob/plugin.cfg")
 
 [internationalization]
 
