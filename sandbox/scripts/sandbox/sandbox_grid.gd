@@ -1060,7 +1060,7 @@ func _show_menu_reminder(menu_id: String, parent_vbox: VBoxContainer, text_key: 
 	vbox.add_child(lbl)
 	
 	var btn = Button.new()
-	btn.text = "Entendido"
+	btn.text = tr("GOT_IT")
 	btn.add_theme_font_override("font", _get_safe_font())
 	btn.add_theme_font_size_override("font_size", 22 * s)
 	btn.custom_minimum_size = Vector2(150 * s, 45 * s)
