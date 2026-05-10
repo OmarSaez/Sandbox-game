@@ -840,10 +840,176 @@ func _show_welcome_message():
 					_launch_firework(right_x + randi_range(-20, 20), base_y + randi_range(-10, 10))
 					await get_tree().create_timer(0.3).timeout
 				# Pequeña pausa entre tandas para que se sienta espectacular
+				# Pequeña pausa entre tandas para que se sienta espectacular
 				await get_tree().create_timer(1.0).timeout
+			
+			# AQUI EMPIEZA EL TUTORIAL SECUENCIAL
+			_start_interactive_tutorial()
 				
 		spawn_fireworks.call()
 	)
+
+var main_tutorial_step = 0
+var main_tutorial_overlay: Control = null
+
+func _start_interactive_tutorial():
+	# Si ya lo vio, no lo volvemos a mostrar
+	var save_path = "user://main_tutorial_shown.save"
+	if FileAccess.file_exists(save_path):
+		return
+	
+	var file = FileAccess.open(save_path, FileAccess.WRITE)
+	if file:
+		file.store_string("shown")
+		file.close()
+
+	main_tutorial_step = 0
+	_show_main_tutorial_step()
+
+func _show_main_tutorial_step():
+	if is_instance_valid(main_tutorial_overlay):
+		main_tutorial_overlay.queue_free()
+	
+	var steps = [
+		{"target": "material_scroll", "text": tr("TUTORIAL_STEP_1")},
+		{"target": "tools_btn", "text": tr("TUTORIAL_STEP_2")},
+		{"target": "lab_btn", "text": tr("TUTORIAL_STEP_3")},
+		{"target": "disaster_btn", "text": tr("TUTORIAL_STEP_4")},
+		{"target": "npc_btn", "text": tr("TUTORIAL_STEP_5")},
+		{"target": "paint_btn", "text": tr("TUTORIAL_STEP_6")},
+		{"target": "music_btn", "text": tr("TUTORIAL_STEP_7")}
+	]
+	
+	if main_tutorial_step >= steps.size():
+		return # Tutorial terminado
+		
+	var step_data = steps[main_tutorial_step]
+	var target_key = step_data["target"]
+	var target_node = null
+	
+	if target_key == "material_scroll":
+		target_node = material_scroll
+	else:
+		target_node = ui_elements.get(target_key)
+		# Hacer auto-scroll si el botón está dentro de un ScrollContainer
+		if is_instance_valid(target_node):
+			var scroll = target_node.get_parent().get_parent()
+			if scroll is ScrollContainer:
+				var center_y = target_node.position.y - (scroll.size.y / 2.0) + (target_node.size.y / 2.0)
+				scroll.scroll_vertical = max(0, int(center_y))
+				await get_tree().process_frame
+				await get_tree().process_frame # Esperar a que la UI recalcule posiciones
+		
+	if not is_instance_valid(target_node) or not target_node.is_inside_tree() or not target_node.is_visible_in_tree():
+		# Si un botón no existe o está oculto, saltamos al siguiente
+		main_tutorial_step += 1
+		call_deferred("_show_main_tutorial_step")
+		return
+		
+	var s = _get_ui_scale()
+	var rect = target_node.get_global_rect()
+	var screen_size = get_viewport_rect().size
+	
+	main_tutorial_overlay = Control.new()
+	main_tutorial_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	main_tutorial_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(main_tutorial_overlay)
+	
+	var create_dim = func(pos, sz):
+		var r = ColorRect.new()
+		r.color = Color(0, 0, 0, 0.8)
+		r.mouse_filter = Control.MOUSE_FILTER_STOP
+		r.position = pos
+		r.size = sz
+		main_tutorial_overlay.add_child(r)
+		
+	var padding = 5 * s
+	var c_rect = rect.grow(padding)
+	
+	# Clamp dentro de la pantalla
+	c_rect = c_rect.intersection(get_viewport_rect())
+	
+	create_dim.call(Vector2(0, 0), Vector2(screen_size.x, c_rect.position.y))
+	create_dim.call(Vector2(0, c_rect.end.y), Vector2(screen_size.x, screen_size.y - c_rect.end.y))
+	create_dim.call(Vector2(0, c_rect.position.y), Vector2(c_rect.position.x, c_rect.size.y))
+	create_dim.call(Vector2(c_rect.end.x, c_rect.position.y), Vector2(screen_size.x - c_rect.end.x, c_rect.size.y))
+	
+	var highlight_border = ReferenceRect.new()
+	highlight_border.position = c_rect.position
+	highlight_border.size = c_rect.size
+	highlight_border.border_color = Color(0.4, 1.0, 0.4)
+	highlight_border.border_width = 4 * s
+	highlight_border.editor_only = false
+	main_tutorial_overlay.add_child(highlight_border)
+	
+	var tw = create_tween().set_loops()
+	tw.tween_property(highlight_border, "border_color", Color(0.4, 1.0, 0.4, 0.3), 0.5)
+	tw.tween_property(highlight_border, "border_color", Color(0.4, 1.0, 0.4, 1.0), 0.5)
+	
+	var panel = PanelContainer.new()
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.1, 0.1, 0.15, 0.95)
+	p_style.border_width_left = 3; p_style.border_width_top = 3
+	p_style.border_width_right = 3; p_style.border_width_bottom = 3
+	p_style.border_color = Color(0.3, 0.8, 0.4)
+	p_style.set_corner_radius_all(15 * s)
+	panel.add_theme_stylebox_override("panel", p_style)
+	main_tutorial_overlay.add_child(panel)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 15 * s)
+	
+	var marg = MarginContainer.new()
+	marg.add_theme_constant_override("margin_left", 20 * s)
+	marg.add_theme_constant_override("margin_right", 20 * s)
+	marg.add_theme_constant_override("margin_top", 20 * s)
+	marg.add_theme_constant_override("margin_bottom", 20 * s)
+	marg.add_child(vbox)
+	panel.add_child(marg)
+	
+	var count_lbl = Label.new()
+	count_lbl.text = str(main_tutorial_step + 1) + "/" + str(steps.size())
+	count_lbl.add_theme_font_override("font", _get_safe_font())
+	count_lbl.add_theme_font_size_override("font_size", 18 * s)
+	count_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	count_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	vbox.add_child(count_lbl)
+	
+	var lbl = Label.new()
+	lbl.text = step_data["text"]
+	lbl.add_theme_font_override("font", _get_safe_font())
+	lbl.add_theme_font_size_override("font_size", 24 * s)
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.custom_minimum_size = Vector2(300 * s, 0)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(lbl)
+	
+	var ok_btn = Button.new()
+	ok_btn.text = "OK"
+	ok_btn.custom_minimum_size = Vector2(120 * s, 50 * s)
+	ok_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	ok_btn.add_theme_font_override("font", _get_safe_font())
+	ok_btn.add_theme_font_size_override("font_size", 24 * s)
+	var ok_style = StyleBoxFlat.new()
+	ok_style.bg_color = Color(0.2, 0.6, 0.3)
+	ok_style.set_corner_radius_all(10 * s)
+	ok_btn.add_theme_stylebox_override("normal", ok_style)
+	
+	ok_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		main_tutorial_step += 1
+		_show_main_tutorial_step()
+	)
+	vbox.add_child(ok_btn)
+	
+	await get_tree().process_frame
+	var p_size = panel.size
+	
+	# Posicionamiento inteligente
+	if target_key == "material_scroll":
+		panel.position = Vector2(screen_size.x / 2 - p_size.x / 2, c_rect.position.y - p_size.y - 20 * s)
+	else:
+		panel.position = Vector2(screen_size.x / 2 - p_size.x / 2, screen_size.y / 2 - p_size.y / 2)
 
 
 func _setup_materials_within_grid():
