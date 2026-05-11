@@ -1386,7 +1386,7 @@ func _setup_main_ui_containers():
 	footer_bg = PanelContainer.new()
 	footer_bg.name = "HUD_Footer_BG"
 	var foot_style = StyleBoxFlat.new()
-	foot_style.bg_color = Color(0.12, 0.12, 0.15, 1.0) # Match Material Slot Dark Grey
+	foot_style.bg_color = Color(0.06, 0.057, 0.07, 1.0) # Near black for maximum contrast
 	footer_bg.add_theme_stylebox_override("panel", foot_style)
 	main_controls.add_child(footer_bg)
 	main_controls.move_child(footer_bg, 0) # ALWAYS BEHIND MATERIAL/ACTION
@@ -6696,6 +6696,7 @@ func _process_npcs(delta):
 		if npc.hp <= 0: emotes = ["💀"]
 		else:
 			if npc.get("is_fleeing", false): emotes.append("😭")
+			if npc.get("dance_timer", 0.0) > 0: emotes.append("🎵")
 			
 			var is_winning = show_dom and npc.team == win_team
 			var is_losing = show_dom and npc.team != win_team
@@ -6740,176 +6741,191 @@ func _process_npcs(delta):
 			
 			# AUTONOMOUS AI LOGIC (Skip if controlled)
 			if npc != controlled_npc:
-				if npc.type == "medic":
-					var heal_cd = npc.attack_cooldown
-					var closest_enemy = null
-					var closest_ally = null
-					var ally_dist = 999.0
+				var is_dancing = false
+				var dance_t = npc.get("dance_timer", 0.0)
+				if dance_t > 0:
+					npc["dance_timer"] = dance_t - 0.05
+					var msec = Time.get_ticks_msec() + (npc.id * 137) # Offset to desync dance
+					var wiggle_speed = 180 + (npc.id % 50)
+					npc.dir = 1 if (msec / wiggle_speed) % 2 == 0 else -1
 					
-					if can_think:
-						closest_enemy = _find_closest_enemy(npc, 180.0)
-						var nearby = _get_nearby_npcs(npc.pos.x, npc.pos.y, 180.0)
-						for other in nearby:
-							if other.team == npc.team and other != npc and other.hp > 0 and other.type != "medic":
-								var mhp = other.get("max_hp", 100.0)
-								if other.hp < mhp: 
-									var d = npc.pos.distance_to(other.pos)
-									if d < ally_dist: ally_dist = d; closest_ally = other
-						# Store results to avoid recalculating every frame
-						npc["cached_closest_enemy"] = closest_enemy
-						npc["cached_closest_ally"] = closest_ally
-						npc["cached_ally_dist"] = ally_dist
-					else:
-						closest_enemy = npc.get("cached_closest_enemy", null)
-						closest_ally = npc.get("cached_closest_ally", null)
-						ally_dist = npc.get("cached_ally_dist", 999.0)
+					var jump_freq = 350 + (npc.id % 150)
+					if (msec / jump_freq) % 2 == 0 and not _can_npc_fit(np.x, np.y + 1, npc):
+						npc.vy = -3.0 - (float(npc.id % 5) * 0.5) # Varied jump height
+					npc["has_spotted_enemy"] = false
+					is_dancing = true
+				
+				if not is_dancing:
+					if npc.type == "medic":
+						var heal_cd = npc.attack_cooldown
+						var closest_enemy = null
+						var closest_ally = null
+						var ally_dist = 999.0
 						
-					var medic_critical = npc.hp < (npc.get("max_hp", 100.0) * 0.5)
-					var enemy_very_close = closest_enemy and npc.pos.distance_to(closest_enemy.pos) < 120.0
-					if (medic_critical and enemy_very_close) or (enemy_very_close and not closest_ally):
-						npc.dir = 1 if closest_enemy.pos.x < np.x else -1; npc["is_fleeing"] = true
-					else:
-						npc["is_fleeing"] = false
-						if closest_ally:
-							if ally_dist < 25.0:
-								npc.dir = 0
-								if heal_cd <= 0:
-									closest_ally.hp = min(closest_ally.hp + npc.get("heal_power", 20.0), closest_ally.get("max_hp", 100.0))
-									npc["attack_cooldown"] = 1.0; _play_action_sound("medic_heal")
-									_set_npc_emoji(npc, "💚", 1.0) 
-									if closest_ally.hp > closest_ally.get("max_hp", 100.0) * 0.3:
-										closest_ally["morale_broken"] = false; closest_ally["is_fleeing"] = false
-									_set_npc_emoji(closest_ally, "😊", 1.5)
-									for _f in range(6): _add_spark(float(closest_ally.pos.x+_get_lut_rand_range(-3,3)),float(closest_ally.pos.y+_get_lut_rand_range(-5,0)),0.0,_get_lut_rand_range(-35.0,-15.0),Color.GREEN,0.6)
-							else: npc.dir = 1 if closest_ally.pos.x > np.x else -1
+						if can_think:
+							closest_enemy = _find_closest_enemy(npc, 180.0)
+							var nearby = _get_nearby_npcs(npc.pos.x, npc.pos.y, 180.0)
+							for other in nearby:
+								if other.team == npc.team and other != npc and other.hp > 0 and other.type != "medic":
+									var mhp = other.get("max_hp", 100.0)
+									if other.hp < mhp: 
+										var d = npc.pos.distance_to(other.pos)
+										if d < ally_dist: ally_dist = d; closest_ally = other
+							# Store results to avoid recalculating every frame
+							npc["cached_closest_enemy"] = closest_enemy
+							npc["cached_closest_ally"] = closest_ally
+							npc["cached_ally_dist"] = ally_dist
 						else:
+							closest_enemy = npc.get("cached_closest_enemy", null)
+							closest_ally = npc.get("cached_closest_ally", null)
+							ally_dist = npc.get("cached_ally_dist", 999.0)
+							
+						var medic_critical = npc.hp < (npc.get("max_hp", 100.0) * 0.5)
+						var enemy_very_close = closest_enemy and npc.pos.distance_to(closest_enemy.pos) < 120.0
+						if (medic_critical and enemy_very_close) or (enemy_very_close and not closest_ally):
+							npc.dir = 1 if closest_enemy.pos.x < np.x else -1; npc["is_fleeing"] = true
+						else:
+							npc["is_fleeing"] = false
+							if closest_ally:
+								if ally_dist < 25.0:
+									npc.dir = 0
+									if heal_cd <= 0:
+										closest_ally.hp = min(closest_ally.hp + npc.get("heal_power", 20.0), closest_ally.get("max_hp", 100.0))
+										npc["attack_cooldown"] = 1.0; _play_action_sound("medic_heal")
+										_set_npc_emoji(npc, "💚", 1.0) 
+										if closest_ally.hp > closest_ally.get("max_hp", 100.0) * 0.3:
+											closest_ally["morale_broken"] = false; closest_ally["is_fleeing"] = false
+										_set_npc_emoji(closest_ally, "😊", 1.5)
+										for _f in range(6): _add_spark(float(closest_ally.pos.x+_get_lut_rand_range(-3,3)),float(closest_ally.pos.y+_get_lut_rand_range(-5,0)),0.0,_get_lut_rand_range(-35.0,-15.0),Color.GREEN,0.6)
+								else: npc.dir = 1 if closest_ally.pos.x > np.x else -1
+							else:
+								if _get_lut_rand() < 0.02: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
+								if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
+					elif npc.type != "miner":
+						if can_think:
+							target = _find_closest_enemy(npc, 250.0)
+							npc["cached_target"] = target
+						else:
+							target = npc.get("cached_target", null)
+							
+						if target and !npc.get("morale_broken", false):
+							if !npc.get("has_spotted_enemy", false):
+								_set_npc_emoji(npc, "❗", 1.2)
+								npc["has_spotted_enemy"] = true
+						elif !target:
+							npc["has_spotted_enemy"] = false
+					
+					# --- PANIC NEAR DISASTERS ---
+					var is_near_tornado = false
+					if tornado_intensity > 0:
+						var d_to_t = abs(npc.pos.x - tornado_x)
+						if d_to_t < 150:
+							is_near_tornado = true
+							npc.dir = 1 if npc.pos.x > tornado_x else -1
+							npc["is_fleeing"] = true
+							if _get_lut_rand() < 0.05: _set_npc_emoji(npc, "😱", 0.5)
+					
+					# Reset panic state if the danger is gone
+					if not is_near_tornado and npc.get("is_fleeing", false):
+						# Only reset if NOT morale broken (they are not crying because of damage)
+						if not npc.get("morale_broken", false):
+							npc["is_fleeing"] = false
+					
+					var critical_hp = npc.get("max_hp", 100.0) * 0.3
+					if npc.hp <= critical_hp and not npc.get("morale_broken", false):
+						npc["morale_broken"] = true
+						if _get_lut_rand() < npc.get("cowardice", 0.30):
+							npc["is_fleeing"] = true
+							_set_npc_emoji(npc, "😭", 3.0) 
+							var start_drop_x = np.x + (1 if npc.dir == -1 else 0)
+							if _get_cell(start_drop_x, np.y) == 0: _set_cell(start_drop_x, np.y, 2)
+					
+					if npc.type != "miner" and npc.type != "medic":
+						if npc.get("is_fleeing", false):
+							if target: npc.dir = 1 if target.pos.x < np.x else -1
+							if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
+							if _get_lut_rand() < 0.10:
+								var drop_x = np.x + (1 if npc.dir == -1 else 0)
+								if _get_cell(drop_x, np.y) == 0: _set_cell(drop_x, np.y, 2)
+						elif !target:
 							if _get_lut_rand() < 0.02: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
 							if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
-				elif npc.type != "miner":
-					if can_think:
-						target = _find_closest_enemy(npc, 250.0)
-						npc["cached_target"] = target
-					else:
-						target = npc.get("cached_target", null)
-						
-					if target and !npc.get("morale_broken", false):
-						if !npc.get("has_spotted_enemy", false):
-							_set_npc_emoji(npc, "❗", 1.2)
-							npc["has_spotted_enemy"] = true
-					elif !target:
-						npc["has_spotted_enemy"] = false
-				
-				# --- PANIC NEAR DISASTERS ---
-				var is_near_tornado = false
-				if tornado_intensity > 0:
-					var d_to_t = abs(npc.pos.x - tornado_x)
-					if d_to_t < 150:
-						is_near_tornado = true
-						npc.dir = 1 if npc.pos.x > tornado_x else -1
-						npc["is_fleeing"] = true
-						if _get_lut_rand() < 0.05: _set_npc_emoji(npc, "😱", 0.5)
-				
-				# Reset panic state if the danger is gone
-				if not is_near_tornado and npc.get("is_fleeing", false):
-					# Only reset if NOT morale broken (they are not crying because of damage)
-					if not npc.get("morale_broken", false):
-						npc["is_fleeing"] = false
-				
-				var critical_hp = npc.get("max_hp", 100.0) * 0.3
-				if npc.hp <= critical_hp and not npc.get("morale_broken", false):
-					npc["morale_broken"] = true
-					if _get_lut_rand() < npc.get("cowardice", 0.30):
-						npc["is_fleeing"] = true
-						_set_npc_emoji(npc, "😭", 3.0) 
-						var start_drop_x = np.x + (1 if npc.dir == -1 else 0)
-						if _get_cell(start_drop_x, np.y) == 0: _set_cell(start_drop_x, np.y, 2)
-				
-				if npc.type != "miner" and npc.type != "medic":
-					if npc.get("is_fleeing", false):
-						if target: npc.dir = 1 if target.pos.x < np.x else -1
-						if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
-						if _get_lut_rand() < 0.10:
-							var drop_x = np.x + (1 if npc.dir == -1 else 0)
-							if _get_cell(drop_x, np.y) == 0: _set_cell(drop_x, np.y, 2)
-					elif !target:
-						if _get_lut_rand() < 0.02: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
-						if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
-					elif target:
-						var dist_x = target.pos.x - np.x; var dx_abs = abs(dist_x); var dy_abs = abs(target.pos.y - np.y)
-						if npc.type == "warrior":
-							var target_below = target.pos.y > np.y + 8
-							if target_below:
-								if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
-							else: npc.dir = 1 if dist_x > 0 else -1
-							if dx_abs < 6 and dy_abs < 6:
-								if npc.attack_cooldown <= 0: _attack_npc(npc, target); npc.attack_cooldown = 0.6
-							if dx_abs < 4 and !target_below: npc.dir = 0 
-						elif npc.type == "archer":
-							var target_below = target.pos.y > np.y + 12
-							if npc.miss_counter < 0:
-								npc.miss_counter += 1
-								if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
-							else:
-								if dx_abs > 120: npc.dir = 1 if dist_x > 0 else -1
-								elif dx_abs < 50: npc.dir = -1 if dist_x > 0 else 1
+						elif target:
+							var dist_x = target.pos.x - np.x; var dx_abs = abs(dist_x); var dy_abs = abs(target.pos.y - np.y)
+							if npc.type == "warrior":
+								var target_below = target.pos.y > np.y + 8
+								if target_below:
+									if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
+								else: npc.dir = 1 if dist_x > 0 else -1
+								if dx_abs < 6 and dy_abs < 6:
+									if npc.attack_cooldown <= 0: _attack_npc(npc, target); npc.attack_cooldown = 0.6
+								if dx_abs < 4 and !target_below: npc.dir = 0 
+							elif npc.type == "archer":
+								var target_below = target.pos.y > np.y + 12
+								if npc.miss_counter < 0:
+									npc.miss_counter += 1
+									if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
 								else:
-									if target_below:
-										if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
-									else: npc.dir = 0
-							if npc.attack_cooldown <= 0:
-								_shoot_arrow(npc, target); npc.miss_counter += 1
-								if npc.miss_counter >= 3: npc.miss_counter = -40
-								npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
-				
-				if npc.type == "miner":
-					var dig_speed = 0.15 if npc.hp < 100.0 else 0.05 
-					if npc.hit_flash == 5: npc.dir = -npc.dir
-					npc.dig_timer += dig_speed
-					if npc.dig_timer >= 0.15:
-						npc.dig_timer = 0.0
-						if !_can_npc_fit(np.x, np.y + 1, npc):
-							if not (npc.has("mine_state") and npc.mine_state == "saboteur"): npc.state_steps -= 1
-							if !(_get_cell(np.x, np.y - 4) != 0) and npc.mine_state == "gallery":
-								npc.mine_state = "ramp"; npc.state_steps = 25
-							if npc.state_steps <= 0:
-								if npc.mine_state == "saboteur":
-									_set_cell(np.x, np.y + 5, 3); npc.hp = 0; npc.hit_flash = 10
-								elif npc.mine_state == "ramp": npc.mine_state = "gallery"; npc.state_steps = _get_lut_rand_range(60, 100)
-								else: npc.mine_state = "ramp"; npc.state_steps = _get_lut_rand_range(15, 25)
-							
-							if npc.hp > 0:
-								var dig_down = (npc.mine_state == "ramp")
-								_miner_dig(npc, dig_down)
-								var next_x = np.x + npc.dir; var next_y = np.y + (1 if dig_down else 0); var hit_wall = false
-								if next_y >= dynamic_grid_height - 15:
-									if npc.mine_state != "saboteur":
-										npc.mine_state = "saboteur"; npc["saboteur_start_x"] = np.x; npc["saboteur_bounces"] = 0; npc.dir = 1 if _get_lut_rand() > 0.5 else -1
-									next_y = np.y; next_x = np.x + npc.dir
+									if dx_abs > 120: npc.dir = 1 if dist_x > 0 else -1
+									elif dx_abs < 50: npc.dir = -1 if dist_x > 0 else 1
+									else:
+										if target_below:
+											if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
+										else: npc.dir = 0
+								if npc.attack_cooldown <= 0:
+									_shoot_arrow(npc, target); npc.miss_counter += 1
+									if npc.miss_counter >= 3: npc.miss_counter = -40
+									npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
+					
+					if npc.type == "miner":
+						var dig_speed = 0.15 if npc.hp < 100.0 else 0.05 
+						if npc.hit_flash == 5: npc.dir = -npc.dir
+						npc.dig_timer += dig_speed
+						if npc.dig_timer >= 0.15:
+							npc.dig_timer = 0.0
+							if !_can_npc_fit(np.x, np.y + 1, npc):
+								if not (npc.has("mine_state") and npc.mine_state == "saboteur"): npc.state_steps -= 1
+								if !(_get_cell(np.x, np.y - 4) != 0) and npc.mine_state == "gallery":
+									npc.mine_state = "ramp"; npc.state_steps = 25
+								if npc.state_steps <= 0:
+									if npc.mine_state == "saboteur":
+										_set_cell(np.x, np.y + 5, 3); npc.hp = 0; npc.hit_flash = 10
+									elif npc.mine_state == "ramp": npc.mine_state = "gallery"; npc.state_steps = _get_lut_rand_range(60, 100)
+									else: npc.mine_state = "ramp"; npc.state_steps = _get_lut_rand_range(15, 25)
 								
-								if npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 3:
-									for fx in range(-2, 3):
-										var f_idx = np.x + fx
-										if f_idx >= 0 and f_idx < grid_width: 
-											_set_cell(f_idx, np.y + 5, 3) 
-											_set_cell(f_idx, np.y - 1, 3)
-									npc.hp = 0; npc.hit_flash = 10
-								else:
-									var old_dir = npc.dir
-									if next_x < 5 or next_x > grid_width - 5: hit_wall = true; npc.dir = -npc.dir
-									elif _can_npc_fit(next_x, next_y, npc): np.x = next_x ; np.y = next_y
-									elif !dig_down and _can_npc_fit(next_x, np.y - 1, npc): np.x = next_x ; np.y -= 1
-									else: hit_wall = true; npc.dir = -npc.dir
-									if hit_wall:
-										if not (npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2) and (next_x <= 5 or next_x >= grid_width - 5):
-											var wall_x1 = np.x + 2 if old_dir == 1 else np.x - 1
-											var wall_x2 = np.x + 3 if old_dir == 1 else np.x - 2
-											for wy in range(np.y - 1, np.y + 6):
-												if wy >= 0 and wy < dynamic_grid_height:
-													if wall_x1 >= 0 and wall_x1 < grid_width: _set_cell(wall_x1, wy, 16)
-													if wall_x2 >= 0 and wall_x2 < grid_width: _set_cell(wall_x2, wy, 16)
-										if npc.has("mine_state") and npc.mine_state == "saboteur":
-											if not npc.has("saboteur_bounces"): npc["saboteur_bounces"] = 0
-											if npc.saboteur_bounces < 4: npc.saboteur_bounces += 1
+								if npc.hp > 0:
+									var dig_down = (npc.mine_state == "ramp")
+									_miner_dig(npc, dig_down)
+									var next_x = np.x + npc.dir; var next_y = np.y + (1 if dig_down else 0); var hit_wall = false
+									if next_y >= dynamic_grid_height - 15:
+										if npc.mine_state != "saboteur":
+											npc.mine_state = "saboteur"; npc["saboteur_start_x"] = np.x; npc["saboteur_bounces"] = 0; npc.dir = 1 if _get_lut_rand() > 0.5 else -1
+										next_y = np.y; next_x = np.x + npc.dir
+									
+									if npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 3:
+										for fx in range(-2, 3):
+											var f_idx = np.x + fx
+											if f_idx >= 0 and f_idx < grid_width: 
+												_set_cell(f_idx, np.y + 5, 3) 
+												_set_cell(f_idx, np.y - 1, 3)
+										npc.hp = 0; npc.hit_flash = 10
+									else:
+										var old_dir = npc.dir
+										if next_x < 5 or next_x > grid_width - 5: hit_wall = true; npc.dir = -npc.dir
+										elif _can_npc_fit(next_x, next_y, npc): np.x = next_x ; np.y = next_y
+										elif !dig_down and _can_npc_fit(next_x, np.y - 1, npc): np.x = next_x ; np.y -= 1
+										else: hit_wall = true; npc.dir = -npc.dir
+										if hit_wall:
+											if not (npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2) and (next_x <= 5 or next_x >= grid_width - 5):
+												var wall_x1 = np.x + 2 if old_dir == 1 else np.x - 1
+												var wall_x2 = np.x + 3 if old_dir == 1 else np.x - 2
+												for wy in range(np.y - 1, np.y + 6):
+													if wy >= 0 and wy < dynamic_grid_height:
+														if wall_x1 >= 0 and wall_x1 < grid_width: _set_cell(wall_x1, wy, 16)
+														if wall_x2 >= 0 and wall_x2 < grid_width: _set_cell(wall_x2, wy, 16)
+											if npc.has("mine_state") and npc.mine_state == "saboteur":
+												if not npc.has("saboteur_bounces"): npc["saboteur_bounces"] = 0
+												if npc.saboteur_bounces < 4: npc.saboteur_bounces += 1
 
 		if not npc.has("vx"): npc["vx"] = 0.0
 		if not npc.has("vy"): npc["vy"] = 0.0
@@ -8042,7 +8058,14 @@ func _play_music_note(inst_idx, note_idx):
 		p.set_deferred("pitch_scale", p_scale)
 		p.set_deferred("volume_db", -5.0) # Lower base volume per note to allow headroom for chords
 		p.call_deferred("play")
+		_trigger_npc_dance()
 	sim_mutex.unlock()
+
+func _trigger_npc_dance():
+	for npc in active_npcs:
+		if npc.hp > 0 and _get_lut_rand() < 0.8:
+			npc["dance_timer"] = 4.0 # Extended dance for 4 seconds
+			npc["has_spotted_enemy"] = false # Distracted by music!
 
 func _setup_music_ui(force_refresh: bool = false):
 	_set_panning_mode(false)
