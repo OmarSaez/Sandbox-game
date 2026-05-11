@@ -6,8 +6,10 @@
 [node name="MainScene" type="Node2D" unique_id=1441274808]
 
 [node name="Background" type="ColorRect" parent="." unique_id=1865854086]
-offset_right = 1631.0
-offset_bottom = 2537.0
+offset_left = -5135.0
+offset_top = -5471.0
+offset_right = 4865.0
+offset_bottom = 4529.0
 color = Color(0.12, 0.12, 0.12, 1)
 
 [node name="SandboxGrid" type="Node2D" parent="." unique_id=20750457]
@@ -86,3 +88,15 @@ offset_right = 326.0
 offset_bottom = 711.0
 grow_horizontal = 2
 grow_vertical = 2
+
+[node name="LoadCurtainLayer" type="CanvasLayer" parent="." unique_id=999999999]
+layer = 128
+
+[node name="Curtain" type="ColorRect" parent="LoadCurtainLayer" unique_id=999999998]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 1)

@@ -744,6 +744,14 @@ func _ready():
 	
 	is_grid_ready = true # Allow _process and _draw to start now!
 	
+	# Smooth fade-in after rotation/startup to hide native scene loading
+	var curtain_layer = get_parent().get_node_or_null("LoadCurtainLayer")
+	if curtain_layer:
+		var curtain = curtain_layer.get_node("Curtain")
+		var tw = create_tween()
+		tw.tween_property(curtain, "modulate:a", 0.0, 0.4)
+		tw.tween_callback(curtain_layer.queue_free)
+	
 	_show_welcome_message()
 
 func _show_welcome_message():
@@ -2620,6 +2628,18 @@ func _on_window_resized():
 		# Remove the signal to avoid loops during reload
 		if get_tree().get_root().size_changed.is_connected(_on_window_resized):
 			get_tree().get_root().size_changed.disconnect(_on_window_resized)
+		
+		# Immediately obscure the screen to hide ugly OS stretching
+		var overlay = ColorRect.new()
+		overlay.color = Color.BLACK
+		overlay.z_index = 4096 # Topmost
+		overlay.custom_minimum_size = Vector2(10000, 10000)
+		overlay.size = Vector2(10000, 10000)
+		overlay.position = Vector2(-5000, -5000)
+		add_child(overlay)
+		
+		# Let the black screen render for one frame before freezing to load
+		await get_tree().process_frame
 		
 		# Preservation mechanism: save the map before OS resizes Godot
 		_save_rotation_cache()
