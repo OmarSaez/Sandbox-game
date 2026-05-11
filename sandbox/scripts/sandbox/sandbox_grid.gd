@@ -58,6 +58,15 @@ var is_mouse_over_ui: bool = false
 var brush_radius: int = 2 
 var current_language: String = "es" # Controlled by TranslationServer
 var ui_scale_level: int = 2 # Start at 1.2x by default
+
+var sim_camera: Camera2D
+var view_zoom: float = 1.0
+
+func _zoom_camera(delta_zoom: float):
+	view_zoom = clamp(view_zoom + delta_zoom, 0.5, 3.0)
+	if is_instance_valid(sim_camera):
+		sim_camera.zoom = Vector2(view_zoom, view_zoom)
+
 func _get_ui_scale() -> float:
 	var scales = [1.0, 1.2, 1.3, 1.5, 1.7, 2.0]
 	return scales[ui_scale_level]
@@ -427,6 +436,13 @@ func _ready():
 		sin_lut[i] = sin(r * TAU)
 	
 	# Skip GlobalBG move child as it's removed
+	
+	# --- SIMULATION CAMERA ---
+	sim_camera = Camera2D.new()
+	sim_camera.anchor_mode = Camera2D.ANCHOR_MODE_DRAG_CENTER
+	sim_camera.position = vp_size / 2.0
+	add_child(sim_camera)
+	sim_camera.make_current()
 	
 	# Setup SFX Pool
 	for i in range(SFX_POOL_SIZE):
@@ -1416,6 +1432,49 @@ func _setup_tools_ui():
 	tools_btn.add_theme_font_override("font", _get_safe_font())
 	tools_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	tools_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	
+	# --- QUICK ACTIONS ROW ---
+	var qa_hbox = HBoxContainer.new()
+	qa_hbox.name = "QuickActionsHBox"
+	qa_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	qa_hbox.custom_minimum_size = Vector2(160 * s, 45 * s)
+	qa_hbox.add_theme_constant_override("separation", 2 * s)
+	
+	var qa_style = StyleBoxFlat.new()
+	qa_style.bg_color = Color(0.15, 0.15, 0.2, 1.0)
+	qa_style.border_width_left = 1; qa_style.border_width_top = 1
+	qa_style.border_width_right = 1; qa_style.border_width_bottom = 1
+	qa_style.border_color = Color(0.4, 0.4, 0.5)
+	
+	var create_qa_btn = func(icon: String):
+		var btn = Button.new()
+		btn.text = icon
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		btn.add_theme_font_override("font", _get_safe_font())
+		btn.add_theme_font_size_override("font_size", 22 * s)
+		btn.mouse_filter = Control.MOUSE_FILTER_PASS
+		btn.add_theme_stylebox_override("normal", qa_style)
+		btn.add_theme_stylebox_override("hover", qa_style)
+		btn.add_theme_stylebox_override("pressed", qa_style)
+		qa_hbox.add_child(btn)
+		return btn
+		
+	var btn_zoom_in = create_qa_btn.call("🔍+")
+	var btn_zoom_out = create_qa_btn.call("🔍-")
+	var btn_save = create_qa_btn.call("💾")
+	
+	btn_zoom_in.pressed.connect(func(): _play_action_sound("ui_click"); _zoom_camera(0.25))
+	btn_zoom_out.pressed.connect(func(): _play_action_sound("ui_click"); _zoom_camera(-0.25))
+	btn_save.pressed.connect(func(): 
+		_play_action_sound("ui_click")
+		if is_instance_valid(save_panel): save_panel.queue_free()
+		else: _setup_save_ui()
+	)
+	
+	action_vbox.add_child(qa_hbox)
+	# -------------------------
+	
 	action_vbox.add_child(tools_btn)
 	
 	var btn_style = StyleBoxFlat.new()
