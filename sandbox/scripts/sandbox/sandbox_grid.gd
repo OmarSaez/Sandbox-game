@@ -93,6 +93,8 @@ var history_max_steps: int = 6 # Store 6 snapshots to allow 5 undo steps
 var history_current_index: int = -1
 
 var is_grid_ready: bool = false # Guard against async _ready running early loops
+var current_is_landscape: bool = false # Tracks axis state to auto-reload on flip
+var current_orientation_setting: int = 0 # 0: Auto, 1: Portrait, 2: Landscape
 
 # Save / Load System
 var save_panel: PanelContainer
@@ -358,20 +360,33 @@ func _ready():
 	# --- ORIENTATION INITIALIZATION ---
 	if FileAccess.file_exists("user://orientation.save"):
 		var orient_val = FileAccess.open("user://orientation.save", FileAccess.READ).get_as_text()
-		if orient_val == "1":
+		current_orientation_setting = int(orient_val)
+		if current_orientation_setting == 1:
+			DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
+		elif current_orientation_setting == 2:
 			DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
 		else:
-			DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
+			DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
 		# Await OS resize event so the grid is built with the correct proportions
 		await get_tree().create_timer(0.2).timeout
 	else:
-		# Force portrait by default if no setting exists
-		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
+		# Force Auto by default if no setting exists
+		current_orientation_setting = 0
+		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
+		await get_tree().create_timer(0.2).timeout
+
+	# Setup auto-reload on axis flip
+	var vp_size = get_viewport_rect().size
+	current_is_landscape = vp_size.x > vp_size.y
+	if not get_tree().get_root().size_changed.is_connected(_on_window_resized):
+		get_tree().get_root().size_changed.connect(_on_window_resized)
 
 	# --- FIX BACKGROUND CANVAS SIZE ---
 	var bg_node = get_parent().get_node_or_null("Background")
 	if bg_node:
-		bg_node.set_anchors_preset(Control.PRESET_FULL_RECT)
+		bg_node.custom_minimum_size = Vector2(5000, 5000)
+		bg_node.size = Vector2(5000, 5000)
+		bg_node.position = Vector2(-1000, -1000)
 
 	_precalculate_optimization_tables()
 	
@@ -1540,14 +1555,18 @@ func _setup_tools_ui():
 	)
 
 	# ORIENTATION ROW
-	var orient_options = [tr("ORIENT_PORTRAIT"), tr("ORIENT_LANDSCAPE")]
+	var orient_options = [tr("ORIENT_AUTO"), tr("ORIENT_PORTRAIT"), tr("ORIENT_LANDSCAPE")]
 	create_row.call("orient", orient_options, func(l):
 		var f = FileAccess.open("user://orientation.save", FileAccess.WRITE)
 		f.store_string(str(l))
 		f.close()
 		
-		if l == 1: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
-		else: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
+		current_orientation_setting = l
+		_update_menu_highlights()
+		
+		if l == 1: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
+		elif l == 2: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
+		else: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
 		
 		# Smooth transition overlay
 		var overlay = ColorRect.new()
@@ -2602,6 +2621,16 @@ func _save_lab_state():
 		file.store_string(JSON.stringify(save))
 		file.close()
 
+func _on_window_resized():
+	var vp_size = get_viewport_rect().size
+	var new_is_landscape = vp_size.x > vp_size.y
+	if new_is_landscape != current_is_landscape:
+		# Orientation axis flipped (Portrait <-> Landscape), reload scene!
+		# Remove the signal to avoid loops during reload
+		if get_tree().get_root().size_changed.is_connected(_on_window_resized):
+			get_tree().get_root().size_changed.disconnect(_on_window_resized)
+		get_tree().reload_current_scene()
+
 func _load_lab_state():
 	# PC/EDITOR SKIP: Always unlock and skip logs for smoother testing
 	if OS.has_feature("editor"):
@@ -3355,6 +3384,9 @@ func _update_menu_highlights():
 				var idx = int(key.split("_")[-1])
 				var codes = ["es", "en", "it", "fr", "de", "pt"]
 				if idx < codes.size() and current_language == codes[idx]: is_active = true
+			elif key.begins_with("orient_btn_"):
+				var idx = int(key.split("_")[-1])
+				if idx == current_orientation_setting: is_active = true
 			elif key.begins_with("ui_size_btn_"):
 				var idx = int(key.split("_")[-1])
 				if idx == ui_scale_level: is_active = true
