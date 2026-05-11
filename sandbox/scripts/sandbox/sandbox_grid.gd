@@ -3891,8 +3891,8 @@ func _process_tornado(delta):
 			var rad_s = (25.0 + tornado_intensity * 15.0) + (50.0 * tornado_intensity * rel_y_s)
 			_set_cell(int(tornado_x + randf_range(-rad_s * 0.4, rad_s * 0.4)), spawn_y, 15)
 	
-	# OPTIMIZED ITERATIONS: 2,000 focused samples are better than 15,000 random ones
-	var points_to_process = 1000 * tornado_intensity if tornado_intensity < 3 else 2000
+	# OPTIMIZED ITERATIONS: Increased for major destruction
+	var points_to_process = 2000 * tornado_intensity if tornado_intensity < 3 else 6000
 	
 	for i in range(points_to_process):
 		# Sample with bias: 60% of samples focus on the area near the ground
@@ -3933,8 +3933,8 @@ func _process_tornado(delta):
 		var target_x = tornado_x + randf_range(-current_radius * 0.7, current_radius * 0.7)
 		var dx = sign(target_x - rx)
 		
-		# Pull up FORCE: Increased significantly for level 3
-		var base_up = -3 if tornado_intensity < 2 else (-6 if tornado_intensity == 2 else -12)
+		# Pull up FORCE: Massive buff for all levels
+		var base_up = -8 if tornado_intensity < 2 else (-16 if tornado_intensity == 2 else -32)
 		var dy = int(base_up * pull_strength)
 		if dy >= 0: dy = -1 # Ensure it always moves up if caught
 		
