@@ -275,6 +275,11 @@ var tornado_x: float = 0.0
 var tornado_target_x: float = 0.0
 var tornado_ground_y: float = 0.0
 var tornado_visual: ColorRect # Dedicated visual node for the triangle look
+var tornado_element: int = 0 # 0: Dust, 1: Fire, 2: Acid, 3: Electric
+var tornado_element_timer: float = 0.0
+var tornado_absorb_fire: float = 0.0
+var tornado_absorb_acid: float = 0.0
+var tornado_absorb_elec: float = 0.0
 
 # Tsunami settings
 var tsunami_intensity: int = 0
@@ -3823,6 +3828,8 @@ func _process_tsunami(delta):
 func _process_tornado(delta):
 	if tornado_timer <= 0:
 		tornado_intensity = 0
+		tornado_element = 0
+		tornado_element_timer = 0
 		tornado_visual.visible = false # Ensure visual disappears
 		if tornado_player.playing: tornado_player.stop()
 		_update_menu_highlights()
@@ -3869,7 +3876,28 @@ func _process_tornado(delta):
 		var t_width = (80.0 + tornado_intensity * 60.0) * grid_scale
 		tornado_visual.size = Vector2(t_width, tornado_ground_y * grid_scale)
 		tornado_visual.position = Vector2(tornado_x * grid_scale - t_width * 0.5, 0)
+		
+		# Element logic
+		if tornado_element_timer > 0:
+			tornado_element_timer -= delta
+			if tornado_element_timer <= 0:
+				tornado_element = 0
+		
+		# Absorption decay
+		tornado_absorb_fire = lerp(tornado_absorb_fire, 0.0, delta * 2.0)
+		tornado_absorb_acid = lerp(tornado_absorb_acid, 0.0, delta * 2.0)
+		tornado_absorb_elec = lerp(tornado_absorb_elec, 0.0, delta * 2.0)
+		
+		# Thresholds to switch element (Prioritize Electricity/Acid over Fire)
+		if tornado_absorb_elec > 150:
+			tornado_element = 3; tornado_element_timer = 6.0; tornado_absorb_elec = 0
+		elif tornado_absorb_acid > 200:
+			tornado_element = 2; tornado_element_timer = 6.0; tornado_absorb_acid = 0
+		elif tornado_absorb_fire > 200:
+			tornado_element = 1; tornado_element_timer = 6.0; tornado_absorb_fire = 0
+			
 		tornado_visual.material.set_shader_parameter("intensity", float(tornado_intensity))
+		tornado_visual.material.set_shader_parameter("element_type", tornado_element)
 	else:
 		tornado_visual.visible = false
 	
@@ -3925,6 +3953,26 @@ func _process_tornado(delta):
 		
 		var tid = cells[ry * grid_width + rx] & 0xFFFF # Inline fast lookup
 		if tid == 0 or tid == 17: continue 
+		
+		var tags = material_tags_raw[tid]
+		
+		# Absorption tracking (Prioritize Electricity/Acid tags if material has multiple)
+		if (tags & SandboxMaterial.Tags.ELECTRICITY): tornado_absorb_elec += 1
+		elif (tags & SandboxMaterial.Tags.ACID): tornado_absorb_acid += 1
+		elif (tags & SandboxMaterial.Tags.INCENDIARY): tornado_absorb_fire += 1
+		
+		# Elemental Effects
+		if tornado_element == 1: # FIRE
+			if (tags & SandboxMaterial.Tags.FLAMMABLE):
+				_set_cell(rx, ry, 3) # Ignite to Fire
+			elif randf() < 0.05:
+				_set_cell(rx, ry, 3)
+		elif tornado_element == 2: # ACID
+			if not (tags & SandboxMaterial.Tags.ANTI_ACID):
+				if randf() < 0.2: _set_cell(rx, ry, 13) # Convert to Acid
+		elif tornado_element == 3: # ELECTRIC
+			charge_array[ry * grid_width + rx] = 255
+			if randf() < 0.02: _set_cell(rx, ry, 43) # Spawn sparks
 		
 		# Vortex Forces
 		var dist_x_abs = abs(tornado_x - rx)
