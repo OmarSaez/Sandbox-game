@@ -361,18 +361,20 @@ func _ready():
 	if FileAccess.file_exists("user://orientation.save"):
 		var orient_val = FileAccess.open("user://orientation.save", FileAccess.READ).get_as_text()
 		current_orientation_setting = int(orient_val)
-		if current_orientation_setting == 1:
-			DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
-		elif current_orientation_setting == 2:
-			DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
-		else:
-			DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
+		if OS.has_feature("mobile"):
+			if current_orientation_setting == 1:
+				DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
+			elif current_orientation_setting == 2:
+				DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
+			else:
+				DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
 		# Await OS resize event so the grid is built with the correct proportions
 		await get_tree().create_timer(0.2).timeout
 	else:
 		# Force Auto by default if no setting exists
 		current_orientation_setting = 0
-		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
+		if OS.has_feature("mobile"):
+			DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
 		await get_tree().create_timer(0.2).timeout
 
 	# Setup auto-reload on axis flip
@@ -1574,9 +1576,10 @@ func _setup_tools_ui():
 		current_orientation_setting = l
 		_update_menu_highlights()
 		
-		if l == 1: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
-		elif l == 2: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
-		else: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
+		if OS.has_feature("mobile"):
+			if l == 1: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
+			elif l == 2: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
+			else: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
 	)
 
 	# UI SCALE ROW (Now 3rd)
@@ -2655,9 +2658,10 @@ func _save_rotation_cache():
 		"charge": charge_array,
 		"tags": tags_array,
 		"cell_paint": cell_paint_colors,
-		"bg_paint": background_img.get_data().to_int32_array()
+		"bg_paint": background_img.get_data().to_int32_array(),
+		"npcs": active_npcs
 	}
-	var file = FileAccess.open(path, FileAccess.WRITE)
+	var file = FileAccess.open_compressed(path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
 	if file:
 		file.store_var(save_dict, true)
 		file.close()
@@ -2711,6 +2715,17 @@ func _map_grid_data(dict: Dictionary):
 						background_img.set_pixel(new_x, new_y, color)
 			
 			background_tex.update(background_img)
+			
+		if dict.has("npcs"):
+			active_npcs.clear()
+			var old_npcs = dict["npcs"]
+			for npc in old_npcs:
+				var new_x = npc["pos"].x + x_offset
+				var new_y = npc["pos"].y + y_offset
+				if new_x >= 0 and new_x < grid_width and new_y >= 0 and new_y < grid_height:
+					var new_npc = npc.duplicate()
+					new_npc["pos"] = Vector2i(new_x, new_y)
+					active_npcs.append(new_npc)
 	
 	background_dirty = true
 
@@ -2718,7 +2733,7 @@ func _load_rotation_cache():
 	var path = "user://rotation_cache.dat"
 	if not FileAccess.file_exists(path): return
 	
-	var file = FileAccess.open(path, FileAccess.READ)
+	var file = FileAccess.open_compressed(path, FileAccess.READ, FileAccess.COMPRESSION_ZSTD)
 	if file:
 		var dict = file.get_var(true)
 		file.close()
@@ -8324,13 +8339,18 @@ func _get_slot_data(idx):
 	
 	var data = {}
 	if FileAccess.file_exists(path):
-		var file = FileAccess.open(path, FileAccess.READ)
+		var file = FileAccess.open_compressed(path, FileAccess.READ, FileAccess.COMPRESSION_ZSTD)
 		if file:
-			var json = file.get_as_text()
-			var dict = JSON.parse_string(json)
-			if dict:
-				data.name = dict.get("name", "Save " + str(idx))
-				data.date = dict.get("date", "Unknown")
+			# Sanity check: if it starts with '{', it's an old JSON file. 
+			# We skip it to avoid the C++ get_var() error spam.
+			var first_byte = file.get_8()
+			file.seek(0)
+			
+			if first_byte != 123: # 123 is '{'
+				var dict = file.get_var(true)
+				if typeof(dict) == TYPE_DICTIONARY:
+					data.name = dict.get("name", "Save " + str(idx))
+					data.date = dict.get("date", "Unknown")
 			file.close()
 			
 	if FileAccess.file_exists(thumb_path):
@@ -8413,19 +8433,18 @@ func _save_to_slot(idx, custom_name: String = ""):
 		"date": date_str,
 		"width": grid_width,
 		"height": grid_height,
-		"grid": Array(cells),
-		"charge": Array(charge_array),
-		"tags": Array(tags_array),
-		"chunks": Array(chunks_active),
-		"next_chunks": Array(next_chunks_active),
+		"grid": cells,
+		"charge": charge_array,
+		"tags": tags_array,
+		"cell_paint": cell_paint_colors,
+		"bg_paint": background_img.get_data().to_int32_array(),
 		"lab_data": _get_cleaned_lab_data(),
-		"cell_paint": Array(cell_paint_colors),
-		"bg_paint": Array(background_img.get_data().to_int32_array())
+		"npcs": active_npcs
 	}
 	
-	var file = FileAccess.open(path, FileAccess.WRITE)
+	var file = FileAccess.open_compressed(path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
 	if file:
-		file.store_string(JSON.stringify(save_dict))
+		file.store_var(save_dict, true)
 		file.close()
 		
 	# CAPTURE ACCURATE MINI SCREENSHOT
@@ -8474,10 +8493,11 @@ func _load_from_slot(idx):
 	var path = "user://save_slot_" + str(idx) + ".dat"
 	if not FileAccess.file_exists(path): return
 	
-	var file = FileAccess.open(path, FileAccess.READ)
+	var file = FileAccess.open_compressed(path, FileAccess.READ, FileAccess.COMPRESSION_ZSTD)
 	if file:
-		var json = file.get_as_text()
-		var dict = JSON.parse_string(json)
+		var dict = file.get_var(true)
+		file.close()
+		
 		if dict:
 			# 1. CLEAN CURRENT STATE
 			_clear_all() 
