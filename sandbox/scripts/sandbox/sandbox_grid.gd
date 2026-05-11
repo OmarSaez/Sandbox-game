@@ -738,6 +738,8 @@ func _ready():
 	s_mat.set_shader_parameter("element_color_tex", element_paint_tex)
 	texture_rect.material = s_mat
 	
+	_load_rotation_cache() # Restore grid exactly as it was if we just flipped axis
+	
 	save_history_state() # Initialize first history step
 	
 	is_grid_ready = true # Allow _process and _draw to start now!
@@ -1567,17 +1569,6 @@ func _setup_tools_ui():
 		if l == 1: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
 		elif l == 2: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
 		else: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
-		
-		# Smooth transition overlay
-		var overlay = ColorRect.new()
-		overlay.color = Color.BLACK
-		overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-		get_parent().get_node("UI").add_child(overlay)
-		
-		# Allow OS to rotate, then reload scene
-		get_tree().create_timer(0.3).timeout.connect(func():
-			get_tree().reload_current_scene()
-		)
 	)
 
 	# UI SCALE ROW (Now 3rd)
@@ -2629,7 +2620,83 @@ func _on_window_resized():
 		# Remove the signal to avoid loops during reload
 		if get_tree().get_root().size_changed.is_connected(_on_window_resized):
 			get_tree().get_root().size_changed.disconnect(_on_window_resized)
+		
+		# Preservation mechanism: save the map before OS resizes Godot
+		_save_rotation_cache()
+		
 		get_tree().reload_current_scene()
+
+func _save_rotation_cache():
+	var path = "user://rotation_cache.dat"
+	var save_dict = {
+		"width": grid_width,
+		"height": grid_height,
+		"grid": cells,
+		"charge": charge_array,
+		"tags": tags_array,
+		"cell_paint": cell_paint_colors,
+		"bg_paint": background_img.get_data().to_int32_array()
+	}
+	var file = FileAccess.open(path, FileAccess.WRITE)
+	if file:
+		file.store_var(save_dict, true)
+		file.close()
+
+func _load_rotation_cache():
+	var path = "user://rotation_cache.dat"
+	if not FileAccess.file_exists(path): return
+	
+	var file = FileAccess.open(path, FileAccess.READ)
+	if file:
+		var dict = file.get_var(true)
+		file.close()
+		DirAccess.remove_absolute(path)
+		
+		if dict and dict.has("width") and dict.has("height"):
+			var old_w = int(dict["width"])
+			var old_h = int(dict["height"])
+			var y_offset = old_h - grid_height
+			var x_offset = int((old_w - grid_width) / 2.0)
+			
+			var old_cells = dict["grid"]
+			var old_charge = dict["charge"]
+			var old_tags = dict["tags"]
+			var old_paint = dict["cell_paint"]
+			
+			for new_y in range(grid_height):
+				var old_y = new_y + y_offset
+				if old_y < 0 or old_y >= old_h: continue
+				
+				for new_x in range(grid_width):
+					var old_x = new_x + x_offset
+					if old_x < 0 or old_x >= old_w: continue
+					
+					var old_idx = old_y * old_w + old_x
+					var new_idx = new_y * grid_width + new_x
+					
+					cells[new_idx] = old_cells[old_idx]
+					charge_array[new_idx] = old_charge[old_idx]
+					tags_array[new_idx] = old_tags[old_idx]
+					cell_paint_colors[new_idx] = old_paint[old_idx]
+					
+					if cells[new_idx] != 0:
+						_activate_chunk(new_x, new_y)
+			
+			if dict.has("bg_paint"):
+				var b_array = dict["bg_paint"]
+				var old_bg_img = Image.create_from_data(old_w, old_h, false, Image.FORMAT_RGBA8, b_array.to_byte_array())
+				
+				for new_y in range(grid_height):
+					var old_y = new_y + y_offset
+					if old_y < 0 or old_y >= old_h: continue
+					for new_x in range(grid_width):
+						var old_x = new_x + x_offset
+						if old_x < 0 or old_x >= old_w: continue
+						var color = old_bg_img.get_pixel(old_x, old_y)
+						if color.a > 0.0:
+							background_img.set_pixel(new_x, new_y, color)
+				
+				background_tex.update(background_img)
 
 func _load_lab_state():
 	# PC/EDITOR SKIP: Always unlock and skip logs for smoother testing
