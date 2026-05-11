@@ -58,14 +58,37 @@ var is_mouse_over_ui: bool = false
 var brush_radius: int = 2 
 var current_language: String = "es" # Controlled by TranslationServer
 var ui_scale_level: int = 2 # Start at 1.2x by default
-
 var sim_camera: Camera2D
 var view_zoom: float = 1.0
+var is_panning_mode: bool = false
+var pan_last_mouse_pos: Vector2
+var cam_min_x: int = 0
+var cam_max_x: int = 9999
+var cam_min_y: int = 0
+var cam_max_y: int = 9999
 
 func _zoom_camera(delta_zoom: float):
-	view_zoom = clamp(view_zoom + delta_zoom, 0.5, 3.0)
+	view_zoom = clamp(view_zoom + delta_zoom, 1.0, 3.0)
 	if is_instance_valid(sim_camera):
 		sim_camera.zoom = Vector2(view_zoom, view_zoom)
+		_clamp_camera_position()
+
+func _clamp_camera_position():
+	if not is_instance_valid(sim_camera): return
+	var vp = get_viewport_rect().size
+	if view_zoom <= 1.0:
+		sim_camera.position = vp / 2.0
+		return
+		
+	var map_w = grid_width * grid_scale
+	var map_h = grid_height * grid_scale
+	var half_cam_w = (vp.x / view_zoom) / 2.0
+	var half_cam_h = (vp.y / view_zoom) / 2.0
+	
+	var new_pos = sim_camera.position
+	new_pos.x = clamp(new_pos.x, half_cam_w, max(half_cam_w, map_w - half_cam_w))
+	new_pos.y = clamp(new_pos.y, half_cam_h, max(half_cam_h, map_h - half_cam_h))
+	sim_camera.position = new_pos
 
 func _get_ui_scale() -> float:
 	var scales = [1.0, 1.2, 1.3, 1.5, 1.7, 2.0]
@@ -1433,18 +1456,23 @@ func _setup_tools_ui():
 	tools_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	tools_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
-	# --- QUICK ACTIONS ROW ---
-	var qa_hbox = HBoxContainer.new()
-	qa_hbox.name = "QuickActionsHBox"
-	qa_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	qa_hbox.custom_minimum_size = Vector2(160 * s, 45 * s)
-	qa_hbox.add_theme_constant_override("separation", 2 * s)
+	# --- QUICK ACTIONS GRID ---
+	var qa_grid = GridContainer.new()
+	qa_grid.columns = 2
+	qa_grid.name = "QuickActionsGrid"
+	qa_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	qa_grid.custom_minimum_size = Vector2(160 * s, 100 * s)
+	qa_grid.add_theme_constant_override("h_separation", 4 * s)
+	qa_grid.add_theme_constant_override("v_separation", 4 * s)
 	
 	var qa_style = StyleBoxFlat.new()
 	qa_style.bg_color = Color(0.15, 0.15, 0.2, 1.0)
 	qa_style.border_width_left = 1; qa_style.border_width_top = 1
 	qa_style.border_width_right = 1; qa_style.border_width_bottom = 1
 	qa_style.border_color = Color(0.4, 0.4, 0.5)
+
+	var qa_style_active = qa_style.duplicate()
+	qa_style_active.bg_color = Color(0.3, 0.5, 0.8, 1.0) # Highlight active Pan Mode
 	
 	var create_qa_btn = func(icon: String):
 		var btn = Button.new()
@@ -1452,27 +1480,41 @@ func _setup_tools_ui():
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		btn.add_theme_font_override("font", _get_safe_font())
-		btn.add_theme_font_size_override("font_size", 22 * s)
+		btn.add_theme_font_size_override("font_size", 26 * s) # Bigger buttons
 		btn.mouse_filter = Control.MOUSE_FILTER_PASS
 		btn.add_theme_stylebox_override("normal", qa_style)
 		btn.add_theme_stylebox_override("hover", qa_style)
 		btn.add_theme_stylebox_override("pressed", qa_style)
-		qa_hbox.add_child(btn)
+		qa_grid.add_child(btn)
 		return btn
 		
-	var btn_zoom_in = create_qa_btn.call("🔍+")
-	var btn_zoom_out = create_qa_btn.call("🔍-")
+	var btn_pan = create_qa_btn.call("✋")
 	var btn_save = create_qa_btn.call("💾")
+	var btn_zoom_out = create_qa_btn.call("🔍-")
+	var btn_zoom_in = create_qa_btn.call("🔍+")
 	
-	btn_zoom_in.pressed.connect(func(): _play_action_sound("ui_click"); _zoom_camera(0.25))
+	var update_pan_btn_style = func():
+		var style = qa_style_active if is_panning_mode else qa_style
+		btn_pan.add_theme_stylebox_override("normal", style)
+		btn_pan.add_theme_stylebox_override("hover", style)
+		btn_pan.add_theme_stylebox_override("pressed", style)
+
+	if is_panning_mode: update_pan_btn_style.call()
+	
 	btn_zoom_out.pressed.connect(func(): _play_action_sound("ui_click"); _zoom_camera(-0.25))
+	btn_zoom_in.pressed.connect(func(): _play_action_sound("ui_click"); _zoom_camera(0.25))
+	btn_pan.pressed.connect(func(): 
+		_play_action_sound("ui_click")
+		is_panning_mode = !is_panning_mode
+		update_pan_btn_style.call()
+	)
 	btn_save.pressed.connect(func(): 
 		_play_action_sound("ui_click")
 		if is_instance_valid(save_panel): save_panel.queue_free()
 		else: _setup_save_ui()
 	)
 	
-	action_vbox.add_child(qa_hbox)
+	action_vbox.add_child(qa_grid)
 	# -------------------------
 	
 	action_vbox.add_child(tools_btn)
@@ -3726,6 +3768,21 @@ func _play_action_sound(action: String, min_interval: float = 0.08):
 func _process(delta):
 	if not is_grid_ready: return
 	_frame_count += 1
+	
+	# Update camera bounds for virtual physical walls
+	if is_instance_valid(sim_camera) and view_zoom > 1.0:
+		var vp = get_viewport_rect().size
+		var cam_pos = sim_camera.position
+		var half_w = (vp.x / view_zoom) / 2.0
+		var half_h = (vp.y / view_zoom) / 2.0
+		cam_min_x = max(0, int((cam_pos.x - half_w) / grid_scale))
+		cam_max_x = min(grid_width, int((cam_pos.x + half_w) / grid_scale))
+		cam_min_y = max(0, int((cam_pos.y - half_h) / grid_scale))
+		cam_max_y = min(dynamic_grid_height, int((cam_pos.y + half_h) / grid_scale))
+	else:
+		cam_min_x = 0; cam_max_x = grid_width
+		cam_min_y = 0; cam_max_y = dynamic_grid_height
+		
 	if is_instance_valid(lab_panel) and lab_panel.visible:
 		var now = int(Time.get_unix_time_from_system())
 		var left = lab_unlock_expiry_unix - now
@@ -3784,6 +3841,20 @@ func _process(delta):
 	# Handle input with robust UI blocking
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		var is_over_ui = _is_any_ui_blocking()
+		
+		# --- PANNING MODE LOGIC ---
+		if is_panning_mode and not touch_started_on_ui and not is_over_ui:
+			var current_mouse_pos = get_viewport().get_mouse_position()
+			if not mouse_was_pressed:
+				pan_last_mouse_pos = current_mouse_pos
+				touch_started_on_ui = false
+			else:
+				var delta_pos = (pan_last_mouse_pos - current_mouse_pos) / view_zoom
+				sim_camera.position += delta_pos
+				_clamp_camera_position()
+				pan_last_mouse_pos = current_mouse_pos
+			mouse_was_pressed = true
+			return
 		
 		# 1. INITIAL TOUCH PROTECTION
 		if not mouse_was_pressed:
@@ -4826,6 +4897,12 @@ func _move_particle(x, y, _mat_id, tags, v_dir):
 func _swap_cells(x1, y1, x2, y2):
 	if y1 < 0 or y1 >= dynamic_grid_height or y2 < 0 or y2 >= dynamic_grid_height: return
 	if x1 < 0 or x1 >= grid_width or x2 < 0 or x2 >= grid_width: return
+	
+	if view_zoom > 1.0:
+		# Enforce virtual physical boundaries tied to the camera viewport
+		var in_cam1 = (x1 >= cam_min_x and x1 < cam_max_x and y1 >= cam_min_y and y1 < cam_max_y)
+		var in_cam2 = (x2 >= cam_min_x and x2 < cam_max_x and y2 >= cam_min_y and y2 < cam_max_y)
+		if in_cam1 != in_cam2: return # Block swaps that cross the camera boundary
 	
 	var idx1 = y1 * grid_width + x1
 	var idx2 = y2 * grid_width + x2
