@@ -8341,16 +8341,10 @@ func _get_slot_data(idx):
 	if FileAccess.file_exists(path):
 		var file = FileAccess.open_compressed(path, FileAccess.READ, FileAccess.COMPRESSION_ZSTD)
 		if file:
-			# Sanity check: if it starts with '{', it's an old JSON file. 
-			# We skip it to avoid the C++ get_var() error spam.
-			var first_byte = file.get_8()
-			file.seek(0)
-			
-			if first_byte != 123: # 123 is '{'
-				var dict = file.get_var(true)
-				if typeof(dict) == TYPE_DICTIONARY:
-					data.name = dict.get("name", "Save " + str(idx))
-					data.date = dict.get("date", "Unknown")
+			var dict = file.get_var(true)
+			if typeof(dict) == TYPE_DICTIONARY:
+				data.name = dict.get("name", "Save " + str(idx))
+				data.date = dict.get("date", "Unknown")
 			file.close()
 			
 	if FileAccess.file_exists(thumb_path):
@@ -8512,7 +8506,6 @@ func _load_from_slot(idx):
 			_update_texture()
 			queue_redraw()
 			if is_instance_valid(save_panel): save_panel.queue_free()
-		file.close()
 
 func _get_cleaned_lab_data() -> Array:
 	var clean_lab = []
