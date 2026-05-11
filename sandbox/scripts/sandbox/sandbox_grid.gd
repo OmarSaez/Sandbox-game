@@ -317,11 +317,11 @@ const LUT_SIZE = 4096 # Larger for better variety
 var random_lut := PackedFloat32Array()
 var cos_lut := PackedFloat32Array()
 var sin_lut := PackedFloat32Array()
-var lut_ptr := 0
+var _lut_state := PackedInt32Array([0])
 
 func _get_lut_rand() -> float:
-	lut_ptr = (lut_ptr + 1) & 4095 # Faster than modulo for power-of-2 sizes
-	return random_lut[lut_ptr]
+	_lut_state[0] = (_lut_state[0] + 1) & 4095
+	return random_lut[_lut_state[0]]
 
 func _get_lut_rand_range(from: float, to: float) -> float:
 	return from + (to - from) * _get_lut_rand()
@@ -4632,7 +4632,7 @@ func _thread_pass3(i: int, process_evens: bool):
 							
 						if cells[idx] == raw_id and not (tags & SandboxMaterial.Tags.GRAV_STATIC):
 							var should_move = true
-							if (tags & SandboxMaterial.Tags.GRAV_SLOW) and randf() > 0.3:
+							if (tags & SandboxMaterial.Tags.GRAV_SLOW) and _get_lut_rand() > 0.3:
 								should_move = false
 							
 							if should_move:
@@ -4734,9 +4734,9 @@ func _move_particle(x, y, _mat_id, tags, v_dir):
 	# SPECIAL GAS BEHAVIOR: Random Diffusion (Expansion)
 	if (tags & SandboxMaterial.Tags.GAS):
 		# Higher chance of random movement to simulate expansion
-		if randf() < 0.3: # 30% chance of random "jump"
-			var rx = x + (1 if randf() > 0.5 else -1)
-			var ry = y + (1 if randf() > 0.5 else -1)
+		if _get_lut_rand() < 0.3: # 30% chance of random "jump"
+			var rx = x + (1 if _get_lut_rand() > 0.5 else -1)
+			var ry = y + (1 if _get_lut_rand() > 0.5 else -1)
 			if _get_cell(rx, ry) == 0:
 				_swap_cells(x, y, rx, ry)
 				return
@@ -4751,7 +4751,7 @@ func _move_particle(x, y, _mat_id, tags, v_dir):
 	
 	# Try diagonals (only for powder, liquids and gases)
 	if (tags & (SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GAS)):
-		var side = 1 if randf() > 0.5 else -1
+		var side = 1 if _get_lut_rand() > 0.5 else -1
 		if _get_cell(x + side, next_y) == 0:
 			_swap_cells(x, y, x + side, next_y)
 		elif _get_cell(x - side, next_y) == 0:
@@ -4834,7 +4834,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		
 	# VIRUS / EXPAND LOGIC (Laboratory Exclusive)
 	if (tags & SandboxMaterial.Tags.VIRUS):
-		if randf() < 0.05: # Reduced probability for better performance (from 0.15)
+		if _get_lut_rand() < 0.05: # Reduced probability for better performance (from 0.15)
 			var nx = x + randi_range(-1, 1)
 			var ny = y + randi_range(-1, 1)
 			if nx >= 0 and nx < grid_width and ny >= 0 and ny < dynamic_grid_height:
@@ -4853,7 +4853,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 						
 	# RADIOACTIVE LOGIC (Laboratory Exclusive - Constant Energy Reactor)
 	if (tags & SandboxMaterial.Tags.RADIOACTIVE):
-		if randf() < 0.005: # Reduced frequency (from 0.02)
+		if _get_lut_rand() < 0.005: # Reduced frequency (from 0.02)
 			for ny in range(y - 1, y + 2):
 				for nx in range(x - 1, x + 2):
 					if nx == x and ny == y: continue
@@ -4863,13 +4863,13 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 						charge_array[n_idx] = 101 # Intense electrical pulse
 						_register_charge(n_idx)
 			# Occasional visual discharge
-			if randf() < 0.1 and _get_cell(x, y - 1) == 0:
+			if _get_lut_rand() < 0.1 and _get_cell(x, y - 1) == 0:
 				_set_cell(x, y - 1, 43)
 				
 	# VORTEX LOGIC (Laboratory Exclusive - Black Hole Effect)
 	if (tags & SandboxMaterial.Tags.VORTEX):
 		# SUPER VORTEX: Optimized processing (10% chance per pixel, but high density pulse)
-		if randf() < 0.1:
+		if _get_lut_rand() < 0.1:
 			# 1. MATERIAL SUCTION & CONSUMPTION
 			for i in range(20): # from 20 power
 				var l_idx = randi() % LUT_SIZE
@@ -4894,7 +4894,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 							elif not (n_tags & SandboxMaterial.Tags.GRAV_STATIC): # Move mobile things
 								var dx = sign(dx_v)
 								var dy = sign(dy_v)
-								if dy < 0 and randf() < 0.4: dy = -1 
+								if dy < 0 and _get_lut_rand() < 0.4: dy = -1 
 								
 								var tx = vx + dx; var ty = vy + dy
 								if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
@@ -4903,7 +4903,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 										_swap_cells(vx, vy, tx, ty)
 			
 			# 2. NPC PULL (Sparse calculation: 20% of vortex pixels pull NPCs)
-			if randf() < 0.1:
+			if _get_lut_rand() < 0.1:
 				var nearby_npcs = _get_nearby_npcs(x, y, 30.0)
 				for npc in nearby_npcs:
 					var dx_n = x - npc.pos.x
@@ -4916,7 +4916,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		
 	# REPEL LOGIC (Laboratory Exclusive - Fan/Wind effect)
 	if (tags & SandboxMaterial.Tags.REPEL):
-		if randf() < 0.1: # Reduced from 0.1
+		if _get_lut_rand() < 0.1: # Reduced from 0.1
 			# 1. MEGA MATERIAL REPULSION (Blast Away)
 			for i in range(30): # 20 POWER
 				var l_idx = randi() % LUT_SIZE
@@ -4938,7 +4938,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 							if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 								if (cells[ty * grid_width + tx] & 0xFFFF) == 0:
 									_swap_cells(vx, vy, tx, ty)
-									if randf() < 0.05: _add_spark(float(vx), float(vy), float(dx), float(dy), Color.WHITE, 0.4)
+									if _get_lut_rand() < 0.05: _add_spark(float(vx), float(vy), float(dx), float(dy), Color.WHITE, 0.4)
 			
 			# 2. NPC PUSH (Sparse calculation: 20% of repel pixels push NPCs)
 			if randf() < 0.02:
@@ -4952,23 +4952,23 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					var d_inv = 1.0 / sqrt(d_sq)
 					npc.vx += dx_n * d_inv * force * 1.5
 					npc.vy += (dy_n * d_inv * force) - 3.5 
-					if randf() < 0.05: npc.hp -= 1.0 
+					if _get_lut_rand() < 0.05: npc.hp -= 1.0 
 		
 	# FIRE AND HEAT REACTIONS
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
 		if pure_id == 3: is_fire_active = true 
 		if pure_id == 3:
-			if randf() < 0.1: _set_cell(x, y, 0)
+			if _get_lut_rand() < 0.1: _set_cell(x, y, 0)
 		elif pure_id == 14: # Coal burnout
 			is_fire_active = true
-			if randf() < 0.002: 
+			if _get_lut_rand() < 0.002: 
 				_set_cell(x, y, 0)
 				if _get_cell(x, y - 1) == 0: _set_cell(x, y - 1, 15)
-			if randf() < 0.1 and _get_cell(x, y-1) == 0:
+			if _get_lut_rand() < 0.1 and _get_cell(x, y-1) == 0:
 				_set_cell(x, y - 1, 3)
 		
 		# SPARSE SAMPLING: Only check reactions for Fire/Heat in 50% of frames (Huge CPU save for big fires)
-		if randf() < 0.5:
+		if _get_lut_rand() < 0.5:
 			_check_neighbors_for_reaction(x, y, true)
 
 	# FLAMMABLE / REACTIVE MATERIALS
@@ -5086,7 +5086,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 						return
 		
 		# 2. Freeze adjacent Water (Slow growth)
-		if randf() < 0.05:
+		if _get_lut_rand() < 0.05:
 			for ny in range(y - 1, y + 2):
 				if ny < 0 or ny >= grid_height: continue
 				for nx in range(x - 1, x + 2):
@@ -5132,11 +5132,11 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 	# ELECTRIC SEEDING (Pure Static Electricity)
 	if (tags & SandboxMaterial.Tags.ELECTRICITY):
 		if not (tags & (SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.VOLATILE)):
-			if randf() < 0.7: _set_cell(x, y, 0)
+			if _get_lut_rand() < 0.7: _set_cell(x, y, 0)
 
 	# --- CORROSION (ACID) ---
 	if (tags & SandboxMaterial.Tags.ACID):
-		if randf() < 0.4: # Reaction Speed
+		if _get_lut_rand() < 0.4: # Reaction Speed
 			for offset in neighbor_offsets:
 				var n_idx = idx + offset
 				if n_idx >= 0 and n_idx < cells.size():
@@ -5145,16 +5145,16 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 						var n_tags = material_tags_raw[nid]
 						if not (n_tags & (SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.INVINCIBLE)):
 							_set_cell_by_idx(n_idx, 44) 
-							if randf() < 0.3: _set_cell(x, y, 0); return
-							if (n_tags & SandboxMaterial.Tags.SOLID) and randf() < 0.1: _set_cell(x, y, 0); return
+							if _get_lut_rand() < 0.3: _set_cell(x, y, 0); return
+							if (n_tags & SandboxMaterial.Tags.SOLID) and _get_lut_rand() < 0.1: _set_cell(x, y, 0); return
 
 	# --- BIOLOGICAL INTERACTIONS (PLANTS & SEEDS) ---
-	if randf() < 0.02:
+	if _get_lut_rand() < 0.02:
 		match pure_id:
 			21: # Grass
 				# WIDE SEARCH: Grass now feels water from further away (20x10)
 				if current_weather > 0 or _has_id_in_lookup(idx, 2, oval_lookup_20x10):
-					if randf() < 0.3:
+					if _get_lut_rand() < 0.3:
 						var gx = x + (randi() % 5 - 2)
 						var gy = y + (randi() % 5 - 2)
 						if gx >= 0 and gx < grid_width and gy >= 0 and gy < dynamic_grid_height:
@@ -5168,21 +5168,21 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					_set_cell(x, y, 22 if pure_id == 1 else 23)
 			22, 23: # Wet Soil
 				if current_weather > 0 or _has_id_in_lookup(idx, 2, oval_lookup_20x10):
-					if randf() < 0.05 and _has_tag_neighbor(x, y, SandboxMaterial.Tags.PLANT):
+					if _get_lut_rand() < 0.05 and _has_tag_neighbor(x, y, SandboxMaterial.Tags.PLANT):
 						if _count_neighbor_id_fast(idx, 21) < 4:
 							_set_cell(x, y, 21)
-					elif randf() < 0.15: # Sprout vines
+					elif _get_lut_rand() < 0.15: # Sprout vines
 						if y > 0 and (cells[idx - grid_width] & 0xFFFF) == 0:
 							# DENSITY FIX: Only sprout vines if no other vines are nearby (Separation)
 							if _count_neighbor_id_radius(x, y, 24, 4) < 1:
 								_set_cell(x, y-1, 24)
 								charge_array[idx - grid_width] = randi() % 5 + 4
 				else:
-					if current_weather == 0 and randf() < 0.1:
+					if current_weather == 0 and _get_lut_rand() < 0.1:
 						_set_cell(x, y, 1 if pure_id == 22 else 6)
 			24: # Vines
 				var h_left = charge_array[idx]
-				if h_left > 0 and randf() < 0.3 and y > 0:
+				if h_left > 0 and _get_lut_rand() < 0.3 and y > 0:
 					if (cells[idx - grid_width] & 0xFFFF) == 0:
 						# Keep vines single-column (Don't clump)
 						if _count_neighbor_id_fast(idx - grid_width, 24) < 2:
@@ -5211,11 +5211,11 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				charge_array[(y-1) * grid_width + tx] = randi_range(80, 150) # Projectile fuel (increased for devastating penetration)
 		
 		# Smoking Base + LAVA PUDDLES (Triple effect)
-		if randf() < 0.3: # Reduced from 0.6
+		if _get_lut_rand() < 0.3: # Reduced from 0.6
 			var sx = x + randi_range(-2, 2)
 			if _get_cell(sx, y-1) == 0: _set_cell(sx, y-1, 15)
 		
-		if randf() < 0.15: # Leak real lava at base
+		if _get_lut_rand() < 0.15: # Leak real lava at base
 			var lx = x + randi_range(-2, 2)
 			if _get_cell(lx, y-1) == 0: _set_cell(lx, y-1, 11)
 			
@@ -5232,7 +5232,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				_draw_circle(x, y, 6, 15) 
 				_explode(x, y, 15, "volcan_burst") # Massive explosion at the top
 				for _j in range(50):
-					_add_spark(float(x), float(y), randf_range(-150, 150), randf_range(-200, 50), [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(), randf_range(0.4, 0.8))
+					_add_spark(float(x), float(y), _get_lut_rand_range(-150, 150), _get_lut_rand_range(-200, 50), [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(), _get_lut_rand_range(0.4, 0.8))
 				return
 			var next_y = y - 1
 			if next_y < 5: _set_cell(x, y, 11); _explode(x, y, 6); return
@@ -5246,21 +5246,21 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				
 				if is_solid:
 					# RESISTENCIA: 30% de probabilidad de luchar contra el material sólido
-					if randf() < 0.30:
+					if _get_lut_rand() < 0.30:
 						current_fuel -= 1 # Gasta combustible intentando romper
 						charge_array[idx] = current_fuel
 						# Crear efecto visual de lucha (chisporroteo lateral)
-						if randf() < 0.4:
+						if _get_lut_rand() < 0.4:
 							for _k in range(3):
-								_add_spark(float(x), float(y), randf_range(-60, 60), randf_range(-20, 20), [Color.RED, Color.ORANGE].pick_random(), 0.3)
+								_add_spark(float(x), float(y), _get_lut_rand_range(-60, 60), _get_lut_rand_range(-20, 20), [Color.RED, Color.ORANGE].pick_random(), 0.3)
 						break # Frena el avance este frame, dando efecto de destrucción lenta pero imparable
 						
 					current_fuel -= 2 # Small penalty for drilling, allows deep penetration
-					if randf() < 0.2:
-						_add_spark(float(x), float(y), randf_range(-50, 50), randf_range(-50, 50), Color.RED, 0.3)
+					if _get_lut_rand() < 0.2:
+						_add_spark(float(x), float(y), _get_lut_rand_range(-50, 50), _get_lut_rand_range(-50, 50), Color.RED, 0.3)
 						
 				_swap_cells(x, y, x, next_y)
-				_set_cell(x, y, 11 if randf() < 0.8 else 15) # Leave lava 80% of the time for a fiery trail
+				_set_cell(x, y, 11 if _get_lut_rand() < 0.8 else 15) # Leave lava 80% of the time for a fiery trail
 				
 				# Drill a chimney (radius 2)
 				for dx in range(-2, 3):
@@ -7569,17 +7569,17 @@ func _update_active_fireworks(delta):
 		
 		# Sutil trail (Visual Sparks instead of physical Smoke)
 		if _get_lut_rand() < 0.6:
-			var ptr = lut_ptr
+			var ptr = _lut_state[0]
 			var trail_colors = [Color.GRAY, Color.YELLOW, Color.WHITE, Color.GOLD]
 			_add_spark(
 				float(fw.x) + _get_lut_rand_range(-1.2, 1.2), 
 				float(fw.y + 1), 
 				(random_lut[(ptr+1)%LUT_SIZE] - 0.5) * 20.0, # -10 to 10
 				20.0 + random_lut[(ptr+2)%LUT_SIZE] * 30.0,  # 20 to 50
-				trail_colors[randi() % trail_colors.size()], 
+				trail_colors[int(_get_lut_rand() * 1000000) % trail_colors.size()], 
 				0.2 + random_lut[(ptr+3)%LUT_SIZE] * 0.4    # 0.2 to 0.6
 			)
-			lut_ptr = (lut_ptr + 4) % LUT_SIZE
+			_lut_state[0] = (ptr + 4) % LUT_SIZE
 			
 		# Check if reached altitude or safe boundary
 		if fw.y <= fw.target_y or fw.y < 15:
@@ -7619,9 +7619,9 @@ func _explode_firework(ex, ey, p_color):
 	# Create GHOST particles (Visual only) 
 	for i in range(spark_count):
 		# Decouple indices to avoid spiral shapes (Cardioids)
-		var angle_idx = (lut_ptr + i) % LUT_SIZE
-		var force_idx = (lut_ptr + i + 500) % LUT_SIZE
-		var life_idx = (lut_ptr + i + 1000) % LUT_SIZE
+		var angle_idx = (_lut_state[0] + i) % LUT_SIZE
+		var force_idx = (_lut_state[0] + i + 500) % LUT_SIZE
+		var life_idx = (_lut_state[0] + i + 1000) % LUT_SIZE
 		
 		var f_cos = cos_lut[angle_idx]
 		var f_sin = sin_lut[angle_idx]
@@ -7629,7 +7629,7 @@ func _explode_firework(ex, ey, p_color):
 		var spark_life = 1.0 + random_lut[life_idx] * 0.8
 		_add_spark(float(ex), float(ey), f_cos * force, f_sin * force, p_color, spark_life)
 		
-	lut_ptr = (lut_ptr + spark_count) % LUT_SIZE
+	_lut_state[0] = (_lut_state[0] + spark_count) % LUT_SIZE
 
 func _clear_all():
 	cells.fill(0)
