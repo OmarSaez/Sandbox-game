@@ -92,6 +92,8 @@ var history_buffer = [] # Array of PackedInt32Array
 var history_max_steps: int = 6 # Store 6 snapshots to allow 5 undo steps
 var history_current_index: int = -1
 
+var is_grid_ready: bool = false # Guard against async _ready running early loops
+
 # Save / Load System
 var save_panel: PanelContainer
 var save_slots_data = {} # slot_index -> { "name": string, "date": string, "thumbnail": ImageTexture }
@@ -351,6 +353,26 @@ const TAGS_INTERACTIVE = SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.
 	SandboxMaterial.Tags.MUSIC
 
 func _ready():
+	is_grid_ready = false # Safeguard during async _ready
+	
+	# --- ORIENTATION INITIALIZATION ---
+	if FileAccess.file_exists("user://orientation.save"):
+		var orient_val = FileAccess.open("user://orientation.save", FileAccess.READ).get_as_text()
+		if orient_val == "1":
+			DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
+		else:
+			DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
+		# Await OS resize event so the grid is built with the correct proportions
+		await get_tree().create_timer(0.2).timeout
+	else:
+		# Force portrait by default if no setting exists
+		DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
+
+	# --- FIX BACKGROUND CANVAS SIZE ---
+	var bg_node = get_parent().get_node_or_null("Background")
+	if bg_node:
+		bg_node.set_anchors_preset(Control.PRESET_FULL_RECT)
+
 	_precalculate_optimization_tables()
 	
 	_load_lab_state() # LOAD DATA FIRST
@@ -702,6 +724,8 @@ func _ready():
 	texture_rect.material = s_mat
 	
 	save_history_state() # Initialize first history step
+	
+	is_grid_ready = true # Allow _process and _draw to start now!
 	
 	_show_welcome_message()
 
@@ -1515,7 +1539,29 @@ func _setup_tools_ui():
 		call_deferred("_setup_main_ui_containers")
 	)
 
-	# UI SCALE ROW (Now 2nd)
+	# ORIENTATION ROW
+	var orient_options = [tr("ORIENT_PORTRAIT"), tr("ORIENT_LANDSCAPE")]
+	create_row.call("orient", orient_options, func(l):
+		var f = FileAccess.open("user://orientation.save", FileAccess.WRITE)
+		f.store_string(str(l))
+		f.close()
+		
+		if l == 1: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
+		else: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
+		
+		# Smooth transition overlay
+		var overlay = ColorRect.new()
+		overlay.color = Color.BLACK
+		overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+		get_parent().get_node("UI").add_child(overlay)
+		
+		# Allow OS to rotate, then reload scene
+		get_tree().create_timer(0.3).timeout.connect(func():
+			get_tree().reload_current_scene()
+		)
+	)
+
+	# UI SCALE ROW (Now 3rd)
 	var scale_labels = [
 		tr("size") + "1.0", 
 		tr("size") + "1.2", 
@@ -3474,6 +3520,7 @@ func _play_action_sound(action: String, min_interval: float = 0.08):
 		_play_sfx(action_sfx[action])
 
 func _process(delta):
+	if not is_grid_ready: return
 	_frame_count += 1
 	if is_instance_valid(lab_panel) and lab_panel.visible:
 		var now = int(Time.get_unix_time_from_system())
@@ -3726,6 +3773,7 @@ func redo_history():
 		queue_redraw()
 
 func _draw():
+	if not is_grid_ready: return
 	var f = _get_safe_font()
 	if not f: return
 	var s = _get_ui_scale()
