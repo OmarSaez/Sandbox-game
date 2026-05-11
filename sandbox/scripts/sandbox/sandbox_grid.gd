@@ -8365,7 +8365,7 @@ func _setup_save_ui():
 	panel_style.border_color = Color(0.6, 0.5, 0.2)
 	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
 	save_panel.add_theme_stylebox_override("panel", panel_style)
-	save_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	save_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	save_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	save_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 	
@@ -8397,7 +8397,7 @@ func _setup_save_ui():
 	main_vbox.add_child(title_hbox)
 	
 	var title = Label.new()
-	title.text = "💾 " + tr("save_btn_ui")
+	title.text = tr("save_btn_ui")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_override("font", _get_safe_font())
@@ -8428,7 +8428,7 @@ func _add_save_slot_ui(container, slot_idx):
 	var slot_data = _get_slot_data(slot_idx)
 	
 	var slot_panel = PanelContainer.new()
-	slot_panel.custom_minimum_size = Vector2(235 * s, 420 * s) # Narrower and more vertical to fit 530px width
+	slot_panel.custom_minimum_size = Vector2(235 * s, 0) # Narrower to fit 530px width, height auto-wraps
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.15, 0.15, 0.18)
 	style.set_corner_radius_all(10 * s)
@@ -8436,6 +8436,7 @@ func _add_save_slot_ui(container, slot_idx):
 	style.border_width_right = 2; style.border_width_bottom = 2
 	style.border_color = Color(0.3, 0.3, 0.3)
 	slot_panel.add_theme_stylebox_override("panel", style)
+	slot_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	slot_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	slot_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 	container.add_child(slot_panel)
@@ -8449,33 +8450,43 @@ func _add_save_slot_ui(container, slot_idx):
 	
 	var lbl_idx = Label.new()
 	lbl_idx.text = "#" + str(slot_idx)
-	lbl_idx.add_theme_font_size_override("font_size", 24 * s)
+	lbl_idx.add_theme_font_size_override("font_size", 26 * s)
 	header.add_child(lbl_idx)
 	
 	var lbl_name = Label.new()
 	lbl_name.text = slot_data.name if slot_data.has("name") else tr("empty")
 	lbl_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl_name.clip_text = true
+	lbl_name.add_theme_font_size_override("font_size", 24 * s)
 	header.add_child(lbl_name)
 	
-	var thumb_rect = TextureRect.new()
-	thumb_rect.custom_minimum_size = Vector2(215 * s, 320 * s) 
-	thumb_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	thumb_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED # Ensure full height visibility without crop
+	var thumb_rect = TextureButton.new()
+	thumb_rect.custom_minimum_size = Vector2(215 * s, 250 * s) 
+	thumb_rect.ignore_texture_size = true
+	thumb_rect.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+	thumb_rect.mouse_filter = Control.MOUSE_FILTER_PASS
 	if slot_data.has("thumbnail"):
-		thumb_rect.texture = slot_data.thumbnail
+		thumb_rect.texture_normal = slot_data.thumbnail
 	else:
 		var empty_tex = GradientTexture2D.new()
 		empty_tex.gradient = Gradient.new()
 		empty_tex.gradient.set_color(0, Color(0.1, 0.1, 0.1))
 		empty_tex.gradient.set_color(1, Color(0.1, 0.1, 0.1))
-		thumb_rect.texture = empty_tex
+		thumb_rect.texture_normal = empty_tex
+		
+	thumb_rect.pressed.connect(func():
+		_play_action_sound("ui_click")
+		if slot_data.has("name"):
+			_confirm_load(slot_idx, lbl_name.text)
+		else:
+			_confirm_save(slot_idx, lbl_name.text)
+	)
 	vbox.add_child(thumb_rect)
 	
 	var lbl_date = Label.new()
 	lbl_date.text = slot_data.date if slot_data.has("date") else ""
-	lbl_date.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	lbl_date.add_theme_font_size_override("font_size", 14 * s)
+	lbl_date.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_date.add_theme_font_size_override("font_size", 18 * s)
 	lbl_date.modulate = Color(0.6, 0.6, 0.6)
 	vbox.add_child(lbl_date)
 	
@@ -8484,7 +8495,8 @@ func _add_save_slot_ui(container, slot_idx):
 	
 	var save_btn = Button.new()
 	save_btn.text = tr("save_btn_ui")
-	save_btn.add_theme_font_size_override("font_size", 16 * s)
+	save_btn.custom_minimum_size = Vector2(0, 45 * s)
+	save_btn.add_theme_font_size_override("font_size", 20 * s)
 	save_btn.add_theme_font_override("font", _get_safe_font())
 	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	save_btn.pressed.connect(func(): _confirm_save(slot_idx, lbl_name.text))
@@ -8493,10 +8505,11 @@ func _add_save_slot_ui(container, slot_idx):
 	if slot_data.has("name"):
 		var load_btn = Button.new()
 		load_btn.text = tr("load")
-		load_btn.add_theme_font_size_override("font_size", 16 * s)
+		load_btn.custom_minimum_size = Vector2(0, 45 * s)
+		load_btn.add_theme_font_size_override("font_size", 20 * s)
 		load_btn.add_theme_font_override("font", _get_safe_font())
 		load_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		load_btn.pressed.connect(func(): _load_from_slot(slot_idx))
+		load_btn.pressed.connect(func(): _confirm_load(slot_idx, lbl_name.text))
 		btn_hbox.add_child(load_btn)
 
 func _get_slot_data(idx):
@@ -8536,13 +8549,20 @@ func _confirm_save(idx, current_name):
 	
 	dialog.anchor_left = 0.5; dialog.anchor_right = 0.5
 	dialog.anchor_top = 0.5; dialog.anchor_bottom = 0.5
-	dialog.offset_left = -250 * s; dialog.offset_right = 250 * s
-	dialog.offset_top = -150 * s; dialog.offset_bottom = 150 * s
+	dialog.offset_left = -260 * s; dialog.offset_right = 260 * s
+	dialog.offset_top = -180 * s; dialog.offset_bottom = 180 * s
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_top", 20 * s)
+	margin.add_theme_constant_override("margin_bottom", 20 * s)
+	margin.add_theme_constant_override("margin_left", 20 * s)
+	margin.add_theme_constant_override("margin_right", 20 * s)
+	dialog.add_child(margin)
 	
 	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 20 * s)
+	vbox.add_theme_constant_override("separation", 25 * s)
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	dialog.add_child(vbox)
+	margin.add_child(vbox)
 	
 	var msg = Label.new()
 	msg.text = tr("save_to_slot").format([str(idx)])
@@ -8550,14 +8570,14 @@ func _confirm_save(idx, current_name):
 		msg.text = tr("override_confirm").format([str(idx), current_name])
 	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	msg.add_theme_font_size_override("font_size", 20 * s)
+	msg.add_theme_font_size_override("font_size", 22 * s)
 	vbox.add_child(msg)
 	
 	var name_edit = LineEdit.new()
 	name_edit.placeholder_text = tr("enter_save_name")
 	name_edit.text = current_name if current_name != tr("empty") else "Save " + str(idx)
 	name_edit.custom_minimum_size = Vector2(300 * s, 50 * s)
-	name_edit.add_theme_font_size_override("font_size", 18 * s)
+	name_edit.add_theme_font_size_override("font_size", 20 * s)
 	vbox.add_child(name_edit)
 	
 	var hbox = HBoxContainer.new()
@@ -8567,7 +8587,12 @@ func _confirm_save(idx, current_name):
 	
 	var yes_btn = Button.new()
 	yes_btn.text = tr("yes")
-	yes_btn.custom_minimum_size = Vector2(100 * s, 60 * s)
+	yes_btn.custom_minimum_size = Vector2(130 * s, 60 * s)
+	yes_btn.add_theme_font_size_override("font_size", 20 * s)
+	var yes_style = StyleBoxFlat.new()
+	yes_style.bg_color = Color(0.2, 0.6, 0.2)
+	yes_style.set_corner_radius_all(10 * s)
+	yes_btn.add_theme_stylebox_override("normal", yes_style)
 	yes_btn.pressed.connect(func(): 
 		_save_to_slot(idx, name_edit.text)
 		dialog.queue_free()
@@ -8576,7 +8601,81 @@ func _confirm_save(idx, current_name):
 	
 	var no_btn = Button.new()
 	no_btn.text = tr("no")
-	no_btn.custom_minimum_size = Vector2(100 * s, 60 * s)
+	no_btn.custom_minimum_size = Vector2(130 * s, 60 * s)
+	no_btn.add_theme_font_size_override("font_size", 20 * s)
+	var no_style = StyleBoxFlat.new()
+	no_style.bg_color = Color(0.6, 0.2, 0.2)
+	no_style.set_corner_radius_all(10 * s)
+	no_btn.add_theme_stylebox_override("normal", no_style)
+	no_btn.pressed.connect(func(): dialog.queue_free())
+	hbox.add_child(no_btn)
+
+func _confirm_load(idx, current_name):
+	var s = _get_ui_scale()
+	var dialog = PanelContainer.new()
+	dialog.name = "ConfirmLoadDialog"
+	save_panel.add_child(dialog)
+	
+	var d_style = StyleBoxFlat.new()
+	d_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
+	d_style.border_width_left = 3; d_style.border_width_top = 3
+	d_style.border_width_right = 3; d_style.border_width_bottom = 3
+	d_style.border_color = Color(0.2, 0.5, 0.7)
+	d_style.set_corner_radius_all(15 * s)
+	dialog.add_theme_stylebox_override("panel", d_style)
+	
+	dialog.anchor_left = 0.5; dialog.anchor_right = 0.5
+	dialog.anchor_top = 0.5; dialog.anchor_bottom = 0.5
+	dialog.offset_left = -260 * s; dialog.offset_right = 260 * s
+	dialog.offset_top = -140 * s; dialog.offset_bottom = 140 * s
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_top", 20 * s)
+	margin.add_theme_constant_override("margin_bottom", 20 * s)
+	margin.add_theme_constant_override("margin_left", 20 * s)
+	margin.add_theme_constant_override("margin_right", 20 * s)
+	dialog.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 25 * s)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	margin.add_child(vbox)
+	
+	var msg = Label.new()
+	msg.text = "¿Cargar el mundo: " + current_name + "?"
+	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	msg.add_theme_font_size_override("font_size", 22 * s)
+	vbox.add_child(msg)
+	
+	var hbox = HBoxContainer.new()
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	hbox.add_theme_constant_override("separation", 20 * s)
+	vbox.add_child(hbox)
+	
+	var yes_btn = Button.new()
+	yes_btn.text = tr("yes")
+	yes_btn.custom_minimum_size = Vector2(130 * s, 60 * s)
+	yes_btn.add_theme_font_size_override("font_size", 20 * s)
+	var yes_style = StyleBoxFlat.new()
+	yes_style.bg_color = Color(0.2, 0.6, 0.2)
+	yes_style.set_corner_radius_all(10 * s)
+	yes_btn.add_theme_stylebox_override("normal", yes_style)
+	yes_btn.pressed.connect(func(): 
+		_load_from_slot(idx)
+		dialog.queue_free()
+		save_panel.queue_free()
+	)
+	hbox.add_child(yes_btn)
+	
+	var no_btn = Button.new()
+	no_btn.text = tr("no")
+	no_btn.custom_minimum_size = Vector2(130 * s, 60 * s)
+	no_btn.add_theme_font_size_override("font_size", 20 * s)
+	var no_style = StyleBoxFlat.new()
+	no_style.bg_color = Color(0.6, 0.2, 0.2)
+	no_style.set_corner_radius_all(10 * s)
+	no_btn.add_theme_stylebox_override("normal", no_style)
 	no_btn.pressed.connect(func(): dialog.queue_free())
 	hbox.add_child(no_btn)
 
