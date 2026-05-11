@@ -318,6 +318,7 @@ var random_lut := PackedFloat32Array()
 var cos_lut := PackedFloat32Array()
 var sin_lut := PackedFloat32Array()
 var _lut_state := PackedInt32Array([0])
+var _ai_tick_count: int = 0
 
 func _get_lut_rand() -> float:
 	_lut_state[0] = (_lut_state[0] + 1) & 4095
@@ -6405,9 +6406,10 @@ func _draw_npc_pixels(npc, override_mat = -1):
 						if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC): _set_cell(tx, ty, 0)
 		return
 		
-	var sx = npc.pos.x; var sy = npc.pos.y
+	var sx = int(npc.pos.x); var sy = int(npc.pos.y)
 	if is_flashing and not is_dead:
-		sx += _get_lut_rand_range(-1, 1); sy += _get_lut_rand_range(-1, 1)
+		sx += int(_get_lut_rand_range(-1.0, 1.9))
+		sy += int(_get_lut_rand_range(-1.0, 1.9))
 	elif is_dead:
 		sy += 2; sx += 1 if (npc.dir > 0) else -1
 		if (npc.hit_flash % 2 == 0): override_mat = 0
@@ -6517,6 +6519,7 @@ func _process_npcs(delta):
 				if t != win_team and t_counts[t] > 10: # Si ALGÚN equipo perdedor tiene > 10 NPCs, se anula
 					show_dom = false; break
 	
+	_ai_tick_count += 1
 	var dead_indices = []
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
@@ -6565,8 +6568,8 @@ func _process_npcs(delta):
 			# Update common timers
 			if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
 			
-			# OPTIMIZATION: Staggered AI Logic (Only update heavy checks once every 6 frames)
-			var can_think = (npc.id % 6 == _frame_count % 6)
+			# OPTIMIZATION: Staggered AI Logic (Now using dedicated AI tick counter)
+			var can_think = (npc.id % 6 == _ai_tick_count % 6)
 			
 			# AUTONOMOUS AI LOGIC (Skip if controlled)
 			if npc != controlled_npc:
