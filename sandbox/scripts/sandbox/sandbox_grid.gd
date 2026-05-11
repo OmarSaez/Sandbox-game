@@ -355,6 +355,7 @@ const TAGS_INTERACTIVE = SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.
 	SandboxMaterial.Tags.MUSIC
 
 func _ready():
+	Engine.max_fps = 60 # Cierra la puerta al stutter en pantallas 120Hz/LTPO
 	is_grid_ready = false # Safeguard during async _ready
 	
 	# --- ORIENTATION INITIALIZATION ---
