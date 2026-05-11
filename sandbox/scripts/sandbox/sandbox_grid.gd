@@ -2642,6 +2642,58 @@ func _save_rotation_cache():
 		file.store_var(save_dict, true)
 		file.close()
 
+func _map_grid_data(dict: Dictionary):
+	if dict.has("width") and dict.has("height"):
+		var old_w = int(dict["width"])
+		var old_h = int(dict["height"])
+		var y_offset = old_h - grid_height
+		var x_offset = int((old_w - grid_width) / 2.0)
+		
+		var old_cells = dict["grid"]
+		var old_charge = dict["charge"]
+		var old_tags = dict["tags"]
+		var old_paint = dict["cell_paint"]
+		
+		for new_y in range(grid_height):
+			var old_y = new_y + y_offset
+			if old_y < 0 or old_y >= old_h: continue
+			
+			for new_x in range(grid_width):
+				var old_x = new_x + x_offset
+				if old_x < 0 or old_x >= old_w: continue
+				
+				var old_idx = old_y * old_w + old_x
+				var new_idx = new_y * grid_width + new_x
+				
+				cells[new_idx] = int(old_cells[old_idx])
+				charge_array[new_idx] = int(old_charge[old_idx])
+				tags_array[new_idx] = int(old_tags[old_idx])
+				cell_paint_colors[new_idx] = int(old_paint[old_idx])
+				
+				if cells[new_idx] != 0:
+					_activate_chunk(new_x, new_y)
+		
+		if dict.has("bg_paint"):
+			var bg_data = dict["bg_paint"]
+			var b_array = PackedInt32Array()
+			b_array.resize(bg_data.size())
+			for i in range(bg_data.size()): b_array[i] = int(bg_data[i])
+			var old_bg_img = Image.create_from_data(old_w, old_h, false, Image.FORMAT_RGBA8, b_array.to_byte_array())
+			
+			for new_y in range(grid_height):
+				var old_y = new_y + y_offset
+				if old_y < 0 or old_y >= old_h: continue
+				for new_x in range(grid_width):
+					var old_x = new_x + x_offset
+					if old_x < 0 or old_x >= old_w: continue
+					var color = old_bg_img.get_pixel(old_x, old_y)
+					if color.a > 0.0:
+						background_img.set_pixel(new_x, new_y, color)
+			
+			background_tex.update(background_img)
+	
+	background_dirty = true
+
 func _load_rotation_cache():
 	var path = "user://rotation_cache.dat"
 	if not FileAccess.file_exists(path): return
@@ -2652,51 +2704,8 @@ func _load_rotation_cache():
 		file.close()
 		DirAccess.remove_absolute(path)
 		
-		if dict and dict.has("width") and dict.has("height"):
-			var old_w = int(dict["width"])
-			var old_h = int(dict["height"])
-			var y_offset = old_h - grid_height
-			var x_offset = int((old_w - grid_width) / 2.0)
-			
-			var old_cells = dict["grid"]
-			var old_charge = dict["charge"]
-			var old_tags = dict["tags"]
-			var old_paint = dict["cell_paint"]
-			
-			for new_y in range(grid_height):
-				var old_y = new_y + y_offset
-				if old_y < 0 or old_y >= old_h: continue
-				
-				for new_x in range(grid_width):
-					var old_x = new_x + x_offset
-					if old_x < 0 or old_x >= old_w: continue
-					
-					var old_idx = old_y * old_w + old_x
-					var new_idx = new_y * grid_width + new_x
-					
-					cells[new_idx] = old_cells[old_idx]
-					charge_array[new_idx] = old_charge[old_idx]
-					tags_array[new_idx] = old_tags[old_idx]
-					cell_paint_colors[new_idx] = old_paint[old_idx]
-					
-					if cells[new_idx] != 0:
-						_activate_chunk(new_x, new_y)
-			
-			if dict.has("bg_paint"):
-				var b_array = dict["bg_paint"]
-				var old_bg_img = Image.create_from_data(old_w, old_h, false, Image.FORMAT_RGBA8, b_array.to_byte_array())
-				
-				for new_y in range(grid_height):
-					var old_y = new_y + y_offset
-					if old_y < 0 or old_y >= old_h: continue
-					for new_x in range(grid_width):
-						var old_x = new_x + x_offset
-						if old_x < 0 or old_x >= old_w: continue
-						var color = old_bg_img.get_pixel(old_x, old_y)
-						if color.a > 0.0:
-							background_img.set_pixel(new_x, new_y, color)
-				
-				background_tex.update(background_img)
+		if dict:
+			_map_grid_data(dict)
 
 func _load_lab_state():
 	# PC/EDITOR SKIP: Always unlock and skip logs for smoother testing
@@ -8382,6 +8391,8 @@ func _save_to_slot(idx, custom_name: String = ""):
 	var save_dict = {
 		"name": save_name,
 		"date": date_str,
+		"width": grid_width,
+		"height": grid_height,
 		"grid": Array(cells),
 		"charge": Array(charge_array),
 		"tags": Array(tags_array),
@@ -8451,51 +8462,13 @@ func _load_from_slot(idx):
 			# 1. CLEAN CURRENT STATE
 			_clear_all() 
 			
-			# 2. RESTORE PRIMARY GRID
-			if dict.has("grid"):
-				var data = dict["grid"]
-				if data.size() == cells.size():
-					for i in range(data.size()): cells[i] = int(data[i])
+			# 2. UNIFIED MAPPER (Restores Grid, Charge, Tags, Paint & Wakes Chunks)
+			_map_grid_data(dict)
 			
-			# 3. RESTORE SECONDARY DATA (Physics & Energy)
-			if dict.has("charge"):
-				var data = dict["charge"]
-				if data.size() == charge_array.size(): 
-					for i in range(data.size()): charge_array[i] = int(data[i])
-			
-			if dict.has("tags"):
-				var data = dict["tags"]
-				if data.size() == tags_array.size():
-					for i in range(data.size()): tags_array[i] = int(data[i])
-					
-			# 4. RESTORE SIMULATION STATE (Wake up relevant parts)
-			if dict.has("chunks"):
-				var data = dict["chunks"]
-				if data.size() == chunks_active.size():
-					for i in range(data.size()): chunks_active[i] = int(data[i])
-			
-			if dict.has("next_chunks"):
-				var data = dict["next_chunks"]
-				if data.size() == next_chunks_active.size():
-					for i in range(data.size()): next_chunks_active[i] = int(data[i])
-					
-			# 5. RESTORE LABORATORY EXPERIMENTS
+			# 3. RESTORE LABORATORY EXPERIMENTS
 			if dict.has("lab_data"):
 				_restore_lab_data(dict["lab_data"])
 				
-			# 6. RESTORE PAINTING
-			if dict.has("cell_paint"):
-				var data = dict["cell_paint"]
-				if data.size() == cell_paint_colors.size():
-					for i in range(data.size()): cell_paint_colors[i] = int(data[i])
-			
-			if dict.has("bg_paint"):
-				var data = dict["bg_paint"]
-				if data.size() == (grid_width * grid_height):
-					var bytes = PackedInt32Array(data).to_byte_array()
-					background_img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, bytes)
-					background_dirty = true
-			
 			_update_texture()
 			queue_redraw()
 			if is_instance_valid(save_panel): save_panel.queue_free()
