@@ -3991,7 +3991,28 @@ func _process_tornado(delta):
 		# Swirl/Orbital chance
 		if randf() < 0.3: dx = -dx 
 		
-		# Suction Chance
+		# --- NPC INTERACTION (Fixes trails and adds physics) ---
+		if (tags & SandboxMaterial.Tags.NPC):
+			var nearby_npcs = _get_nearby_npcs(rx, ry, 15.0)
+			for n in nearby_npcs:
+				# Precise hit check for the NPC body
+				if abs(n.pos.x - rx) <= 3 and ry >= n.pos.y and ry <= n.pos.y + 6:
+					# Apply physics force instead of moving pixels directly
+					n.vx += dx * pull_strength * 5.0
+					n.vy += float(dy) * 0.4
+					
+					# Elemental Damage
+					if tornado_element == 1: # Fire
+						n.hp -= 0.6; n.hit_flash = 4; n.hit_type = "fire"
+					elif tornado_element == 2: # Acid
+						n.hp -= 1.0; n.hit_flash = 4; n.hit_type = "acid"
+					elif tornado_element == 3: # Electric
+						n.hp -= 0.5; n.hit_flash = 4; n.hit_type = "electric"
+						
+					if randf() < 0.05: _set_npc_emoji(n, "😱", 1.0)
+			continue # SKIP manual pixel swap for NPCs to prevent tearing/trails
+		
+		# Suction Chance for normal materials
 		if randf() < pull_strength:
 			var nx = rx + dx
 			var ny = ry + dy
@@ -6415,6 +6436,22 @@ func _process_npcs(delta):
 							npc["has_spotted_enemy"] = true
 					elif !target:
 						npc["has_spotted_enemy"] = false
+				
+				# --- PANIC NEAR DISASTERS ---
+				var is_near_tornado = false
+				if tornado_intensity > 0:
+					var d_to_t = abs(npc.pos.x - tornado_x)
+					if d_to_t < 150:
+						is_near_tornado = true
+						npc.dir = 1 if npc.pos.x > tornado_x else -1
+						npc["is_fleeing"] = true
+						if randf() < 0.05: _set_npc_emoji(npc, "😱", 0.5)
+				
+				# Reset panic state if the danger is gone
+				if not is_near_tornado and npc.get("is_fleeing", false):
+					# Only reset if NOT morale broken (they are not crying because of damage)
+					if not npc.get("morale_broken", false):
+						npc["is_fleeing"] = false
 				
 				var critical_hp = npc.get("max_hp", 100.0) * 0.3
 				if npc.hp <= critical_hp and not npc.get("morale_broken", false):
