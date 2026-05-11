@@ -2807,11 +2807,20 @@ func _map_grid_data(dict: Dictionary):
 				var new_idx = new_y * grid_width + new_x
 				
 				cells[new_idx] = int(old_cells[old_idx])
-				charge_array[new_idx] = int(old_charge[old_idx])
+				var charge_val = int(old_charge[old_idx])
+				charge_array[new_idx] = charge_val
 				tags_array[new_idx] = int(old_tags[old_idx])
 				cell_paint_colors[new_idx] = int(old_paint[old_idx])
 				
+				if charge_val > 0:
+					next_charge_indices.append(new_idx)
+					charge_visual_buffer[new_idx] = clampi(charge_val, 0, 255)
+					charge_dirty = true
+				
 				if cells[new_idx] != 0:
+					var pure_id = cells[new_idx] & 0xFFFF
+					if pure_id == 600:
+						active_metronome_indices[new_idx] = true
 					_activate_chunk(new_x, new_y)
 		
 		if dict.has("bg_paint"):
