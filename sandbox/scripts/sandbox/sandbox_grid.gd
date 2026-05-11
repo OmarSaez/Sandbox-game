@@ -73,6 +73,24 @@ func _zoom_camera(delta_zoom: float):
 		sim_camera.zoom = Vector2(view_zoom, view_zoom)
 		_clamp_camera_position()
 
+func _set_panning_mode(active: bool):
+	is_panning_mode = active
+	if ui_elements.has("btn_pan") and is_instance_valid(ui_elements["btn_pan"]):
+		var qa_style = StyleBoxFlat.new()
+		qa_style.bg_color = Color(0.15, 0.15, 0.2, 1.0)
+		qa_style.border_width_left = 1; qa_style.border_width_top = 1
+		qa_style.border_width_right = 1; qa_style.border_width_bottom = 1
+		qa_style.border_color = Color(0.4, 0.4, 0.5)
+
+		var qa_style_active = qa_style.duplicate()
+		qa_style_active.bg_color = Color(0.3, 0.5, 0.8, 1.0)
+		
+		var style = qa_style_active if is_panning_mode else qa_style
+		var btn = ui_elements["btn_pan"]
+		btn.add_theme_stylebox_override("normal", style)
+		btn.add_theme_stylebox_override("hover", style)
+		btn.add_theme_stylebox_override("pressed", style)
+
 func _clamp_camera_position():
 	if not is_instance_valid(sim_camera): return
 	var vp = get_viewport_rect().size
@@ -1493,20 +1511,14 @@ func _setup_tools_ui():
 	var btn_zoom_out = create_qa_btn.call("🔍-")
 	var btn_zoom_in = create_qa_btn.call("🔍+")
 	
-	var update_pan_btn_style = func():
-		var style = qa_style_active if is_panning_mode else qa_style
-		btn_pan.add_theme_stylebox_override("normal", style)
-		btn_pan.add_theme_stylebox_override("hover", style)
-		btn_pan.add_theme_stylebox_override("pressed", style)
-
-	if is_panning_mode: update_pan_btn_style.call()
+	ui_elements["btn_pan"] = btn_pan
+	_set_panning_mode(is_panning_mode)
 	
-	btn_zoom_out.pressed.connect(func(): _play_action_sound("ui_click"); _zoom_camera(-0.25))
-	btn_zoom_in.pressed.connect(func(): _play_action_sound("ui_click"); _zoom_camera(0.25))
+	btn_zoom_out.pressed.connect(func(): _play_action_sound("ui_click"); _zoom_camera(-0.5))
+	btn_zoom_in.pressed.connect(func(): _play_action_sound("ui_click"); _zoom_camera(0.5))
 	btn_pan.pressed.connect(func(): 
 		_play_action_sound("ui_click")
-		is_panning_mode = !is_panning_mode
-		update_pan_btn_style.call()
+		_set_panning_mode(!is_panning_mode)
 	)
 	btn_save.pressed.connect(func(): 
 		_play_action_sound("ui_click")
@@ -3194,6 +3206,7 @@ func _update_lab_preview(idx: int):
 	tex_rect.texture = tex
 
 func _setup_disaster_ui():
+	_set_panning_mode(false)
 	var s = _get_ui_scale()
 	var disaster_btn = Button.new()
 	disaster_btn.name = "DisasterBtn"
@@ -3539,6 +3552,7 @@ func _add_ui_header(container, key: String):
 # --- OPTIMIZED HIGHLIGHT SYSTEM ---
 
 func _update_material_highlights():
+	_set_panning_mode(false)
 	# PRE-CACHE SELECTION STYLE
 	var sel_style = StyleBoxFlat.new()
 	sel_style.draw_center = false
@@ -3775,10 +3789,15 @@ func _process(delta):
 		var cam_pos = sim_camera.position
 		var half_w = (vp.x / view_zoom) / 2.0
 		var half_h = (vp.y / view_zoom) / 2.0
+		
+		# Offset bottom bound by the HUD height so physics drops right at the user's visible edge
+		var hud_h_px = (grid_height - dynamic_grid_height) * grid_scale
+		var visible_half_h_bottom = (vp.y / 2.0 - hud_h_px) / view_zoom
+		
 		cam_min_x = max(0, int((cam_pos.x - half_w) / grid_scale))
 		cam_max_x = min(grid_width, int((cam_pos.x + half_w) / grid_scale))
 		cam_min_y = max(0, int((cam_pos.y - half_h) / grid_scale))
-		cam_max_y = min(dynamic_grid_height, int((cam_pos.y + half_h) / grid_scale))
+		cam_max_y = min(dynamic_grid_height, int((cam_pos.y + visible_half_h_bottom) / grid_scale))
 	else:
 		cam_min_x = 0; cam_max_x = grid_width
 		cam_min_y = 0; cam_max_y = dynamic_grid_height
@@ -3854,7 +3873,6 @@ func _process(delta):
 				_clamp_camera_position()
 				pan_last_mouse_pos = current_mouse_pos
 			mouse_was_pressed = true
-			return
 		
 		# 1. INITIAL TOUCH PROTECTION
 		if not mouse_was_pressed:
@@ -3901,7 +3919,7 @@ func _process(delta):
 				if is_instance_valid(save_panel): save_panel.queue_free()
 
 		# DRAW LOGIC (Only if touch session started on Sandbox, current position is Sandbox, and NOT in selection mode)
-		if not touch_started_on_ui and not is_over_ui and not is_selecting_npc_to_control:
+		if not is_panning_mode and not touch_started_on_ui and not is_over_ui and not is_selecting_npc_to_control:
 			var m_pos = get_local_mouse_position()
 			var gx = int(m_pos.x / grid_scale)
 			var gy = int(m_pos.y / grid_scale)
@@ -5433,6 +5451,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		if charge_array[idx] <= 1: _set_cell(x, y, 26) 
 
 func _setup_paint_ui():
+	_set_panning_mode(false)
 	var s = _get_ui_scale()
 	var paint_btn = Button.new()
 	paint_btn.name = "PaintBtn"
@@ -6199,6 +6218,7 @@ func _trigger_controlled_npc_action():
 				controlled_npc.attack_cooldown = 1.5
 
 func _setup_npc_ui():
+	_set_panning_mode(false)
 	var s = _get_ui_scale()
 	var npc_btn = Button.new()
 	npc_btn.name = "NPCBtn"
@@ -8014,6 +8034,7 @@ func _play_music_note(inst_idx, note_idx):
 	sim_mutex.unlock()
 
 func _setup_music_ui(force_refresh: bool = false):
+	_set_panning_mode(false)
 	var s = _get_ui_scale()
 	ui_root = get_parent().get_node("UI")
 	
@@ -8324,6 +8345,7 @@ func _is_music_active() -> bool:
 # --- SAVE / LOAD SYSTEM ---
 
 func _setup_save_ui():
+	_set_panning_mode(false)
 	var s = _get_ui_scale()
 	ui_root = get_parent().get_node("UI")
 	
