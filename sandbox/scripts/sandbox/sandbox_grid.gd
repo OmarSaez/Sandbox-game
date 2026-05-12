@@ -1551,19 +1551,19 @@ func _create_vertical_category_btn(emoji: String, text_key: String) -> Button:
 	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", -4 * s)
+	vbox.add_theme_constant_override("separation", 1 * s)
 	btn.add_child(vbox)
 	
 	var emoji_lbl = Label.new()
 	emoji_lbl.text = emoji
 	emoji_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	emoji_lbl.add_theme_font_size_override("font_size", 20 * s)
+	emoji_lbl.add_theme_font_size_override("font_size", 28 * s)
 	vbox.add_child(emoji_lbl)
 	
 	var text_lbl = Label.new()
 	text_lbl.text = tr(text_key)
 	text_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	text_lbl.add_theme_font_size_override("font_size", 14 * s)
+	text_lbl.add_theme_font_size_override("font_size", 16 * s)
 	text_lbl.add_theme_font_override("font", _get_safe_font())
 	vbox.add_child(text_lbl)
 	
