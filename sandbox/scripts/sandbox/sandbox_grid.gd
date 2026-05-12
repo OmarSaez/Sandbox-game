@@ -1394,7 +1394,7 @@ func _setup_main_ui_containers():
 
 	# ALWAYS Refresh Scroll Height for the current scale
 	# NEW: LARGER TALL HUD with logical CAP (Increased to 352px for mobile clearance) 
-	var h = 362
+	var h = 392
 	var h_cat = 60 * s # Slightly reduced height to fit 51px buttons
 	cached_hud_height = float(h) # Cache for smart panel alignment
 	
@@ -1491,8 +1491,8 @@ func _setup_main_ui_containers():
 			if is_instance_valid(child): 
 				child.get_parent().remove_child(child)
 				child.queue_free()
-		material_grid.add_theme_constant_override("h_separation", 10 * s)
-		material_grid.add_theme_constant_override("v_separation", 10 * s)
+		material_grid.add_theme_constant_override("h_separation", 6 * s)
+		material_grid.add_theme_constant_override("v_separation", 4 * s)
 
 	# 5. CONSTRUCT ALL SUB-UI
 	ui_root.set_meta("tools_v", tools_v)
