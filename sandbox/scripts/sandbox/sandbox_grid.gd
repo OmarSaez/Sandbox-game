@@ -5623,6 +5623,7 @@ func _setup_paint_ui():
 		btn.custom_minimum_size = Vector2(0, 50 * s)
 		btn.add_theme_font_override("font", _get_safe_font())
 		btn.add_theme_font_size_override("font_size", 22 * s)
+		btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 		
 		var st_n = StyleBoxFlat.new()
 		st_n.bg_color = Color(0.12, 0.12, 0.15, 0.8)
@@ -5681,6 +5682,7 @@ func _setup_paint_ui():
 		btn.add_theme_stylebox_override("normal", st)
 		btn.add_theme_stylebox_override("hover", st)
 		btn.add_theme_stylebox_override("pressed", st)
+		btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 		
 		btn.pressed.connect(func():
 			_play_action_sound("ui_click")
@@ -5700,6 +5702,7 @@ func _setup_paint_ui():
 	custom_cp.custom_minimum_size = Vector2(300 * s, 50 * s)
 	custom_cp.add_theme_font_override("font", _get_safe_font())
 	custom_cp.add_theme_font_size_override("font_size", 20 * s)
+	custom_cp.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	custom_cp.color_changed.connect(func(c):
 		selected_paint_color = c
 		_update_paint_slider_grabber()
@@ -8315,6 +8318,7 @@ func _setup_music_ui(force_refresh: bool = false):
 			var b_size = 105 * s if selected_music_instrument < 4 else 140 * s
 			btn.custom_minimum_size = Vector2(b_size, b_size)
 			btn.add_theme_font_override("font", _get_safe_font())
+			btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 			
 			if selected_music_instrument < 4:
 				# Piano Notes with Dual Labels
