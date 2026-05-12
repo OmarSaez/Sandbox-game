@@ -45,10 +45,12 @@ func load(
 		
 func _on_interstitial_ad_loaded(uid: int) -> void:
 	if uid == _uid:
-		interstitial_ad_load_callback.on_ad_loaded.call(InterstitialAd.new(uid))
+		if is_instance_valid(interstitial_ad_load_callback) and interstitial_ad_load_callback.on_ad_loaded.is_valid():
+			interstitial_ad_load_callback.on_ad_loaded.call(InterstitialAd.new(uid))
 		unreference.call_deferred()
 
 func _on_interstitial_ad_failed_to_load(uid: int, load_ad_error_dictionary: Dictionary) -> void:
 	if uid == _uid:
-		interstitial_ad_load_callback.on_ad_failed_to_load.call(LoadAdError.create(load_ad_error_dictionary))
+		if is_instance_valid(interstitial_ad_load_callback) and interstitial_ad_load_callback.on_ad_failed_to_load.is_valid():
+			interstitial_ad_load_callback.on_ad_failed_to_load.call(LoadAdError.create(load_ad_error_dictionary))
 		unreference.call_deferred()

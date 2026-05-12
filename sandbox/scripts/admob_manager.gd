@@ -284,6 +284,20 @@ func check_and_show_interstitial(button_type: String = "") -> bool:
 		print("ADMOB: Saltando anuncio. Tiempo libre: %.1f s" % ad_free_time)
 		return false
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED:
+		if _banner_view:
+			print("ADMOB: App pausada, destruyendo banner...")
+			_banner_view.destroy()
+			_banner_view = null
+			_initial_banner_loaded = false
+			
+	elif what == NOTIFICATION_APPLICATION_RESUMED:
+		if OS.get_name() == "Android" or OS.get_name() == "iOS":
+			print("ADMOB: App reanudada, recreando banner...")
+			await get_tree().create_timer(0.5).timeout
+			_create_banner()
+
 func _exit_tree() -> void:
 	if _banner_view:
 		_banner_view.destroy()

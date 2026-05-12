@@ -45,10 +45,12 @@ func load(
 
 func _on_rewarded_ad_loaded(uid: int) -> void:
 	if uid == _uid:
-		rewarded_ad_load_callback.on_ad_loaded.call(RewardedAd.new(uid))
+		if is_instance_valid(rewarded_ad_load_callback) and rewarded_ad_load_callback.on_ad_loaded.is_valid():
+			rewarded_ad_load_callback.on_ad_loaded.call(RewardedAd.new(uid))
 		unreference.call_deferred()
 
 func _on_rewarded_ad_failed_to_load(uid: int, load_ad_error_dictionary: Dictionary) -> void:
 	if uid == _uid:
-		rewarded_ad_load_callback.on_ad_failed_to_load.call(LoadAdError.create(load_ad_error_dictionary))
+		if is_instance_valid(rewarded_ad_load_callback) and rewarded_ad_load_callback.on_ad_failed_to_load.is_valid():
+			rewarded_ad_load_callback.on_ad_failed_to_load.call(LoadAdError.create(load_ad_error_dictionary))
 		unreference.call_deferred()
