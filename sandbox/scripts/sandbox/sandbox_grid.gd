@@ -1044,6 +1044,14 @@ func _show_main_tutorial_step():
 		target_node = material_scroll
 	else:
 		target_node = ui_elements.get(target_key)
+		
+	# ROBUST FALLBACK: Search by Name if Dictionary key failed or node invalid
+	if not is_instance_valid(target_node) and is_instance_valid(main_controls):
+		var search_name = target_key.capitalize().replace("_", "").replace(" ", "")
+		target_node = main_controls.find_child(search_name, true, false)
+		if not target_node:
+			# Try snake_case too
+			target_node = main_controls.find_child(target_key, true, false)
 		# Hacer auto-scroll si el botón está dentro de un ScrollContainer
 		if is_instance_valid(target_node):
 			var scroll = target_node.get_parent().get_parent()
