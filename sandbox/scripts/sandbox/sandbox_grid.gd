@@ -2628,10 +2628,6 @@ func _setup_lab_ui():
 func _on_tools_btn_pressed():
 	_play_action_sound("ui_click")
 	_close_music_menu() # Close music if opening tools
-	is_paint_tool_active = false
-	if is_instance_valid(disaster_panel): disaster_panel.visible = false
-	if is_instance_valid(npc_panel): npc_panel.visible = false
-	if is_instance_valid(save_panel): save_panel.queue_free()
 	if is_instance_valid(lab_panel): lab_panel.visible = false
 	if is_instance_valid(paint_panel): paint_panel.visible = false
 	if is_instance_valid(tools_panel): 
@@ -5563,7 +5559,10 @@ func _setup_paint_ui():
 		# EXCLUSIVE PAINT MODE
 		if is_instance_valid(paint_panel):
 			paint_panel.visible = !paint_panel.visible
-			is_paint_tool_active = paint_panel.visible
+			# PRESERVE PAINT MODE: Don't set to false when closing manually, 
+			# unless we are switching to something else.
+			if paint_panel.visible:
+				is_paint_tool_active = true
 			if paint_panel.visible:
 				var inner_vbox = paint_panel.find_child("PaintVBox", true, false)
 				if inner_vbox:
