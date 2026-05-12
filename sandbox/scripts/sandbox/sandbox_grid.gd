@@ -1309,6 +1309,7 @@ var action_hbox: HBoxContainer
 var action_vbox: VBoxContainer
 
 var material_scroll: ScrollContainer
+var cached_hud_height: float = 362.0 # Performance optimization: Cached for panel alignment
 
 func _setup_main_ui_containers():
 	var s = _get_ui_scale()
@@ -1395,6 +1396,7 @@ func _setup_main_ui_containers():
 	# NEW: LARGER TALL HUD with logical CAP (Increased to 352px for mobile clearance) 
 	var h = 362
 	var h_cat = 60 * s # Slightly reduced height to fit 51px buttons
+	cached_hud_height = float(h) # Cache for smart panel alignment
 	
 	# UPDATE PHYSICAL BOUNDARY
 	dynamic_grid_height = grid_height - ceil(float(h) / grid_scale)
@@ -1512,6 +1514,24 @@ func _setup_main_ui_containers():
 	_update_material_highlights()
 	_update_menu_highlights()
 
+
+# Helper for intelligent panel positioning above the HUD
+func _align_panel_to_hud(panel: Control, p_width: float, p_height: float):
+	var s = _get_ui_scale()
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_top = 1.0
+	panel.anchor_bottom = 1.0
+	
+	# Optimized: Uses cached value updated only on UI rebuilds/orientation changes
+	var h_base = cached_hud_height
+	
+	var bottom_gap = h_base # Stick directly to the edge
+	
+	panel.offset_left = -p_width / 2
+	panel.offset_right = p_width / 2
+	panel.offset_bottom = -bottom_gap
+	panel.offset_top = -bottom_gap - p_height
 
 func _create_vertical_category_btn(emoji: String, text_key: String) -> Button:
 	var s = _get_ui_scale()
@@ -1638,22 +1658,7 @@ func _setup_tools_ui():
 	# RESTORE STATE
 	tools_panel.visible = ui_root.get_meta("tools_v", false)
 	
-	# COMPACT DYNAMIC POSITIONING
-	tools_panel.anchor_left = 0.5
-	tools_panel.anchor_right = 0.5
-	tools_panel.anchor_top = 1.0
-	tools_panel.anchor_bottom = 1.0
-	
-	#Tools_panel
-	var panel_width = 530 * s
-	var panel_height = 570 * s
-	var h = 340 # Match the Fixed Tall HUD height
-	var bottom_gap = h + (5 * s) # Dynamic GAP above HUD floor
-	
-	tools_panel.offset_left = -panel_width / 2
-	tools_panel.offset_right = panel_width / 2
-	tools_panel.offset_bottom = -bottom_gap
-	tools_panel.offset_top = -bottom_gap - panel_height
+	_align_panel_to_hud(tools_panel, 530 * s, 570 * s)
 	
 	# DYNAMIC BOX (NOW INSIDE SCROLL)
 	var scroll = ScrollContainer.new()
@@ -2064,20 +2069,7 @@ func _setup_lab_ui():
 	lab_panel.add_theme_stylebox_override("panel", panel_style)
 	
 	lab_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	lab_panel.anchor_left = 0.5
-	lab_panel.anchor_right = 0.5
-	lab_panel.anchor_top = 1.0
-	lab_panel.anchor_bottom = 1.0
-	
-	var l_width = 530 * s
-	var l_height = 650 * s
-	var h = 340
-	var l_bottom_gap = h + (5 * s)
-	
-	lab_panel.offset_left = -l_width / 2
-	lab_panel.offset_right = l_width / 2
-	lab_panel.offset_bottom = -l_bottom_gap
-	lab_panel.offset_top = -l_bottom_gap - l_height
+	_align_panel_to_hud(lab_panel, 530 * s, 650 * s)
 	lab_panel.visible = ui_root.get_meta("lab_v", false)
 	
 	for child in lab_panel.get_children(): 
@@ -3316,20 +3308,7 @@ func _setup_disaster_ui():
 	
 	disaster_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	disaster_panel.anchor_left = 0.5
-	disaster_panel.anchor_right = 0.5
-	disaster_panel.anchor_top = 1.0
-	disaster_panel.anchor_bottom = 1.0
-	
-	var d_width = 370 * s
-	var d_height = 490 * s
-	var h = 340 # Match the Fixed Tall HUD height
-	var d_bottom_gap = h + (5 * s)
-	
-	disaster_panel.offset_left = -d_width / 2
-	disaster_panel.offset_right = d_width / 2
-	disaster_panel.offset_bottom = -d_bottom_gap
-	disaster_panel.offset_top = -d_bottom_gap - d_height
+	_align_panel_to_hud(disaster_panel, 370 * s, 490 * s)
 	# RESTORE STATE
 	disaster_panel.visible = ui_root.get_meta("disaster_v", false)
 	
@@ -5553,12 +5532,7 @@ func _setup_paint_ui():
 	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
 	paint_panel.add_theme_stylebox_override("panel", panel_style)
 	
-	paint_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	paint_panel.anchor_left = 0.5
-	paint_panel.anchor_right = 0.5
-	paint_panel.anchor_top = 1.0
-	paint_panel.anchor_bottom = 1.0
-	
+	# COMPACT DYNAMIC POSITIONING
 	var p_width = 540 * s
 	var p_height = 680 * s
 	
@@ -5566,13 +5540,7 @@ func _setup_paint_ui():
 	if is_inside_tree() and get_viewport_rect().size.x > get_viewport_rect().size.y:
 		p_height = 570 * s
 		
-	var h_hud = 340
-	var p_bottom_gap = h_hud + (5 * s)
-	
-	paint_panel.offset_left = -p_width / 2
-	paint_panel.offset_right = p_width / 2
-	paint_panel.offset_bottom = -p_bottom_gap
-	paint_panel.offset_top = -p_bottom_gap - p_height
+	_align_panel_to_hud(paint_panel, p_width, p_height)
 	paint_panel.visible = ui_root.get_meta("paint_v", false)
 	
 	paint_btn.pressed.connect(func():
@@ -5883,21 +5851,7 @@ func _setup_npc_panel_node():
 	
 	# Compact dynamic positioning (Middle menu)
 	var s = _get_ui_scale()
-	npc_panel.anchor_left = 0.5
-	npc_panel.anchor_right = 0.5
-	npc_panel.anchor_top = 1.0
-	npc_panel.anchor_bottom = 1.0
-	
-	#Tamaño del panel NPC
-	var p_width = 530 * s
-	var p_height = 350 * s
-	var h = 340 # Match the Fixed Tall HUD height
-	var bottom_gap = h + (5 * s)
-	
-	npc_panel.offset_left = -p_width / 2
-	npc_panel.offset_right = p_width / 2
-	npc_panel.offset_bottom = -bottom_gap
-	npc_panel.offset_top = -bottom_gap - p_height
+	_align_panel_to_hud(npc_panel, 530 * s, 350 * s)
 	
 	# RESTORE STATE
 	npc_panel.visible = ui_root.get_meta("npc_v", false)
@@ -8187,17 +8141,7 @@ func _setup_music_ui(force_refresh: bool = false):
 		
 	music_panel.custom_minimum_size = Vector2(m_width, m_height)
 	
-	# Anchor to Bottom-Center
-	music_panel.anchor_left = 0.5; music_panel.anchor_right = 0.5
-	music_panel.anchor_top = 1.0; music_panel.anchor_bottom = 1.0
-	
-	var h = 340 # Match the Fixed Tall HUD height
-	var bottom_gap = h + (5 * s) # Consistent gap across scales
-	
-	music_panel.offset_left = -m_width / 2.0
-	music_panel.offset_right = m_width / 2.0
-	music_panel.offset_bottom = -bottom_gap
-	music_panel.offset_top = -bottom_gap - m_height
+	_align_panel_to_hud(music_panel, m_width, m_height)
 
 	# INTERNAL SCROLL (Crucial to prevent overlap if content is tall)
 	var scroll = ScrollContainer.new()
@@ -8485,19 +8429,9 @@ func _setup_save_ui():
 	if is_instance_valid(npc_panel): npc_panel.visible = false
 	_close_music_menu()
 
-	save_panel.anchor_left = 0.5; save_panel.anchor_right = 0.5
-	save_panel.anchor_top = 1.0; save_panel.anchor_bottom = 1.0
-	
 	var m_width = 530 * s
 	var m_height = min(650 * s, get_viewport_rect().size.y * 0.8)
-	var h = 340 # Match Fixed Tall HUD height
-	var bottom_gap = h + (5 * s)
-	
-	save_panel.custom_minimum_size = Vector2(m_width, m_height)
-	save_panel.offset_left = -m_width / 2.0
-	save_panel.offset_right = m_width / 2.0
-	save_panel.offset_bottom = -bottom_gap
-	save_panel.offset_top = -bottom_gap - m_height
+	_align_panel_to_hud(save_panel, m_width, m_height)
 	
 	var main_vbox = VBoxContainer.new()
 	main_vbox.add_theme_constant_override("separation", 20 * s)
