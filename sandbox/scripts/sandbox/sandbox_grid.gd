@@ -57,7 +57,7 @@ var is_paused: bool = false
 var is_mouse_over_ui: bool = false
 var brush_radius: int = 2 
 var current_language: String = "es" # Controlled by TranslationServer
-var ui_scale_level: int = 2 # Start at 1.2x by default
+var ui_scale_level: int = 4 # Fixed at 1.7x (index 4 of the old scales array)
 var sim_camera: Camera2D
 var view_zoom: float = 1.0
 var is_panning_mode: bool = false
@@ -109,13 +109,12 @@ func _clamp_camera_position():
 	sim_camera.position = new_pos
 
 func _get_ui_scale() -> float:
-	var scales = [1.0, 1.2, 1.3, 1.5, 1.7, 2.0]
-	var base_scale = scales[ui_scale_level]
+	var base_scale = 1.7
 	
 	if is_inside_tree():
 		var vp_size = get_viewport_rect().size
 		if vp_size.x > vp_size.y:
-			return base_scale * 1.30 #Multiplicador de escala en modo horizontal
+			return base_scale * 1.30 # Multiplicador de escala en modo horizontal (Total ~2.2x)
 			
 	return base_scale
 
@@ -414,7 +413,6 @@ const TAGS_INTERACTIVE = SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.
 
 func _save_tool_settings():
 	var settings = {
-		"ui_scale_level": ui_scale_level,
 		"brush_radius": brush_radius,
 		"paint_brush_radius_idx": paint_brush_radius_idx,
 		"game_volume": game_volume,
@@ -431,7 +429,6 @@ func _load_tool_settings():
 		if f:
 			var dict = JSON.parse_string(f.get_as_text())
 			if typeof(dict) == TYPE_DICTIONARY:
-				if dict.has("ui_scale_level"): ui_scale_level = dict["ui_scale_level"]
 				if dict.has("brush_radius"): brush_radius = dict["brush_radius"]
 				if dict.has("paint_brush_radius_idx"): paint_brush_radius_idx = dict["paint_brush_radius_idx"]
 				if dict.has("game_volume"): 
@@ -1744,21 +1741,6 @@ func _setup_tools_ui():
 			else: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
 	)
 
-	# UI SCALE ROW (Now 3rd)
-	var scale_labels = [
-		tr("size") + "1.0", 
-		tr("size") + "1.2", 
-		tr("size") + "1.3", 
-		tr("size") + "1.5", 
-		tr("size") + "1.7", 
-		tr("size") + "2.0"
-	]
-	create_row.call("ui_size", scale_labels, func(l): 
-		ui_scale_level = l
-		_save_tool_settings()
-		ui_root.set_meta("tools_v", true) # Safe persistence
-		call_deferred("_setup_main_ui_containers") # DEFERRED: Separation from click event
-	)
 
 	# BRUSH SIZE ROW (Now 3rd)
 	var brush_sizes = [0, 1, 2, 5, 7, 12]
@@ -5555,6 +5537,11 @@ func _setup_paint_ui():
 	
 	var p_width = 540 * s
 	var p_height = 680 * s
+	
+	# Limit height in landscape to avoid ad overlap
+	if is_inside_tree() and get_viewport_rect().size.x > get_viewport_rect().size.y:
+		p_height = 530 * s
+		
 	var h_hud = 340
 	var p_bottom_gap = h_hud + (5 * s)
 	
@@ -5578,7 +5565,9 @@ func _setup_paint_ui():
 			paint_panel.visible = !paint_panel.visible
 			is_paint_tool_active = paint_panel.visible
 			if paint_panel.visible:
-				_show_menu_reminder("paint", paint_panel.get_child(0), "TUTORIAL_STEP_6")
+				var inner_vbox = paint_panel.find_child("PaintVBox", true, false)
+				if inner_vbox:
+					_show_menu_reminder("paint", inner_vbox, "TUTORIAL_STEP_6")
 			if paint_panel.visible:
 				# Clear material selection
 				selected_material = -1
@@ -5591,9 +5580,20 @@ func _setup_paint_ui():
 	paint_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	paint_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 	
+	# SETUP SCROLL FOR PAINT PANEL (Prevention for small screens/landscape)
+	var scroll = ScrollContainer.new()
+	scroll.name = "PaintScroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.scroll_deadzone = 25
+	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+	paint_panel.add_child(scroll)
+	
 	var main_vbox = VBoxContainer.new()
+	main_vbox.name = "PaintVBox"
 	main_vbox.add_theme_constant_override("separation", 15 * s)
-	paint_panel.add_child(main_vbox)
+	main_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(main_vbox)
 	
 	# Title
 	var title = Label.new()
@@ -8153,6 +8153,11 @@ func _setup_music_ui(force_refresh: bool = false):
 	# ROBUST POSITIONING (Same as ToolsPanel: Centered above Bottom HUD)
 	var m_width = 530 * s
 	var m_height = 655 * s
+	
+	# Limit height in landscape to avoid ad overlap
+	if is_inside_tree() and get_viewport_rect().size.x > get_viewport_rect().size.y:
+		m_height = 530 * s
+		
 	music_panel.custom_minimum_size = Vector2(m_width, m_height)
 	
 	# Anchor to Bottom-Center
