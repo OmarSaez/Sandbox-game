@@ -1407,6 +1407,11 @@ func _setup_main_ui_containers():
 	cached_hud_height = float(h) # Cache for smart panel alignment
 	
 	# UPDATE PHYSICAL BOUNDARY
+	var is_landscape = get_viewport_rect().size.x > get_viewport_rect().size.y
+	var qa_width = 160 * s
+	if is_landscape:
+		qa_width = 320 * s # Double width in landscape for better ergonomics
+	
 	dynamic_grid_height = grid_height - ceil(float(h) / grid_scale)
 	
 	material_scroll.custom_minimum_size = Vector2(0, h - h_cat)
@@ -1418,7 +1423,7 @@ func _setup_main_ui_containers():
 	material_scroll.offset_top = -h + h_cat
 	material_scroll.offset_bottom = 0
 	material_scroll.offset_left = 0
-	material_scroll.offset_right = -165 * s # Leave space for narrower ActionButtons
+	material_scroll.offset_right = -qa_width - (5 * s) # Space for ActionButtons (dynamic)
 
 	# 3.5 FRESH CATEGORY BAR (Smart Horizontal Row)
 	# Removed ScrollContainer to allow auto-expansion/shrinking across full width
@@ -1485,7 +1490,7 @@ func _setup_main_ui_containers():
 	
 	action_vbox.offset_bottom = 0
 	action_vbox.offset_top = -h + h_cat
-	action_vbox.offset_left = -160 * s 
+	action_vbox.offset_left = -qa_width
 	action_vbox.offset_right = 0
 	
 	action_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1566,6 +1571,16 @@ func _create_vertical_category_btn(emoji: String, text_key: String) -> Button:
 	text_lbl.add_theme_font_size_override("font_size", 16 * s)
 	text_lbl.add_theme_font_override("font", _get_safe_font())
 	vbox.add_child(text_lbl)
+	
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.2, 0.2, 0.25, 1.0)
+	btn_style.border_width_left = 1; btn_style.border_width_top = 1
+	btn_style.border_width_right = 1; btn_style.border_width_bottom = 1
+	btn_style.border_color = Color(0.4, 0.4, 0.5)
+	btn.add_theme_stylebox_override("normal", btn_style)
+	btn.add_theme_stylebox_override("hover", btn_style)
+	btn.add_theme_stylebox_override("pressed", btn_style)
+	btn.set_meta("base_style", btn_style)
 	
 	return btn
 
@@ -2233,6 +2248,7 @@ func _setup_lab_ui():
 				else:
 					lab_tutorial_step = 0
 				_update_lab_tutorial_highlight()
+		_update_menu_highlights()
 	)
 	
 	lab_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
@@ -3355,6 +3371,7 @@ func _setup_disaster_ui():
 			disaster_panel.visible = !disaster_panel.visible
 			if disaster_panel.visible:
 				_show_menu_reminder("disaster", disaster_panel.get_child(0), "TUTORIAL_STEP_4")
+		_update_menu_highlights()
 	)
 	
 	disaster_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
@@ -3703,14 +3720,38 @@ func _update_menu_highlights():
 				btn.text = tr("selecting_npc") if is_selecting_npc_to_control else tr("active")
 			elif key == "control_disabled_btn":
 				is_active = not is_selecting_npc_to_control and not is_instance_valid(controlled_npc)
+			elif key == "tools_btn":
+				is_active = is_instance_valid(tools_panel) and tools_panel.visible
+			elif key == "lab_btn":
+				is_active = is_instance_valid(lab_panel) and lab_panel.visible
+			elif key == "disaster_btn":
+				is_active = is_instance_valid(disaster_panel) and disaster_panel.visible
+			elif key == "npc_btn":
+				is_active = is_instance_valid(npc_panel) and npc_panel.visible
+			elif key == "paint_btn":
+				is_active = is_instance_valid(paint_panel) and paint_panel.visible
+			elif key == "music_btn":
+				is_active = is_instance_valid(music_panel) and music_panel.visible
 			
 			# SMART STATE UPDATE: Avoid redundant style overrides
 			if btn.get_meta("is_currently_active", false) != is_active:
 				btn.set_meta("is_currently_active", is_active)
 				if is_active:
-					btn.add_theme_stylebox_override("normal", h_style)
-					btn.add_theme_stylebox_override("hover", h_style)
-					btn.add_theme_stylebox_override("pressed", h_style)
+					if btn.has_meta("base_style"):
+						# CATEGORY BUTTON: Apply white border to base style
+						var b_style = btn.get_meta("base_style")
+						var active_cat_style = b_style.duplicate()
+						active_cat_style.border_width_left = 2; active_cat_style.border_width_top = 2
+						active_cat_style.border_width_right = 2; active_cat_style.border_width_bottom = 2
+						active_cat_style.border_color = Color.WHITE
+						btn.add_theme_stylebox_override("normal", active_cat_style)
+						btn.add_theme_stylebox_override("hover", active_cat_style)
+						btn.add_theme_stylebox_override("pressed", active_cat_style)
+					else:
+						# Normal highlight
+						btn.add_theme_stylebox_override("normal", h_style)
+						btn.add_theme_stylebox_override("hover", h_style)
+						btn.add_theme_stylebox_override("pressed", h_style)
 					btn.add_theme_color_override("font_color", Color.WHITE)
 				else:
 					if btn.has_meta("base_style"):
@@ -3718,6 +3759,10 @@ func _update_menu_highlights():
 						btn.add_theme_stylebox_override("normal", b_style)
 						btn.add_theme_stylebox_override("hover", b_style)
 						btn.add_theme_stylebox_override("pressed", b_style)
+					else:
+						btn.remove_theme_stylebox_override("normal")
+						btn.remove_theme_stylebox_override("hover")
+						btn.remove_theme_stylebox_override("pressed")
 					btn.remove_theme_color_override("font_color")
 
 func _is_any_ui_blocking() -> bool:
@@ -5526,6 +5571,7 @@ func _setup_paint_ui():
 	paint_btn.add_theme_stylebox_override("normal", btn_style)
 	paint_btn.add_theme_stylebox_override("hover", btn_style)
 	paint_btn.add_theme_stylebox_override("pressed", btn_style)
+	paint_btn.set_meta("base_style", btn_style)
 	
 	ui_root = get_parent().get_node("UI")
 	paint_panel = PanelContainer.new()
@@ -6306,6 +6352,7 @@ func _setup_npc_ui():
 			npc_panel.visible = !npc_panel.visible
 			if npc_panel.visible:
 				_show_menu_reminder("npc", npc_panel.get_child(0), "TUTORIAL_STEP_5")
+		_update_menu_highlights()
 	)
 	
 	# Clear and Fill
@@ -8382,6 +8429,7 @@ func _setup_music_button():
 	btn.add_theme_stylebox_override("hover", m_style)
 	btn.add_theme_stylebox_override("pressed", m_style)
 	btn.add_theme_stylebox_override("focus", m_style)
+	btn.set_meta("base_style", m_style)
 	
 	btn.pressed.connect(func():
 		_play_action_sound("ui_click")
@@ -8395,6 +8443,7 @@ func _setup_music_button():
 		if is_instance_valid(save_panel): save_panel.queue_free()
 		
 		_setup_music_ui()
+		_update_menu_highlights()
 	)
 	
 	action_hbox.add_child(btn)
