@@ -1,6 +1,6 @@
-﻿id,es,en,it,fr,de,pt
-disasters,🌪️ Desastres,🌪️ Disasters,🌪️ Disastri,🌪️ Catastrophes,🌪️ Katastrophen,🌪️ Desastres
-tools,🛠️ Herramientas,🛠️ Tools,🛠️ Strumenti,🛠️ Outils,🛠️ Werkzeuge,🛠️ Ferramentas
+id,es,en,it,fr,de,pt
+disasters,Desastres,Disasters,Disastri,Catastrophes,Katastrophen,Desastres
+tools,Herramientas,Tools,Strumenti,Outils,Werkzeuge,Ferramentas
 lang,🌐 Idioma,🌐 Language,🌐 Lingua,🌐 Langue,🌐 Sprache,🌐 Idioma
 brush,🖌️ Tamaño del pincel,🖌️ Brush Size,🖌️ Dimensione pennello,🖌️ Taille du pinceau,🖌️ Pinselgröße,🖌️ Tamanho do pincel
 weather,⛈️ Clima,⛈️ Weather,⛈️ Meteo,⛈️ Météo,⛈️ Wetter,⛈️ Clima
@@ -36,7 +36,7 @@ volcan,Volcán,Volcano,Vulcano,Volcan,Vulkan,Vulcão
 reset,Limpar Todo,Clear All,Pulisci Tutto,Tout effacer,Alles löschen,Limpar Tudo
 pause,⏸️ Pausar,⏸️ Pause,⏸️ Pausa,⏸️ Pause,⏸️ Pause,⏸️ Pausar
 play,▶️ Reanudar,▶️ Resume,▶️ Ripristina,▶️ Reprendre,▶️ Weiter,▶️ Retomar
-npc,👥 NPCs,👥 NPCs,👥 NPCs,👥 NPCs,👥 NPCs,👥 NPCs
+npc,NPCs,NPCs,NPCs,NPCs,NPCs,NPCs
 warrior,⚔️ Guerrero,⚔️ Warrior,⚔️ Guerriero,⚔️ Guerrier,⚔️ Krieger,⚔️ Guerreiro
 archer,🏹 Arquero,🏹 Archer,🏹 Arciere,🏹 Archer,🏹 Bogenschütze,🏹 Arqueiro
 miner,⛏️ Minero,⛏️ Miner,⛏️ Minatore,⛏️ Mineur,⛏️ Minenarbeiter,⛏️ Minerador
@@ -98,7 +98,7 @@ npc_controller_title,🎮 Controlador de NPC,🎮 NPC Controller,🎮 Controller
 active,Activo,Active,Attivo,Actif,Aktiv,Ativo
 inactive,Desactivado,Disabled,Disattivato,Désactivé,Deaktiviert,Desativado
 menu,MENÚ,MENU,MENU,MENU,MENÜ,MENU
-music,🎹 Música,🎹 Music,🎹 Musica,🎹 Musique,🎹 Musik,🎹 Música
+music,Música,Music,Musica,Musique,Musik,Música
 piano1,Piano Clásico,Grand Piano,Pianoforte,Piano,Klavier,Piano
 piano2,Piano Suave,Soft Piano,Piano Dolce,Piano Doux,Softes Klavier,Piano Suave
 piano3,Sintetizador,Synth,Sintetizzatore,Synthé,Synthesizer,Sintetizador
@@ -129,7 +129,7 @@ drum_tom_high,Tom Agudo,High Tom,Tom Alto,Tom Haut,Hohe Tom,Tom Agudo
 drum_ride,Platillo Ride,Ride Cymbal,Piatto Ride,Cymbale Ride,Ride-Becken,Prato Ride
 drum_crash,Platillo Crash,Crash Cymbal,Piatto Crash,Cymbale Crash,Crash-Becken,Prato Crash
 drum_sticks,Palitos,Sticks,Bacchette,Baguettes,Sticks,Baquetas
-lab,🧪 Laboratorio,🧪 Laboratory,🧪 Laboratorio,🧪 Laboratoire,🧪 Labor,🧪 Laboratório
+lab,Laboratorio,Laboratory,Laboratorio,Laboratoire,Labor,Laboratório
 lab_overlay_title,🧪 Laboratorio de Creación,🧪 Creation Laboratory,🧪 Laboratorio di Creazione,🧪 Laboratoire de Création,🧪 Schöpfungslabor,🧪 Laboratório de Criação
 lab_overlay_desc,"Desbloquea la creación de elementos.\nAjusta el color, nombre, gravedad y reacciones.\n\nMira un anuncio para activarlo por 12 horas.","Unlock element creation.\nAdjust color, name, gravity, and reactions.\n\nWatch an ad to activate for 12 hours.","Sblocca la creazione di elementos.\nRegola colore, nome, gravità e reazioni.\n\nGuarda un annuncio per attivarlo per 12 ore.","Débloquez la création d'éléments.\nAjustez la couleur, le nom, la gravité et les réactions.\n\nRegardez une publicité pour l'activer pendant 12 heures.","Elementerstellung freischalten.\nPassen Sie Farbe, Name, Schwerkraft und Reaktionen an.\n\nWerbung ansehen, um sie 12 Stunden lang zu aktivieren.","Desbloqueie a criação de elementos.\nAjuste a cor, o nome, a gravidade e as reações.\n\nVeja um anúncio para ativá-lo por 12 horas."
 not_now,No por ahora,Not now,Non ora,Pas maintenant,Nicht jetzt,Não agora
@@ -188,7 +188,7 @@ STATE_GAS,Gas,Gas,Gas,Gaz,Gas,Gás
 STATE_LIQUID,Líquido,Liquid,Liquido,Liquide,Flüssigkeit,Líquido
 STATE_POWDER,Polvo,Powder,Polvere,Poudre,Pulver,Pó
 STATE_SOLID,Sólido,Solid,Solido,Solide,Festkörper,Sólido
-paint,🎨Pintura,🎨Paint,🎨Pittura,🎨Peinture,🎨Malen,🎨Pintura
+paint,Pintura,Paint,Pittura,Peinture,Malen,Pintura
 paint_elements,Pintar elementos,Paint elements,Dipingi elementi,Peindre éléments,Elemente bemalen,Pintar elementos
 paint_background,Pintar fondo,Paint background,Dipingi sfondo,Peindre le fond,Hintergrund bemalen,Pintar fundo
 ad_not_ready,Anuncio no disponible aún. Intenta en unos segundos.,Ad not available yet. Try in a few seconds.,Annuncio non ancora disponibile. Riprova tra qualche segundo.,Publicité non disponible pour le moment. Réessayez dans quelques secondes.,Anzeige noch nicht verfügbar. Versuchen Sie es in ein paar Sekunden erneut.,Anúncio ainda não disponível. Tente em alguns segundos.

@@ -1394,7 +1394,7 @@ func _setup_main_ui_containers():
 	# ALWAYS Refresh Scroll Height for the current scale
 	# NEW: LARGER TALL HUD with logical CAP (Increased to 352px for mobile clearance) 
 	var h = 362
-	var h_cat = 58 * s # Shrunk height for categories row
+	var h_cat = 64 * s # Vertical layout needs a bit more height than single line
 	
 	# UPDATE PHYSICAL BOUNDARY
 	dynamic_grid_height = grid_height - ceil(float(h) / grid_scale)
@@ -1519,15 +1519,39 @@ func _setup_main_ui_containers():
 	_update_menu_highlights()
 
 
+func _create_vertical_category_btn(emoji: String, text_key: String) -> Button:
+	var s = _get_ui_scale()
+	var btn = Button.new()
+	btn.custom_minimum_size = Vector2(120 * s, 54 * s)
+	
+	var vbox = VBoxContainer.new()
+	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", -4 * s)
+	btn.add_child(vbox)
+	
+	var emoji_lbl = Label.new()
+	emoji_lbl.text = emoji
+	emoji_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	emoji_lbl.add_theme_font_size_override("font_size", 20 * s)
+	vbox.add_child(emoji_lbl)
+	
+	var text_lbl = Label.new()
+	text_lbl.text = tr(text_key)
+	text_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	text_lbl.add_theme_font_size_override("font_size", 14 * s)
+	text_lbl.add_theme_font_override("font", _get_safe_font())
+	vbox.add_child(text_lbl)
+	
+	return btn
+
 func _setup_tools_ui():
 	var s = _get_ui_scale()
 	ui_root = get_parent().get_node("UI")
 	
-	var tools_btn = Button.new()
+	var tools_btn = _create_vertical_category_btn("🛠️", "tools")
 	tools_btn.name = "ToolsBtn"
-	tools_btn.custom_minimum_size = Vector2(140 * s, 48 * s)
-	tools_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
-	tools_btn.text = tr("tools")
 	ui_elements["tools_btn"] = tools_btn
 	tools_btn.add_theme_font_override("font", _get_safe_font())
 	tools_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
@@ -2014,11 +2038,8 @@ func _update_game_volume(value: float):
 
 func _setup_lab_ui():
 	var s = _get_ui_scale()
-	var lab_btn = Button.new()
+	var lab_btn = _create_vertical_category_btn("🧪", "lab")
 	lab_btn.name = "LabBtn"
-	lab_btn.custom_minimum_size = Vector2(140 * s, 48 * s)
-	lab_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
-	lab_btn.text = tr("lab")
 	ui_elements["lab_btn"] = lab_btn
 	lab_btn.add_theme_font_override("font", _get_safe_font())
 	lab_btn.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -3265,11 +3286,8 @@ func _update_lab_preview(idx: int):
 func _setup_disaster_ui():
 	_set_panning_mode(false)
 	var s = _get_ui_scale()
-	var disaster_btn = Button.new()
+	var disaster_btn = _create_vertical_category_btn("🌪️", "disasters")
 	disaster_btn.name = "DisasterBtn"
-	disaster_btn.custom_minimum_size = Vector2(140 * s, 48 * s)
-	disaster_btn.add_theme_font_size_override("font_size", action_btn_font_size * s) 
-	disaster_btn.text = tr("disasters")
 	ui_elements["disaster_btn"] = disaster_btn
 	disaster_btn.add_theme_font_override("font", _get_safe_font())
 	disaster_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
@@ -5510,11 +5528,8 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 func _setup_paint_ui():
 	_set_panning_mode(false)
 	var s = _get_ui_scale()
-	var paint_btn = Button.new()
+	var paint_btn = _create_vertical_category_btn("🎨", "paint")
 	paint_btn.name = "PaintBtn"
-	paint_btn.custom_minimum_size = Vector2(140 * s, 48 * s)
-	paint_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
-	paint_btn.text = tr("paint")
 	ui_elements["paint_btn"] = paint_btn
 	paint_btn.add_theme_font_override("font", _get_safe_font())
 	paint_btn.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -6302,11 +6317,8 @@ func _trigger_controlled_npc_action():
 func _setup_npc_ui():
 	_set_panning_mode(false)
 	var s = _get_ui_scale()
-	var npc_btn = Button.new()
+	var npc_btn = _create_vertical_category_btn("👥", "npc")
 	npc_btn.name = "NPCBtn"
-	npc_btn.custom_minimum_size = Vector2(140 * s, 48 * s)
-	npc_btn.add_theme_font_size_override("font_size", action_btn_font_size * s) 
-	npc_btn.text = tr("npc")
 	ui_elements["npc_btn"] = npc_btn
 	npc_btn.add_theme_font_override("font", _get_safe_font())
 	npc_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
@@ -8407,13 +8419,9 @@ func _close_music_menu():
 	
 func _setup_music_button():
 	var s = _get_ui_scale()
-	var btn = Button.new()
+	var btn = _create_vertical_category_btn("🎹", "music")
 	btn.name = "MusicBtn"
-	btn.text = tr("music")
-	btn.add_theme_font_override("font", _get_safe_font())
-	
-	btn.custom_minimum_size = Vector2(140 * s, 48 * s)
-	btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
+	ui_elements["music_btn"] = btn
 	
 	var m_style = StyleBoxFlat.new()
 	m_style.bg_color = Color("#9E1FFF").darkened(0.6) # Consistent dark purple base
