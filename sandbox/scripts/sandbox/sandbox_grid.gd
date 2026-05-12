@@ -110,7 +110,14 @@ func _clamp_camera_position():
 
 func _get_ui_scale() -> float:
 	var scales = [1.0, 1.2, 1.3, 1.5, 1.7, 2.0]
-	return scales[ui_scale_level]
+	var base_scale = scales[ui_scale_level]
+	
+	if is_inside_tree():
+		var vp_size = get_viewport_rect().size
+		if vp_size.x > vp_size.y:
+			return base_scale * 1.30 #Multiplicador de escala en modo horizontal
+			
+	return base_scale
 
 var ui_elements = {} # To track nodes for re-labeling
 var tools_panel: PanelContainer
@@ -405,6 +412,36 @@ const TAGS_INTERACTIVE = SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.
 	SandboxMaterial.Tags.REPEL | SandboxMaterial.Tags.VOLATILE | SandboxMaterial.Tags.FERTILE | \
 	SandboxMaterial.Tags.MUSIC
 
+func _save_tool_settings():
+	var settings = {
+		"ui_scale_level": ui_scale_level,
+		"brush_radius": brush_radius,
+		"paint_brush_radius_idx": paint_brush_radius_idx,
+		"game_volume": game_volume,
+		"is_muted": is_muted,
+		"current_language": current_language
+	}
+	var f = FileAccess.open("user://tools_settings.json", FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(settings))
+
+func _load_tool_settings():
+	if FileAccess.file_exists("user://tools_settings.json"):
+		var f = FileAccess.open("user://tools_settings.json", FileAccess.READ)
+		if f:
+			var dict = JSON.parse_string(f.get_as_text())
+			if typeof(dict) == TYPE_DICTIONARY:
+				if dict.has("ui_scale_level"): ui_scale_level = dict["ui_scale_level"]
+				if dict.has("brush_radius"): brush_radius = dict["brush_radius"]
+				if dict.has("paint_brush_radius_idx"): paint_brush_radius_idx = dict["paint_brush_radius_idx"]
+				if dict.has("game_volume"): 
+					game_volume = dict["game_volume"]
+					_update_game_volume(game_volume)
+				if dict.has("is_muted"): is_muted = dict["is_muted"]
+				if dict.has("current_language"): 
+					current_language = dict["current_language"]
+					TranslationServer.set_locale(current_language)
+
 func _ready():
 	Engine.max_fps = 60 # Cierra la puerta al stutter en pantallas 120Hz/LTPO
 	is_grid_ready = false # Safeguard during async _ready
@@ -457,6 +494,7 @@ func _ready():
 	else:
 		TranslationServer.set_locale("en") # Fallback
 	current_language = TranslationServer.get_locale()
+	_load_tool_settings()
 	# 1. OPTIMIZATION: Use clear color instead of a full ColorRect to avoid overdraw (30% less GPU load)
 	RenderingServer.set_default_clear_color(Color(0.08, 0.08, 0.1, 1.0))
 	
@@ -1684,6 +1722,7 @@ func _setup_tools_ui():
 	create_row.call("lang", lang_options, func(l):
 		current_language = lang_codes[l]
 		TranslationServer.set_locale(current_language)
+		_save_tool_settings()
 		# Rebuilding the UI is the most robust way to ensure all "premium" formatting
 		# and spacing is preserved identically across different languages.
 		call_deferred("_setup_main_ui_containers")
@@ -1716,6 +1755,7 @@ func _setup_tools_ui():
 	]
 	create_row.call("ui_size", scale_labels, func(l): 
 		ui_scale_level = l
+		_save_tool_settings()
 		ui_root.set_meta("tools_v", true) # Safe persistence
 		call_deferred("_setup_main_ui_containers") # DEFERRED: Separation from click event
 	)
@@ -1725,6 +1765,7 @@ func _setup_tools_ui():
 	var brush_labels = ["1", "3", "5", "10", "15", "25"]
 	create_row.call("brush", brush_labels, func(l): 
 		brush_radius = brush_sizes[l]
+		_save_tool_settings()
 		_update_menu_highlights()
 		_on_arcade_selection_made(true) # Real-time update for Arcade HUD (don't close menu)
 	)
@@ -1787,6 +1828,7 @@ func _setup_tools_ui():
 	create_action_btn.call("eraser_tool", Color("#ff6b6b"), func(): 
 		selected_material = 0
 		brush_radius = 3 
+		_save_tool_settings()
 		_update_material_highlights()
 		_update_menu_highlights()
 		_on_arcade_selection_made(true)
@@ -1934,6 +1976,7 @@ func _setup_tools_ui():
 			is_muted = true
 		_update_game_volume(val)
 		update_mute_icon.call(val)
+		_save_tool_settings()
 	)
 	
 	mute_btn.pressed.connect(func():
@@ -1949,6 +1992,7 @@ func _setup_tools_ui():
 		vol_slider.value = game_volume
 		_update_game_volume(game_volume)
 		update_mute_icon.call(game_volume)
+		_save_tool_settings()
 	)
 
 	_add_ui_header(v_box, "coming_soon")
@@ -5719,6 +5763,7 @@ func _setup_paint_ui():
 		paint_brush_radius_idx = int(v)
 		var _sizes = [1, 3, 5, 10, 15, 25]
 		slider_label.text = tr("brush") + ": " + str(_sizes[paint_brush_radius_idx])
+		_save_tool_settings()
 	)
 	slider_vbox.add_child(slider)
 	
