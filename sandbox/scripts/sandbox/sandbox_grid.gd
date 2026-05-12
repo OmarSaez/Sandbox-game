@@ -236,7 +236,7 @@ var ascent_player: AudioStreamPlayer   # Dedicated for rocket flying up
 var volcano_loop_player: AudioStreamPlayer # Dedicated for volcano bubbling loop
 var fire_loop_player: AudioStreamPlayer    # Dedicated for global crackling/burning
 const SFX_POOL_SIZE = 8
-var action_btn_font_size: int = 21 # Unified size for the 3 main ActionButtons tamaño botones
+var action_btn_font_size: int = 23 # Unified size for main ActionButtons (Increased for accessibility)
 
 # Mapeo: ID del Material -> Nombre del archivo (SONIDO EN BUCLE / LOOP) MP3
 # Estos sonidos se repiten mientras mantienes el pincel presionado.
@@ -997,6 +997,8 @@ func _show_main_tutorial_step():
 	]
 	
 	if main_tutorial_step >= steps.size():
+		if is_instance_valid(main_tutorial_overlay):
+			main_tutorial_overlay.queue_free()
 		return # Tutorial terminado
 		
 	var step_data = steps[main_tutorial_step]
@@ -1019,6 +1021,9 @@ func _show_main_tutorial_step():
 	if not is_instance_valid(target_node) or not target_node.is_inside_tree() or not target_node.is_visible_in_tree():
 		# Si un botón no existe o está oculto, saltamos al siguiente
 		main_tutorial_step += 1
+		# IMPORTANTE: No podemos dejar el overlay anterior si vamos a saltar diferido
+		# Pero _show_main_tutorial_step ya limpia al inicio, así que call_deferred es seguro.
+		# Sin embargo, si es el último paso, se quedaría colgado si no limpiamos arriba.
 		call_deferred("_show_main_tutorial_step")
 		return
 		
@@ -1113,6 +1118,7 @@ func _show_main_tutorial_step():
 	
 	ok_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
+		ok_btn.disabled = true # Evitar doble click
 		main_tutorial_step += 1
 		_show_main_tutorial_step()
 	)
@@ -1350,8 +1356,8 @@ func _setup_main_ui_containers():
 		material_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	# ALWAYS Refresh Scroll Height for the current scale
-	# NEW: LARGER TALL HUD with logical CAP (Fixed at 340px for stability) 
-	var h = 340
+	# NEW: LARGER TALL HUD with logical CAP (Increased to 352px for mobile clearance) 
+	var h = 352
 	
 	# UPDATE PHYSICAL BOUNDARY
 	dynamic_grid_height = grid_height - ceil(float(h) / grid_scale)
@@ -1365,7 +1371,7 @@ func _setup_main_ui_containers():
 	material_scroll.offset_top = -h
 	material_scroll.offset_bottom = 0
 	material_scroll.offset_left = 0
-	material_scroll.offset_right = -175 * s # Leave space for ActionButtons
+	material_scroll.offset_right = -215 * s # Leave space for wider ActionButtons
 
 	# PUSH GAME VIEW (TextureRect) ABOVE HUD
 	if not is_instance_valid(texture_rect): 
@@ -1421,12 +1427,12 @@ func _setup_main_ui_containers():
 	
 	action_scroll.offset_bottom = 0
 	action_scroll.offset_top = -h
-	action_scroll.offset_left = -170 * s 
+	action_scroll.offset_left = -210 * s 
 	action_scroll.offset_right = 0
 	
 	action_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_vbox.custom_minimum_size = Vector2(0, 336) # FILL TOTAL HUD HEIGHT (-4px margin)
+	action_vbox.custom_minimum_size = Vector2(0, 348) # FILL TOTAL HUD HEIGHT (-4px margin)
 	action_vbox.add_theme_constant_override("separation", 3 * s)
 	# Removed alignment center to allow expansion to fill
 	action_scroll.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE DRAG
@@ -1467,7 +1473,7 @@ func _setup_tools_ui():
 	
 	var tools_btn = Button.new()
 	tools_btn.name = "ToolsBtn"
-	tools_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
+	tools_btn.custom_minimum_size = Vector2(200 * s, 68 * s) # LARGER for touch accessibility
 	tools_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
 	tools_btn.text = tr("tools")
 	ui_elements["tools_btn"] = tools_btn
@@ -1966,7 +1972,7 @@ func _setup_lab_ui():
 	var s = _get_ui_scale()
 	var lab_btn = Button.new()
 	lab_btn.name = "LabBtn"
-	lab_btn.custom_minimum_size = Vector2(160 * s, 58 * s)
+	lab_btn.custom_minimum_size = Vector2(200 * s, 68 * s)
 	lab_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
 	lab_btn.text = tr("lab")
 	ui_elements["lab_btn"] = lab_btn
@@ -3221,7 +3227,7 @@ func _setup_disaster_ui():
 	var s = _get_ui_scale()
 	var disaster_btn = Button.new()
 	disaster_btn.name = "DisasterBtn"
-	disaster_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
+	disaster_btn.custom_minimum_size = Vector2(200 * s, 68 * s)
 	disaster_btn.add_theme_font_size_override("font_size", action_btn_font_size * s) 
 	disaster_btn.text = tr("disasters")
 	ui_elements["disaster_btn"] = disaster_btn
@@ -5466,7 +5472,7 @@ func _setup_paint_ui():
 	var s = _get_ui_scale()
 	var paint_btn = Button.new()
 	paint_btn.name = "PaintBtn"
-	paint_btn.custom_minimum_size = Vector2(160 * s, 58 * s)
+	paint_btn.custom_minimum_size = Vector2(200 * s, 68 * s)
 	paint_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
 	paint_btn.text = tr("paint")
 	ui_elements["paint_btn"] = paint_btn
@@ -6233,7 +6239,7 @@ func _setup_npc_ui():
 	var s = _get_ui_scale()
 	var npc_btn = Button.new()
 	npc_btn.name = "NPCBtn"
-	npc_btn.custom_minimum_size = Vector2(160 * s, 58 * s) # BEEFY 58px Height for "Better Body"
+	npc_btn.custom_minimum_size = Vector2(200 * s, 68 * s)
 	npc_btn.add_theme_font_size_override("font_size", action_btn_font_size * s) 
 	npc_btn.text = tr("npc")
 	ui_elements["npc_btn"] = npc_btn
@@ -8336,8 +8342,8 @@ func _setup_music_button():
 	btn.add_theme_font_override("font", _get_safe_font())
 	
 	# Calculation for 4 buttons height
-	var btn_h = (336.0 - (9.0 * s)) / 4.0
-	btn.custom_minimum_size = Vector2(160 * s, btn_h)
+	var btn_h = (348.0 - (9.0 * s)) / 4.0
+	btn.custom_minimum_size = Vector2(200 * s, btn_h)
 	btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
 	
 	var m_style = StyleBoxFlat.new()
