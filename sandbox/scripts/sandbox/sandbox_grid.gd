@@ -5540,7 +5540,7 @@ func _setup_paint_ui():
 	
 	# Limit height in landscape to avoid ad overlap
 	if is_inside_tree() and get_viewport_rect().size.x > get_viewport_rect().size.y:
-		p_height = 530 * s
+		p_height = 570 * s
 		
 	var h_hud = 340
 	var p_bottom_gap = h_hud + (5 * s)
@@ -8156,7 +8156,7 @@ func _setup_music_ui(force_refresh: bool = false):
 	
 	# Limit height in landscape to avoid ad overlap
 	if is_inside_tree() and get_viewport_rect().size.x > get_viewport_rect().size.y:
-		m_height = 530 * s
+		m_height = 570 * s
 		
 	music_panel.custom_minimum_size = Vector2(m_width, m_height)
 	
