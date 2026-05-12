@@ -1394,7 +1394,7 @@ func _setup_main_ui_containers():
 	# ALWAYS Refresh Scroll Height for the current scale
 	# NEW: LARGER TALL HUD with logical CAP (Increased to 352px for mobile clearance) 
 	var h = 362
-	var h_cat = 64 * s # Vertical layout needs a bit more height than single line
+	var h_cat = 60 * s # Slightly reduced height to fit 51px buttons
 	
 	# UPDATE PHYSICAL BOUNDARY
 	dynamic_grid_height = grid_height - ceil(float(h) / grid_scale)
@@ -1410,28 +1410,22 @@ func _setup_main_ui_containers():
 	material_scroll.offset_left = 0
 	material_scroll.offset_right = -165 * s # Leave space for narrower ActionButtons
 
-	# 3.5 FRESH CATEGORY SCROLL (Horizontal Row)
-	var category_scroll = ScrollContainer.new()
-	category_scroll.name = "CategoryScroll"
-	category_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	category_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	category_scroll.scroll_deadzone = 25
-	main_controls.add_child(category_scroll)
-	
-	category_scroll.anchor_top = 1.0
-	category_scroll.anchor_bottom = 1.0
-	category_scroll.anchor_left = 0
-	category_scroll.anchor_right = 1.0
-	category_scroll.offset_top = -h
-	category_scroll.offset_bottom = -h + h_cat
-	category_scroll.offset_left = 0
-	category_scroll.offset_right = 0 # Categories cover full width
-	
+	# 3.5 FRESH CATEGORY BAR (Smart Horizontal Row)
+	# Removed ScrollContainer to allow auto-expansion/shrinking across full width
 	action_hbox = HBoxContainer.new()
 	action_hbox.name = "ActionButtons"
-	action_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_hbox.add_theme_constant_override("separation", 8 * s)
-	category_scroll.add_child(action_hbox)
+	main_controls.add_child(action_hbox)
+	
+	action_hbox.anchor_top = 1.0
+	action_hbox.anchor_bottom = 1.0
+	action_hbox.anchor_left = 0
+	action_hbox.anchor_right = 1.0
+	action_hbox.offset_top = -h
+	action_hbox.offset_bottom = -h + h_cat
+	action_hbox.offset_left = 0
+	action_hbox.offset_right = 0
+	
+	action_hbox.add_theme_constant_override("separation", 2 * s)
 
 	# PUSH GAME VIEW (TextureRect) ABOVE HUD
 	if not is_instance_valid(texture_rect): 
@@ -1522,7 +1516,8 @@ func _setup_main_ui_containers():
 func _create_vertical_category_btn(emoji: String, text_key: String) -> Button:
 	var s = _get_ui_scale()
 	var btn = Button.new()
-	btn.custom_minimum_size = Vector2(120 * s, 54 * s)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size = Vector2(0, 51 * s)
 	
 	var vbox = VBoxContainer.new()
 	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
