@@ -3775,15 +3775,18 @@ func _is_any_ui_blocking() -> bool:
 	if is_mouse_over_ui: return true
 	if is_npc_mode_menu_open: return true # GLOBAL PROTECTOR: Block all workspace edits while arcade menu is up
 	
-	# 1. Check if we are over the bottom HUD using grid math
-	# BUT only block if we are NOT currently over a floating UI panel like Save/Tools
-	var m_local = get_local_mouse_position()
-	var gy = int(m_local.y / grid_scale)
-	if gy >= dynamic_grid_height and not is_mouse_over_ui:
+	# 1. SMART HUD BLOCKING (Precise Rect Check)
+	# Use Viewport coordinates (Pixels) for UI intersection to avoid zoom interference.
+	var m_pos = get_viewport().get_mouse_position()
+	
+	if is_instance_valid(material_scroll) and material_scroll.get_global_rect().has_point(m_pos):
+		return true
+	if is_instance_valid(action_hbox) and action_hbox.get_global_rect().has_point(m_pos):
+		return true
+	if is_instance_valid(action_vbox) and action_vbox.get_global_rect().has_point(m_pos):
 		return true
 
-	# 2. Check Floating Panels (Only if they are actually visible)
-	var m_pos = get_global_mouse_position()
+	# 2. Check Floating Panels (Global Rect Point)
 	
 	if tools_panel and tools_panel.visible and tools_panel.get_global_rect().has_point(m_pos):
 		return true
