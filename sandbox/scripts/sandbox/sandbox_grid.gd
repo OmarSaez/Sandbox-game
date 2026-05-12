@@ -242,7 +242,7 @@ var ascent_player: AudioStreamPlayer   # Dedicated for rocket flying up
 var volcano_loop_player: AudioStreamPlayer # Dedicated for volcano bubbling loop
 var fire_loop_player: AudioStreamPlayer    # Dedicated for global crackling/burning
 const SFX_POOL_SIZE = 8
-var action_btn_font_size: int = 23 # Unified size for main ActionButtons (Increased for accessibility)
+var action_btn_font_size: int = 16 # Unified size for main ActionButtons (Shrunk for space)
 
 # Mapeo: ID del Material -> Nombre del archivo (SONIDO EN BUCLE / LOOP) MP3
 # Estos sonidos se repiten mientras mantienes el pincel presionado.
@@ -1393,8 +1393,8 @@ func _setup_main_ui_containers():
 
 	# ALWAYS Refresh Scroll Height for the current scale
 	# NEW: LARGER TALL HUD with logical CAP (Increased to 352px for mobile clearance) 
-	var h = 352
-	var h_cat = 82 * s # Logical row height for categories
+	var h = 362
+	var h_cat = 58 * s # Shrunk height for categories row
 	
 	# UPDATE PHYSICAL BOUNDARY
 	dynamic_grid_height = grid_height - ceil(float(h) / grid_scale)
@@ -1408,7 +1408,7 @@ func _setup_main_ui_containers():
 	material_scroll.offset_top = -h + h_cat
 	material_scroll.offset_bottom = 0
 	material_scroll.offset_left = 0
-	material_scroll.offset_right = -215 * s # Leave space for wider ActionButtons
+	material_scroll.offset_right = -165 * s # Leave space for narrower ActionButtons
 
 	# 3.5 FRESH CATEGORY SCROLL (Horizontal Row)
 	var category_scroll = ScrollContainer.new()
@@ -1425,7 +1425,7 @@ func _setup_main_ui_containers():
 	category_scroll.offset_top = -h
 	category_scroll.offset_bottom = -h + h_cat
 	category_scroll.offset_left = 0
-	category_scroll.offset_right = 0
+	category_scroll.offset_right = 0 # Categories cover full width
 	
 	action_hbox = HBoxContainer.new()
 	action_hbox.name = "ActionButtons"
@@ -1481,7 +1481,7 @@ func _setup_main_ui_containers():
 	
 	action_vbox.offset_bottom = 0
 	action_vbox.offset_top = -h + h_cat
-	action_vbox.offset_left = -210 * s 
+	action_vbox.offset_left = -160 * s 
 	action_vbox.offset_right = 0
 	
 	action_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1525,7 +1525,7 @@ func _setup_tools_ui():
 	
 	var tools_btn = Button.new()
 	tools_btn.name = "ToolsBtn"
-	tools_btn.custom_minimum_size = Vector2(200 * s, 68 * s) # LARGER for touch accessibility
+	tools_btn.custom_minimum_size = Vector2(140 * s, 48 * s)
 	tools_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
 	tools_btn.text = tr("tools")
 	ui_elements["tools_btn"] = tools_btn
@@ -1540,7 +1540,7 @@ func _setup_tools_ui():
 	ui_elements["quick_actions_grid"] = qa_grid
 	qa_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	qa_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	qa_grid.custom_minimum_size = Vector2(160 * s, 0)
+	qa_grid.custom_minimum_size = Vector2(150 * s, 0)
 	qa_grid.add_theme_constant_override("h_separation", 0)
 	qa_grid.add_theme_constant_override("v_separation", 0)
 	
@@ -2016,7 +2016,7 @@ func _setup_lab_ui():
 	var s = _get_ui_scale()
 	var lab_btn = Button.new()
 	lab_btn.name = "LabBtn"
-	lab_btn.custom_minimum_size = Vector2(200 * s, 68 * s)
+	lab_btn.custom_minimum_size = Vector2(140 * s, 48 * s)
 	lab_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
 	lab_btn.text = tr("lab")
 	ui_elements["lab_btn"] = lab_btn
@@ -3267,7 +3267,7 @@ func _setup_disaster_ui():
 	var s = _get_ui_scale()
 	var disaster_btn = Button.new()
 	disaster_btn.name = "DisasterBtn"
-	disaster_btn.custom_minimum_size = Vector2(200 * s, 68 * s)
+	disaster_btn.custom_minimum_size = Vector2(140 * s, 48 * s)
 	disaster_btn.add_theme_font_size_override("font_size", action_btn_font_size * s) 
 	disaster_btn.text = tr("disasters")
 	ui_elements["disaster_btn"] = disaster_btn
@@ -5512,7 +5512,7 @@ func _setup_paint_ui():
 	var s = _get_ui_scale()
 	var paint_btn = Button.new()
 	paint_btn.name = "PaintBtn"
-	paint_btn.custom_minimum_size = Vector2(200 * s, 68 * s)
+	paint_btn.custom_minimum_size = Vector2(140 * s, 48 * s)
 	paint_btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
 	paint_btn.text = tr("paint")
 	ui_elements["paint_btn"] = paint_btn
@@ -6304,7 +6304,7 @@ func _setup_npc_ui():
 	var s = _get_ui_scale()
 	var npc_btn = Button.new()
 	npc_btn.name = "NPCBtn"
-	npc_btn.custom_minimum_size = Vector2(200 * s, 68 * s)
+	npc_btn.custom_minimum_size = Vector2(140 * s, 48 * s)
 	npc_btn.add_theme_font_size_override("font_size", action_btn_font_size * s) 
 	npc_btn.text = tr("npc")
 	ui_elements["npc_btn"] = npc_btn
@@ -8412,7 +8412,7 @@ func _setup_music_button():
 	btn.text = tr("music")
 	btn.add_theme_font_override("font", _get_safe_font())
 	
-	btn.custom_minimum_size = Vector2(200 * s, 68 * s)
+	btn.custom_minimum_size = Vector2(140 * s, 48 * s)
 	btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
 	
 	var m_style = StyleBoxFlat.new()
