@@ -4120,12 +4120,12 @@ func _draw():
 	if (music_menu_node and music_menu_node.visible) or _is_music_active():
 		var grid_col = Color("#4D4D4D") # Muy visible
 		var thickness = 2.0
-		# Vertical lines (Todo el mapa)
-		for x in range(0, grid_width + 1, 4):
-			draw_line(Vector2(x * g_scale, 0), Vector2(x * g_scale, grid_height * g_scale), grid_col, thickness)
-		# Horizontal lines (Todo el mapa)
-		for y in range(0, grid_height + 1, 4):
-			draw_line(Vector2(0, y * g_scale), Vector2(grid_width * g_scale, y * g_scale), grid_col, thickness)
+		# Vertical lines - Safety margin for virtual/scaled resolutions
+		for x in range(0, grid_width + 8, 4):
+			draw_line(Vector2(x * g_scale, 0), Vector2(x * g_scale, (grid_height + 8) * g_scale), grid_col, thickness)
+		# Horizontal lines - Safety margin for virtual/scaled resolutions
+		for y in range(0, grid_height + 8, 4):
+			draw_line(Vector2(0, y * g_scale), Vector2((grid_width + 8) * g_scale, y * g_scale), grid_col, thickness)
 			
 	# METRONOME VISUAL RHYTHM PULSE
 	if Engine.get_frames_drawn() % music_tempo_frames < 5:
