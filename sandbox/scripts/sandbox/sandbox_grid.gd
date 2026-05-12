@@ -1678,6 +1678,9 @@ func _setup_tools_ui():
 	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
 	tools_panel.add_theme_stylebox_override("panel", panel_style)
 	tools_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	
+	tools_btn.set_meta("base_style", btn_style)
+	
 	# RESTORE STATE
 	tools_panel.visible = ui_root.get_meta("tools_v", false)
 	
@@ -2077,6 +2080,7 @@ func _setup_lab_ui():
 	lab_btn.add_theme_stylebox_override("normal", btn_style)
 	lab_btn.add_theme_stylebox_override("hover", btn_style)
 	lab_btn.add_theme_stylebox_override("pressed", btn_style)
+	lab_btn.set_meta("base_style", btn_style)
 	
 	ui_root = get_parent().get_node("UI")
 	lab_panel = PanelContainer.new()
@@ -2223,32 +2227,19 @@ func _setup_lab_ui():
 	lab_overlay.visible = !is_lab_unlocked
 	
 	lab_btn.pressed.connect(func(): 
-		_play_action_sound("ui_click")
-		_close_music_menu()
-		is_paint_tool_active = false
-		if is_instance_valid(tools_panel): tools_panel.visible = false
-		if is_instance_valid(disaster_panel): disaster_panel.visible = false
-		if is_instance_valid(npc_panel): npc_panel.visible = false
-		if is_instance_valid(save_panel): save_panel.queue_free()
-		if is_instance_valid(paint_panel): paint_panel.visible = false
-		if is_instance_valid(lab_panel): 
-			lab_panel.visible = !lab_panel.visible
-			if lab_panel.visible:
-				_show_menu_reminder("lab", lab_panel.get_child(0), "TUTORIAL_STEP_3")
-				if not is_lab_tutorial_done and is_lab_unlocked:
-					lab_tutorial_step = 1
-					# TUTORIAL RESET: Start with no selection to force the user to pick
-					lab_custom_data[0]["grav"] = -1
-					lab_custom_data[0]["state"] = -1
-					_update_lab_inspector()
-					_update_lab_tutorial_highlight()
-			elif not lab_panel.visible:
-				if lab_tutorial_step == 5:
-					lab_tutorial_step = 6
-				else:
-					lab_tutorial_step = 0
+		_toggle_category_panel(lab_panel)
+		if is_instance_valid(lab_panel) and lab_panel.visible:
+			_show_menu_reminder("lab", lab_panel.get_child(0), "TUTORIAL_STEP_3")
+			if not is_lab_tutorial_done and is_lab_unlocked:
+				lab_tutorial_step = 1
+				lab_custom_data[0]["grav"] = -1
+				lab_custom_data[0]["state"] = -1
+				_update_lab_inspector()
 				_update_lab_tutorial_highlight()
-		_update_menu_highlights()
+		else:
+			if lab_tutorial_step == 5: lab_tutorial_step = 6
+			else: lab_tutorial_step = 0
+			_update_lab_tutorial_highlight()
 	)
 	
 	lab_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
@@ -2671,20 +2662,32 @@ func _setup_lab_ui():
 			flow.add_child(tb)
 			ui_elements["lab_tag_buttons"][tag] = tb
 
-	for i in range(3):
-		_update_lab_preview(i)
-	_update_lab_inspector()
+func _toggle_category_panel(target_panel: Control):
+	_play_action_sound("ui_click")
+	var was_visible = is_instance_valid(target_panel) and target_panel.visible
+	
+	# CLOSE ALL
+	if is_instance_valid(tools_panel): tools_panel.visible = false
+	if is_instance_valid(lab_panel): lab_panel.visible = false
+	if is_instance_valid(disaster_panel): disaster_panel.visible = false
+	if is_instance_valid(npc_panel): npc_panel.visible = false
+	if is_instance_valid(paint_panel): paint_panel.visible = false
+	if is_instance_valid(save_panel): save_panel.queue_free()
+	_close_music_menu()
+	is_paint_tool_active = false
+	
+	# TOGGLE TARGET
+	if is_instance_valid(target_panel):
+		target_panel.visible = !was_visible
+		if target_panel == paint_panel and target_panel.visible:
+			is_paint_tool_active = true
+	
+	_update_menu_highlights()
 
 func _on_tools_btn_pressed():
-	_play_action_sound("ui_click")
-	_close_music_menu() # Close music if opening tools
-	if is_instance_valid(lab_panel): lab_panel.visible = false
-	if is_instance_valid(paint_panel): paint_panel.visible = false
-	if is_instance_valid(tools_panel): 
-		tools_panel.visible = !tools_panel.visible
-		if tools_panel.visible:
-			_show_menu_reminder("tools", tools_panel.get_child(0), "TUTORIAL_STEP_2")
-	_update_menu_highlights()
+	_toggle_category_panel(tools_panel)
+	if is_instance_valid(tools_panel) and tools_panel.visible:
+		_show_menu_reminder("tools", tools_panel.get_child(0), "TUTORIAL_STEP_2")
 	
 	# Update tutorial highlight if we just opened/closed tools
 	if lab_tutorial_step == 6:
@@ -3315,6 +3318,7 @@ func _setup_disaster_ui():
 	disaster_btn.add_theme_stylebox_override("normal", btn_style)
 	disaster_btn.add_theme_stylebox_override("hover", btn_style)
 	disaster_btn.add_theme_stylebox_override("pressed", btn_style)
+	disaster_btn.set_meta("base_style", btn_style)
 	
 	# CREATE FRESH PANEL WITH STYLE
 	ui_root = get_parent().get_node("UI")
@@ -3359,19 +3363,9 @@ func _setup_disaster_ui():
 	main_vbox.add_child(scroll)
 	
 	disaster_btn.pressed.connect(func(): 
-		_play_action_sound("ui_click")
-		_close_music_menu() # Close music if opening disasters
-		is_paint_tool_active = false
-		if is_instance_valid(tools_panel): tools_panel.visible = false
-		if is_instance_valid(npc_panel): npc_panel.visible = false
-		if is_instance_valid(save_panel): save_panel.queue_free()
-		if is_instance_valid(lab_panel): lab_panel.visible = false
-		if is_instance_valid(paint_panel): paint_panel.visible = false
-		if is_instance_valid(disaster_panel): 
-			disaster_panel.visible = !disaster_panel.visible
-			if disaster_panel.visible:
-				_show_menu_reminder("disaster", disaster_panel.get_child(0), "TUTORIAL_STEP_4")
-		_update_menu_highlights()
+		_toggle_category_panel(disaster_panel)
+		if is_instance_valid(disaster_panel) and disaster_panel.visible:
+			_show_menu_reminder("disaster", disaster_panel.get_child(0), "TUTORIAL_STEP_4")
 	)
 	
 	disaster_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
@@ -3662,22 +3656,58 @@ func _update_material_highlights():
 func _update_menu_highlights():
 	var s = _get_ui_scale()
 	
-	# PRE-CACHE THE PREMIUM HIGHLIGHT STYLE
+	var cat_menus = {
+		"tools_btn": tools_panel,
+		"lab_btn": lab_panel,
+		"disaster_btn": disaster_panel,
+		"npc_btn": npc_panel,
+		"paint_btn": paint_panel,
+		"music_btn": music_panel
+	}
+	
+	# PRE-CACHE THE PREMIUM HIGHLIGHT STYLE (Blue background for panel buttons)
 	var h_style = StyleBoxFlat.new()
 	h_style.bg_color = Color(0.2, 0.5, 1.0) # Lab Blue
 	h_style.set_corner_radius_all(10 * s)
 	h_style.border_width_bottom = 4 * s
 	h_style.border_color = Color(0.5, 0.8, 1.0) # Light blue accent
 
-	# Update Tool/Disaster/NPC Highlights (Buttons)
 	for key in ui_elements:
 		if not key.contains("_btn"): continue
 		var node_data = ui_elements[key]
 		var btn = node_data[0] if node_data is Array else node_data
 		
 		if is_instance_valid(btn) and btn is Button:
-			# Logic for is_active remains the same...
 			var is_active = false
+			
+			# 1. CATEGORY BUTTONS LOGIC (White Border)
+			if key in cat_menus:
+				var panel = cat_menus[key]
+				if key == "music_btn":
+					is_active = is_instance_valid(music_panel) and music_panel.visible
+				else:
+					is_active = is_instance_valid(panel) and panel.visible
+				
+				if btn.get_meta("is_currently_active", false) != is_active:
+					btn.set_meta("is_currently_active", is_active)
+					if is_active:
+						var b_style = btn.get_meta("base_style") if btn.has_meta("base_style") else btn.get_theme_stylebox("normal")
+						var active_cat_style = b_style.duplicate()
+						active_cat_style.border_width_left = 2; active_cat_style.border_width_top = 2
+						active_cat_style.border_width_right = 2; active_cat_style.border_width_bottom = 2
+						active_cat_style.border_color = Color.WHITE
+						btn.add_theme_stylebox_override("normal", active_cat_style)
+						btn.add_theme_stylebox_override("hover", active_cat_style)
+						btn.add_theme_stylebox_override("pressed", active_cat_style)
+					else:
+						if btn.has_meta("base_style"):
+							var b_style = btn.get_meta("base_style")
+							btn.add_theme_stylebox_override("normal", b_style)
+							btn.add_theme_stylebox_override("hover", b_style)
+							btn.add_theme_stylebox_override("pressed", b_style)
+				continue
+
+			# 2. NORMAL PANEL BUTTONS LOGIC (Blue Background)
 			if key.begins_with("brush_btn_"):
 				var idx = int(key.split("_")[-1])
 				var brush_sizes = [0, 1, 2, 5, 7, 12]
@@ -3720,38 +3750,13 @@ func _update_menu_highlights():
 				btn.text = tr("selecting_npc") if is_selecting_npc_to_control else tr("active")
 			elif key == "control_disabled_btn":
 				is_active = not is_selecting_npc_to_control and not is_instance_valid(controlled_npc)
-			elif key == "tools_btn":
-				is_active = is_instance_valid(tools_panel) and tools_panel.visible
-			elif key == "lab_btn":
-				is_active = is_instance_valid(lab_panel) and lab_panel.visible
-			elif key == "disaster_btn":
-				is_active = is_instance_valid(disaster_panel) and disaster_panel.visible
-			elif key == "npc_btn":
-				is_active = is_instance_valid(npc_panel) and npc_panel.visible
-			elif key == "paint_btn":
-				is_active = is_instance_valid(paint_panel) and paint_panel.visible
-			elif key == "music_btn":
-				is_active = is_instance_valid(music_panel) and music_panel.visible
 			
-			# SMART STATE UPDATE: Avoid redundant style overrides
 			if btn.get_meta("is_currently_active", false) != is_active:
 				btn.set_meta("is_currently_active", is_active)
 				if is_active:
-					if btn.has_meta("base_style"):
-						# CATEGORY BUTTON: Apply white border to base style
-						var b_style = btn.get_meta("base_style")
-						var active_cat_style = b_style.duplicate()
-						active_cat_style.border_width_left = 2; active_cat_style.border_width_top = 2
-						active_cat_style.border_width_right = 2; active_cat_style.border_width_bottom = 2
-						active_cat_style.border_color = Color.WHITE
-						btn.add_theme_stylebox_override("normal", active_cat_style)
-						btn.add_theme_stylebox_override("hover", active_cat_style)
-						btn.add_theme_stylebox_override("pressed", active_cat_style)
-					else:
-						# Normal highlight
-						btn.add_theme_stylebox_override("normal", h_style)
-						btn.add_theme_stylebox_override("hover", h_style)
-						btn.add_theme_stylebox_override("pressed", h_style)
+					btn.add_theme_stylebox_override("normal", h_style)
+					btn.add_theme_stylebox_override("hover", h_style)
+					btn.add_theme_stylebox_override("pressed", h_style)
 					btn.add_theme_color_override("font_color", Color.WHITE)
 				else:
 					if btn.has_meta("base_style"):
@@ -5598,32 +5603,14 @@ func _setup_paint_ui():
 	paint_panel.visible = ui_root.get_meta("paint_v", false)
 	
 	paint_btn.pressed.connect(func():
-		_play_action_sound("ui_click")
-		_close_music_menu()
-		if is_instance_valid(tools_panel): tools_panel.visible = false
-		if is_instance_valid(disaster_panel): disaster_panel.visible = false
-		if is_instance_valid(npc_panel): npc_panel.visible = false
-		if is_instance_valid(lab_panel): lab_panel.visible = false
-		if is_instance_valid(save_panel): save_panel.queue_free()
-		
-		# EXCLUSIVE PAINT MODE
-		if is_instance_valid(paint_panel):
-			paint_panel.visible = !paint_panel.visible
-			# PRESERVE PAINT MODE: Don't set to false when closing manually, 
-			# unless we are switching to something else.
-			if paint_panel.visible:
-				is_paint_tool_active = true
-			if paint_panel.visible:
-				var inner_vbox = paint_panel.find_child("PaintVBox", true, false)
-				if inner_vbox:
-					_show_menu_reminder("paint", inner_vbox, "TUTORIAL_STEP_6")
-			if paint_panel.visible:
-				# Clear material selection
-				selected_material = -1
-				is_paint_tool_active = true
-				_update_material_highlights()
-				_update_menu_highlights()
-				_update_paint_recent_ui() # Ensure eraser is shown
+		_toggle_category_panel(paint_panel)
+		if is_instance_valid(paint_panel) and paint_panel.visible:
+			var inner_vbox = paint_panel.find_child("PaintVBox", true, false)
+			if inner_vbox:
+				_show_menu_reminder("paint", inner_vbox, "TUTORIAL_STEP_6")
+			selected_material = -1
+			_update_material_highlights()
+			_update_paint_recent_ui()
 	)
 	
 	paint_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
@@ -6335,24 +6322,13 @@ func _setup_npc_ui():
 	btn_style.border_color = Color(0.4, 0.5, 0.4)
 	btn_style.corner_radius_top_left = 0; btn_style.corner_radius_top_right = 0
 	btn_style.corner_radius_bottom_left = 0; btn_style.corner_radius_bottom_right = 0
-	npc_btn.add_theme_stylebox_override("normal", btn_style)
-	npc_btn.add_theme_stylebox_override("hover", btn_style)
 	npc_btn.add_theme_stylebox_override("pressed", btn_style)
+	npc_btn.set_meta("base_style", btn_style)
 	
 	npc_btn.pressed.connect(func():
-		_play_action_sound("ui_click")
-		_close_music_menu() # Close music if opening NPCs
-		is_paint_tool_active = false
-		if is_instance_valid(tools_panel): tools_panel.visible = false
-		if is_instance_valid(disaster_panel): disaster_panel.visible = false
-		if is_instance_valid(save_panel): save_panel.queue_free()
-		if is_instance_valid(lab_panel): lab_panel.visible = false
-		if is_instance_valid(paint_panel): paint_panel.visible = false
-		if is_instance_valid(npc_panel): 
-			npc_panel.visible = !npc_panel.visible
-			if npc_panel.visible:
-				_show_menu_reminder("npc", npc_panel.get_child(0), "TUTORIAL_STEP_5")
-		_update_menu_highlights()
+		_toggle_category_panel(npc_panel)
+		if is_instance_valid(npc_panel) and npc_panel.visible:
+			_show_menu_reminder("npc", npc_panel.get_child(0), "TUTORIAL_STEP_5")
 	)
 	
 	# Clear and Fill
