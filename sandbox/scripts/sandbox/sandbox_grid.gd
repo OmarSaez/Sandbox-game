@@ -1305,6 +1305,7 @@ func _setup_ui():
 	_setup_disaster_ui() # Disasters below
 
 var material_grid: HFlowContainer
+var action_hbox: HBoxContainer
 var action_vbox: VBoxContainer
 
 var material_scroll: ScrollContainer
@@ -1327,7 +1328,7 @@ func _setup_main_ui_containers():
 			child.queue_free()
 			
 	for child in main_controls.get_children():
-		if child.name == "ActionScroll" or child.name.begins_with("ActionButtons"):
+		if child.name == "ActionScroll" or child.name.begins_with("ActionButtons") or child.name == "QuickActionsZone" or child.name == "CategoryScroll":
 			child.get_parent().remove_child(child)
 			child.queue_free()
 			
@@ -1393,20 +1394,44 @@ func _setup_main_ui_containers():
 	# ALWAYS Refresh Scroll Height for the current scale
 	# NEW: LARGER TALL HUD with logical CAP (Increased to 352px for mobile clearance) 
 	var h = 352
+	var h_cat = 82 * s # Logical row height for categories
 	
 	# UPDATE PHYSICAL BOUNDARY
 	dynamic_grid_height = grid_height - ceil(float(h) / grid_scale)
 	
-	material_scroll.custom_minimum_size = Vector2(0, h)
+	material_scroll.custom_minimum_size = Vector2(0, h - h_cat)
 	material_scroll.anchor_top = 1.0
 	material_scroll.anchor_bottom = 1.0
 	material_scroll.anchor_left = 0
 	material_scroll.anchor_right = 1.0
 	
-	material_scroll.offset_top = -h
+	material_scroll.offset_top = -h + h_cat
 	material_scroll.offset_bottom = 0
 	material_scroll.offset_left = 0
 	material_scroll.offset_right = -215 * s # Leave space for wider ActionButtons
+
+	# 3.5 FRESH CATEGORY SCROLL (Horizontal Row)
+	var category_scroll = ScrollContainer.new()
+	category_scroll.name = "CategoryScroll"
+	category_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	category_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	category_scroll.scroll_deadzone = 25
+	main_controls.add_child(category_scroll)
+	
+	category_scroll.anchor_top = 1.0
+	category_scroll.anchor_bottom = 1.0
+	category_scroll.anchor_left = 0
+	category_scroll.anchor_right = 1.0
+	category_scroll.offset_top = -h
+	category_scroll.offset_bottom = -h + h_cat
+	category_scroll.offset_left = 0
+	category_scroll.offset_right = 0
+	
+	action_hbox = HBoxContainer.new()
+	action_hbox.name = "ActionButtons"
+	action_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	action_hbox.add_theme_constant_override("separation", 8 * s)
+	category_scroll.add_child(action_hbox)
 
 	# PUSH GAME VIEW (TextureRect) ABOVE HUD
 	if not is_instance_valid(texture_rect): 
@@ -1442,35 +1467,27 @@ func _setup_main_ui_containers():
 	footer_bg.offset_right = 0
 	footer_bg.mouse_filter = Control.MOUSE_FILTER_STOP # Block game world clicks
 
-	# 5. FRESH ACTION ZONE REBUILD (Fixes scroll bugs on scale change)
-	var action_scroll = ScrollContainer.new()
-	action_scroll.name = "ActionScroll"
-	action_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	action_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	action_scroll.scroll_deadzone = 25
-	main_controls.add_child(action_scroll)
-	
+	# 5. FRESH ACTION ZONE REBUILD
+	# Vertical Area on the right (Quick Actions)
 	action_vbox = VBoxContainer.new()
-	action_vbox.name = "ActionButtons"
-	action_scroll.add_child(action_vbox)
+	action_vbox.name = "QuickActionsZone"
+	main_controls.add_child(action_vbox)
 		
-	# PIN SCROLL to HUD Floor
-	action_scroll.anchor_bottom = 1.0
-	action_scroll.anchor_top = 1.0
-	action_scroll.anchor_left = 1.0
-	action_scroll.anchor_right = 1.0
+	# PIN to HUD Floor
+	action_vbox.anchor_bottom = 1.0
+	action_vbox.anchor_top = 1.0
+	action_vbox.anchor_left = 1.0
+	action_vbox.anchor_right = 1.0
 	
-	action_scroll.offset_bottom = 0
-	action_scroll.offset_top = -h
-	action_scroll.offset_left = -210 * s 
-	action_scroll.offset_right = 0
+	action_vbox.offset_bottom = 0
+	action_vbox.offset_top = -h + h_cat
+	action_vbox.offset_left = -210 * s 
+	action_vbox.offset_right = 0
 	
 	action_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_vbox.custom_minimum_size = Vector2(0, 348) # FILL TOTAL HUD HEIGHT (-4px margin)
-	action_vbox.add_theme_constant_override("separation", 3 * s)
-	# Removed alignment center to allow expansion to fill
-	action_scroll.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE DRAG
+	action_vbox.add_theme_constant_override("separation", 0)
+	action_vbox.mouse_filter = Control.MOUSE_FILTER_PASS
 	
 	# CLEAN MATERIAL GRID
 	if material_grid:
@@ -1522,9 +1539,10 @@ func _setup_tools_ui():
 	qa_grid.name = "QuickActionsGrid"
 	ui_elements["quick_actions_grid"] = qa_grid
 	qa_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	qa_grid.custom_minimum_size = Vector2(160 * s, 100 * s)
-	qa_grid.add_theme_constant_override("h_separation", 4 * s)
-	qa_grid.add_theme_constant_override("v_separation", 4 * s)
+	qa_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	qa_grid.custom_minimum_size = Vector2(160 * s, 0)
+	qa_grid.add_theme_constant_override("h_separation", 0)
+	qa_grid.add_theme_constant_override("v_separation", 0)
 	
 	var qa_style = StyleBoxFlat.new()
 	qa_style.bg_color = Color(0.15, 0.15, 0.2, 1.0)
@@ -1572,7 +1590,7 @@ func _setup_tools_ui():
 	action_vbox.add_child(qa_grid)
 	# -------------------------
 	
-	action_vbox.add_child(tools_btn)
+	action_hbox.add_child(tools_btn)
 	
 	var btn_style = StyleBoxFlat.new()
 	btn_style.bg_color = Color(0.2, 0.2, 0.25, 1.0) # SOLID dark blue-grey
@@ -2005,7 +2023,7 @@ func _setup_lab_ui():
 	lab_btn.add_theme_font_override("font", _get_safe_font())
 	lab_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	lab_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_vbox.add_child(lab_btn)
+	action_hbox.add_child(lab_btn)
 	
 	var btn_style = StyleBoxFlat.new()
 	btn_style.bg_color = Color(0.18, 0.15, 0.22, 1.0)
@@ -3256,7 +3274,7 @@ func _setup_disaster_ui():
 	disaster_btn.add_theme_font_override("font", _get_safe_font())
 	disaster_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	disaster_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_vbox.add_child(disaster_btn)
+	action_hbox.add_child(disaster_btn)
 	
 	var btn_style = StyleBoxFlat.new()
 	btn_style.bg_color = Color(0.25, 0.2, 0.2, 1.0) # SOLID dark red-grey
@@ -5501,7 +5519,7 @@ func _setup_paint_ui():
 	paint_btn.add_theme_font_override("font", _get_safe_font())
 	paint_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	paint_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_vbox.add_child(paint_btn)
+	action_hbox.add_child(paint_btn)
 	
 	var btn_style = StyleBoxFlat.new()
 	btn_style.bg_color = Color(0.2, 0.2, 0.15, 1.0) # Dark yellow-grey
@@ -6293,7 +6311,7 @@ func _setup_npc_ui():
 	npc_btn.add_theme_font_override("font", _get_safe_font())
 	npc_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 	npc_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_vbox.add_child(npc_btn)
+	action_hbox.add_child(npc_btn)
 	
 	var btn_style = StyleBoxFlat.new()
 	btn_style.bg_color = Color(0.2, 0.25, 0.2, 1.0) # SOLID dark green-grey
@@ -8394,9 +8412,7 @@ func _setup_music_button():
 	btn.text = tr("music")
 	btn.add_theme_font_override("font", _get_safe_font())
 	
-	# Calculation for 4 buttons height
-	var btn_h = (348.0 - (9.0 * s)) / 4.0
-	btn.custom_minimum_size = Vector2(200 * s, btn_h)
+	btn.custom_minimum_size = Vector2(200 * s, 68 * s)
 	btn.add_theme_font_size_override("font_size", action_btn_font_size * s)
 	
 	var m_style = StyleBoxFlat.new()
@@ -8426,7 +8442,7 @@ func _setup_music_button():
 		_setup_music_ui()
 	)
 	
-	action_vbox.add_child(btn)
+	action_hbox.add_child(btn)
 	ui_elements["music_btn"] = btn
 
 func _is_music_active() -> bool:
