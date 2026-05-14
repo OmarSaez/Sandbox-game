@@ -6860,15 +6860,22 @@ func _process_npcs(delta):
 					is_dancing = true
 				
 				if not is_dancing:
-					# --- CONTAGION: If a nearby ally is dancing, we might join! ---
-					if can_think and not npc.get("recently_celebrated", false):
+					# --- CONTAGION CHECK (Victory or Panic) ---
+					if can_think:
 						var nearby = _get_nearby_npcs(np.x, np.y, 80.0)
 						for other in nearby:
-							if other.team == npc.team and other != npc and other.get("dance_timer", 0.0) > 1.0:
-								if _get_lut_rand() < 0.35 and npc.get("contagion_wait_timer", 0.0) <= 0:
-									# Delay the start to create an organic wave effect
-									npc["contagion_wait_timer"] = _get_lut_rand_range(0.4, 2.0)
-									break
+							if other.team == npc.team and other != npc:
+								# 1. Join celebration?
+								if other.get("dance_timer", 0.0) > 1.0 and not npc.get("recently_celebrated", false):
+									if _get_lut_rand() < 0.35 and npc.get("contagion_wait_timer", 0.0) <= 0:
+										npc["contagion_wait_timer"] = _get_lut_rand_range(0.4, 2.0)
+										break
+								# 2. Join panic? (If we see an ally fleeing with a scare emoji)
+								elif other.get("is_fleeing", false) and other.current_emoji in ["😱", "😰", "🏃", "😨"]:
+									if not npc.get("is_fleeing", false) and _get_lut_rand() < npc.get("cowardice", 0.3):
+										npc["is_fleeing"] = true
+										_set_npc_emoji(npc, other.current_emoji, 2.0)
+										break
 				
 				if not is_dancing:
 					if npc.type == "medic":
@@ -6949,20 +6956,33 @@ func _process_npcs(delta):
 									_set_npc_emoji(npc, "😎", 5.0)
 							npc["has_spotted_enemy"] = false
 					
-					# --- PANIC NEAR DISASTERS ---
-					var is_near_tornado = false
-					if tornado_intensity > 0:
-						var d_to_t = abs(npc.pos.x - tornado_x)
-						if d_to_t < 150:
-							is_near_tornado = true
-							npc.dir = 1 if npc.pos.x > tornado_x else -1
-							npc["is_fleeing"] = true
-							if _get_lut_rand() < 0.05: _set_npc_emoji(npc, "😱", 0.5)
+					# --- EMERGENT DISASTER PANIC ---
+					var disaster_near = false
+					var run_from_x = -1.0
+					if tornado_intensity > 0 and abs(npc.pos.x - tornado_x) < 180:
+						disaster_near = true; run_from_x = tornado_x
+					if tsunami_intensity > 0 and abs(npc.pos.x - tsunami_wave_x) < 220:
+						disaster_near = true; run_from_x = tsunami_wave_x
+					if earthquake_intensity > 1.2:
+						disaster_near = true
+					
+					if disaster_near:
+						if not npc.get("is_fleeing", false):
+							var panic_chance = npc.get("cowardice", 0.3) * 1.8
+							if _get_lut_rand() < panic_chance:
+								npc["is_fleeing"] = true
+								var panic_emoji = ["😱", "😰", "🏃", "😨"][randi() % 4]
+								_set_npc_emoji(npc, panic_emoji, 2.5)
+						
+						if npc.get("is_fleeing", false):
+							if run_from_x != -1.0:
+								npc.dir = 1 if npc.pos.x > run_from_x else -1
+							else:
+								if _get_lut_rand() < 0.02: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
 					
 					# Reset panic state if the danger is gone
-					if not is_near_tornado and npc.get("is_fleeing", false):
-						# Only reset if NOT morale broken (they are not crying because of damage)
-						if not npc.get("morale_broken", false):
+					if not disaster_near and npc.get("is_fleeing", false):
+						if not npc.get("morale_broken", false) and not npc.current_emoji in ["😱", "😰", "🏃", "😨"]:
 							npc["is_fleeing"] = false
 					
 					var critical_hp = npc.get("max_hp", 100.0) * 0.3
