@@ -4000,6 +4000,9 @@ func _process(delta):
 				var nearby = _get_nearby_npcs(gx, gy, 12.0)
 				if nearby.size() > 0:
 					controlled_npc = nearby[0]
+					# Boost HP for player control (Hero unit)
+					controlled_npc.hp = max(controlled_npc.hp, 160.0)
+					controlled_npc["max_hp"] = max(controlled_npc.get("max_hp", 100.0), 160.0)
 					controlled_npc.dir = 0 # Detener movimiento autónomo
 					controlled_npc["is_fleeing"] = false # Quitar miedo si lo tenía
 					is_selecting_npc_to_control = false
@@ -7045,7 +7048,9 @@ func _process_npcs(delta):
 			else: # EN EL SUELO
 				if npc.vy > 0: 
 					if npc.vy >= 7.0 or npc.fall_depth >= 15: 
-						npc.hp -= max(5.0, (npc.fall_depth - 10) * 1.5); npc.hit_flash = 5
+						var fall_dmg = max(5.0, (npc.fall_depth - 10) * 1.5)
+						if npc == controlled_npc: fall_dmg *= 0.5 # 50% fall damage reduction
+						npc.hp -= fall_dmg; npc.hit_flash = 5
 					npc.vy = 0.0; npc.fall_depth = 0
 				npc.vx *= 0.6 # Fricción de suelo
 			
@@ -7070,7 +7075,9 @@ func _process_npcs(delta):
 				np.y += 1; npc.fall_depth += 1
 			elif npc.type != "miner":
 				if npc.fall_depth >= 12: 
-					npc.hp -= (npc.fall_depth - 10) * 1.5; npc.hit_flash = 5
+					var fall_dmg = (npc.fall_depth - 10) * 1.5
+					if npc == controlled_npc: fall_dmg *= 0.5
+					npc.hp -= fall_dmg; npc.hit_flash = 5
 				if npc.fall_depth >= 3: npc.dir = -npc.dir
 				npc.fall_depth = 0
 				
@@ -7283,7 +7290,9 @@ func _find_closest_enemy(me, radar_range):
 func _attack_npc(attacker, victim):
 	if attacker.hp <= 0 or victim.hp <= 0: return
 	if !attacker.get("morale_broken", false): _set_npc_emoji(attacker, "⚔️", 0.5)
-	victim.hp -= (15.0 * attacker.get("atk_dmg", 1.0)); victim.hit_flash = 5; victim.hit_type = "normal"
+	var dmg = 15.0 * attacker.get("atk_dmg", 1.0)
+	if victim == controlled_npc: dmg *= 0.6 # 40% reduction for the player's controlled NPC
+	victim.hp -= dmg; victim.hit_flash = 5; victim.hit_type = "normal"
 	if attacker.get("is_fire_variant", false):
 		var fx = victim.pos.x + _get_lut_rand_range(0, 1); var fy = victim.pos.y + _get_lut_rand_range(2, 4)
 		if fx >= 0 and fx < grid_width and fy >= 0 and fy < dynamic_grid_height:
@@ -7309,16 +7318,17 @@ func _check_npc_environment_damage(npc) -> bool:
 		var cell_idx = pt.y * grid_width + pt.x
 		var tid = cells[cell_idx] & 0xFFFF
 		var t_tags = material_tags_raw[tid]
+		var dmg_mult = 0.5 if npc == controlled_npc else 1.0
 		if (t_tags & SandboxMaterial.Tags.ACID):
-			npc.hp -= 3.5; npc.hit_flash = 5; npc.hit_type = "acid"; took_damage = true
+			npc.hp -= 3.5 * dmg_mult; npc.hit_flash = 5; npc.hit_type = "acid"; took_damage = true
 			if _get_lut_rand() < 0.4: _add_spark(float(pt.x)+_get_lut_rand_range(-2,2),float(pt.y),_get_lut_rand_range(-10,10),_get_lut_rand_range(-40,-20),Color("#39FF14"),0.6)
 		elif (t_tags & SandboxMaterial.Tags.INCENDIARY):
-			npc.hp -= 1.2; took_damage = true; if npc.hit_type != "acid": npc.hit_flash = 5; npc.hit_type = "fire"
+			npc.hp -= 1.2 * dmg_mult; took_damage = true; if npc.hit_type != "acid": npc.hit_flash = 5; npc.hit_type = "fire"
 			if _get_lut_rand() < 0.3: _add_spark(float(pt.x),float(pt.y),_get_lut_rand_range(-15,15),_get_lut_rand_range(-35,-15),Color("#FF8200"),0.5)
 		
 		# Electricity Damage
 		if charge_array[cell_idx] > 50:
-			npc.hp -= 2.5; took_damage = true; npc.hit_flash = 5; npc.hit_type = "electric"
+			npc.hp -= 2.5 * dmg_mult; took_damage = true; npc.hit_flash = 5; npc.hit_type = "electric"
 			if _get_lut_rand() < 0.4: _add_spark(float(pt.x),float(pt.y),_get_lut_rand_range(-20,20),_get_lut_rand_range(-40,-10),Color.CYAN,0.4)
 	var air_found = false
 	for oy in range(-1, 6):
@@ -7332,7 +7342,9 @@ func _check_npc_environment_damage(npc) -> bool:
 			var nid = cells[row_offset + tx] & 0xFFFF
 			if nid == 0 or nid == 15 or nid == 17: air_found = true; break
 		if air_found: break
-	if !air_found: npc.hp -= 3.0; npc.hit_flash = 4; took_damage = true
+	if !air_found: 
+		var suff_dmg = 3.0; if npc == controlled_npc: suff_dmg = 1.0
+		npc.hp -= suff_dmg; npc.hit_flash = 4; took_damage = true
 	if took_damage: _play_action_sound("damage_npc", 0.4)
 	return took_damage
 
@@ -7601,7 +7613,10 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 	for npc in nearby:
 		var dist = Vector2(npc.pos).distance_to(Vector2(center))
 		if dist < radius:
-			var ratio = 1.0 - (dist / radius); npc.hp -= ratio * 120.0; npc.hit_flash = 12; npc.hit_type = "explosive"
+			var ratio = 1.0 - (dist / radius)
+			var exp_dmg = ratio * 120.0
+			if npc == controlled_npc: exp_dmg *= 0.5 # 50% explosion reduction
+			npc.hp -= exp_dmg; npc.hit_flash = 12; npc.hit_type = "explosive"
 			var blast_dir = (Vector2(npc.pos) - Vector2(center)).normalized()
 			if blast_dir.length() < 0.1: blast_dir = Vector2.UP
 			npc.vx = blast_dir.x * ratio * 15.0; npc.vy = blast_dir.y * ratio * 15.0 - 6.0
