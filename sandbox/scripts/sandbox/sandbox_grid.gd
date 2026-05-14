@@ -224,6 +224,7 @@ func _get_safe_font() -> Font:
 var touch_started_on_ui: bool = false # NEW: Track if the touch session began over UI
 var sim_mutex := Mutex.new() # Protects global arrays from parallel threads
 var active_npcs = [] # Array of dicts: { "pos": Vector2i, "team": int, "dir": int, "type": string, "hp": float, etc }
+var _world_peace_timer = 0.0 # Track global inactivity for sleeping NPCs
 const SPATIAL_CELL_SIZE = 32
 var npc_spatial_grid = [] 
 var spatial_grid_w = 0
@@ -3972,6 +3973,8 @@ func _process(delta):
 	# Handle input with robust UI blocking
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		var is_over_ui = _is_any_ui_blocking()
+		if not is_over_ui and not is_panning_mode:
+			_world_peace_timer = 0.0 # Wake up NPCs only when player interacts with the world
 		
 		# --- PANNING MODE LOGIC ---
 		if is_panning_mode and not touch_started_on_ui and not is_over_ui:
@@ -4210,7 +4213,9 @@ func _draw():
 	for npc in active_npcs:
 		if npc.get("current_emoji", "") != "":
 			var world_pos = Vector2(float(npc.pos.x) + 1.0, float(npc.pos.y)) * g_scale
-			draw_string(f, world_pos + Vector2(-40.0 * s, -14.0 * s), npc.current_emoji, HORIZONTAL_ALIGNMENT_CENTER, 80.0 * s, 20 * s)
+			var offset = Vector2(-40.0 * s, -14.0 * s)
+			if npc.get("is_lying", false): offset = Vector2(-40.0 * s, 8.0 * s) # Lower emoji for lying NPCs
+			draw_string(f, world_pos + offset, npc.current_emoji, HORIZONTAL_ALIGNMENT_CENTER, 80.0 * s, 20 * s)
 
 func _process_tsunami(delta):
 	if tsunami_timer <= 0:
@@ -6670,13 +6675,16 @@ func _spawn_explosion_npc(x, y, team = 0):
 
 func _draw_npc_pixels(npc, override_mat = -1):
 	var is_dead = npc.hp <= 0; var is_flashing = npc.hit_flash > 0
+	var is_lying = npc.get("is_lying", false)
 	
 	if override_mat == 0:
 		# DUAL-ZONE CLEANUP: Wipe both current physics pos AND the last jittered render pos
+		var was_lying = npc.get("last_render_lying", false)
 		var zones = [npc.pos, Vector2i(int(npc.get("last_render_x", npc.pos.x)), int(npc.get("last_render_y", npc.pos.y)))]
 		for p in zones:
+			var xr = range(-5, 6) if was_lying else range(-1, 3)
 			for oy in range(-1, 6):
-				for ox in range(-1, 3):
+				for ox in xr:
 					var tx = p.x + ox; var ty = p.y + oy
 					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 						var tid = cells[ty * grid_width + tx] & 0xFFFF
@@ -6691,9 +6699,10 @@ func _draw_npc_pixels(npc, override_mat = -1):
 		sy += 2; sx += 1 if (npc.dir > 0) else -1
 		if (npc.hit_flash % 2 == 0): override_mat = 0
 		
-	# Store this exact render position for the next erasure pass
+	# Store this exact render position and state for the next erasure pass
 	npc["last_render_x"] = sx
 	npc["last_render_y"] = sy
+	npc["last_render_lying"] = is_lying
 		
 	# 1. Definir materiales por Clase (Dedicados para personalización)
 	var m_head = 1001; var m_skin = 1003; var m_torso = 1002; var m_shoes = 1008
@@ -6717,33 +6726,46 @@ func _draw_npc_pixels(npc, override_mat = -1):
 		elif npc.hit_type == "electric": f_mat = 1035
 		m_head = f_mat; m_skin = f_mat; m_torso = f_mat; m_shoes = f_mat; team_mat = f_mat
 		
-	# 3. SET PIXELS (2x5 Grid)
+	# 3. SET PIXELS (2x5 Grid or 5x2 Lying down)
 	var face_dir = npc.get("dir", 1)
-	if face_dir == 0:
-		face_dir = npc.get("last_dir", 1)
-	else:
-		npc["last_dir"] = face_dir
+	if face_dir == 0: face_dir = npc.get("last_dir", 1)
+	else: npc["last_dir"] = face_dir
 		
-	var px0 = sx if face_dir > 0 else sx + 1
-	var px1 = sx + 1 if face_dir > 0 else sx
-
-	# Fila 0: Cabeza x2 (Casco cubriendo la parte superior)
-	_set_cell(px0, sy, m_head); _set_cell(px1, sy, m_head)
-	# Fila 1: Cabeza + Piel
-	_set_cell(px0, sy+1, m_head); _set_cell(px1, sy+1, m_skin)
-	# Fila 2 & 3: Torso (Mezcla de Color de Clase y Color de Equipo)
-	if npc.type == "medic" and override_mat == -1 and !is_flashing:
-		_set_cell(px0, sy+2, 1041); _set_cell(px1, sy+2, 1041)       # Torso arriba: Franja Médica (ID 1041)
-		_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, team_mat) # Torso abajo: Color Equipo
-	elif npc.type == "archer" and override_mat == -1 and !is_flashing:
-		_set_cell(px0, sy+2, team_mat); _set_cell(px1, sy+2, team_mat) # Torso arriba: Equipo Completo
-		_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, team_mat) # Torso abajo: Equipo Completo
+	if is_lying:
+		# --- LYING DOWN (Horizontal 5x2 - Face Up) ---
+		var lx = sx; var ly = sy + 3
+		if face_dir > 0:
+			# Fila Superior (Cara y pecho mirando arriba)
+			_set_cell(lx, ly, m_head); _set_cell(lx+1, ly, m_skin)
+			_set_cell(lx+2, ly, team_mat); _set_cell(lx+3, ly, m_torso)
+			_set_cell(lx+4, ly, m_shoes)
+			# Fila Inferior (Base del cuerpo)
+			_set_cell(lx, ly+1, m_head); _set_cell(lx+1, ly+1, m_head)
+			_set_cell(lx+2, ly+1, m_torso); _set_cell(lx+3, ly+1, team_mat)
+			_set_cell(lx+4, ly+1, m_shoes)
+		else:
+			# Espejo
+			_set_cell(lx, ly, m_shoes); _set_cell(lx, ly+1, m_shoes)
+			_set_cell(lx-1, ly, team_mat); _set_cell(lx-2, ly, m_torso)
+			_set_cell(lx-1, ly+1, m_torso); _set_cell(lx-2, ly+1, team_mat)
+			_set_cell(lx-3, ly, m_skin); _set_cell(lx-4, ly, m_head)
+			_set_cell(lx-3, ly+1, m_head); _set_cell(lx-4, ly+1, m_head)
 	else:
-		_set_cell(px0, sy+2, m_torso); _set_cell(px1, sy+2, team_mat) # Mezcla clase/equipo
-		_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, m_torso)
-	
-	# Fila 4: Zapatos (Restaurados para TODOS los tipos)
-	_set_cell(px0, sy+4, m_shoes); _set_cell(px1, sy+4, m_shoes)
+		# --- STANDING (Vertical 2x5) ---
+		var px0 = sx if face_dir > 0 else sx + 1
+		var px1 = sx + 1 if face_dir > 0 else sx
+		_set_cell(px0, sy, m_head); _set_cell(px1, sy, m_head)
+		_set_cell(px0, sy+1, m_head); _set_cell(px1, sy+1, m_skin)
+		if npc.type == "medic" and override_mat == -1 and !is_flashing:
+			_set_cell(px0, sy+2, 1041); _set_cell(px1, sy+2, 1041)
+			_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, team_mat)
+		elif npc.type == "archer" and override_mat == -1 and !is_flashing:
+			_set_cell(px0, sy+2, team_mat); _set_cell(px1, sy+2, team_mat)
+			_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, team_mat)
+		else:
+			_set_cell(px0, sy+2, m_torso); _set_cell(px1, sy+2, team_mat)
+			_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, m_torso)
+		_set_cell(px0, sy+4, m_shoes); _set_cell(px1, sy+4, m_shoes)
 
 func _update_npc_spatial_hash():
 	for cell in npc_spatial_grid:
@@ -6819,7 +6841,10 @@ func _process_npcs(delta):
 			
 			if npc.get("mine_state", "") == "saboteur": emotes.append("⭐"); emotes.append("😄")
 			
-			if !npc.get("has_spotted_enemy", false) and !is_losing:
+			if npc.get("is_lying", false):
+				if npc.hp < (npc.max_hp * 0.3): emotes.append("🤕")
+				else: emotes.append("😴")
+			elif !npc.get("has_spotted_enemy", false) and !is_losing:
 				emotes.append("👀")
 				if is_winning: emotes.append("😎")
 		
@@ -6852,11 +6877,28 @@ func _process_npcs(delta):
 			
 			# OPTIMIZATION: Staggered AI Logic (Now using dedicated AI tick counter)
 			var can_think = (npc.id % 6 == _ai_tick_count % 6)
+			if can_think:
+				_world_peace_timer += 0.3 # Approx 0.05 * 6
 			
 			# AUTONOMOUS AI LOGIC (Skip if controlled)
 			if npc != controlled_npc:
-				# --- SOCIAL STATE HANDLER ---
 				var is_socializing = false
+				
+				# --- DOWNED / SLEEPING STATE HANDLER ---
+				var is_lying = npc.get("is_lying", false)
+				var lying_t = npc.get("lying_timer", 0.0)
+				if is_lying:
+					# Wake up if peace is broken! (combat, disaster, or user interaction)
+					if _world_peace_timer == 0: 
+						npc["lying_timer"] = 0; npc["is_lying"] = false; npc.current_emoji = ""
+					else:
+						npc["lying_timer"] = lying_t - 0.05
+						npc.dir = 0
+						if npc["lying_timer"] <= 0:
+							npc["is_lying"] = false; npc["social_cooldown"] = 5.0
+						is_socializing = true # Block other actions
+				
+				# --- SOCIAL STATE HANDLER ---
 				var s_timer = npc.get("social_timer", 0.0)
 				if s_timer > 0:
 					npc["social_timer"] = s_timer - 0.05
@@ -7041,6 +7083,8 @@ func _process_npcs(delta):
 									if r < 0.35: npc.dir = 1
 									elif r < 0.7: npc.dir = -1
 									else: npc.dir = 0 # Guard mode / Stay still
+						# (Medic logic ends here)
+						pass
 					elif npc.type != "miner":
 						if can_think:
 							target = _find_closest_enemy(npc, 250.0)
@@ -7055,6 +7099,7 @@ func _process_npcs(delta):
 								var spot_emoji = "📣" if npc.get("is_leader", false) else "❗"
 								_set_npc_emoji(npc, spot_emoji, 1.2)
 								npc["has_spotted_enemy"] = true
+								_world_peace_timer = 0.0 # Combat resets peace
 								# Shared Vision: Leader alerts nearby allies
 								if npc.get("is_leader", false):
 									var allies = _get_nearby_npcs(np.x, np.y, 150.0)
@@ -7083,6 +7128,7 @@ func _process_npcs(delta):
 						disaster_near = true
 					
 					if disaster_near:
+						_world_peace_timer = 0.0 # Disasters reset peace
 						if not npc.get("is_fleeing", false):
 							var panic_chance = npc.get("cowardice", 0.3) * 1.8
 							if npc.get("morale_boost_timer", 0.0) > 0: panic_chance *= 0.5 # Protected by leader
@@ -7103,7 +7149,7 @@ func _process_npcs(delta):
 							npc["is_fleeing"] = false
 					
 					# --- EMOTIONAL PERSONALITY (SPONTANEOUS) ---
-					if can_think and not is_dancing and not npc.get("is_fleeing", false) and not target:
+					if can_think and not is_dancing and not is_socializing and not npc.get("is_fleeing", false) and not target:
 						var chance = _get_lut_rand()
 						
 						# 1. Rain Awareness
@@ -7136,7 +7182,7 @@ func _process_npcs(delta):
 						if _get_lut_rand() < social_chance and npc.get("social_cooldown", 0.0) <= 0:
 							var nearby = _get_nearby_npcs(np.x, np.y, 42.0) 
 							for other in nearby:
-								if other.team == npc.team and other != npc and abs(other.vx) < 0.2 and not other.get("dance_timer", 0.0) > 0 and other.get("social_cooldown", 0.0) <= 0:
+								if other.team == npc.team and other != npc and abs(other.vx) < 0.2 and not other.get("dance_timer", 0.0) > 0 and other.get("social_cooldown", 0.0) <= 0 and not other.get("is_lying", false):
 									var meet_t = _get_lut_rand_range(3.0, 5.0)
 									var topics = [
 										"🍎", "🧪", "🔥", "🏠", "⚔️", "💎", "🌧️", "🌳", "⚡", "📜", "💰", "👑", "🗣️", "🍻", "🐺", "💀", "🗺️", "🏹", "🛡️", "🔮", "👁️", "☄️", "🍄", "🗝️", "🍞", "⚒️", "⚖️", "🐎", "🕯️" ];
@@ -7156,8 +7202,19 @@ func _process_npcs(delta):
 						elif npc.get("social_cooldown", 0.0) <= 0 and chance < 0.25:
 							if _get_lut_rand() < 0.05 and not npc.get("recently_bored", false):
 								_set_npc_emoji(npc, "🥱", 2.0); npc["recently_bored"] = true
+							
+							# 7. Sleeping (If world has been at peace for 2+ minutes)
+							if _world_peace_timer > 120.0 and _get_lut_rand() < 0.25: # Significantly higher chance
+								if not npc.get("is_leader", false) or _get_lut_rand() < 0.15: 
+									npc["is_lying"] = true; npc["lying_timer"] = 9999.0 
+									_set_npc_emoji(npc, "😴", 9999.0); npc["recently_bored"] = false
 						else:
 							if _get_lut_rand() < 0.01: npc["recently_bored"] = false
+						
+						# 8. Collapse (If very low HP)
+						if npc.hp < (npc.max_hp * 0.2) and _get_lut_rand() < 0.03:
+							npc["is_lying"] = true; npc["lying_timer"] = _get_lut_rand_range(3.0, 6.0)
+							_set_npc_emoji(npc, "🤕", 2.5)
 					
 					var critical_hp = npc.get("max_hp", 100.0) * 0.3
 					if npc.hp <= critical_hp and not npc.get("morale_broken", false):
