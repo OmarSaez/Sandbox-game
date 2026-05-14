@@ -8382,11 +8382,11 @@ func _play_music_note(inst_idx, note_idx):
 func _trigger_npc_dance():
 	for npc in active_npcs:
 		if npc.hp > 0 and _get_lut_rand() < 0.85:
-			npc["dance_timer"] = 4.0 
+			npc["dance_timer"] = 3.5 
 			npc["has_spotted_enemy"] = false 
-			npc["recently_celebrated"] = false # Allow fireworks even if just celebrated
-			npc["celebration_mode"] = randi() % 4 # Include all firework variants
-			_set_npc_emoji(npc, ["🎵", "🕺", "✨", "🔥"][randi() % 4], 4.0)
+			npc["celebration_mode"] = 3 # 3 = JUST DANCE (No fireworks for music)
+			var music_emojis = ["🎵", "🕺", "💃", "🎶"]
+			_set_npc_emoji(npc, music_emojis[randi() % music_emojis.size()], 3.5)
 
 func _setup_music_ui(force_refresh: bool = false):
 	_set_panning_mode(false)
