@@ -6815,19 +6815,60 @@ func _process_npcs(delta):
 			
 			# AUTONOMOUS AI LOGIC (Skip if controlled)
 			if npc != controlled_npc:
+				# --- DELAYED CONTAGION HANDLER ---
+				var wait_t = npc.get("contagion_wait_timer", 0.0)
+				if wait_t > 0:
+					npc["contagion_wait_timer"] = wait_t - 0.05
+					if npc["contagion_wait_timer"] <= 0:
+						npc["dance_timer"] = 5.0
+						npc["recently_celebrated"] = true
+						npc["celebration_mode"] = randi() % 4 # 0:sparks, 1:launch, 2:burst, 3:just_dance
+						npc["celebration_fw_timer"] = _get_lut_rand_range(0.3, 1.2)
+						_set_npc_emoji(npc, "😎", 5.0)
+				
 				var is_dancing = false
 				var dance_t = npc.get("dance_timer", 0.0)
 				if dance_t > 0:
 					npc["dance_timer"] = dance_t - 0.05
-					var msec = Time.get_ticks_msec() + (npc.id * 137) # Offset to desync dance
+					var msec = Time.get_ticks_msec() + (npc.id * 137)
 					var wiggle_speed = 180 + (npc.id % 50)
 					npc.dir = 1 if (msec / wiggle_speed) % 2 == 0 else -1
-					
 					var jump_freq = 350 + (npc.id % 150)
 					if (msec / jump_freq) % 2 == 0 and not _can_npc_fit(np.x, np.y + 1, npc):
-						npc.vy = -3.0 - (float(npc.id % 5) * 0.5) # Varied jump height
+						npc.vy = -3.0 - (float(npc.id % 5) * 0.5)
+					
+					# --- PERIODIC FIREWORKS DURING CELEBRATION ---
+					var fw_mode = npc.get("celebration_mode", 0)
+					if fw_mode != 3: # 3 is "Just Dance" (No fireworks)
+						var fw_t = npc.get("celebration_fw_timer", 0.0)
+						if fw_t > 0:
+							npc["celebration_fw_timer"] = fw_t - 0.05
+						else:
+							var fw_type = randi() % 3
+							if fw_type == 0: # Multi-color sparks
+								var f_cols = [Color.RED, Color.YELLOW, Color.CYAN, Color.GREEN, Color.MAGENTA, Color.WHITE]
+								var f_col = f_cols[randi() % f_cols.size()]
+								for s in range(12): _add_spark(float(np.x), float(np.y - 12), _get_lut_rand_range(-70, 70), _get_lut_rand_range(-190, -70), f_col, 0.8)
+							elif fw_type == 1: # Real firework launch
+								_launch_firework(np.x, np.y - 5)
+							else: # Real firework burst
+								var f_col = Color.from_hsv(_get_lut_rand(), 0.8, 1.0)
+								_explode_firework(np.x, np.y - 15, f_col)
+							npc["celebration_fw_timer"] = _get_lut_rand_range(0.8, 2.0)
+					
 					npc["has_spotted_enemy"] = false
 					is_dancing = true
+				
+				if not is_dancing:
+					# --- CONTAGION: If a nearby ally is dancing, we might join! ---
+					if can_think and not npc.get("recently_celebrated", false):
+						var nearby = _get_nearby_npcs(np.x, np.y, 80.0)
+						for other in nearby:
+							if other.team == npc.team and other != npc and other.get("dance_timer", 0.0) > 1.0:
+								if _get_lut_rand() < 0.35 and npc.get("contagion_wait_timer", 0.0) <= 0:
+									# Delay the start to create an organic wave effect
+									npc["contagion_wait_timer"] = _get_lut_rand_range(0.4, 2.0)
+									break
 				
 				if not is_dancing:
 					if npc.type == "medic":
@@ -6873,6 +6914,15 @@ func _process_npcs(delta):
 										for _f in range(6): _add_spark(float(closest_ally.pos.x+_get_lut_rand_range(-3,3)),float(closest_ally.pos.y+_get_lut_rand_range(-5,0)),0.0,_get_lut_rand_range(-35.0,-15.0),Color.GREEN,0.6)
 								else: npc.dir = 1 if closest_ally.pos.x > np.x else -1
 							else:
+								if npc.get("has_spotted_enemy", false):
+									# VICTORY CELEBRATION (Medic variant)
+									if _get_lut_rand() < 0.4:
+										npc["dance_timer"] = 5.0
+										npc["recently_celebrated"] = true
+										npc["celebration_mode"] = randi() % 4
+										npc["celebration_fw_timer"] = 0.1 # Start firing immediately
+										_set_npc_emoji(npc, "😎", 5.0)
+								npc["has_spotted_enemy"] = false
 								if _get_lut_rand() < 0.02: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
 								if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
 					elif npc.type != "miner":
@@ -6883,10 +6933,20 @@ func _process_npcs(delta):
 							target = npc.get("cached_target", null)
 							
 						if target and !npc.get("morale_broken", false):
+							npc["recently_celebrated"] = false # Ready for next time
+							npc["contagion_wait_timer"] = 0.0
 							if !npc.get("has_spotted_enemy", false):
 								_set_npc_emoji(npc, "❗", 1.2)
 								npc["has_spotted_enemy"] = true
 						elif !target:
+							if npc.get("has_spotted_enemy", false):
+								# VICTORY CELEBRATION!
+								if _get_lut_rand() < 0.4:
+									npc["dance_timer"] = 5.0
+									npc["recently_celebrated"] = true
+									npc["celebration_mode"] = randi() % 4
+									npc["celebration_fw_timer"] = 0.1 # Start firing immediately
+									_set_npc_emoji(npc, "😎", 5.0)
 							npc["has_spotted_enemy"] = false
 					
 					# --- PANIC NEAR DISASTERS ---
