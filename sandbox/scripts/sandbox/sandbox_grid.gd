@@ -6809,12 +6809,46 @@ func _process_npcs(delta):
 		if npc.hp > 0:
 			# Update common timers
 			if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
+			var s_cd = npc.get("social_cooldown", 0.0)
+			if s_cd > 0: npc["social_cooldown"] = s_cd - 0.05
 			
 			# OPTIMIZATION: Staggered AI Logic (Now using dedicated AI tick counter)
 			var can_think = (npc.id % 6 == _ai_tick_count % 6)
 			
 			# AUTONOMOUS AI LOGIC (Skip if controlled)
 			if npc != controlled_npc:
+				# --- SOCIAL STATE HANDLER ---
+				var is_socializing = false
+				var s_timer = npc.get("social_timer", 0.0)
+				if s_timer > 0:
+					npc["social_timer"] = s_timer - 0.05
+					if npc["social_timer"] <= 0:
+						npc["social_timer"] = 0
+						npc["social_cooldown"] = _get_lut_rand_range(25.0, 45.0) # Reduced cooldown
+						npc["social_target"] = null
+					else:
+						var s_target = npc.get("social_target", null)
+						if s_target and s_target.hp > 0:
+							var s_dist_x = s_target.pos.x - np.x
+							if abs(s_dist_x) > 8:
+								npc.dir = 1 if s_dist_x > 0 else -1
+								if _get_lut_rand() < 0.1: npc.vy = -2.0 
+							else:
+								npc.dir = 0 # Arrived at the meeting
+								if _get_lut_rand() < 0.12:
+									var topic = npc.get("social_topic", "🍎")
+									var emoji = "💬" if _get_lut_rand() > 0.5 else topic
+									_set_npc_emoji(npc, emoji, 1.4)
+							is_socializing = true
+						else: 
+							npc["social_timer"] = 0
+							npc["social_cooldown"] = _get_lut_rand_range(15.0, 30.0) # Target lost cooldown
+				
+				# Cancel social if danger appears
+				if (target != null or npc.get("is_fleeing", false)) and is_socializing:
+					npc["social_timer"] = 0; is_socializing = false
+					npc["social_cooldown"] = 10.0 # Shorter cooldown if interrupted by battle
+				
 				# --- DELAYED CONTAGION HANDLER ---
 				var wait_t = npc.get("contagion_wait_timer", 0.0)
 				if wait_t > 0:
@@ -6858,8 +6892,9 @@ func _process_npcs(delta):
 					
 					npc["has_spotted_enemy"] = false
 					is_dancing = true
+					npc["social_timer"] = 0 # Cancel socializing if dancing
 				
-				if not is_dancing:
+				if not is_dancing and not is_socializing:
 					# --- CONTAGION CHECK (Victory or Panic) ---
 					if can_think:
 						var nearby = _get_nearby_npcs(np.x, np.y, 80.0)
@@ -6877,7 +6912,7 @@ func _process_npcs(delta):
 										_set_npc_emoji(npc, other.current_emoji, 2.0)
 										break
 				
-				if not is_dancing:
+				if not is_dancing and not is_socializing:
 					if npc.type == "medic":
 						var heal_cd = npc.attack_cooldown
 						var closest_enemy = null
@@ -6930,8 +6965,11 @@ func _process_npcs(delta):
 										npc["celebration_fw_timer"] = 0.1 # Start firing immediately
 										_set_npc_emoji(npc, "😎", 5.0)
 								npc["has_spotted_enemy"] = false
-								if _get_lut_rand() < 0.02: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
-								if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
+								if _get_lut_rand() < 0.012: 
+									var r = _get_lut_rand()
+									if r < 0.25: npc.dir = 1
+									elif r < 0.5: npc.dir = -1
+									else: npc.dir = 0 # Guard mode / Stay still
 					elif npc.type != "miner":
 						if can_think:
 							target = _find_closest_enemy(npc, 250.0)
@@ -6985,6 +7023,64 @@ func _process_npcs(delta):
 						if not npc.get("morale_broken", false) and not npc.current_emoji in ["😱", "😰", "🏃", "😨"]:
 							npc["is_fleeing"] = false
 					
+					# --- EMOTIONAL PERSONALITY (SPONTANEOUS) ---
+					if can_think and not is_dancing and not npc.get("is_fleeing", false) and not target:
+						var chance = _get_lut_rand()
+						
+						# 1. Rain Awareness
+						if current_weather > 0 and chance < 0.1:
+							_set_npc_emoji(npc, "☔", 3.0)
+						
+						# 2. Greed/Curiosity (Near Metal or tech blocks)
+						elif chance < 0.15:
+							var is_near_tech = false
+							for ox in range(-6, 7, 3):
+								for oy in range(-6, 7, 3):
+									var tid = _get_cell(np.x + ox, np.y + oy)
+									if tid == 8 or tid == 9 or tid == 27: is_near_tech = true; break
+								if is_near_tech: break
+							if is_near_tech: _set_npc_emoji(npc, "🤩", 2.0)
+							
+						# 3. Fire Aversion (Near Fire or Lava)
+						elif chance < 0.2:
+							var is_near_fire = false
+							for ox in range(-5, 6, 2):
+								for oy in range(-5, 6, 2):
+									var tid = _get_cell(np.x + ox, np.y + oy)
+									if tid == 3 or tid == 11: is_near_fire = true; break
+								if is_near_fire: break
+							if is_near_fire: _set_npc_emoji(npc, "😰", 1.5)
+						
+						# 4. Socialize (Move to chat with ally)
+						elif chance < 0.21 and npc.get("social_cooldown", 0.0) <= 0:
+							var nearby = _get_nearby_npcs(np.x, np.y, 42.0) # Only immediate neighbors
+							for other in nearby:
+								if other.team == npc.team and other != npc and abs(other.vx) < 0.2 and not other.get("dance_timer", 0.0) > 0 and other.get("social_cooldown", 0.0) <= 0:
+									# Initiate meeting with a shared topic
+									var meet_t = _get_lut_rand_range(3.0, 5.0)
+									var topics = ["🍎", "🧪", "🔥", "🏠", "⚔️", "💎", "🌧️", "🌳", "⚡"]
+									var chosen_topic = topics[randi() % topics.size()]
+									
+									npc["social_timer"] = meet_t; npc["social_target"] = other; npc["social_topic"] = chosen_topic
+									other["social_timer"] = meet_t; other["social_target"] = npc; other["social_topic"] = chosen_topic
+									
+									_set_npc_emoji(npc, "👋", 1.2); _set_npc_emoji(other, "👋", 1.2)
+									is_socializing = true
+									break
+						
+						# 5. Cold (High Altitude simulation)
+						elif np.y < 130 and chance < 0.3:
+							_set_npc_emoji(npc, "🥶", 3.0)
+							
+						# 6. Boredom (Idle for too long)
+						elif abs(npc.vx) < 0.1 and chance < 0.35:
+							var idle_t = npc.get("idle_time", 0.0)
+							var inc = 2.0 if npc.dir == 0 else 1.0 # Boredom grows 2x faster if standing still
+							npc["idle_time"] = idle_t + inc 
+							if idle_t > 15: _set_npc_emoji(npc, "🥱", 2.0); npc["idle_time"] = 0.0
+						else:
+							npc["idle_time"] = 0.0
+					
 					var critical_hp = npc.get("max_hp", 100.0) * 0.3
 					if npc.hp <= critical_hp and not npc.get("morale_broken", false):
 						npc["morale_broken"] = true
@@ -7002,8 +7098,11 @@ func _process_npcs(delta):
 								var drop_x = np.x + (1 if npc.dir == -1 else 0)
 								if _get_cell(drop_x, np.y) == 0: _set_cell(drop_x, np.y, 2)
 						elif !target:
-							if _get_lut_rand() < 0.02: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
-							if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
+							if _get_lut_rand() < 0.012: 
+								var r = _get_lut_rand()
+								if r < 0.25: npc.dir = 1
+								elif r < 0.5: npc.dir = -1
+								else: npc.dir = 0 # Guard mode / Stay still
 						elif target:
 							var dist_x = target.pos.x - np.x; var dx_abs = abs(dist_x); var dy_abs = abs(target.pos.y - np.y)
 							if npc.type == "warrior":
@@ -7229,9 +7328,19 @@ func _process_npcs(delta):
 									bumped_ally = true; break
 						
 						if bumped_ally: 
-							if target == null: npc.dir = -npc.dir; moved = true
+							if target == null: 
+								var bumps = npc.get("bump_counter", 0)
+								npc["bump_counter"] = bumps + 1
+								if bumps >= 5:
+									if _can_npc_fit(np.x, np.y - 1, npc):
+										npc.vy = -4.0; npc.vx = npc.dir * 2.5; moved = true
+										npc["bump_counter"] = 0
+								else:
+									npc.dir = -npc.dir; moved = true
 							else: # Intentar saltar sobre el aliado si estamos persiguiendo
-								if _can_npc_fit(np.x, np.y - 1, npc): npc.vy = -3.5; npc.vx = npc.dir * 2.0; moved = true
+								if _can_npc_fit(np.x, np.y - 1, npc): 
+									npc.vy = -3.5; npc.vx = npc.dir * 2.0; moved = true
+									npc["bump_counter"] = 0 # Reset bump on successful jump
 						
 						if not moved:
 							# --- STEP-UP SISTEMA ---
@@ -8229,9 +8338,12 @@ func _play_music_note(inst_idx, note_idx):
 
 func _trigger_npc_dance():
 	for npc in active_npcs:
-		if npc.hp > 0 and _get_lut_rand() < 0.8:
-			npc["dance_timer"] = 4.0 # Extended dance for 4 seconds
-			npc["has_spotted_enemy"] = false # Distracted by music!
+		if npc.hp > 0 and _get_lut_rand() < 0.85:
+			npc["dance_timer"] = 4.0 
+			npc["has_spotted_enemy"] = false 
+			npc["recently_celebrated"] = false # Allow fireworks even if just celebrated
+			npc["celebration_mode"] = randi() % 4 # Include all firework variants
+			_set_npc_emoji(npc, ["🎵", "🕺", "✨", "🔥"][randi() % 4], 4.0)
 
 func _setup_music_ui(force_refresh: bool = false):
 	_set_panning_mode(false)
