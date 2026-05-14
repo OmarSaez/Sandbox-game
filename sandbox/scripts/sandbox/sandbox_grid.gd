@@ -6824,7 +6824,7 @@ func _process_npcs(delta):
 					npc["social_timer"] = s_timer - 0.05
 					if npc["social_timer"] <= 0:
 						npc["social_timer"] = 0
-						npc["social_cooldown"] = _get_lut_rand_range(25.0, 45.0) # Reduced cooldown
+						npc["social_cooldown"] = _get_lut_rand_range(25.0, 45.0) 
 						npc["social_target"] = null
 					else:
 						var s_target = npc.get("social_target", null)
@@ -6834,15 +6834,27 @@ func _process_npcs(delta):
 								npc.dir = 1 if s_dist_x > 0 else -1
 								if _get_lut_rand() < 0.1: npc.vy = -2.0 
 							else:
-								npc.dir = 0 # Arrived at the meeting
+								npc.dir = 0 
+								npc["last_dir"] = 1 if s_dist_x > 0 else -1 # Look at partner
 								if _get_lut_rand() < 0.12:
 									var topic = npc.get("social_topic", "🍎")
 									var emoji = "💬" if _get_lut_rand() > 0.5 else topic
 									_set_npc_emoji(npc, emoji, 1.4)
+								
+								# --- OPTIMIZATION: Chance to invite a 3rd person (Group) ---
+								if can_think and _get_lut_rand() < 0.05:
+									var others = _get_nearby_npcs(np.x, np.y, 45.0)
+									for o in others:
+										if o.team == npc.team and o != npc and o != s_target:
+											if o.get("social_timer", 0.0) <= 0 and o.get("social_cooldown", 0.0) <= 0:
+												o["social_timer"] = npc["social_timer"]
+												o["social_target"] = npc
+												o["social_topic"] = npc["social_topic"]
+												_set_npc_emoji(o, "👋", 1.2); break
 							is_socializing = true
 						else: 
 							npc["social_timer"] = 0
-							npc["social_cooldown"] = _get_lut_rand_range(15.0, 30.0) # Target lost cooldown
+							npc["social_cooldown"] = _get_lut_rand_range(15.0, 30.0) 
 				
 				# Cancel social if danger appears
 				if (target != null or npc.get("is_fleeing", false)) and is_socializing:
@@ -6965,10 +6977,11 @@ func _process_npcs(delta):
 										npc["celebration_fw_timer"] = 0.1 # Start firing immediately
 										_set_npc_emoji(npc, "😎", 5.0)
 								npc["has_spotted_enemy"] = false
-								if _get_lut_rand() < 0.012: 
+								var rethink_chance = 0.045 if npc.dir == 0 else 0.012
+								if _get_lut_rand() < rethink_chance: 
 									var r = _get_lut_rand()
-									if r < 0.25: npc.dir = 1
-									elif r < 0.5: npc.dir = -1
+									if r < 0.35: npc.dir = 1
+									elif r < 0.7: npc.dir = -1
 									else: npc.dir = 0 # Guard mode / Stay still
 					elif npc.type != "miner":
 						if can_think:
@@ -7052,18 +7065,19 @@ func _process_npcs(delta):
 							if is_near_fire: _set_npc_emoji(npc, "😰", 1.5)
 						
 						# 4. Socialize (Move to chat with ally)
-						elif chance < 0.21 and npc.get("social_cooldown", 0.0) <= 0:
-							var nearby = _get_nearby_npcs(np.x, np.y, 42.0) # Only immediate neighbors
+						var is_bored = npc.get("recently_bored", false)
+						var social_chance = 0.2 if is_bored else 0.012
+						if _get_lut_rand() < social_chance and npc.get("social_cooldown", 0.0) <= 0:
+							var nearby = _get_nearby_npcs(np.x, np.y, 42.0) 
 							for other in nearby:
 								if other.team == npc.team and other != npc and abs(other.vx) < 0.2 and not other.get("dance_timer", 0.0) > 0 and other.get("social_cooldown", 0.0) <= 0:
-									# Initiate meeting with a shared topic
 									var meet_t = _get_lut_rand_range(3.0, 5.0)
-									var topics = ["🍎", "🧪", "🔥", "🏠", "⚔️", "💎", "🌧️", "🌳", "⚡"]
+									var topics = [
+										"🍎", "🧪", "🔥", "🏠", "⚔️", "💎", "🌧️", "🌳", "⚡", "📜", "💰", "👑", "🗣️", "🍻", "🐺", "💀", "🗺️", "🏹", "🛡️", "🔮", "👁️", "☄️", "🍄", "🗝️", "🍞", "⚒️", "⚖️", "🐎", "🕯️" ];
 									var chosen_topic = topics[randi() % topics.size()]
-									
 									npc["social_timer"] = meet_t; npc["social_target"] = other; npc["social_topic"] = chosen_topic
 									other["social_timer"] = meet_t; other["social_target"] = npc; other["social_topic"] = chosen_topic
-									
+									npc["recently_bored"] = false; other["recently_bored"] = false
 									_set_npc_emoji(npc, "👋", 1.2); _set_npc_emoji(other, "👋", 1.2)
 									is_socializing = true
 									break
@@ -7072,14 +7086,12 @@ func _process_npcs(delta):
 						elif np.y < 130 and chance < 0.3:
 							_set_npc_emoji(npc, "🥶", 3.0)
 							
-						# 6. Boredom (Idle for too long)
-						elif abs(npc.vx) < 0.1 and chance < 0.35:
-							var idle_t = npc.get("idle_time", 0.0)
-							var inc = 2.0 if npc.dir == 0 else 1.0 # Boredom grows 2x faster if standing still
-							npc["idle_time"] = idle_t + inc 
-							if idle_t > 15: _set_npc_emoji(npc, "🥱", 2.0); npc["idle_time"] = 0.0
+						# 6. Boredom (Linked to Social)
+						elif npc.get("social_cooldown", 0.0) <= 0 and chance < 0.25:
+							if _get_lut_rand() < 0.05 and not npc.get("recently_bored", false):
+								_set_npc_emoji(npc, "🥱", 2.0); npc["recently_bored"] = true
 						else:
-							npc["idle_time"] = 0.0
+							if _get_lut_rand() < 0.01: npc["recently_bored"] = false
 					
 					var critical_hp = npc.get("max_hp", 100.0) * 0.3
 					if npc.hp <= critical_hp and not npc.get("morale_broken", false):
@@ -7098,10 +7110,11 @@ func _process_npcs(delta):
 								var drop_x = np.x + (1 if npc.dir == -1 else 0)
 								if _get_cell(drop_x, np.y) == 0: _set_cell(drop_x, np.y, 2)
 						elif !target:
-							if _get_lut_rand() < 0.012: 
+							var rethink_chance = 0.045 if npc.dir == 0 else 0.012
+							if _get_lut_rand() < rethink_chance: 
 								var r = _get_lut_rand()
-								if r < 0.25: npc.dir = 1
-								elif r < 0.5: npc.dir = -1
+								if r < 0.35: npc.dir = 1
+								elif r < 0.7: npc.dir = -1
 								else: npc.dir = 0 # Guard mode / Stay still
 						elif target:
 							var dist_x = target.pos.x - np.x; var dx_abs = abs(dist_x); var dy_abs = abs(target.pos.y - np.y)
