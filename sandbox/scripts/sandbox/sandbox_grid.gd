@@ -6811,6 +6811,8 @@ func _process_npcs(delta):
 			if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
 			var s_cd = npc.get("social_cooldown", 0.0)
 			if s_cd > 0: npc["social_cooldown"] = s_cd - 0.05
+			var m_boost = npc.get("morale_boost_timer", 0.0)
+			if m_boost > 0: npc["morale_boost_timer"] = m_boost - 0.05
 			
 			# OPTIMIZATION: Staggered AI Logic (Now using dedicated AI tick counter)
 			var can_think = (npc.id % 6 == _ai_tick_count % 6)
@@ -6860,6 +6862,26 @@ func _process_npcs(delta):
 				if (target != null or npc.get("is_fleeing", false)) and is_socializing:
 					npc["social_timer"] = 0; is_socializing = false
 					npc["social_cooldown"] = 10.0 # Shorter cooldown if interrupted by battle
+				
+				# --- LEADERSHIP SYSTEM (Update & Aura) ---
+				if can_think:
+					if npc.get("is_leader", false):
+						# Leader's Aura: Boost morale of nearby allies
+						var allies = _get_nearby_npcs(np.x, np.y, 140.0)
+						for a in allies:
+							if a.team == npc.team and a != npc: a["morale_boost_timer"] = 2.0
+						if _ai_tick_count % 30 == 0 and npc.get("emoji_timer", 0.0) <= 0: _set_npc_emoji(npc, "👑", 2.0)
+					else:
+						# Promotion Check: If 5+ allies are together without a leader
+						var allies = _get_nearby_npcs(np.x, np.y, 100.0)
+						var ally_count = 0; var leader_found = false
+						for a in allies:
+							if a.team == npc.team:
+								ally_count += 1
+								if a.get("is_leader", false): leader_found = true; break
+						if ally_count >= 5 and not leader_found:
+							npc["is_leader"] = true; npc["max_hp"] *= 1.5; npc["hp"] *= 1.5; npc["knockback_mult"] *= 0.7
+							_set_npc_emoji(npc, "👑", 5.0)
 				
 				# --- DELAYED CONTAGION HANDLER ---
 				var wait_t = npc.get("contagion_wait_timer", 0.0)
@@ -6994,8 +7016,15 @@ func _process_npcs(delta):
 							npc["recently_celebrated"] = false # Ready for next time
 							npc["contagion_wait_timer"] = 0.0
 							if !npc.get("has_spotted_enemy", false):
-								_set_npc_emoji(npc, "❗", 1.2)
+								var spot_emoji = "📣" if npc.get("is_leader", false) else "❗"
+								_set_npc_emoji(npc, spot_emoji, 1.2)
 								npc["has_spotted_enemy"] = true
+								# Shared Vision: Leader alerts nearby allies
+								if npc.get("is_leader", false):
+									var allies = _get_nearby_npcs(np.x, np.y, 150.0)
+									for a in allies:
+										if a.team == npc.team and !a.get("has_spotted_enemy", false):
+											a["has_spotted_enemy"] = true; _set_npc_emoji(a, "❗", 1.0)
 						elif !target:
 							if npc.get("has_spotted_enemy", false):
 								# VICTORY CELEBRATION!
@@ -7020,6 +7049,7 @@ func _process_npcs(delta):
 					if disaster_near:
 						if not npc.get("is_fleeing", false):
 							var panic_chance = npc.get("cowardice", 0.3) * 1.8
+							if npc.get("morale_boost_timer", 0.0) > 0: panic_chance *= 0.5 # Protected by leader
 							if _get_lut_rand() < panic_chance:
 								npc["is_fleeing"] = true
 								var panic_emoji = ["😱", "😰", "🏃", "😨"][randi() % 4]
