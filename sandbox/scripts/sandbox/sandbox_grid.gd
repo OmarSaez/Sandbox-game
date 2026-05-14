@@ -2674,12 +2674,14 @@ func _toggle_category_panel(target_panel: Control):
 	if is_instance_valid(paint_panel): paint_panel.visible = false
 	if is_instance_valid(save_panel): save_panel.queue_free()
 	_close_music_menu()
-	is_paint_tool_active = false
+	# Only reset paint tool if we are NOT toggling the paint panel itself
+	if target_panel != paint_panel:
+		is_paint_tool_active = false
 	
 	# TOGGLE TARGET
 	if is_instance_valid(target_panel):
 		target_panel.visible = !was_visible
-		if target_panel == paint_panel and target_panel.visible:
+		if target_panel == paint_panel:
 			is_paint_tool_active = true
 	
 	_update_menu_highlights()
@@ -6325,6 +6327,8 @@ func _setup_npc_ui():
 	btn_style.border_color = Color(0.4, 0.5, 0.4)
 	btn_style.corner_radius_top_left = 0; btn_style.corner_radius_top_right = 0
 	btn_style.corner_radius_bottom_left = 0; btn_style.corner_radius_bottom_right = 0
+	npc_btn.add_theme_stylebox_override("normal", btn_style)
+	npc_btn.add_theme_stylebox_override("hover", btn_style)
 	npc_btn.add_theme_stylebox_override("pressed", btn_style)
 	npc_btn.set_meta("base_style", btn_style)
 	
@@ -6379,6 +6383,7 @@ func _setup_npc_ui():
 			if not is_instance_valid(controlled_npc):
 				is_selecting_npc_to_control = true
 				selected_material = 0 
+				is_paint_tool_active = false
 				_update_material_highlights()
 			_update_menu_highlights()
 			_on_arcade_selection_made(true)
