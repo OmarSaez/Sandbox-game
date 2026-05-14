@@ -4493,27 +4493,53 @@ func _process_earthquake(delta):
 	# Play sound loop while earthquake is active
 	_manage_looping_player(quake_player, "quake_loop")
 	
-	# 1. Screen Shake (Visual)
-	var shake_force = earthquake_intensity * 5.0
+	# 1. Screen Shake (Visual) - Much more violent for higher intensities
+	var shake_force = float(earthquake_intensity) * 6.0
+	if earthquake_intensity >= 3: shake_force = 15.0 # Extra violent for BRUTAL
+	
 	if shake_force > 0:
 		texture_rect.position = Vector2(_get_lut_rand_range(-shake_force, shake_force), _get_lut_rand_range(-shake_force, shake_force))
 	
-	# 2. Physics Shake (Actual material movement)
-	# Increased iterations for MASSIVE destruction
-	for i in range(1200 * earthquake_intensity):
+	# 2. Physics Chaos (Actual material movement)
+	# Scaled iterations: light=4000, med=8000, brutal=15000 per frame
+	var iterations = 4000 * earthquake_intensity 
+	# Max displacement range: light=8, med=16, brutal=24 pixels
+	var max_offset = float(earthquake_intensity * 8.0) 
+	
+	for i in range(iterations):
+		# Random sampling across the whole grid
 		var rx = int(_get_lut_rand() * grid_width)
 		var ry = int(_get_lut_rand() * grid_height)
 		var idx = ry * grid_width + rx
-		var _tid = cells[idx]
 		
-		# In a earthquake, even static things can juggle a bit, but mostly powders/liquids
-		var nx = rx + int(_get_lut_rand_range(-earthquake_intensity, earthquake_intensity))
-		var ny = ry + int(_get_lut_rand_range(-earthquake_intensity, earthquake_intensity))
+		# Skip air for performance optimization (focus on where stuff is)
+		if cells[idx] == 0: continue
+		
+		# Random direction and distance using LUT for "disparar" effect
+		var dx = int(_get_lut_rand_range(-max_offset, max_offset))
+		var dy = int(_get_lut_rand_range(-max_offset, max_offset))
+		
+		var nx = rx + dx
+		var ny = ry + dy
 		
 		if nx >= 0 and nx < grid_width and ny >= 0 and ny < grid_height:
-			# MIXING: Do not check for empty. Swap everything to cause liquefaction.
-			# Only limit swapping for very stable solids? No, let's keep it chaotic.
+			# Massive mixing/dispersal: Swap regardless of what's there (liquefaction)
 			_swap_cells(rx, ry, nx, ny)
+			_activate_chunk(nx, ny) # Ensure it keeps moving/falling
+			
+	# 3. NPC Panic & Physical Displacement
+	# NPCs should fly/jitter as the earth moves beneath them
+	for n in active_npcs:
+		if n.hp > 0:
+			# Apply chaotic physical impulses directly to velocity
+			var npc_push = float(earthquake_intensity) * 2.5
+			n.vx += _get_lut_rand_range(-npc_push, npc_push)
+			n.vy += _get_lut_rand_range(-npc_push, npc_push)
+			
+			# Chance to trip or jump randomly due to shockwaves
+			if _get_lut_rand() < 0.08 * earthquake_intensity:
+				n.vy = -4.0 * earthquake_intensity
+				_set_npc_emoji(n, ["🫨", "😱", "😨"].pick_random(), 0.8)
 	
 	# Automatic stop after timer
 	if earthquake_timer <= 0:
