@@ -4512,8 +4512,12 @@ func _process_earthquake(delta):
 		var ry = int(_get_lut_rand() * grid_height)
 		var idx = ry * grid_width + rx
 		
-		# Skip air for performance optimization (focus on where stuff is)
+		# Skip air for performance optimization
 		if cells[idx] == 0: continue
+		
+		# ANTI-TEARING: Don't move NPC pixels (they are managed as a single entity)
+		var tid = cells[idx] & 0xFFFF
+		if material_tags_raw[tid] & SandboxMaterial.Tags.NPC: continue
 		
 		# Random direction and distance using LUT for "disparar" effect
 		var dx = int(_get_lut_rand_range(-max_offset, max_offset))
@@ -4523,22 +4527,28 @@ func _process_earthquake(delta):
 		var ny = ry + dy
 		
 		if nx >= 0 and nx < grid_width and ny >= 0 and ny < grid_height:
-			# Massive mixing/dispersal: Swap regardless of what's there (liquefaction)
-			_swap_cells(rx, ry, nx, ny)
-			_activate_chunk(nx, ny) # Ensure it keeps moving/falling
+			# ANTI-TEARING: Don't overwrite NPC pixels at destination either
+			var n_tid = cells[ny * grid_width + nx] & 0xFFFF
+			if not (material_tags_raw[n_tid] & SandboxMaterial.Tags.NPC):
+				# Massive mixing/dispersal: Swap regardless of what's there (liquefaction)
+				_swap_cells(rx, ry, nx, ny)
+				_activate_chunk(nx, ny) # Ensure it keeps moving/falling
 			
 	# 3. NPC Panic & Physical Displacement
-	# NPCs should fly/jitter as the earth moves beneath them
+	# NPCs should feel the earth moving without flying to the ceiling
+	var shock_limit = float(earthquake_intensity) * 0.4
 	for n in active_npcs:
 		if n.hp > 0:
-			# Apply chaotic physical impulses directly to velocity
-			var npc_push = float(earthquake_intensity) * 2.5
-			n.vx += _get_lut_rand_range(-npc_push, npc_push)
-			n.vy += _get_lut_rand_range(-npc_push, npc_push)
+			# Very small horizontal jitter
+			n.vx += _get_lut_rand_range(-shock_limit, shock_limit)
 			
-			# Chance to trip or jump randomly due to shockwaves
-			if _get_lut_rand() < 0.08 * earthquake_intensity:
-				n.vy = -4.0 * earthquake_intensity
+			# Occasional small vertical "pop" to simulate ground shock, 
+			# but rare enough that gravity (20Hz) can easily overcome it
+			if _get_lut_rand() < 0.05: 
+				n.vy -= _get_lut_rand() * float(earthquake_intensity) * 1.5
+			
+			# Chance to trip or show emoji (less frequent)
+			if _get_lut_rand() < 0.02 * earthquake_intensity:
 				_set_npc_emoji(n, ["🫨", "😱", "😨"].pick_random(), 0.8)
 	
 	# Automatic stop after timer
