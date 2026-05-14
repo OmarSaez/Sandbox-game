@@ -5934,7 +5934,7 @@ func _setup_npc_panel_node():
 	npc_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
 func _setup_npc_control_gui():
-	var s = 1.1 # FIXED SCALE: Unified size for movement/action pads
+	var s = 1.25 # FIXED SCALE: Unified size for movement/action pads (Increased for mobile)
 	ui_root = get_parent().get_node("UI")
 	main_controls = ui_root.get_node("Controls")
 	
@@ -5946,7 +5946,7 @@ func _setup_npc_control_gui():
 	npc_control_gui = Control.new()
 	npc_control_gui.name = "NPCControlGUI"
 	npc_control_gui.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	npc_control_gui.offset_top = -340
+	npc_control_gui.offset_top = -cached_hud_height
 	npc_control_gui.mouse_filter = Control.MOUSE_FILTER_PASS 
 	
 	# Visibility based on Control State + Menu Toggle
@@ -6125,7 +6125,7 @@ func _stop_controlling_npc(keep_menus_open: bool = false):
 	main_controls = ui_root.get_node("Controls")
 	if is_instance_valid(main_controls):
 		main_controls.visible = true
-		main_controls.offset_top = -340
+		main_controls.offset_top = -cached_hud_height
 		main_controls.offset_bottom = 0
 	
 	if not keep_menus_open:
