@@ -1353,6 +1353,12 @@ var achievements = {
 		"title": "ach_god_title",
 		"desc": "ach_god_desc",
 		"unlocked": false
+	},
+	"mad_scientist": {
+		"id": "mad_scientist",
+		"title": "ach_mad_scientist_title",
+		"desc": "ach_mad_scientist_desc",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -3305,6 +3311,7 @@ func _update_custom_mats_in_material_grid():
 					lab_tutorial_step = 0
 					_update_lab_tutorial_highlight()
 					_save_lab_state()
+					_unlock_achievement("mad_scientist")
 					
 					# CLEANUP: Close tools if it was opened by tutorial and reset any remaining pulses
 					if is_instance_valid(tools_panel) and tools_panel.visible:
