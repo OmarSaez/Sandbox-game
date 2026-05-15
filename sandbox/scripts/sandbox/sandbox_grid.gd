@@ -1332,20 +1332,20 @@ var cached_hud_height: float = 362.0 # Performance optimization: Cached for pane
 var achievements = {
 	"massive_fight": {
 		"id": "massive_fight",
-		"title": "PELEA MASIVA",
-		"desc": "Haz una pelea de más de 10 NPCs en cada equipo con al menos 2 equipos",
+		"title": "ach_massive_fight_title",
+		"desc": "ach_massive_fight_desc",
 		"unlocked": false
 	},
 	"electrifying": {
 		"id": "electrifying",
-		"title": "ELECTRIFICANTE",
-		"desc": "Combina electricidad y agua para crear una reacción conductora",
+		"title": "ach_electrifying_title",
+		"desc": "ach_electrifying_desc",
 		"unlocked": false
 	},
 	"miner_plan": {
 		"id": "miner_plan",
-		"title": "EL PLAN DEL MINERO",
-		"desc": "Descubre el trágico final del sabotaje del minero",
+		"title": "ach_miner_plan_title",
+		"desc": "ach_miner_plan_desc",
 		"unlocked": false
 	}
 }
@@ -1652,7 +1652,7 @@ func _setup_main_ui_containers():
 				child.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 				child.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
-		achievement_btn = _create_vertical_category_btn("🏆", "achievement")
+		achievement_btn = _create_vertical_category_btn("🏆", "achievement_btn")
 		achievement_btn.name = "AchievementBtn"
 		achievement_btn.custom_minimum_size = Vector2(fixed_w * 2.0, h_cat)
 		achievement_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -9492,7 +9492,7 @@ func _trigger_achievement_reveal():
 	_save_global_achievements()
 	
 	# 3. UI Implementation
-	var achievement_btn_new = _create_vertical_category_btn("🏆", "achievement")
+	var achievement_btn_new = _create_vertical_category_btn("🏆", "achievement_btn")
 	achievement_btn_new.name = "AchievementButton"
 	achievement_btn_new.custom_minimum_size = Vector2(fixed_w * 2.0, h_cat)
 	achievement_btn_new.modulate.a = 0
@@ -9601,7 +9601,7 @@ func _show_achievement_notification(title: String):
 	static_content.add_child(bg)
 	
 	var label = Label.new()
-	label.text = title.to_upper()
+	label.text = tr(title).to_upper()
 	label.add_theme_font_size_override("font_size", 24 * s)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -9722,7 +9722,7 @@ func _setup_achievement_menu():
 		
 		# Header
 		var title = Label.new()
-		title.text = "LOGROS DEL MUNDO"
+		title.text = tr("achievement_menu_title")
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.add_theme_font_size_override("font_size", 32 * s)
 		title.add_theme_color_override("font_color", Color(1, 0.85, 0.4))
@@ -9775,7 +9775,7 @@ func _setup_achievement_menu():
 		i_hbox.add_child(text_vbox)
 		
 		var a_title = Label.new()
-		a_title.text = a.title
+		a_title.text = tr(a.title)
 		a_title.add_theme_font_size_override("font_size", 22 * s)
 		text_vbox.add_child(a_title)
 		
@@ -9786,7 +9786,7 @@ func _setup_achievement_menu():
 			a_title.add_theme_color_override("font_color", Color(1.0, 0.9, 0.6))
 			
 			var a_desc = Label.new()
-			a_desc.text = a.desc
+			a_desc.text = tr(a.desc)
 			a_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			a_desc.add_theme_font_size_override("font_size", 14 * s)
 			a_desc.modulate = Color(1, 0.95, 0.8, 0.9)

@@ -1,4 +1,4 @@
-﻿id,es,en,it,fr,de,pt
+id,es,en,it,fr,de,pt
 disasters,Desastres,Disasters,Disastri,Catastrophes,Katastrophen,Desastres
 tools,Herramientas,Tools,Strumenti,Outils,Werkzeuge,Ferramentas
 lang,🌐 Idioma,🌐 Language,🌐 Lingua,🌐 Langue,🌐 Sprache,🌐 Idioma
@@ -226,4 +226,11 @@ ORIENT_AUTO,Automático,Auto,Automatico,Auto,Auto,Automático
 ORIENT_PORTRAIT,Vertical,Portrait,Verticale,Vertical,Hochformat,Retrato
 ORIENT_LANDSCAPE,Horizontal,Landscape,Orizzontale,Horizontal,Querformat,Paisagem
 orient,Orientación,Orientation,Orientamento,Orientation,Ausrichtung,Orientação
-
+achievement_btn,Logros,Achievements,Obiettivi,Succès,Erfolge,Conquistas
+achievement_menu_title,Logros del Mundo,World Achievements,Obiettivi del Mondo,Succès du Monde,Welterfolge,Conquistas do Mundo
+ach_massive_fight_title,Pelea Masiva,Massive Fight,Battaglia Massiccia,Combat Massif,Massenschlacht,Luta Massiva
+ach_massive_fight_desc,Haz una pelea de más de 10 NPCs en cada equipo con al menos 2 equipos,Have a fight with more than 10 NPCs on each team with at least 2 teams,Fai una battaglia con più di 10 NPC per squadra con almeno 2 squadre,Faites un combat avec plus de 10 PNJ dans chaque équipe avec au moins 2 équipes,Lass mehr als 10 NPCs pro Team in mindestens 2 Teams gegeneinander kämpfen,Faça uma luta com mais de 10 NPCs em cada equipe com pelo menos 2 equipes
+ach_electrifying_title,Electrificante,Electrifying,Elettrificante,Électrisant,Elektrisierend,Eletrizante
+ach_electrifying_desc,Combina electricidad y agua para crear una reacción conductora,Combine electricity and water to create a conductive reaction,Combina elettricità e acqua per creare una reazione conduttiva,Combinez l'électricité et l'eau pour créer une réaction conductrice,Kombiniere Elektrizität und Wasser, um eine leitfähige Reaktion zu erzeugen,Combine eletricidade e água para criar uma reação condutora
+ach_miner_plan_title,El Plan del Minero,The Miner's Plan,Il Piano del Minatore,Le Plan du Mineur,Der Plan des Bergarbeiters,O Plano do Minerador
+ach_miner_plan_desc,Descubre el trágico final del sabotaje del minero,Discover the tragic end of the miner's sabotage,Scopri la tragica fine del sabotaggio del minatore,Découvrez la fin tragique du sabotage du mineur,Entdecke das tragische Ende des Sabotageakts des Bergarbeiters,Descubra o fim trágico da sabotagem do minerador
