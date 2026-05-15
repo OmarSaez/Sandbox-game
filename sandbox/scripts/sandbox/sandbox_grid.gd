@@ -1408,10 +1408,27 @@ var achievements = {
 		"title": "ach_volcano_title",
 		"desc": "ach_volcano_desc",
 		"unlocked": false
+	},
+	"boom": {
+		"id": "boom",
+		"title": "ach_boom_title",
+		"desc": "ach_boom_desc",
+		"unlocked": false
+	},
+	"special_boom": {
+		"id": "special_boom",
+		"title": "ach_special_boom_title",
+		"desc": "ach_special_boom_desc",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
 var achievement_sequence_step: int = -1 # -1: Idle, 0+: Current group frame
+
+# TNT Chain Tracking
+var _tnt_chain_count: int = 0
+var _tnt_chain_flags: int = 0
+var _tnt_chain_timer: float = 0.0
 
 # Music Achievement Tracking
 var composition_note_count: int = 0
@@ -1451,6 +1468,15 @@ func _load_global_achievements():
 func _check_achievement_conditions(delta):
 	# --- ACHIEVEMENT POLLING SEQUENCE ---
 	achievement_check_timer += delta
+	
+	# Update TNT chain timer
+	if _tnt_chain_timer > 0:
+		_tnt_chain_timer -= delta
+		if _tnt_chain_timer <= 0:
+			_tnt_chain_timer = 0
+			_tnt_chain_count = 0
+			_tnt_chain_flags = 0
+	
 	if achievement_check_timer >= 2.0:
 		achievement_check_timer = 0.0
 		achievement_sequence_step = 0 # Start sequence
@@ -1458,7 +1484,7 @@ func _check_achievement_conditions(delta):
 	if achievement_sequence_step != -1:
 		_check_achievement_step(achievement_sequence_step)
 		achievement_sequence_step += 1
-		if achievement_sequence_step >= 6: # 6 groups total (0-5)
+		if achievement_sequence_step >= 7: # 7 groups total (0-6)
 			achievement_sequence_step = -1 # End sequence
 	
 func _check_achievement_step(step: int):
@@ -1562,6 +1588,17 @@ func _check_achievement_step(step: int):
 							if volcano_pixels >= 1000:
 								_unlock_achievement("volcano_giant")
 								return
+		6: # --- GROUP 6: EXPLOSIONS (BOOM) ---
+			if not achievements["boom"].unlocked and _tnt_chain_count >= 10:
+				_unlock_achievement("boom")
+			if not achievements["special_boom"].unlocked and _tnt_chain_count >= 10:
+				# Check for at least 2 distinct flags (Acid=64, Elec=128, or 0=Fire vs others)
+				var has_acid = (_tnt_chain_flags & 64) > 0
+				var has_elec = (_tnt_chain_flags & 128) > 0
+				# If we have at least one special type in a 10+ chain, it's special enough
+				# but user asked for "distintos tipos", so let's require Acid AND Elec or similar
+				if has_acid and has_elec:
+					_unlock_achievement("special_boom")
 
 func _unlock_retro_time_delayed():
 	# Esperar 2 segundos para que el usuario vea el mando y se mueva
@@ -5747,6 +5784,11 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		timer -= 1
 		if timer <= 0:
 			_explode(x, y, 12 if not is_gunpowder else 8, "explosion", flags)
+			
+			# LOGRO: TNT Chain tracking
+			_tnt_chain_count += 1
+			_tnt_chain_flags |= flags
+			_tnt_chain_timer = 0.6 # 0.6s to continue chain
 			return
 		
 		charge_array[idx] = flags | timer
