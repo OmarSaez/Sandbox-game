@@ -131,6 +131,7 @@ var is_lab_unlocked: bool = false
 var lab_unlock_expiry_unix: int = 0
 var disaster_panel: PanelContainer
 var npc_panel: PanelContainer
+var achievement_panel: PanelContainer
 var paint_panel: PanelContainer
 var selected_team: int = 0 
 var mat_id_to_key = {} # ID -> Translation Key
@@ -1327,6 +1328,67 @@ var action_vbox: VBoxContainer
 var material_scroll: ScrollContainer
 var cached_hud_height: float = 362.0 # Performance optimization: Cached for panel alignment
 
+# --- ACHIEVEMENT SYSTEM DATA ---
+var achievements = {
+	"massive_fight": {
+		"id": "massive_fight",
+		"title": "PELEA MASIVA",
+		"desc": "Haz una pelea de más de 10 NPCs en cada equipo con al menos 2 equipos",
+		"unlocked": false
+	}
+}
+var achievement_check_timer: float = 0.0
+
+func _save_global_achievements():
+	var config = ConfigFile.new()
+	config.set_value("progression", "achievements_unlocked_menu", is_achievement_menu_unlocked)
+	
+	var unlocked_list = []
+	for id in achievements:
+		if achievements[id].unlocked:
+			unlocked_list.append(id)
+	config.set_value("progression", "unlocked_ids", unlocked_list)
+	config.save("user://achievements.cfg")
+
+func _load_global_achievements():
+	var config = ConfigFile.new()
+	var err = config.load("user://achievements.cfg")
+	if err == OK:
+		is_achievement_menu_unlocked = config.get_value("progression", "achievements_unlocked_menu", false)
+		var unlocked_list = config.get_value("progression", "unlocked_ids", [])
+		for id in unlocked_list:
+			if achievements.has(id):
+				achievements[id].unlocked = true
+
+func _check_achievement_conditions(delta):
+	# Throttled check: Only every 2 seconds to save CPU
+	achievement_check_timer += delta
+	if achievement_check_timer < 2.0: return
+	achievement_check_timer = 0.0
+	
+	# 1. PELEA MASIVA
+	if not achievements["massive_fight"].unlocked:
+		var teams = {} # team_id -> count
+		for npc in active_npcs:
+			if npc.hp <= 0: continue
+			var t = npc.get("team", 0)
+			teams[t] = teams.get(t, 0) + 1
+		
+		var valid_teams = 0
+		for t_id in teams:
+			if teams[t_id] >= 10:
+				valid_teams += 1
+		
+		if valid_teams >= 2:
+			_unlock_achievement("massive_fight")
+
+func _unlock_achievement(id: String):
+	if not achievements.has(id) or achievements[id].unlocked: return
+	
+	achievements[id].unlocked = true
+	_save_global_achievements()
+	_show_achievement_notification(achievements[id].title)
+
 func _setup_main_ui_containers():
 	var s = _get_ui_scale()
 	ui_root = get_parent().get_node("UI")
@@ -1464,13 +1526,7 @@ func _setup_main_ui_containers():
 
 	# -------------------------
 	
-	# --- TEST NOTIFICATION BUTTON ---
-	var test_btn = Button.new()
-	test_btn.text = "TEST NOTIFICATION"
-	test_btn.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	test_btn.offset_top = 80 * s
-	test_btn.pressed.connect(func(): _show_achievement_notification("Bienvenido al Sandbox"))
-	main_controls.add_child(test_btn)
+
 
 
 	# PUSH GAME VIEW (TextureRect) ABOVE HUD
@@ -1574,10 +1630,10 @@ func _setup_main_ui_containers():
 
 		achievement_btn = _create_vertical_category_btn("🏆", "achievement")
 		achievement_btn.name = "AchievementBtn"
-		# DOUBLE WIDTH only, Standard height
 		achievement_btn.custom_minimum_size = Vector2(fixed_w * 2.0, h_cat)
 		achievement_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		achievement_btn.visible = true
+		achievement_btn.pressed.connect(_setup_achievement_menu)
 		
 		var gold_style = StyleBoxFlat.new()
 		gold_style.bg_color = Color("#D4AF37")
@@ -2754,6 +2810,7 @@ func _toggle_category_panel(target_panel: Control):
 	if is_instance_valid(lab_panel): lab_panel.visible = false
 	if is_instance_valid(disaster_panel): disaster_panel.visible = false
 	if is_instance_valid(npc_panel): npc_panel.visible = false
+	if is_instance_valid(achievement_panel): achievement_panel.visible = false
 	if is_instance_valid(paint_panel): paint_panel.visible = false
 	if is_instance_valid(save_panel): save_panel.queue_free()
 	_close_music_menu()
@@ -4015,6 +4072,7 @@ func _play_action_sound(action: String, min_interval: float = 0.08):
 func _process(delta):
 	if not is_grid_ready: return
 	_frame_count += 1
+	_check_achievement_conditions(delta)
 	
 	# Update camera bounds for virtual physical walls
 	if is_instance_valid(sim_camera) and view_zoom > 1.0:
@@ -9410,6 +9468,7 @@ func _trigger_achievement_reveal():
 	achievement_btn_new.name = "AchievementButton"
 	achievement_btn_new.custom_minimum_size = Vector2(fixed_w * 2.0, h_cat)
 	achievement_btn_new.modulate.a = 0
+	achievement_btn_new.pressed.connect(_setup_achievement_menu)
 	achievement_btn = achievement_btn_new
 	action_hbox.add_child(achievement_btn_new)
 	
@@ -9427,21 +9486,14 @@ func _trigger_achievement_reveal():
 	p.volume_db = -80
 	get_tree().root.add_child(p)
 	p.play()
-	
-	# Background Audio Tween (Does NOT block the rest of the function)
 	var audio_t = create_tween()
 	audio_t.tween_property(p, "volume_db", 0.0, 0.4)
-	audio_t.tween_interval(2.5) # Sustain while the button appears
+	audio_t.tween_interval(2.5)
 	audio_t.tween_property(p, "volume_db", -80.0, 1.2)
-	audio_t.finished.connect(p.queue_free) # Auto-cleanup when done
-	
-	# Independent Scroll Tween (1.5s) - This we await
+	audio_t.finished.connect(p.queue_free)
 	var scroll_t = create_tween().set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
 	scroll_t.tween_property(action_scroll, "scroll_horizontal", 2000, 1.5)
 	await scroll_t.finished
-
-
-
 
 
 	
@@ -9582,6 +9634,8 @@ func _show_achievement_notification(title: String):
 
 func _debug_reset_achievements():
 	is_achievement_menu_unlocked = false
+	for id in achievements:
+		achievements[id].unlocked = false
 	_save_global_achievements()
 	if is_instance_valid(achievement_btn):
 		achievement_btn.queue_free()
@@ -9592,42 +9646,129 @@ func _debug_reset_achievements():
 
 func _setup_achievement_debug_ui():
 	var debug_layer = CanvasLayer.new()
-	debug_layer.layer = 128 # High layer to be above everything
+	debug_layer.layer = 128
 	add_child(debug_layer)
 	
-	var vbox = VBoxContainer.new()
-	# Centramos el contenedor en pantalla
-	vbox.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	vbox.add_theme_constant_override("separation", 20)
-	debug_layer.add_child(vbox)
-	
 	var btn_reset = Button.new()
-	btn_reset.text = " [ !!! RESET LOGROS !!! ] "
-	btn_reset.custom_minimum_size = Vector2(300, 80)
-	btn_reset.modulate = Color.RED
+	btn_reset.text = " [ RESETEAR TODO (LOGROS) ] "
+	btn_reset.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	btn_reset.offset_top = 20
+	btn_reset.custom_minimum_size = Vector2(300, 60)
+	btn_reset.modulate = Color(1, 0, 0, 1) # Rojo sólido
 	btn_reset.pressed.connect(_debug_reset_achievements)
-	vbox.add_child(btn_reset)
-	
-	var btn_test = Button.new()
-	btn_test.text = " [ >>> TEST SECUENCIA <<< ] "
-	btn_test.custom_minimum_size = Vector2(300, 80)
-	btn_test.modulate = Color.GOLD
-	btn_test.pressed.connect(func(): 
-		_show_achievement_notification("LOGRO CINEMÁTICO")
-		# Opcional: Cerrar el panel de debug al probar
-		# vbox.visible = false 
-	)
-	vbox.add_child(btn_test)
-	
-	print("DEBUG: Panel de Test Centrado Creado")
+	debug_layer.add_child(btn_reset)
 
-func _save_global_achievements():
-	var config = ConfigFile.new()
-	config.set_value("progression", "achievements_unlocked", is_achievement_menu_unlocked)
-	config.save("user://achievements.cfg")
+func _setup_achievement_menu():
+	_play_action_sound("ui_click")
+	var s = _get_ui_scale()
+	
+	# 1. Toggle Logic like other panels
+	if is_instance_valid(achievement_panel) and achievement_panel.visible:
+		achievement_panel.visible = false
+		_update_menu_highlights()
+		return
+		
+	_toggle_category_panel(null) # Close others
+	
+	if not is_instance_valid(achievement_panel):
+		achievement_panel = PanelContainer.new()
+		ui_root.add_child(achievement_panel)
+		
+		var p_style = StyleBoxFlat.new()
+		p_style.bg_color = Color(0.12, 0.12, 0.14, 0.98)
+		p_style.set_corner_radius_all(20 * s)
+		p_style.set_border_width_all(4 * s)
+		p_style.border_color = Color(0.35, 0.35, 0.4)
+		achievement_panel.add_theme_stylebox_override("panel", p_style)
+		
+		# Position it exactly like tools/npcs
+		_align_panel_to_hud(achievement_panel, 550 * s, 500 * s)
+		
+		var margin = MarginContainer.new()
+		margin.add_theme_constant_override("margin_all", 20 * s)
+		achievement_panel.add_child(margin)
+		
+		var vbox = VBoxContainer.new()
+		vbox.add_theme_constant_override("separation", 15 * s)
+		margin.add_child(vbox)
+		
+		# Header
+		var title = Label.new()
+		title.text = "LOGROS DEL MUNDO"
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.add_theme_font_size_override("font_size", 32 * s)
+		title.add_theme_color_override("font_color", Color(1, 0.85, 0.4))
+		vbox.add_child(title)
+		
+		# Scroll
+		var scroll = ScrollContainer.new()
+		scroll.name = "AchieveScroll"
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		vbox.add_child(scroll)
+		
+		var item_vbox = VBoxContainer.new()
+		item_vbox.name = "AchieveList"
+		item_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		item_vbox.add_theme_constant_override("separation", 10 * s)
+		scroll.add_child(item_vbox)
 
-func _load_global_achievements():
-	var config = ConfigFile.new()
-	var err = config.load("user://achievements.cfg")
-	if err == OK:
-		is_achievement_menu_unlocked = config.get_value("progression", "achievements_unlocked", false)
+	# REFRESH LIST (Clear and rebuild to show latest unlocks)
+	achievement_panel.visible = true
+	var list = achievement_panel.find_child("AchieveList", true, false)
+	for child in list.get_children(): child.queue_free()
+	
+	for id in achievements:
+		var a = achievements[id]
+		var item = PanelContainer.new()
+		item.custom_minimum_size.y = 90 * s
+		list.add_child(item)
+		
+		var i_style = StyleBoxFlat.new()
+		i_style.set_corner_radius_all(12 * s)
+		
+		var i_margin = MarginContainer.new()
+		i_margin.add_theme_constant_override("margin_all", 12 * s)
+		item.add_child(i_margin)
+		
+		var i_hbox = HBoxContainer.new()
+		i_hbox.add_theme_constant_override("separation", 15 * s)
+		i_margin.add_child(i_hbox)
+		
+		var icon = Label.new()
+		icon.text = "🏆" if a.unlocked else "🔒"
+		icon.add_theme_font_size_override("font_size", 28 * s)
+		icon.modulate.a = 1.0 if a.unlocked else 0.4
+		i_hbox.add_child(icon)
+		
+		var text_vbox = VBoxContainer.new()
+		text_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		text_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		i_hbox.add_child(text_vbox)
+		
+		var a_title = Label.new()
+		a_title.text = a.title
+		a_title.add_theme_font_size_override("font_size", 22 * s)
+		text_vbox.add_child(a_title)
+		
+		if a.unlocked:
+			i_style.bg_color = Color(0.85, 0.65, 0.2, 0.15)
+			i_style.set_border_width_all(2 * s)
+			i_style.border_color = Color(0.9, 0.75, 0.3, 0.8)
+			a_title.add_theme_color_override("font_color", Color(1.0, 0.9, 0.6))
+			
+			var a_desc = Label.new()
+			a_desc.text = a.desc
+			a_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			a_desc.add_theme_font_size_override("font_size", 14 * s)
+			a_desc.modulate = Color(1, 0.95, 0.8, 0.9)
+			text_vbox.add_child(a_desc)
+		else:
+			i_style.bg_color = Color(0.18, 0.18, 0.2, 0.6)
+			i_style.set_border_width_all(1 * s)
+			i_style.border_color = Color(0.3, 0.3, 0.35, 0.4)
+			a_title.modulate.a = 0.4
+			
+		item.add_theme_stylebox_override("panel", i_style)
+
+	_update_menu_highlights()
