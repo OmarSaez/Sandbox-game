@@ -441,6 +441,7 @@ func _load_tool_settings():
 					TranslationServer.set_locale(current_language)
 
 func _ready():
+	_load_global_achievements() # Load global state once at startup
 	Engine.max_fps = 60 # Cierra la puerta al stutter en pantallas 120Hz/LTPO
 	is_grid_ready = false # Safeguard during async _ready
 	
@@ -1324,7 +1325,6 @@ var material_scroll: ScrollContainer
 var cached_hud_height: float = 362.0 # Performance optimization: Cached for panel alignment
 
 func _setup_main_ui_containers():
-	_load_global_achievements() # PERSISTENCE FIRST
 	var s = _get_ui_scale()
 	ui_root = get_parent().get_node("UI")
 	main_controls = ui_root.get_node("Controls")
@@ -1462,23 +1462,7 @@ func _setup_main_ui_containers():
 	# -------------------------
 
 	
-	# --- TEST CONTROLS (CENTERED IN SCREEN) ---
-	var test_vbox = VBoxContainer.new()
-	test_vbox.name = "AchievementTestControls"
-	test_vbox.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	test_vbox.offset_left = -100 * s; test_vbox.offset_right = 100 * s
-	test_vbox.offset_top = -100 * s; test_vbox.offset_bottom = 100 * s
-	ui_root.add_child(test_vbox)
-	
-	var b_unlock = Button.new()
-	b_unlock.text = "TEST: UNLOCK"
-	b_unlock.pressed.connect(func(): _trigger_achievement_reveal())
-	test_vbox.add_child(b_unlock)
-	
-	var b_reset = Button.new()
-	b_reset.text = "TEST: RESET"
-	b_reset.pressed.connect(func(): _reset_achievements())
-	test_vbox.add_child(b_reset)
+
 
 	# PUSH GAME VIEW (TextureRect) ABOVE HUD
 	if not is_instance_valid(texture_rect): 
@@ -1600,12 +1584,12 @@ func _setup_main_ui_containers():
 		
 		action_hbox.add_child(achievement_btn)
 		
-		# Pulse Animation (Only if not already pulsing to avoid infinite loop)
-		if not achievement_btn.has_meta("is_pulsing"):
-			achievement_btn.set_meta("is_pulsing", true)
-			var pulse = create_tween().set_loops()
-			pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-			pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
+		action_hbox.add_child(achievement_btn)
+		
+		# Pulse Animation (Safe creation for mobile)
+		var pulse = achievement_btn.create_tween().set_loops()
+		pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+		pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
 
 
 # Helper for intelligent panel positioning above the HUD
@@ -9441,25 +9425,17 @@ func _trigger_achievement_reveal():
 	var tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
 	tween.tween_property(action_scroll, "scroll_horizontal", 2000, 1.5)
 	
-	var fade_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	var fade_tween = create_tween().bind_node(achievement_btn).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	fade_tween.tween_interval(0.6)
 	fade_tween.tween_property(achievement_btn, "modulate:a", 1.0, 0.8)
 	
 	fade_tween.tween_callback(func():
-		if not achievement_btn.has_meta("is_pulsing"):
-			achievement_btn.set_meta("is_pulsing", true)
-			var pulse = create_tween().set_loops()
-			pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-			pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
+		var pulse = create_tween().set_loops().bind_node(achievement_btn)
+		pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+		pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
 	)
 	
 	_play_action_sound("ui_pop")
-
-func _reset_achievements():
-	is_achievement_menu_unlocked = false
-	_save_global_achievements()
-	_setup_main_ui_containers()
-	_play_action_sound("ui_click")
 
 func _save_global_achievements():
 	var config = ConfigFile.new()
