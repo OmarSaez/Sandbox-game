@@ -1565,7 +1565,6 @@ func _setup_main_ui_containers():
 	_update_material_highlights()
 	_update_menu_highlights()
 
-	_update_menu_highlights()
 
 	# --- HIDDEN ACHIEVEMENT BUTTON (ALWAYS AT THE END / RIGHT) ---
 	if is_achievement_menu_unlocked:
@@ -1576,19 +1575,14 @@ func _setup_main_ui_containers():
 		# Apply fixed width to all existing buttons
 		for child in action_hbox.get_children():
 			if child is Button:
-				child.custom_minimum_size = Vector2(fixed_w, 0) # Fill height automatically
+				child.custom_minimum_size = Vector2(fixed_w, h_cat)
 				child.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 				child.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
-		# ADD A SPACER to separate it from the rest
-		var spacer = Control.new()
-		spacer.custom_minimum_size = Vector2(40 * s, 0)
-		action_hbox.add_child(spacer)
-		
 		achievement_btn = _create_vertical_category_btn("🏆", "achievement")
 		achievement_btn.name = "AchievementBtn"
-		# FORCE TOTAL HEIGHT
-		achievement_btn.custom_minimum_size = Vector2(fixed_w, h_cat)
+		# DOUBLE WIDTH only, Standard height
+		achievement_btn.custom_minimum_size = Vector2(fixed_w * 2.0, h_cat)
 		achievement_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		achievement_btn.visible = true
 		
@@ -1605,13 +1599,13 @@ func _setup_main_ui_containers():
 		achievement_btn.add_theme_stylebox_override("pressed", gold_style)
 		
 		action_hbox.add_child(achievement_btn)
-		# Force the button to match the container's height perfectly
-		achievement_btn.set_anchors_and_offsets_preset(Control.PRESET_VCENTER_WIDE)
 		
-		# Pulse Animation (Subtle glow)
-		var pulse = create_tween().set_loops()
-		pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-		pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
+		# Pulse Animation (Only if not already pulsing to avoid infinite loop)
+		if not achievement_btn.has_meta("is_pulsing"):
+			achievement_btn.set_meta("is_pulsing", true)
+			var pulse = create_tween().set_loops()
+			pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+			pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
 
 
 # Helper for intelligent panel positioning above the HUD
@@ -9407,11 +9401,12 @@ func _trigger_achievement_reveal():
 	# 1. Capture current button widths to prevent shrinking
 	var screen_w = get_viewport_rect().size.x
 	var s = _get_ui_scale()
+	var h_cat = 60 * s
 	var fixed_w = (screen_w - (5 * 2 * s)) / 6.0
 	
 	for child in action_hbox.get_children():
 		if child is Button:
-			child.custom_minimum_size = Vector2(fixed_w, action_hbox.size.y)
+			child.custom_minimum_size = Vector2(fixed_w, h_cat)
 			child.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 			child.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
@@ -9422,20 +9417,21 @@ func _trigger_achievement_reveal():
 	# 3. Enable scrolling behavior
 	action_hbox.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	
-	# 4. Add the items manually for the animation (before the next full rebuild)
-	var spacer = Control.new()
-	spacer.custom_minimum_size = Vector2(40 * s, 0)
-	action_hbox.add_child(spacer)
-	
+	# 4. Add the BIG trophy button manually for the animation
 	achievement_btn = _create_vertical_category_btn("🏆", "achievement")
 	achievement_btn.name = "AchievementBtn"
 	achievement_btn.modulate.a = 0
-	achievement_btn.custom_minimum_size = Vector2(fixed_w, action_hbox.size.y)
+	achievement_btn.custom_minimum_size = Vector2(fixed_w * 2.0, h_cat) # DOUBLE WIDTH
 	achievement_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
 	var gold_style = StyleBoxFlat.new()
 	gold_style.bg_color = Color("#D4AF37")
+	gold_style.border_width_left = 2; gold_style.border_width_top = 2
+	gold_style.border_width_right = 2; gold_style.border_width_bottom = 2
+	gold_style.border_color = Color("#FFFACD")
 	gold_style.set_corner_radius_all(4 * s)
+	gold_style.content_margin_top = 0; gold_style.content_margin_bottom = 0
+	
 	achievement_btn.add_theme_stylebox_override("normal", gold_style)
 	achievement_btn.add_theme_stylebox_override("hover", gold_style)
 	achievement_btn.add_theme_stylebox_override("pressed", gold_style)
@@ -9450,9 +9446,11 @@ func _trigger_achievement_reveal():
 	fade_tween.tween_property(achievement_btn, "modulate:a", 1.0, 0.8)
 	
 	fade_tween.tween_callback(func():
-		var pulse = create_tween().set_loops()
-		pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-		pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
+		if not achievement_btn.has_meta("is_pulsing"):
+			achievement_btn.set_meta("is_pulsing", true)
+			var pulse = create_tween().set_loops()
+			pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+			pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
 	)
 	
 	_play_action_sound("ui_pop")
