@@ -1384,6 +1384,12 @@ var achievements = {
 		"title": "ach_compositor_title",
 		"desc": "ach_compositor_desc",
 		"unlocked": false
+	},
+	"tsunami_master": {
+		"id": "tsunami_master",
+		"title": "ach_tsunami_master_title",
+		"desc": "ach_tsunami_master_desc",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -1434,7 +1440,7 @@ func _check_achievement_conditions(delta):
 	if achievement_sequence_step != -1:
 		_check_achievement_step(achievement_sequence_step)
 		achievement_sequence_step += 1
-		if achievement_sequence_step >= 3: # 3 groups total
+		if achievement_sequence_step >= 4: # 4 groups total
 			achievement_sequence_step = -1 # End sequence
 	
 func _check_achievement_step(step: int):
@@ -1506,6 +1512,18 @@ func _check_achievement_step(step: int):
 						if el_colors.size() >= 4 and bg_colors.size() >= 4:
 							_unlock_achievement("paint")
 							return
+		3: # --- GROUP 3: DISASTERS (TSUNAMI) ---
+			if not achievements["tsunami_master"].unlocked and tsunami_intensity > 0:
+				var target_liquids = [2, 4, 11, 13] # Water, Petro, Lava, Acid
+				var found = {}
+				for y in range(0, dynamic_grid_height, 4):
+					for x in range(0, grid_width, 4):
+						var pid = cells[y * grid_width + x] & 0xFFFF
+						if pid in target_liquids:
+							found[pid] = true
+							if found.size() >= 4:
+								_unlock_achievement("tsunami_master")
+								return
 
 func _unlock_achievement(id: String):
 	if not achievements.has(id) or achievements[id].unlocked: return
