@@ -4740,8 +4740,10 @@ func _register_material(id: int, color1: Color, tags: int, color2 = null, color3
 	material_tags_raw[id] = tags
 
 func _set_cell(x, y, mat_id):
-	if x >= 0 and x < grid_width and y >= 0 and y < dynamic_grid_height:
-		var idx = y * grid_width + x
+	var ix = int(x)
+	var iy = int(y)
+	if ix >= 0 and ix < grid_width and iy >= 0 and iy < dynamic_grid_height:
+		var idx = iy * grid_width + ix
 		
 		# CRITICAL PERFORMANCE OPTIMIZATION: Early Exit for Air
 		if mat_id == 0:
@@ -4800,7 +4802,7 @@ func _set_cell(x, y, mat_id):
 			cell_paint_colors[idx] = 0
 			if not element_paint_dirty: element_paint_dirty = true
 			
-		_activate_chunk(x, y)
+		_activate_chunk(ix, iy)
 
 		if (tags & SandboxMaterial.Tags.ELECTRICITY): 
 			charge_array[idx] = 101
@@ -4808,8 +4810,10 @@ func _set_cell(x, y, mat_id):
 			charge_dirty = true
 
 func _activate_chunk(gx, gy):
-	var cx = int(gx / CHUNK_SIZE)
-	var cy = int(gy / CHUNK_SIZE)
+	var ix = int(gx)
+	var iy = int(gy)
+	var cx = int(ix / CHUNK_SIZE)
+	var cy = int(iy / CHUNK_SIZE)
 	if cx >= 0 and cx < chunks_x and cy >= 0 and cy < chunks_y:
 		var c_idx = cy * chunks_x + cx
 		if next_chunks_active[c_idx] >= 60: return
@@ -4822,8 +4826,10 @@ func _activate_chunk(gx, gy):
 					next_chunks_active[ncy * chunks_x + ncx] = 60
 
 func _get_cell(x, y):
-	if x >= 0 and x < grid_width and y >= 0 and y < dynamic_grid_height:
-		return cells[y * grid_width + x] & 0xFFFF
+	var ix = int(x)
+	var iy = int(y)
+	if ix >= 0 and ix < grid_width and iy >= 0 and iy < dynamic_grid_height:
+		return cells[iy * grid_width + ix] & 0xFFFF
 	return -1
 
 func _step_simulation():
@@ -5486,14 +5492,14 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 	# --- CORROSION (ACID) ---
 	if (tags & SandboxMaterial.Tags.ACID):
 		if _get_lut_rand() < 0.4: # Reaction Speed
-			for offset in neighbor_offsets:
-				var n_idx = idx + offset
-				if n_idx >= 0 and n_idx < cells.size():
-					var nid = cells[n_idx] & 0xFFFF
+			for ny in range(y - 1, y + 2):
+				for nx in range(x - 1, x + 2):
+					if nx == x and ny == y: continue
+					var nid = _get_cell(nx, ny)
 					if nid > 0 and nid != pure_id:
 						var n_tags = material_tags_raw[nid]
 						if not (n_tags & (SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.INVINCIBLE)):
-							_set_cell_by_idx(n_idx, 44) 
+							_set_cell(nx, ny, 44) 
 							if _get_lut_rand() < 0.3: _set_cell(x, y, 0); return
 							if (n_tags & SandboxMaterial.Tags.SOLID) and _get_lut_rand() < 0.1: _set_cell(x, y, 0); return
 
@@ -7741,11 +7747,10 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 	return true
 
 func _has_tag_neighbor(x, y, tag):
-	var idx = y * grid_width + x
-	for offset in neighbor_offsets:
-		var n_idx = idx + offset
-		if n_idx >= 0 and n_idx < cells.size():
-			var nid = cells[n_idx] & 0xFFFF
+	for ny in range(y - 1, y + 2):
+		for nx in range(x - 1, x + 2):
+			if nx == x and ny == y: continue
+			var nid = _get_cell(nx, ny)
 			if nid > 0 and (material_tags_raw[nid] & tag): return true
 	return false
 
@@ -7797,11 +7802,13 @@ func _has_id_in_lookup(idx: int, target_id: int, lookup: PackedInt32Array) -> bo
 	return false
 
 func _count_neighbor_id_fast(idx: int, target_id: int) -> int:
+	var x = idx % grid_width
+	var y = int(idx / float(grid_width))
 	var count = 0
-	for offset in neighbor_offsets:
-		var n_idx = idx + offset
-		if n_idx >= 0 and n_idx < cells.size():
-			if (cells[n_idx] & 0xFFFF) == target_id: count += 1
+	for ny in range(y - 1, y + 2):
+		for nx in range(x - 1, x + 2):
+			if nx == x and ny == y: continue
+			if _get_cell(nx, ny) == target_id: count += 1
 	return count
 
 func _has_id_within_oval(x, y, target_id, rx, ry):
