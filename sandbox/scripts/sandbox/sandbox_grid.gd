@@ -1387,6 +1387,7 @@ var achievements = {
 		"title": "ach_wind_master_title",
 		"desc": "ach_wind_master_desc",
 		"unlocked": false,
+		"seen": true,
 		"discovered": []
 	},
 	"compositor": {
@@ -1695,6 +1696,23 @@ func _unlock_achievement(id: String):
 	achievements[id].seen = false # Mark as NEW (unseen)
 	_save_global_achievements()
 	_show_achievement_notification(achievements[id].title)
+
+func _record_tornado_discovery(type: int):
+	if not achievements.has("wind_master"): return
+	
+	if typeof(achievements["wind_master"]["discovered"]) != TYPE_ARRAY:
+		achievements["wind_master"]["discovered"] = []
+		
+	var disc = achievements["wind_master"]["discovered"]
+	
+	if not (int(type) in disc):
+		disc.append(int(type))
+		_save_global_achievements()
+
+	if disc.size() >= 4 and not achievements["wind_master"].unlocked:
+		_unlock_achievement("wind_master")
+
+# (Debug HUD removed)
 
 func _setup_main_ui_containers():
 	var s = _get_ui_scale()
@@ -3944,6 +3962,8 @@ func _setup_disaster_ui():
 		if l > 0: 
 			tornado_timer = 15.0; tornado_x = _get_lut_rand()*grid_width; tornado_target_x = _get_lut_rand()*grid_width
 			tornado_ground_y = 0.0 # Start from the sky for landing animation
+			tornado_element = 0 # Default normal
+			_record_tornado_discovery(0) # Record normal type immediately
 			_play_action_sound("tornado")
 			_toggle_category_panel(disaster_panel)
 		else:
@@ -4404,6 +4424,7 @@ func _process(delta):
 	_tnt_buckets_this_frame.clear()
 	_frame_count += 1
 	_check_achievement_conditions(delta)
+	# (Debug HUD removed)
 	
 	# Update camera bounds for virtual physical walls
 	if is_instance_valid(sim_camera) and view_zoom > 1.0:
@@ -4859,34 +4880,31 @@ func _process_tornado(delta):
 		tornado_visual.size = Vector2(t_width, tornado_ground_y * grid_scale)
 		tornado_visual.position = Vector2(tornado_x * grid_scale - t_width * 0.5, 0)
 		
-		# Element logic
+		# --- LOGRO: MAESTRO DE VIENTOS (Detección de seguridad) ---
+		if not achievements["wind_master"].unlocked:
+			_record_tornado_discovery(tornado_element)
+			
 		if tornado_element_timer > 0:
 			tornado_element_timer -= delta
 			if tornado_element_timer <= 0:
 				tornado_element = 0
 		
-		# --- LOGRO: MAESTRO DE VIENTOS (Detección de descubrimiento) ---
-		if tornado_intensity > 0 and not achievements["wind_master"].unlocked:
-			var disc = achievements["wind_master"].discovered
-			if not tornado_element in disc:
-				disc.append(tornado_element)
-				_save_global_achievements() # Persist progress immediately
-				if disc.size() >= 4:
-					_unlock_achievement("wind_master")
-
 		# Absorption decay
 		tornado_absorb_fire = lerp(tornado_absorb_fire, 0.0, delta * 2.0)
 		tornado_absorb_acid = lerp(tornado_absorb_acid, 0.0, delta * 2.0)
 		tornado_absorb_elec = lerp(tornado_absorb_elec, 0.0, delta * 2.0)
 		
-		# Thresholds to switch element (Prioritize Electricity/Acid over Fire)
+		# Thresholds to switch element
 		if tornado_absorb_elec > 150:
 			tornado_element = 3; tornado_element_timer = 6.0; tornado_absorb_elec = 0
+			_record_tornado_discovery(3)
 		elif tornado_absorb_acid > 200:
 			tornado_element = 2; tornado_element_timer = 6.0; tornado_absorb_acid = 0
+			_record_tornado_discovery(2)
 		elif tornado_absorb_fire > 200:
 			tornado_element = 1; tornado_element_timer = 6.0; tornado_absorb_fire = 0
-			
+			_record_tornado_discovery(1)
+		
 		tornado_visual.material.set_shader_parameter("intensity", float(tornado_intensity))
 		tornado_visual.material.set_shader_parameter("element_type", tornado_element)
 	else:
