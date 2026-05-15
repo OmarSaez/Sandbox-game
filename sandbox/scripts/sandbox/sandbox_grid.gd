@@ -1359,9 +1359,16 @@ var achievements = {
 		"title": "ach_mad_scientist_title",
 		"desc": "ach_mad_scientist_desc",
 		"unlocked": false
+	},
+	"paint": {
+		"id": "paint",
+		"title": "ach_paint_title",
+		"desc": "ach_paint_desc",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
+var achievement_sequence_step: int = -1 # -1: Idle, 0+: Current group frame
 
 func _save_global_achievements():
 	var config = ConfigFile.new()
@@ -1385,54 +1392,75 @@ func _load_global_achievements():
 				achievements[id].unlocked = true
 
 func _check_achievement_conditions(delta):
-	# Throttled check: Only every 2 seconds to save CPU
+	# --- ACHIEVEMENT POLLING SEQUENCE ---
 	achievement_check_timer += delta
-	if achievement_check_timer < 2.0: return
-	achievement_check_timer = 0.0
+	if achievement_check_timer >= 2.0:
+		achievement_check_timer = 0.0
+		achievement_sequence_step = 0 # Start sequence
 	
-	# 1. PELEA MASIVA
-	if not achievements["massive_fight"].unlocked:
-		var teams = {} # team_id -> count
-		for npc in active_npcs:
-			if npc.hp <= 0: continue
-			var t = npc.get("team", 0)
-			teams[t] = teams.get(t, 0) + 1
-		
-		var valid_teams = 0
-		for t_id in teams:
-			if teams[t_id] >= 10:
-				valid_teams += 1
-		
-		if valid_teams >= 2:
-			_unlock_achievement("massive_fight")
-			
-	# 2. ELECTRIFICANTE
-	if not achievements["electrifying"].unlocked:
-		# We check if there's any water cell (ID 2) with active charge
-		# Optimization: We sample the grid in steps to avoid a full 100% scan every check
-		for y in range(0, dynamic_grid_height, 2):
-			for x in range(0, grid_width, 2):
-				var idx = y * grid_width + x
-				var id = cells[idx] & 0xFF
-				if id == 2 and charge_array[idx] > 0: # 2 is Water
-					_unlock_achievement("electrifying")
-					return # Found! Stop scanning
+	if achievement_sequence_step != -1:
+		_check_achievement_step(achievement_sequence_step)
+		achievement_sequence_step += 1
+		if achievement_sequence_step >= 3: # 3 groups total
+			achievement_sequence_step = -1 # End sequence
+	
+func _check_achievement_step(step: int):
+	match step:
+		0: # --- GROUP 0: COMBAT & INTERACTION ---
+			if not achievements["massive_fight"].unlocked:
+				var teams = {}
+				for npc in active_npcs:
+					if npc.hp > 0:
+						teams[npc.team] = teams.get(npc.team, 0) + 1
+				var valid_teams = 0
+				for t_id in teams:
+					if teams[t_id] >= 10: valid_teams += 1
+				if valid_teams >= 2: _unlock_achievement("massive_fight")
 					
-	# 3. DIOS TODO PODEROSO (Optimized scan)
-	if not achievements["god"].unlocked:
-		var req = [1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 16, 4, 18, 20, 21, 24, 25, 26, 27, 70]
-		var found = {}
-		var total = req.size()
-		
-		# High performance 4x4 sampling
-		for y in range(0, dynamic_grid_height, 4):
-			for x in range(0, grid_width, 4):
-				var pid = cells[y * grid_width + x] & 0xFF
-				if pid in req:
-					found[pid] = true
-					if found.size() >= total:
-						_unlock_achievement("god")
-						return # Achievement found, exit early
+			if not achievements["electrifying"].unlocked:
+				for y in range(0, dynamic_grid_height, 4):
+					for x in range(0, grid_width, 4):
+						var idx = y * grid_width + x
+						if (cells[idx] & 0xFF) == 2 and charge_array[idx] > 0:
+							_unlock_achievement("electrifying")
+							return 
+
+		1: # --- GROUP 1: THE HEAVY SCAN (GOD MODE) ---
+			if not achievements["god"].unlocked:
+				var req = [1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 16, 4, 18, 20, 21, 24, 25, 26, 27, 70]
+				var found = {}
+				for y in range(0, dynamic_grid_height, 4):
+					for x in range(0, grid_width, 4):
+						var pid = cells[y * grid_width + x] & 0xFF
+						if pid in req:
+							found[pid] = true
+							if found.size() >= req.size():
+								_unlock_achievement("god")
+								return
+
+		2: # --- GROUP 2: ARTISTIC (PAINT) ---
+			if not achievements["paint"].unlocked:
+				var bg_colors = {}
+				var el_colors = {}
+				
+				# Sensitive 4x4 sampling to detect thin lines
+				for y in range(0, dynamic_grid_height, 4):
+					for x in range(0, grid_width, 4):
+						var idx = y * grid_width + x
+						# 1. Check Element Paint (ABGR32)
+						var el_c = cell_paint_colors[idx]
+						if el_c != 0: 
+							el_colors[el_c] = true
+						
+						# 2. Check Background Paint (Ignore near-black/transparent)
+						var bg_c = background_img.get_pixel(x, y)
+						if bg_c.a > 0.1 and (bg_c.r > 0.02 or bg_c.g > 0.02 or bg_c.b > 0.02):
+							# We use a rounded hex to avoid counting microscopic variations
+							bg_colors[bg_c.to_html(false).left(6)] = true
+						
+						if el_colors.size() >= 4 and bg_colors.size() >= 4:
+							_unlock_achievement("paint")
+							return
 
 func _unlock_achievement(id: String):
 	if not achievements.has(id) or achievements[id].unlocked: return
