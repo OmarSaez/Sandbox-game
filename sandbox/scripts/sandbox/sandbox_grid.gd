@@ -1402,6 +1402,12 @@ var achievements = {
 		"title": "ach_good_night_title",
 		"desc": "ach_good_night_desc",
 		"unlocked": false
+	},
+	"volcano_giant": {
+		"id": "volcano_giant",
+		"title": "ach_volcano_title",
+		"desc": "ach_volcano_desc",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -1452,7 +1458,7 @@ func _check_achievement_conditions(delta):
 	if achievement_sequence_step != -1:
 		_check_achievement_step(achievement_sequence_step)
 		achievement_sequence_step += 1
-		if achievement_sequence_step >= 5: # 5 groups total (0-4)
+		if achievement_sequence_step >= 6: # 6 groups total (0-5)
 			achievement_sequence_step = -1 # End sequence
 	
 func _check_achievement_step(step: int):
@@ -1545,6 +1551,17 @@ func _check_achievement_step(step: int):
 						if sleep_count >= 12:
 							_unlock_achievement("good_night")
 							return
+		5: # --- GROUP 5: VOLCANO (GIANT'S AWAKENING) ---
+			if not achievements["volcano_giant"].unlocked and is_volcano_active:
+				var volcano_pixels = 0
+				for y in range(0, dynamic_grid_height, 2):
+					for x in range(0, grid_width, 2):
+						var pid = cells[y * grid_width + x] & 0xFFFF
+						if pid == 27 or pid == 29:
+							volcano_pixels += 4 # Weighted for 2x2 sampling
+							if volcano_pixels >= 1000:
+								_unlock_achievement("volcano_giant")
+								return
 
 func _unlock_retro_time_delayed():
 	# Esperar 2 segundos para que el usuario vea el mando y se mueva
