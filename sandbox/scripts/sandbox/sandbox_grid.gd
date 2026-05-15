@@ -1378,10 +1378,20 @@ var achievements = {
 		"desc": "ach_wind_master_desc",
 		"unlocked": false,
 		"discovered": []
+	},
+	"compositor": {
+		"id": "compositor",
+		"title": "ach_compositor_title",
+		"desc": "ach_compositor_desc",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
 var achievement_sequence_step: int = -1 # -1: Idle, 0+: Current group frame
+
+# Music Achievement Tracking
+var composition_note_count: int = 0
+var last_note_play_time: float = 0.0
 
 func _save_global_achievements():
 	var config = ConfigFile.new()
@@ -4363,11 +4373,11 @@ func _process(delta):
 					# 4. MUSIC: Trigger note on pulse/heat
 					if (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC):
 						if selected_material == 600:
-							_play_music_note(5, 0)
+							_play_music_note(5, 0, true)
 						else:
 							var inst = int((selected_material - MUSIC_ID_START) / 16.0)
 							var note = (selected_material - MUSIC_ID_START) % 16
-							_play_music_note(inst, note)
+							_play_music_note(inst, note, true)
 					
 				_manage_brush_sound(-1)
 			else:
@@ -8771,8 +8781,20 @@ func _place_music_block(gx, gy, mat_id):
 		for ox in range(2):
 			_set_cell(gx + ox, gy + oy, mat_id)
 
-func _play_music_note(inst_idx, note_idx):
+func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false):
 	sim_mutex.lock()
+	
+	# Achievement Tracking: Composer
+	if not ignore_achievement and not achievements["compositor"].unlocked:
+		var current_time = Time.get_ticks_msec() / 1000.0
+		if current_time - last_note_play_time <= 1.0:
+			composition_note_count += 1
+			if composition_note_count >= 5:
+				_unlock_achievement("compositor")
+		else:
+			composition_note_count = 1 # Start new count
+		last_note_play_time = current_time
+	
 	var s_name = MUSIC_INSTRUMENTS[inst_idx]
 	var p_scale = MUSIC_PITCHES[note_idx % 16]
 	
@@ -8909,7 +8931,7 @@ func _setup_music_ui(force_refresh: bool = false):
 				selected_material = 600
 			else:
 				selected_material = MUSIC_ID_START + (idx * 16) + selected_music_note
-				_play_music_note(selected_music_instrument, selected_music_note)
+				_play_music_note(selected_music_instrument, selected_music_note, true)
 			_setup_music_ui(true)
 		)
 		inst_grid.add_child(btn)
@@ -9045,7 +9067,7 @@ func _setup_music_ui(force_refresh: bool = false):
 			btn.pressed.connect(func():
 				selected_music_note = nid
 				selected_material = MUSIC_ID_START + (selected_music_instrument * 16) + nid
-				_play_music_note(selected_music_instrument, nid)
+				_play_music_note(selected_music_instrument, nid, true)
 				_setup_music_ui(true)
 			)
 			note_grid.add_child(btn)
