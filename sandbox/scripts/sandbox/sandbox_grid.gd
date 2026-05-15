@@ -1496,31 +1496,6 @@ func _has_unseen_achievements() -> bool:
 			return true
 	return false
 
-func _pulse_achievement_button():
-	if not is_instance_valid(achievement_btn): return
-	
-	if not _has_unseen_achievements():
-		achievement_btn.modulate = Color.WHITE
-		achievement_btn.set_meta("is_pulsing", false)
-		return
-	
-	if achievement_btn.get_meta("is_pulsing", false): return # Already in loop
-	
-	achievement_btn.set_meta("is_pulsing", true)
-	_do_pulse_loop()
-
-func _do_pulse_loop():
-	if not is_instance_valid(achievement_btn) or not achievement_btn.get_meta("is_pulsing", false) or not _has_unseen_achievements():
-		if is_instance_valid(achievement_btn):
-			achievement_btn.modulate = Color.WHITE
-			achievement_btn.set_meta("is_pulsing", false)
-		return
-		
-	var t = achievement_btn.create_tween()
-	t.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-	t.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
-	t.finished.connect(_do_pulse_loop)
-
 func _load_global_achievements():
 	var config = ConfigFile.new()
 	var err = config.load("user://achievements.cfg")
@@ -1979,7 +1954,9 @@ func _setup_main_ui_containers():
 		action_hbox.add_child(achievement_btn)
 		
 		if _has_unseen_achievements():
-			_pulse_achievement_button()
+			var pulse = achievement_btn.create_tween().set_loops()
+			pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+			pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
 		else:
 			achievement_btn.modulate = Color.WHITE
 
@@ -9907,7 +9884,12 @@ func _show_achievement_notification(title: String):
 	var origin_pos = Vector2(viewport_w - 100 * s, get_viewport_rect().size.y - 40 * s)
 	if is_instance_valid(achievement_btn):
 		origin_pos = achievement_btn.global_position + achievement_btn.size / 2.0
-		_pulse_achievement_button()
+		# Start pulse directly on the existing button to avoid HUD scroll reset
+		if not achievement_btn.has_meta("is_pulsing"):
+			var pulse = achievement_btn.create_tween().set_loops()
+			pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+			pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
+			achievement_btn.set_meta("is_pulsing", true)
 	
 	var toast_layer = CanvasLayer.new()
 	toast_layer.layer = 100
@@ -10055,10 +10037,14 @@ func _setup_achievement_menu():
 			changed = true
 	if changed:
 		_save_global_achievements()
-		# Break the pulse loop immediately
-		if is_instance_valid(achievement_btn):
-			achievement_btn.set_meta("is_pulsing", false)
-			achievement_btn.modulate = Color.WHITE
+		# Refresh HUD to stop pulsing effect but PRESERVE scroll position
+		if is_instance_valid(action_scroll):
+			var old_scroll = action_scroll.scroll_horizontal
+			_setup_main_ui_containers()
+			# IMPORTANT: Wait one frame for layout to be ready before restoring scroll
+			await get_tree().process_frame
+			if is_instance_valid(action_scroll):
+				action_scroll.scroll_horizontal = old_scroll
 		
 	_toggle_category_panel(null) # Close others
 	
