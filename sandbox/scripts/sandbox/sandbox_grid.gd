@@ -1396,6 +1396,12 @@ var achievements = {
 		"title": "ach_retro_time_title",
 		"desc": "ach_retro_time_desc",
 		"unlocked": false
+	},
+	"good_night": {
+		"id": "good_night",
+		"title": "ach_good_night_title",
+		"desc": "ach_good_night_desc",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -1446,7 +1452,7 @@ func _check_achievement_conditions(delta):
 	if achievement_sequence_step != -1:
 		_check_achievement_step(achievement_sequence_step)
 		achievement_sequence_step += 1
-		if achievement_sequence_step >= 4: # 4 groups total
+		if achievement_sequence_step >= 5: # 5 groups total (0-4)
 			achievement_sequence_step = -1 # End sequence
 	
 func _check_achievement_step(step: int):
@@ -1530,6 +1536,15 @@ func _check_achievement_step(step: int):
 							if found.size() >= 4:
 								_unlock_achievement("tsunami_master")
 								return
+		4: # --- GROUP 4: PEACEFUL (SLEEP) ---
+			if not achievements["good_night"].unlocked:
+				var sleep_count = 0
+				for npc in active_npcs:
+					if npc.hp > 0 and npc.get("is_lying", false) and npc.get("current_emoji", "") == "😴":
+						sleep_count += 1
+						if sleep_count >= 12:
+							_unlock_achievement("good_night")
+							return
 
 func _unlock_retro_time_delayed():
 	# Esperar 2 segundos para que el usuario vea el mando y se mueva
