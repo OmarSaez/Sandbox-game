@@ -1341,6 +1341,12 @@ var achievements = {
 		"title": "ELECTRIFICANTE",
 		"desc": "Combina electricidad y agua para crear una reacción conductora",
 		"unlocked": false
+	},
+	"miner_plan": {
+		"id": "miner_plan",
+		"title": "EL PLAN DEL MINERO",
+		"desc": "Descubre el trágico final del sabotaje del minero",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -7492,6 +7498,7 @@ func _process_npcs(delta):
 								if npc.state_steps <= 0:
 									if npc.mine_state == "saboteur":
 										_set_cell(np.x, np.y + 5, 3); npc.hp = 0; npc.hit_flash = 10
+										_unlock_achievement("miner_plan")
 									elif npc.mine_state == "ramp": npc.mine_state = "gallery"; npc.state_steps = _get_lut_rand_range(60, 100)
 									else: npc.mine_state = "ramp"; npc.state_steps = _get_lut_rand_range(15, 25)
 								
@@ -7510,6 +7517,9 @@ func _process_npcs(delta):
 											if f_idx >= 0 and f_idx < grid_width: 
 												_set_cell(f_idx, np.y + 5, 3) 
 												_set_cell(f_idx, np.y - 1, 3)
+										npc.hp = 0
+										npc.hit_flash = 10
+										_unlock_achievement("miner_plan")
 										npc.hp = 0; npc.hit_flash = 10
 									else:
 										var old_dir = npc.dir
