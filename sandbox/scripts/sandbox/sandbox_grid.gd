@@ -3440,6 +3440,7 @@ func _setup_disaster_ui():
 		if l > 0: 
 			earthquake_timer = _get_lut_rand_range(5.0, 7.0)
 			_play_action_sound("earthquake")
+			_toggle_category_panel(disaster_panel)
 		else:
 			earthquake_timer = 0 # Reset para apagar sonido e intensidad
 		_update_menu_highlights()
@@ -3451,6 +3452,7 @@ func _setup_disaster_ui():
 			tornado_timer = 15.0; tornado_x = _get_lut_rand()*grid_width; tornado_target_x = _get_lut_rand()*grid_width
 			tornado_ground_y = 0.0 # Start from the sky for landing animation
 			_play_action_sound("tornado")
+			_toggle_category_panel(disaster_panel)
 		else:
 			tornado_timer = 0 # Apagar instantáneamente
 		_update_menu_highlights()
@@ -3461,6 +3463,7 @@ func _setup_disaster_ui():
 		if l > 0: 
 			tsunami_timer = 15.0; tsunami_wave_x = 0.0
 			_play_action_sound("tsunami")
+			_toggle_category_panel(disaster_panel)
 		else:
 			tsunami_timer = 0 # Apagar instantáneamente
 		_update_menu_highlights()
