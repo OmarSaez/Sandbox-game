@@ -307,7 +307,9 @@ var action_sfx = {
 	"volcan_brush": "volcan",          # (PINCEL) Sonido al dibujar
 	"volcan_active": "volcan_bubbles", # (LOOP) Burbujeo constante cuando el volcán funciona
 	"volcan_burst": "volcan_explode",   # (ONE-SHOT) Pequeños estallidos de lava
-	"burn_loop": "fire_crackle"        # (LOOP) Sonido de cosas quemándose (fuego, lava, carbón)
+	"burn_loop": "fire_crackle",        # (LOOP) Sonido de cosas quemándose (fuego, lava, carbón)
+	"achievement_menu_unlock": "achievement_menu_unlock",
+	"achievement_unlock": "achievement_unlock"
 }
 
 var last_action_times = {} # Para controlar la saturación de sonidos
@@ -851,6 +853,7 @@ func _ready():
 		tw.tween_callback(curtain_layer.queue_free)
 	
 	_show_welcome_message()
+	_setup_achievement_debug_ui()
 
 func _show_welcome_message():
 	var save_path = "user://welcome_shown.save"
@@ -9386,8 +9389,6 @@ func _restore_lab_data(lab_data: Array):
 	_update_custom_mats_in_material_grid()
 
 func _trigger_achievement_reveal():
-	if is_achievement_menu_unlocked: return
-	
 	# 1. Capture current button widths to prevent shrinking
 	var screen_w = get_viewport_rect().size.x
 	var s = _get_ui_scale()
@@ -9399,64 +9400,79 @@ func _trigger_achievement_reveal():
 			child.custom_minimum_size = Vector2(fixed_w, h_cat)
 			child.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 			child.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	
-	# 2. Unlock state
+
+	# 2. Unlock & Persist
 	is_achievement_menu_unlocked = true
 	_save_global_achievements()
 	
-	# 3. Enable scrolling behavior
-	action_hbox.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	
-	# 4. Add the BIG trophy button manually for the animation
-	achievement_btn = _create_vertical_category_btn("🏆", "achievement")
-	achievement_btn.name = "AchievementBtn"
-	achievement_btn.modulate.a = 0
-	achievement_btn.custom_minimum_size = Vector2(fixed_w * 2.0, h_cat) # DOUBLE WIDTH
-	achievement_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# 3. UI Implementation
+	var achievement_btn_new = _create_vertical_category_btn("🏆", "achievement")
+	achievement_btn_new.name = "AchievementButton"
+	achievement_btn_new.custom_minimum_size = Vector2(fixed_w * 2.0, h_cat)
+	achievement_btn_new.modulate.a = 0
+	achievement_btn = achievement_btn_new
+	action_hbox.add_child(achievement_btn_new)
 	
 	var gold_style = StyleBoxFlat.new()
 	gold_style.bg_color = Color("#D4AF37")
-	gold_style.border_width_left = 2; gold_style.border_width_top = 2
-	gold_style.border_width_right = 2; gold_style.border_width_bottom = 2
-	gold_style.border_color = Color("#FFFACD")
-	gold_style.set_corner_radius_all(4 * s)
-	gold_style.content_margin_top = 0; gold_style.content_margin_bottom = 0
+	gold_style.set_corner_radius_all(0)
+	achievement_btn_new.add_theme_stylebox_override("normal", gold_style)
+	achievement_btn_new.add_theme_stylebox_override("hover", gold_style)
+	achievement_btn_new.add_theme_stylebox_override("pressed", gold_style)
 	
-	achievement_btn.add_theme_stylebox_override("normal", gold_style)
-	achievement_btn.add_theme_stylebox_override("hover", gold_style)
-	achievement_btn.add_theme_stylebox_override("pressed", gold_style)
-	action_hbox.add_child(achievement_btn)
+	# 4. Cinematic Sequence with Background Audio
+	var p = AudioStreamPlayer.new()
+	p.stream = _get_sfx_stream("achievement_menu_unlock")
+	p.bus = "Master"
+	p.volume_db = -80
+	get_tree().root.add_child(p)
+	p.play()
 	
-	# 5. Animation
-	var tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
-	tween.tween_property(action_scroll, "scroll_horizontal", 2000, 1.5)
+	# Background Audio Tween (Does NOT block the rest of the function)
+	var audio_t = create_tween()
+	audio_t.tween_property(p, "volume_db", 0.0, 0.4)
+	audio_t.tween_interval(2.5) # Sustain while the button appears
+	audio_t.tween_property(p, "volume_db", -80.0, 1.2)
+	audio_t.finished.connect(p.queue_free) # Auto-cleanup when done
 	
-	var fade_tween = create_tween().bind_node(achievement_btn).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	fade_tween.tween_interval(0.6)
-	fade_tween.tween_property(achievement_btn, "modulate:a", 1.0, 0.8)
+	# Independent Scroll Tween (1.5s) - This we await
+	var scroll_t = create_tween().set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
+	scroll_t.tween_property(action_scroll, "scroll_horizontal", 2000, 1.5)
+	await scroll_t.finished
+
+
+
+
+
 	
-	fade_tween.tween_callback(func():
-		var pulse = create_tween().set_loops().bind_node(achievement_btn)
-		pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-		pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
-	)
+	# After scroll, show button
+	var fade_t = create_tween().bind_node(achievement_btn_new).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	fade_t.tween_property(achievement_btn_new, "modulate:a", 1.0, 0.6)
 	
-	_play_action_sound("ui_pop")
+	# Idle pulse
+	var pulse = create_tween().set_loops().bind_node(achievement_btn_new)
+	pulse.tween_property(achievement_btn_new, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+	pulse.tween_property(achievement_btn_new, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
+	
+	await fade_t.finished
+
+
+
 
 func _show_achievement_notification(title: String):
 	var s = _get_ui_scale()
 	var viewport_w = get_viewport_rect().size.x
 	
-	# 1. PRE-SEQUENCE
+	# 1. Ensure menu is visible (Cinematic Chain for the first time)
 	if not is_achievement_menu_unlocked:
-		_trigger_achievement_reveal()
-		await get_tree().create_timer(1.2).timeout
+		await _trigger_achievement_reveal()
+		await get_tree().create_timer(1.0).timeout # Pause for audio to breathe and impact
 	else:
 		var scroll_tween = create_tween().set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
 		scroll_tween.tween_property(action_scroll, "scroll_horizontal", 2000, 1.0)
 		await scroll_tween.finished
 	
-	# 2. ORIGIN & SIZE
+	# 2. Dimensions & UI Root
 	var icon_size = 75 * s
 	var origin_pos = Vector2(viewport_w - 100 * s, get_viewport_rect().size.y - 40 * s)
 	if is_instance_valid(achievement_btn):
@@ -9466,7 +9482,7 @@ func _show_achievement_notification(title: String):
 	toast_layer.layer = 100
 	ui_root.add_child(toast_layer)
 	
-	# --- 3. ICON ---
+	# --- 3. UI Construction ---
 	var icon_container = Control.new()
 	icon_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast_layer.add_child(icon_container)
@@ -9479,7 +9495,6 @@ func _show_achievement_notification(title: String):
 	icon_tex.position = -icon_tex.custom_minimum_size / 2.0
 	icon_container.add_child(icon_tex)
 	
-	# --- 4. MASK & STATIC CONTENT ---
 	var origin_x_right = origin_pos.x + icon_size / 2.0
 	var margin = viewport_w - origin_x_right
 	var final_w = viewport_w - 2.0 * margin
@@ -9498,7 +9513,6 @@ func _show_achievement_notification(title: String):
 	var bg = Panel.new()
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.05, 0.05, 0.05, 0.95)
-	style.set_corner_radius_all(0)
 	style.border_width_left = 3 * s; style.border_width_top = 3 * s
 	style.border_width_right = 3 * s; style.border_width_bottom = 3 * s
 	style.border_color = Color("#D4AF37")
@@ -9523,31 +9537,29 @@ func _show_achievement_notification(title: String):
 	mask.size = Vector2(0, icon_size)
 	mask.global_position = Vector2(origin_x_right, target_y - icon_size/2.0)
 	
-	# --- 5. ANIMATION SEQUENCE ---
-	# Phase 1: Pop Icon
-	var t1 = create_tween().set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	# --- 4. Animation Sequence ---
+	# Bind Tweens to toast_layer for automatic mobile cleanup
+	var t1 = create_tween().bind_node(toast_layer).set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	t1.tween_property(icon_container, "scale", Vector2.ONE, 0.5)
 	t1.tween_property(icon_container, "modulate:a", 1.0, 0.3)
 	t1.tween_property(icon_container, "global_position:y", target_y, 0.6)
-	_play_action_sound("ui_pop")
+	_play_action_sound("achievement_unlock")
 	await t1.finished
 	
 	await get_tree().create_timer(0.2).timeout
 	mask.visible = true
 	
-	# Phase 2: Unroll Expansion
-	var t2 = create_tween().set_parallel(true).set_trans(Tween.TRANS_EXPO)
+	var t2 = create_tween().bind_node(toast_layer).set_parallel(true).set_trans(Tween.TRANS_EXPO)
 	t2.tween_property(icon_container, "global_position:x", target_x + icon_size/2.0, 1.0)
 	t2.tween_property(mask, "global_position:x", target_x, 1.0)
 	t2.tween_property(mask, "size:x", final_w, 1.0)
 	t2.tween_property(static_content, "position:x", 0, 1.0).from(final_w)
 	await t2.finished
 	
-	# --- PHASE 3: THE HOLD (GUARANTEED 8 SECONDS) ---
+	# Hold for readability
 	await get_tree().create_timer(1.5).timeout
 	
-	# Phase 4: Exit Animation
-	var t3 = create_tween().set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	var t3 = create_tween().bind_node(toast_layer).set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 	t3.tween_property(icon_container, "global_position:y", get_viewport_rect().size.y + 200 * s, 0.8)
 	t3.tween_property(mask, "global_position:y", get_viewport_rect().size.y + 200 * s, 0.8)
 	t3.tween_property(icon_container, "modulate:a", 0.0, 0.5)
@@ -9566,6 +9578,48 @@ func _show_achievement_notification(title: String):
 
 
 
+
+
+func _debug_reset_achievements():
+	is_achievement_menu_unlocked = false
+	_save_global_achievements()
+	if is_instance_valid(achievement_btn):
+		achievement_btn.queue_free()
+	achievement_btn = null
+	# Reset scroll to see the animation again
+	action_scroll.scroll_horizontal = 0
+	print("DEBUG: Achievements Reset!")
+
+func _setup_achievement_debug_ui():
+	var debug_layer = CanvasLayer.new()
+	debug_layer.layer = 128 # High layer to be above everything
+	add_child(debug_layer)
+	
+	var vbox = VBoxContainer.new()
+	# Centramos el contenedor en pantalla
+	vbox.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	vbox.add_theme_constant_override("separation", 20)
+	debug_layer.add_child(vbox)
+	
+	var btn_reset = Button.new()
+	btn_reset.text = " [ !!! RESET LOGROS !!! ] "
+	btn_reset.custom_minimum_size = Vector2(300, 80)
+	btn_reset.modulate = Color.RED
+	btn_reset.pressed.connect(_debug_reset_achievements)
+	vbox.add_child(btn_reset)
+	
+	var btn_test = Button.new()
+	btn_test.text = " [ >>> TEST SECUENCIA <<< ] "
+	btn_test.custom_minimum_size = Vector2(300, 80)
+	btn_test.modulate = Color.GOLD
+	btn_test.pressed.connect(func(): 
+		_show_achievement_notification("LOGRO CINEMÁTICO")
+		# Opcional: Cerrar el panel de debug al probar
+		# vbox.visible = false 
+	)
+	vbox.add_child(btn_test)
+	
+	print("DEBUG: Panel de Test Centrado Creado")
 
 func _save_global_achievements():
 	var config = ConfigFile.new()
