@@ -1131,6 +1131,7 @@ func _show_main_tutorial_step():
 	
 	var count_lbl = Label.new()
 	count_lbl.text = str(main_tutorial_step + 1) + "/" + str(steps.size())
+	count_lbl.add_theme_font_override("font", _get_safe_font())
 	count_lbl.add_theme_font_size_override("font_size", 18 * s)
 	count_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
 	count_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -1138,6 +1139,7 @@ func _show_main_tutorial_step():
 	
 	var lbl = Label.new()
 	lbl.text = step_data["text"]
+	lbl.add_theme_font_override("font", _get_safe_font())
 	lbl.add_theme_font_size_override("font_size", 24 * s)
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lbl.custom_minimum_size = Vector2(300 * s, 0)
@@ -1148,6 +1150,7 @@ func _show_main_tutorial_step():
 	ok_btn.text = "OK"
 	ok_btn.custom_minimum_size = Vector2(120 * s, 50 * s)
 	ok_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	ok_btn.add_theme_font_override("font", _get_safe_font())
 	ok_btn.add_theme_font_size_override("font_size", 24 * s)
 	var ok_style = StyleBoxFlat.new()
 	ok_style.bg_color = Color(0.2, 0.6, 0.3)
@@ -2008,6 +2011,7 @@ func _create_vertical_category_btn(emoji: String, text_key: String) -> Button:
 	emoji_lbl.text = emoji
 	emoji_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	emoji_lbl.add_theme_font_size_override("font_size", 28 * s)
+	emoji_lbl.add_theme_font_override("font", _get_safe_font())
 	vbox.add_child(emoji_lbl)
 	
 	var text_lbl = Label.new()
@@ -9337,6 +9341,8 @@ func _setup_music_button():
 		if is_instance_valid(npc_panel): npc_panel.visible = false
 		if is_instance_valid(paint_panel): paint_panel.visible = false
 		if is_instance_valid(save_panel): save_panel.queue_free()
+		if is_instance_valid(achievement_panel): achievement_panel.visible = false
+		if is_instance_valid(lab_panel): lab_panel.visible = false
 		
 		_setup_music_ui()
 		_update_menu_highlights()
@@ -10036,7 +10042,10 @@ func _setup_achievement_menu():
 		
 		var p_style = StyleBoxFlat.new()
 		p_style.bg_color = Color(0.12, 0.12, 0.14, 0.98)
-		p_style.set_corner_radius_all(20 * s)
+		p_style.corner_radius_top_left = 20 * s
+		p_style.corner_radius_top_right = 20 * s
+		p_style.corner_radius_bottom_left = 0
+		p_style.corner_radius_bottom_right = 0
 		p_style.set_border_width_all(4 * s)
 		p_style.border_color = Color(0.35, 0.35, 0.4)
 		achievement_panel.add_theme_stylebox_override("panel", p_style)
@@ -10056,6 +10065,7 @@ func _setup_achievement_menu():
 		var title = Label.new()
 		title.text = tr("achievement_menu_title")
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.add_theme_font_override("font", _get_safe_font())
 		title.add_theme_font_size_override("font_size", 32 * s)
 		title.add_theme_color_override("font_color", Color(1, 0.85, 0.4))
 		vbox.add_child(title)
@@ -10088,34 +10098,42 @@ func _setup_achievement_menu():
 		else:
 			# CREATE ONLY IF MISSING
 			item = PanelContainer.new()
-			item.custom_minimum_size.y = 90 * s
+			item.custom_minimum_size.y = 100 * s
 			item.mouse_filter = Control.MOUSE_FILTER_PASS
 			list.add_child(item)
 			
 			var i_margin = MarginContainer.new()
-			i_margin.add_theme_constant_override("margin_all", 12 * s)
+			var im_val = int(12 * s)
+			i_margin.add_theme_constant_override("margin_left", int(20 * s))
+			i_margin.add_theme_constant_override("margin_right", im_val)
+			i_margin.add_theme_constant_override("margin_top", im_val)
+			i_margin.add_theme_constant_override("margin_bottom", im_val)
 			item.add_child(i_margin)
 			
 			var i_hbox = HBoxContainer.new()
-			i_hbox.add_theme_constant_override("separation", 15 * s)
+			i_hbox.add_theme_constant_override("separation", 22 * s)
 			i_margin.add_child(i_hbox)
 			
 			var icon = Label.new()
 			icon.name = "Icon"
+			icon.add_theme_font_override("font", _get_safe_font())
 			i_hbox.add_child(icon)
 			
 			var text_vbox = VBoxContainer.new()
 			text_vbox.name = "TextVBox"
 			text_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			text_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+			text_vbox.add_theme_constant_override("separation", 2 * s)
 			i_hbox.add_child(text_vbox)
 			
 			var a_title = Label.new()
 			a_title.name = "Title"
+			a_title.add_theme_font_override("font", _get_safe_font())
 			text_vbox.add_child(a_title)
 			
 			var a_desc = Label.new()
 			a_desc.name = "Desc"
+			a_desc.add_theme_font_override("font", _get_safe_font())
 			text_vbox.add_child(a_desc)
 		
 		# UPDATE VISUAL STATE (Cheap)
@@ -10143,7 +10161,7 @@ func _setup_achievement_menu():
 			a_desc.text = tr(a.desc)
 			a_desc.visible = true
 			a_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			a_desc.add_theme_font_size_override("font_size", 14 * s)
+			a_desc.add_theme_font_size_override("font_size", 16 * s)
 			a_desc.modulate = Color(1, 0.95, 0.8, 0.9)
 		else:
 			i_style.bg_color = Color(0.18, 0.18, 0.2, 0.6)
