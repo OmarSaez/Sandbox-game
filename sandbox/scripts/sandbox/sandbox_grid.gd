@@ -1420,6 +1420,12 @@ var achievements = {
 		"title": "ach_special_boom_title",
 		"desc": "ach_special_boom_desc",
 		"unlocked": false
+	},
+	"short_circuit": {
+		"id": "short_circuit",
+		"title": "ach_short_circuit_title",
+		"desc": "ach_short_circuit_desc",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -1484,7 +1490,7 @@ func _check_achievement_conditions(delta):
 	if achievement_sequence_step != -1:
 		_check_achievement_step(achievement_sequence_step)
 		achievement_sequence_step += 1
-		if achievement_sequence_step >= 7: # 7 groups total (0-6)
+		if achievement_sequence_step >= 8: # 8 groups total (0-7)
 			achievement_sequence_step = -1 # End sequence
 	
 func _check_achievement_step(step: int):
@@ -1599,6 +1605,15 @@ func _check_achievement_step(step: int):
 				# but user asked for "distintos tipos", so let's require Acid AND Elec or similar
 				if has_acid and has_elec:
 					_unlock_achievement("special_boom")
+		7: # --- GROUP 7: ELECTRICITY (SHORT CIRCUIT) ---
+			if not achievements["short_circuit"].unlocked:
+				var electric_count = 0
+				for npc in active_npcs:
+					if npc.hp > 0 and npc.get("hit_flash", 0) > 0 and npc.get("hit_type", "") == "electric":
+						electric_count += 1
+						if electric_count >= 10:
+							_unlock_achievement("short_circuit")
+							return
 
 func _unlock_retro_time_delayed():
 	# Esperar 2 segundos para que el usuario vea el mando y se mueva
