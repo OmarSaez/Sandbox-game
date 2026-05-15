@@ -1335,6 +1335,12 @@ var achievements = {
 		"title": "PELEA MASIVA",
 		"desc": "Haz una pelea de más de 10 NPCs en cada equipo con al menos 2 equipos",
 		"unlocked": false
+	},
+	"electrifying": {
+		"id": "electrifying",
+		"title": "ELECTRIFICANTE",
+		"desc": "Combina electricidad y agua para crear una reacción conductora",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -1381,6 +1387,18 @@ func _check_achievement_conditions(delta):
 		
 		if valid_teams >= 2:
 			_unlock_achievement("massive_fight")
+			
+	# 2. ELECTRIFICANTE
+	if not achievements["electrifying"].unlocked:
+		# We check if there's any water cell (ID 2) with active charge
+		# Optimization: We sample the grid in steps to avoid a full 100% scan every check
+		for y in range(0, dynamic_grid_height, 2):
+			for x in range(0, grid_width, 2):
+				var idx = y * grid_width + x
+				var id = cells[idx] & 0xFF
+				if id == 2 and charge_array[idx] > 0: # 2 is Water
+					_unlock_achievement("electrifying")
+					return # Found! Stop scanning
 
 func _unlock_achievement(id: String):
 	if not achievements.has(id) or achievements[id].unlocked: return
