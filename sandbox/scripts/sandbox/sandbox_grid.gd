@@ -2852,6 +2852,20 @@ func _on_window_resized():
 
 func _save_rotation_cache():
 	var path = "user://rotation_cache.dat"
+	
+	# CLEAN CIRCULAR REFERENCES BEFORE SAVING
+	# NPCs often point to each other (social_target, cached_target), which causes infinite recursion in store_var
+	var clean_npcs = []
+	var keys_to_nullify = ["social_target", "cached_target", "cached_closest_enemy", "cached_closest_ally", "social_partner"]
+	for npc in active_npcs:
+		var c = {}
+		for key in npc:
+			if key in keys_to_nullify:
+				c[key] = null
+			else:
+				c[key] = npc[key]
+		clean_npcs.append(c)
+		
 	var save_dict = {
 		"width": grid_width,
 		"height": grid_height,
@@ -2860,7 +2874,8 @@ func _save_rotation_cache():
 		"tags": tags_array,
 		"cell_paint": cell_paint_colors,
 		"bg_paint": background_img.get_data().to_int32_array(),
-		"npcs": active_npcs
+		"npcs": clean_npcs,
+		"npc_id_counter": _npc_id_counter
 	}
 	var file = FileAccess.open_compressed(path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
 	if file:
@@ -2868,6 +2883,9 @@ func _save_rotation_cache():
 		file.close()
 
 func _map_grid_data(dict: Dictionary):
+	if dict.has("npc_id_counter"):
+		_npc_id_counter = dict["npc_id_counter"]
+		
 	if dict.has("width") and dict.has("height"):
 		var old_w = int(dict["width"])
 		var old_h = int(dict["height"])
@@ -2930,14 +2948,31 @@ func _map_grid_data(dict: Dictionary):
 			active_npcs.clear()
 			var old_npcs = dict["npcs"]
 			for npc in old_npcs:
-				var new_x = npc["pos"].x + x_offset
-				var new_y = npc["pos"].y + y_offset
+				var new_x = npc["pos"].x - x_offset
+				var new_y = npc["pos"].y - y_offset
 				if new_x >= 0 and new_x < grid_width and new_y >= 0 and new_y < grid_height:
 					var new_npc = npc.duplicate()
 					new_npc["pos"] = Vector2i(new_x, new_y)
+					
+					# FIX: Also translate last render and logic positions to avoid "ghost" pixels and AI freeze
+					# The offset direction must match the inverse of the cell mapping (new = old - offset)
+					if new_npc.has("last_render_x"): new_npc["last_render_x"] -= x_offset
+					if new_npc.has("last_render_y"): new_npc["last_render_y"] -= y_offset
+					if new_npc.has("spawn_y"): new_npc["spawn_y"] -= y_offset
+					if new_npc.has("last_pos_x"): new_npc["last_pos_x"] -= x_offset
+					
+					# Clear references to old NPCs (as they belong to the previous scene)
+					new_npc["social_target"] = null
+					new_npc["social_timer"] = 0.0
+					new_npc["cached_target"] = null
+					new_npc["cached_closest_enemy"] = null
+					new_npc["cached_closest_ally"] = null
+					
+					new_npc["stuck_timer"] = 0.0 # Force re-think
 					active_npcs.append(new_npc)
 	
 	background_dirty = true
+	element_paint_dirty = true # Force update of the custom paint texture after reload
 
 func _load_rotation_cache():
 	var path = "user://rotation_cache.dat"
