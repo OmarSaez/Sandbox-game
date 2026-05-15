@@ -1023,9 +1023,6 @@ func _start_interactive_tutorial():
 	_show_main_tutorial_step()
 
 func _show_main_tutorial_step():
-	if is_instance_valid(main_tutorial_overlay):
-		main_tutorial_overlay.queue_free()
-	
 	var steps = [
 		{"target": "material_scroll", "text": tr("TUTORIAL_STEP_1")},
 		{"target": "tools_btn", "text": tr("TUTORIAL_STEP_2")},
@@ -1040,7 +1037,8 @@ func _show_main_tutorial_step():
 	if main_tutorial_step >= steps.size():
 		if is_instance_valid(main_tutorial_overlay):
 			main_tutorial_overlay.queue_free()
-		return # Tutorial terminado
+			main_tutorial_overlay = null
+		return
 		
 	var step_data = steps[main_tutorial_step]
 	var target_key = step_data["target"]
@@ -1051,28 +1049,16 @@ func _show_main_tutorial_step():
 	else:
 		target_node = ui_elements.get(target_key)
 		
-	# ROBUST FALLBACK: Search by Name if Dictionary key failed or node invalid
+	# Safe Fallback Search
 	if not is_instance_valid(target_node) and is_instance_valid(main_controls):
-		var search_name = target_key.capitalize().replace("_", "").replace(" ", "")
-		target_node = main_controls.find_child(search_name, true, false)
+		target_node = main_controls.find_child(target_key, true, false)
 		if not target_node:
-			# Try snake_case too
-			target_node = main_controls.find_child(target_key, true, false)
-		# Hacer auto-scroll si el botón está dentro de un ScrollContainer
-		if is_instance_valid(target_node):
-			var scroll = target_node.get_parent().get_parent()
-			if scroll is ScrollContainer:
-				var center_y = target_node.position.y - (scroll.size.y / 2.0) + (target_node.size.y / 2.0)
-				scroll.scroll_vertical = max(0, int(center_y))
-				await get_tree().process_frame
-				await get_tree().process_frame # Esperar a que la UI recalcule posiciones
-		
+			var search_name = target_key.capitalize().replace("_", "").replace(" ", "")
+			target_node = main_controls.find_child(search_name, true, false)
+
+	# If node still invalid, skip step safely
 	if not is_instance_valid(target_node) or not target_node.is_inside_tree() or not target_node.is_visible_in_tree():
-		# Si un botón no existe o está oculto, saltamos al siguiente
 		main_tutorial_step += 1
-		# IMPORTANTE: No podemos dejar el overlay anterior si vamos a saltar diferido
-		# Pero _show_main_tutorial_step ya limpia al inicio, así que call_deferred es seguro.
-		# Sin embargo, si es el último paso, se quedaría colgado si no limpiamos arriba.
 		call_deferred("_show_main_tutorial_step")
 		return
 		
@@ -1080,11 +1066,19 @@ func _show_main_tutorial_step():
 	var rect = target_node.get_global_rect()
 	var screen_size = get_viewport_rect().size
 	
-	main_tutorial_overlay = Control.new()
-	main_tutorial_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	main_tutorial_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	ui_root.add_child(main_tutorial_overlay)
+	# PERSISTENT OVERLAY LOGIC (No more flickering)
+	if not is_instance_valid(main_tutorial_overlay):
+		main_tutorial_overlay = Control.new()
+		main_tutorial_overlay.name = "MainTutorialOverlay"
+		main_tutorial_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		main_tutorial_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+		ui_root.add_child(main_tutorial_overlay)
+	else:
+		# Immediate clear of old step visuals, but keeping the overlay node alive
+		for c in main_tutorial_overlay.get_children():
+			c.queue_free()
 	
+	# Drawing Dimming Rects
 	var create_dim = func(pos, sz):
 		var r = ColorRect.new()
 		r.color = Color(0, 0, 0, 0.8)
@@ -1094,10 +1088,7 @@ func _show_main_tutorial_step():
 		main_tutorial_overlay.add_child(r)
 		
 	var padding = 5 * s
-	var c_rect = rect.grow(padding)
-	
-	# Clamp dentro de la pantalla
-	c_rect = c_rect.intersection(get_viewport_rect())
+	var c_rect = rect.grow(padding).intersection(get_viewport_rect())
 	
 	create_dim.call(Vector2(0, 0), Vector2(screen_size.x, c_rect.position.y))
 	create_dim.call(Vector2(0, c_rect.end.y), Vector2(screen_size.x, screen_size.y - c_rect.end.y))
@@ -1112,15 +1103,15 @@ func _show_main_tutorial_step():
 	highlight_border.editor_only = false
 	main_tutorial_overlay.add_child(highlight_border)
 	
-	var tw = create_tween().set_loops()
-	tw.tween_property(highlight_border, "border_color", Color(0.4, 1.0, 0.4, 0.3), 0.5)
-	tw.tween_property(highlight_border, "border_color", Color(0.4, 1.0, 0.4, 1.0), 0.5)
+	var tw = create_tween().set_loops().bind_node(highlight_border)
+	tw.tween_property(highlight_border, "border_color", Color(0.4, 1.0, 0.4, 0.2), 0.6)
+	tw.tween_property(highlight_border, "border_color", Color(0.4, 1.0, 0.4, 1.0), 0.6)
 	
+	# Tutorial Panel
 	var panel = PanelContainer.new()
 	var p_style = StyleBoxFlat.new()
 	p_style.bg_color = Color(0.1, 0.1, 0.15, 0.95)
-	p_style.border_width_left = 3; p_style.border_width_top = 3
-	p_style.border_width_right = 3; p_style.border_width_bottom = 3
+	p_style.set_border_width_all(int(3 * s))
 	p_style.border_color = Color(0.3, 0.8, 0.4)
 	p_style.set_corner_radius_all(15 * s)
 	panel.add_theme_stylebox_override("panel", p_style)
@@ -1128,18 +1119,18 @@ func _show_main_tutorial_step():
 	
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 15 * s)
-	
 	var marg = MarginContainer.new()
-	marg.add_theme_constant_override("margin_left", 20 * s)
-	marg.add_theme_constant_override("margin_right", 20 * s)
-	marg.add_theme_constant_override("margin_top", 20 * s)
-	marg.add_theme_constant_override("margin_bottom", 20 * s)
+	# Correct margin properties for Godot 4
+	var m_val = int(20 * s)
+	marg.add_theme_constant_override("margin_top", m_val)
+	marg.add_theme_constant_override("margin_bottom", m_val)
+	marg.add_theme_constant_override("margin_left", m_val)
+	marg.add_theme_constant_override("margin_right", m_val)
 	marg.add_child(vbox)
 	panel.add_child(marg)
 	
 	var count_lbl = Label.new()
 	count_lbl.text = str(main_tutorial_step + 1) + "/" + str(steps.size())
-	count_lbl.add_theme_font_override("font", _get_safe_font())
 	count_lbl.add_theme_font_size_override("font_size", 18 * s)
 	count_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
 	count_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -1147,7 +1138,6 @@ func _show_main_tutorial_step():
 	
 	var lbl = Label.new()
 	lbl.text = step_data["text"]
-	lbl.add_theme_font_override("font", _get_safe_font())
 	lbl.add_theme_font_size_override("font_size", 24 * s)
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lbl.custom_minimum_size = Vector2(300 * s, 0)
@@ -1158,29 +1148,39 @@ func _show_main_tutorial_step():
 	ok_btn.text = "OK"
 	ok_btn.custom_minimum_size = Vector2(120 * s, 50 * s)
 	ok_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	ok_btn.add_theme_font_override("font", _get_safe_font())
 	ok_btn.add_theme_font_size_override("font_size", 24 * s)
 	var ok_style = StyleBoxFlat.new()
 	ok_style.bg_color = Color(0.2, 0.6, 0.3)
 	ok_style.set_corner_radius_all(10 * s)
 	ok_btn.add_theme_stylebox_override("normal", ok_style)
+	ok_btn.add_theme_stylebox_override("hover", ok_style)
+	ok_btn.add_theme_stylebox_override("pressed", ok_style)
 	
 	ok_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
-		ok_btn.disabled = true # Evitar doble click
+		ok_btn.disabled = true
 		main_tutorial_step += 1
-		_show_main_tutorial_step()
+		call_deferred("_show_main_tutorial_step")
 	)
 	vbox.add_child(ok_btn)
 	
-	await get_tree().process_frame
-	var p_size = panel.size
+	# DYNAMIC POSITIONING (Closer to target)
+	var p_size = panel.get_combined_minimum_size()
+	panel.position.x = (screen_size.x - p_size.x) / 2.0
 	
-	# Posicionamiento inteligente
 	if target_key == "material_scroll":
-		panel.position = Vector2(screen_size.x / 2 - p_size.x / 2, c_rect.position.y - p_size.y - 20 * s)
+		# Step 1: Specific placement for the material list
+		panel.position.y = rect.position.y - p_size.y - 50 * s
+	elif rect.position.y > screen_size.y * 0.5:
+		# Target is on bottom half, show panel just ABOVE it
+		panel.position.y = rect.position.y - p_size.y - 40 * s
 	else:
-		panel.position = Vector2(screen_size.x / 2 - p_size.x / 2, screen_size.y / 2 - p_size.y / 2)
+		# Target is on top half, show panel just BELOW it
+		panel.position.y = rect.end.y + 40 * s
+
+	# Final safety clamp to keep panel on screen
+	panel.position.y = clamp(panel.position.y, 20 * s, screen_size.y - p_size.y - 20 * s)
+	panel.position.x = clamp(panel.position.x, 10 * s, screen_size.x - p_size.x - 10 * s)
 
 
 func _show_menu_reminder(menu_id: String, parent_vbox: VBoxContainer, text_key: String):
