@@ -397,9 +397,10 @@ var charge_queued_frame := PackedInt32Array()
 var img: Image
 
 # VOLUME SYSTEM
-var game_volume: float = 1.5
+var game_volume: float = 1.3
 var pre_mute_volume: float = 1.0
 var is_muted: bool = false
+var achievement_pulse_tween: Tween = null
 
 # OPTIMIZATION TABLES
 var oval_lookup_10x5: PackedInt32Array = []
@@ -1493,6 +1494,15 @@ func _save_global_achievements():
 	config.set_value("progression", "unlocked_ids", unlocked_list)
 	config.set_value("progression", "seen_ids", seen_list)
 	config.save("user://achievements.cfg")
+	
+	# After saving, if everything is seen, kill pulse just in case
+	if not _has_unseen_achievements():
+		if is_instance_valid(achievement_pulse_tween):
+			print("ACH DEBUG: Killing pulse after save. ID: ", achievement_pulse_tween.get_instance_id())
+			achievement_pulse_tween.kill()
+			achievement_pulse_tween = null
+		if is_instance_valid(achievement_btn):
+			achievement_btn.modulate = Color.WHITE
 
 func _has_unseen_achievements() -> bool:
 	for id in achievements:
@@ -1947,11 +1957,12 @@ func _setup_main_ui_containers():
 		var fixed_w = (screen_w - (5 * 2 * s)) / 6.0 # 6 buttons + separations
 		
 		# Apply fixed width to all existing buttons
-		for child in action_hbox.get_children():
-			if child is Button:
-				child.custom_minimum_size = Vector2(fixed_w, h_cat)
-				child.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-				child.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		# Kill any existing pulse tween before replacing the reference
+		if is_instance_valid(achievement_btn):
+			if achievement_btn.has_meta("pulse_tween"):
+				var old_tw = achievement_btn.get_meta("pulse_tween")
+				if is_instance_valid(old_tw): old_tw.kill()
+			achievement_btn.modulate = Color(1,1,1,1)
 
 		achievement_btn = _create_vertical_category_btn("🏆", "achievement_btn")
 		achievement_btn.name = "AchievementBtn"
@@ -1975,12 +1986,19 @@ func _setup_main_ui_containers():
 		
 		action_hbox.add_child(achievement_btn)
 		
-		if _has_unseen_achievements():
-			var pulse = achievement_btn.create_tween().set_loops()
-			pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-			pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
-			achievement_btn.set_meta("pulse_tween", pulse)
+		var is_menu_open = is_instance_valid(achievement_panel) and achievement_panel.visible
+		if _has_unseen_achievements() and not is_menu_open:
+			if is_instance_valid(achievement_pulse_tween): 
+				achievement_pulse_tween.kill()
+			achievement_pulse_tween = achievement_btn.create_tween().set_loops()
+			print("ACH DEBUG: Starting pulse from HUD. ID: ", achievement_pulse_tween.get_instance_id())
+			achievement_pulse_tween.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+			achievement_pulse_tween.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
 		else:
+			if is_instance_valid(achievement_pulse_tween): 
+				print("ACH DEBUG: HUD Rebuild killing pulse. ID: ", achievement_pulse_tween.get_instance_id())
+				achievement_pulse_tween.kill()
+				achievement_pulse_tween = null
 			achievement_btn.modulate = Color.WHITE
 
 
@@ -3130,6 +3148,29 @@ func _setup_lab_ui():
 			)
 			flow.add_child(tb)
 			ui_elements["lab_tag_buttons"][tag] = tb
+
+func _get_unseen_count() -> int:
+	var count = 0
+	for id in achievements:
+		if achievements[id].unlocked and not achievements[id].get("seen", false):
+			count += 1
+	return count
+
+var ach_debug_lbl: Label
+func _draw_debug_ach_info():
+	if not ach_debug_lbl:
+		var cl = CanvasLayer.new(); cl.layer = 205; add_child(cl)
+		ach_debug_lbl = Label.new(); ach_debug_lbl.position = Vector2(20, 250)
+		ach_debug_lbl.add_theme_font_size_override("font_size", 20)
+		ach_debug_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+		ach_debug_lbl.add_theme_constant_override("outline_size", 4)
+		cl.add_child(ach_debug_lbl)
+	
+	var txt = "ACH DIAGNOSTIC:\n"
+	txt += "Unseen Count: " + str(_get_unseen_count()) + "\n"
+	txt += "Pulse Tween: " + ("VALID" if is_instance_valid(achievement_pulse_tween) else "NULL") + "\n"
+	txt += "Menu Open: " + ("YES" if (is_instance_valid(achievement_panel) and achievement_panel.visible) else "NO") + "\n"
+	ach_debug_lbl.text = txt
 
 func _toggle_category_panel(target_panel: Control):
 	_play_action_sound("ui_click")
@@ -4424,6 +4465,7 @@ func _process(delta):
 	_tnt_buckets_this_frame.clear()
 	_frame_count += 1
 	_check_achievement_conditions(delta)
+	_draw_debug_ach_info()
 	# (Debug HUD removed)
 	
 	# Update camera bounds for virtual physical walls
@@ -9899,9 +9941,11 @@ func _trigger_achievement_reveal():
 	fade_t.tween_property(achievement_btn_new, "modulate:a", 1.0, 0.6)
 	
 	# Idle pulse
-	var pulse = create_tween().set_loops().bind_node(achievement_btn_new)
-	pulse.tween_property(achievement_btn_new, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-	pulse.tween_property(achievement_btn_new, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
+	if is_instance_valid(achievement_pulse_tween): achievement_pulse_tween.kill()
+	achievement_pulse_tween = create_tween().set_loops().bind_node(achievement_btn_new)
+	print("ACH DEBUG: Starting pulse from REVEAL CINEMATIC. ID: ", achievement_pulse_tween.get_instance_id())
+	achievement_pulse_tween.tween_property(achievement_btn_new, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+	achievement_pulse_tween.tween_property(achievement_btn_new, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
 	
 	await fade_t.finished
 
@@ -9926,12 +9970,14 @@ func _show_achievement_notification(title: String):
 	var origin_pos = Vector2(viewport_w - 100 * s, get_viewport_rect().size.y - 40 * s)
 	if is_instance_valid(achievement_btn):
 		origin_pos = achievement_btn.global_position + achievement_btn.size / 2.0
-		# Start pulse directly on the existing button to avoid HUD scroll reset
-		if not achievement_btn.has_meta("pulse_tween"):
-			var pulse = achievement_btn.create_tween().set_loops()
-			pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-			pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
-			achievement_btn.set_meta("pulse_tween", pulse)
+		# Handle pulse logic
+		var is_menu_open = is_instance_valid(achievement_panel) and achievement_panel.visible
+		if not is_menu_open:
+			if is_instance_valid(achievement_pulse_tween): achievement_pulse_tween.kill()
+			achievement_pulse_tween = achievement_btn.create_tween().set_loops()
+			print("ACH DEBUG: Starting pulse from NOTIFICATION. ID: ", achievement_pulse_tween.get_instance_id())
+			achievement_pulse_tween.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+			achievement_pulse_tween.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
 	
 	var toast_layer = CanvasLayer.new()
 	toast_layer.layer = 100
@@ -10026,6 +10072,20 @@ func _show_achievement_notification(title: String):
 
 func _setup_achievement_menu():
 	_play_action_sound("ui_click")
+	
+	print("ACH DEBUG: Opening menu. Attempting to kill pulse.")
+	# KILL THE PULSE DEFINITIVELY
+	if is_instance_valid(achievement_pulse_tween):
+		print("ACH DEBUG: Pulse KILLED in menu. ID: ", achievement_pulse_tween.get_instance_id())
+		achievement_pulse_tween.kill()
+		achievement_pulse_tween = null
+	
+	if is_instance_valid(achievement_btn):
+		# Aggressive Reset
+		var kill_tw = create_tween()
+		kill_tw.tween_property(achievement_btn, "modulate", Color(1, 1, 1, 1), 0.1)
+		achievement_btn.modulate = Color(1, 1, 1, 1)
+
 	var s = _get_ui_scale()
 	
 	# 1. Toggle Logic like other panels
@@ -10042,13 +10102,6 @@ func _setup_achievement_menu():
 			changed = true
 	if changed:
 		_save_global_achievements()
-		# Stop the pulse effect SURGICALLY without rebuilding HUD
-		if is_instance_valid(achievement_btn):
-			if achievement_btn.has_meta("pulse_tween"):
-				var tw = achievement_btn.get_meta("pulse_tween")
-				if is_instance_valid(tw): tw.kill()
-				achievement_btn.remove_meta("pulse_tween")
-			achievement_btn.modulate = Color.WHITE
 		
 	_toggle_category_panel(null) # Close others
 	
