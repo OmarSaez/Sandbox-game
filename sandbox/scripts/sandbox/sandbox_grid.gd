@@ -483,7 +483,6 @@ func _ready():
 
 	_precalculate_optimization_tables()
 	
-	_load_lab_state() # LOAD DATA FIRST
 	
 	# 0. GLOBAL VISUAL STABILITY (Fixes grey margins on Tablets/Modern Devices)
 	RenderingServer.set_default_clear_color(Color(0.04, 0.04, 0.04, 1.0))
@@ -788,6 +787,7 @@ func _ready():
 
 	# Initialize UI
 	_setup_main_ui_containers()
+	_load_lab_state() # LOAD LAB AFTER UI AND ARRAYS ARE READY
 	
 	# FORCE START HIDDEN
 	tools_panel.visible = false
@@ -1949,6 +1949,7 @@ func _setup_main_ui_containers():
 		achievement_btn.add_theme_stylebox_override("normal", gold_style)
 		achievement_btn.add_theme_stylebox_override("hover", gold_style)
 		achievement_btn.add_theme_stylebox_override("pressed", gold_style)
+		achievement_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 		
 		action_hbox.add_child(achievement_btn)
 		
@@ -1991,6 +1992,7 @@ func _create_vertical_category_btn(emoji: String, text_key: String) -> Button:
 	
 	btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	btn.custom_minimum_size.y = 0 # Let the parent HBox dictate height
+	btn.mouse_filter = Control.MOUSE_FILTER_PASS
 
 	
 	var vbox = VBoxContainer.new()
@@ -3288,6 +3290,7 @@ func _on_window_resized():
 		await get_tree().process_frame
 		
 		# Preservation mechanism: save the map before OS resizes Godot
+		_save_lab_state()
 		_save_rotation_cache()
 		
 		get_tree().reload_current_scene()
@@ -3461,6 +3464,11 @@ func _load_lab_state():
 		_set_lab_unlocked(true)
 	else:
 		_set_lab_unlocked(false)
+		
+	# CRITICAL: Re-apply loaded definitions to the engine arrays
+	for i in range(3):
+		_apply_custom_material_to_engine(i)
+	_sync_palette_to_shader()
 
 func _set_lab_unlocked(unlocked: bool):
 	is_lab_unlocked = unlocked
@@ -10042,11 +10050,11 @@ func _setup_achievement_menu():
 		title.add_theme_color_override("font_color", Color(1, 0.85, 0.4))
 		vbox.add_child(title)
 		
-		# Scroll
 		var scroll = ScrollContainer.new()
 		scroll.name = "AchieveScroll"
 		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		scroll.mouse_filter = Control.MOUSE_FILTER_PASS # Allow dragging from background
 		vbox.add_child(scroll)
 		
 		var item_vbox = VBoxContainer.new()
@@ -10064,6 +10072,7 @@ func _setup_achievement_menu():
 		var a = achievements[id]
 		var item = PanelContainer.new()
 		item.custom_minimum_size.y = 90 * s
+		item.mouse_filter = Control.MOUSE_FILTER_PASS # Allow scrolling through items
 		list.add_child(item)
 		
 		var i_style = StyleBoxFlat.new()
