@@ -1957,6 +1957,7 @@ func _setup_main_ui_containers():
 			var pulse = achievement_btn.create_tween().set_loops()
 			pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
 			pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
+			achievement_btn.set_meta("pulse_tween", pulse)
 		else:
 			achievement_btn.modulate = Color.WHITE
 
@@ -9892,11 +9893,11 @@ func _show_achievement_notification(title: String):
 	if is_instance_valid(achievement_btn):
 		origin_pos = achievement_btn.global_position + achievement_btn.size / 2.0
 		# Start pulse directly on the existing button to avoid HUD scroll reset
-		if not achievement_btn.has_meta("is_pulsing"):
+		if not achievement_btn.has_meta("pulse_tween"):
 			var pulse = achievement_btn.create_tween().set_loops()
 			pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
 			pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
-			achievement_btn.set_meta("is_pulsing", true)
+			achievement_btn.set_meta("pulse_tween", pulse)
 	
 	var toast_layer = CanvasLayer.new()
 	toast_layer.layer = 100
@@ -10007,14 +10008,13 @@ func _setup_achievement_menu():
 			changed = true
 	if changed:
 		_save_global_achievements()
-		# Refresh HUD to stop pulsing effect but PRESERVE scroll position
-		if is_instance_valid(action_scroll):
-			var old_scroll = action_scroll.scroll_horizontal
-			_setup_main_ui_containers()
-			# IMPORTANT: Wait one frame for layout to be ready before restoring scroll
-			await get_tree().process_frame
-			if is_instance_valid(action_scroll):
-				action_scroll.scroll_horizontal = old_scroll
+		# Stop the pulse effect SURGICALLY without rebuilding HUD
+		if is_instance_valid(achievement_btn):
+			if achievement_btn.has_meta("pulse_tween"):
+				var tw = achievement_btn.get_meta("pulse_tween")
+				if is_instance_valid(tw): tw.kill()
+				achievement_btn.remove_meta("pulse_tween")
+			achievement_btn.modulate = Color.WHITE
 		
 	_toggle_category_panel(null) # Close others
 	
