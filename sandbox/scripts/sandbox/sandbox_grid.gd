@@ -5491,7 +5491,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 
 	# --- CORROSION (ACID) ---
 	if (tags & SandboxMaterial.Tags.ACID):
-		if _get_lut_rand() < 0.4: # Reaction Speed
+		if _get_lut_rand() < 0.2: # Reaction Speed (Lowered for natural feel)
 			for ny in range(y - 1, y + 2):
 				for nx in range(x - 1, x + 2):
 					if nx == x and ny == y: continue
@@ -5514,10 +5514,21 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 						var gy = y + (_get_lut_rand_range(0, 4) - 2)
 						if gx >= 0 and gx < grid_width and gy >= 0 and gy < dynamic_grid_height:
 							var g_idx = gy * grid_width + gx
-							var tid = cells[g_idx] & 0xFFFF
-							if (material_tags_raw[tid] & SandboxMaterial.Tags.FERTILE):
-								if _count_neighbor_id_fast(g_idx, 21) < 4:
-									_set_cell(gx, gy, 21)
+							var target_id = cells[g_idx] & 0xFFFF
+							# ONLY grow into AIR (0) and if the target is next to FERTILE ground
+							if target_id == 0:
+								# Check if the pixel BELOW or around is fertile
+								var can_grow = false
+								for oy in range(-1, 2):
+									for ox in range(-1, 2):
+										var neighbor_id = _get_cell(gx + ox, gy + oy)
+										if (material_tags_raw[neighbor_id] & SandboxMaterial.Tags.FERTILE):
+											can_grow = true; break
+									if can_grow: break
+								
+								if can_grow and _get_lut_rand() < 0.7: # 70% Population Density
+									if _count_neighbor_id_fast(g_idx, 21) < 4:
+										_set_cell(gx, gy, 21)
 			1, 6: # Fertile Soil
 				if current_weather > 0 or _has_id_in_lookup(idx, 2, oval_lookup_16x8):
 					_set_cell(x, y, 22 if pure_id == 1 else 23)
