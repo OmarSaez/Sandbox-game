@@ -1365,6 +1365,12 @@ var achievements = {
 		"title": "ach_paint_title",
 		"desc": "ach_paint_desc",
 		"unlocked": false
+	},
+	"party_rock": {
+		"id": "party_rock",
+		"title": "ach_party_rock_title",
+		"desc": "ach_party_rock_desc",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -1416,6 +1422,15 @@ func _check_achievement_step(step: int):
 				for t_id in teams:
 					if teams[t_id] >= 10: valid_teams += 1
 				if valid_teams >= 2: _unlock_achievement("massive_fight")
+			
+			# 3. PARTY ROCK (Celebrating NPCs - Victory only)
+			if not achievements["party_rock"].unlocked:
+				var celebrating_count = 0
+				for npc in active_npcs:
+					if npc.hp > 0 and npc.get("dance_timer", 0.0) > 0 and npc.get("recently_celebrated", false):
+						celebrating_count += 1
+				if celebrating_count >= 20:
+					_unlock_achievement("party_rock")
 					
 			if not achievements["electrifying"].unlocked:
 				for y in range(0, dynamic_grid_height, 4):
