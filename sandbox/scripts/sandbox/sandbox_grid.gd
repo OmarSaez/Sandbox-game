@@ -1390,6 +1390,12 @@ var achievements = {
 		"title": "ach_tsunami_master_title",
 		"desc": "ach_tsunami_master_desc",
 		"unlocked": false
+	},
+	"retro_time": {
+		"id": "retro_time",
+		"title": "ach_retro_time_title",
+		"desc": "ach_retro_time_desc",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -1524,6 +1530,13 @@ func _check_achievement_step(step: int):
 							if found.size() >= 4:
 								_unlock_achievement("tsunami_master")
 								return
+
+func _unlock_retro_time_delayed():
+	# Esperar 2 segundos para que el usuario vea el mando y se mueva
+	await get_tree().create_timer(2.0).timeout
+	if controlled_npc:
+		_stop_controlling_npc()
+	_unlock_achievement("retro_time")
 
 func _unlock_achievement(id: String):
 	if not achievements.has(id) or achievements[id].unlocked: return
@@ -4341,9 +4354,15 @@ func _process(delta):
 					
 					if is_instance_valid(npc_control_gui):
 						npc_control_gui.visible = true
+						_update_arcade_dynamic_button()
+						
 						var action_btn = npc_control_gui.find_child("ActionBtn", true, false)
 						if action_btn:
 							action_btn.text = tr("action") # Siempre "ACCIÓN" (Genérico)
+						
+					# LOGRO: Tiempo Retro - Ejecutar en segundo plano para no bloquear la entrada
+					if not achievements["retro_time"].unlocked:
+						_unlock_retro_time_delayed()
 					
 					mouse_was_pressed = true
 					touch_started_on_ui = true # BLOCK drawing for the rest of this touch session
@@ -4359,7 +4378,12 @@ func _process(delta):
 				if is_instance_valid(save_panel): save_panel.queue_free()
 
 		# DRAW LOGIC (Only if touch session started on Sandbox, current position is Sandbox, and NOT in selection mode)
-		if not is_panning_mode and not touch_started_on_ui and not is_over_ui and not is_selecting_npc_to_control:
+		# 4. DRAWING & TOOLS BLOCK (If controlling an NPC or selecting one)
+		if is_instance_valid(controlled_npc) or is_selecting_npc_to_control:
+			_manage_brush_sound(-1)
+			return
+			
+		if not is_panning_mode and not touch_started_on_ui and not is_over_ui:
 			var m_pos = get_local_mouse_position()
 			var gx = int(m_pos.x / grid_scale)
 			var gy = int(m_pos.y / grid_scale)
