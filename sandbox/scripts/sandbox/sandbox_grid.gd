@@ -1426,6 +1426,18 @@ var achievements = {
 		"title": "ach_short_circuit_title",
 		"desc": "ach_short_circuit_desc",
 		"unlocked": false
+	},
+	"world_war": {
+		"id": "world_war",
+		"title": "ach_world_war_title",
+		"desc": "ach_world_war_desc",
+		"unlocked": false
+	},
+	"supreme_alchemist": {
+		"id": "supreme_alchemist",
+		"title": "ach_alchemist_title",
+		"desc": "ach_alchemist_desc",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -1490,7 +1502,7 @@ func _check_achievement_conditions(delta):
 	if achievement_sequence_step != -1:
 		_check_achievement_step(achievement_sequence_step)
 		achievement_sequence_step += 1
-		if achievement_sequence_step >= 8: # 8 groups total (0-7)
+		if achievement_sequence_step >= 10: # 10 groups total (0-9)
 			achievement_sequence_step = -1 # End sequence
 	
 func _check_achievement_step(step: int):
@@ -1614,6 +1626,25 @@ func _check_achievement_step(step: int):
 						if electric_count >= 10:
 							_unlock_achievement("short_circuit")
 							return
+		8: # --- GROUP 8: SOCIAL (WORLD WAR) ---
+			if not achievements["world_war"].unlocked:
+				var team_counts = {0:0, 1:0, 2:0, 3:0}
+				for npc in active_npcs:
+					if npc.hp > 0:
+						team_counts[npc.team] = team_counts.get(npc.team, 0) + 1
+				if team_counts[0] >= 5 and team_counts[1] >= 5 and team_counts[2] >= 5 and team_counts[3] >= 5:
+					_unlock_achievement("world_war")
+		9: # --- GROUP 9: LABORATORY (SUPREME ALCHEMIST) ---
+			if not achievements["supreme_alchemist"].unlocked:
+				var lab_found = {}
+				for y in range(0, dynamic_grid_height, 4): # More sensitive scan
+					for x in range(0, grid_width, 4):
+						var pid = cells[y * grid_width + x] & 0xFFFF
+						if pid >= 900 and pid <= 902:
+							lab_found[pid] = true
+							if lab_found.size() >= 3:
+								_unlock_achievement("supreme_alchemist")
+								return
 
 func _unlock_retro_time_delayed():
 	# Esperar 2 segundos para que el usuario vea el mando y se mueva
