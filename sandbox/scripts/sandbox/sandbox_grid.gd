@@ -397,7 +397,7 @@ var charge_queued_frame := PackedInt32Array()
 var img: Image
 
 # VOLUME SYSTEM
-var game_volume: float = 1.0
+var game_volume: float = 1.5
 var pre_mute_volume: float = 1.0
 var is_muted: bool = false
 
@@ -496,6 +496,7 @@ func _ready():
 		TranslationServer.set_locale("en") # Fallback
 	current_language = TranslationServer.get_locale()
 	_load_tool_settings()
+	_update_game_volume(game_volume) # Force apply default on first run
 	# 1. OPTIMIZATION: Use clear color instead of a full ColorRect to avoid overdraw (30% less GPU load)
 	RenderingServer.set_default_clear_color(Color(0.08, 0.08, 0.1, 1.0))
 	
@@ -2502,7 +2503,8 @@ func _setup_tools_ui():
 
 func _update_game_volume(value: float):
 	# Convert linear 0.0 - 1.5 to dB. Master is bus index 0.
-	var db = linear_to_db(value)
+	# Boosted by +12dB to compensate for extremely low base recordings
+	var db = linear_to_db(value) + 12.0
 	AudioServer.set_bus_volume_db(0, db)
 	# Mute completely if 0 to save processing
 	AudioServer.set_bus_mute(0, value <= 0)
@@ -4319,7 +4321,7 @@ func _get_sfx_stream(sfx_name: String) -> AudioStream:
 			return stream
 	return null
 
-func _play_sfx(sfx_name: String):
+func _play_sfx(sfx_name: String, volume_boost: float = 0.0):
 	if sfx_name == "": return
 	
 	var stream = _get_sfx_stream(sfx_name)
@@ -4334,6 +4336,8 @@ func _play_sfx(sfx_name: String):
 	next_sfx_idx = (next_sfx_idx + 1) % SFX_POOL_SIZE
 	sim_mutex.unlock()
 	
+	# Apply local boost if any
+	player.set_deferred("volume_db", volume_boost)
 	# DEFER to main thread to prevent Node access errors from WorkerThreadPool!
 	player.set_deferred("stream", stream)
 	player.call_deferred("play")
@@ -4372,6 +4376,12 @@ func _manage_looping_player(player: AudioStreamPlayer, key: String):
 func _play_material_sound(id: int):
 	if material_sfx.has(id):
 		_play_sfx(material_sfx[id])
+
+func _play_achievement_unlock_sfx(is_menu_unlock: bool = false):
+	if is_menu_unlock:
+		_play_sfx("achievement_menu_unlock", 5.0)
+	else:
+		_play_sfx("achievement_unlock", 5.0)
 
 func _play_action_sound(action: String, min_interval: float = 0.08):
 	if action_sfx.has(action):
@@ -9850,7 +9860,7 @@ func _trigger_achievement_reveal():
 	get_tree().root.add_child(p)
 	p.play()
 	var audio_t = create_tween()
-	audio_t.tween_property(p, "volume_db", 0.0, 0.4)
+	audio_t.tween_property(p, "volume_db", 5.0, 0.4)
 	audio_t.tween_interval(2.5)
 	audio_t.tween_property(p, "volume_db", -80.0, 1.2)
 	audio_t.finished.connect(p.queue_free)
@@ -9964,7 +9974,7 @@ func _show_achievement_notification(title: String):
 	t1.tween_property(icon_container, "scale", Vector2.ONE, 0.5)
 	t1.tween_property(icon_container, "modulate:a", 1.0, 0.3)
 	t1.tween_property(icon_container, "global_position:y", target_y, 0.6)
-	_play_action_sound("achievement_unlock")
+	_play_achievement_unlock_sfx(false) # Local boost +5dB
 	await t1.finished
 	
 	await get_tree().create_timer(0.2).timeout
