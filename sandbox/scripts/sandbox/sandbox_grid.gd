@@ -1334,43 +1334,50 @@ var achievements = {
 		"id": "massive_fight",
 		"title": "ach_massive_fight_title",
 		"desc": "ach_massive_fight_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"electrifying": {
 		"id": "electrifying",
 		"title": "ach_electrifying_title",
 		"desc": "ach_electrifying_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"miner_plan": {
 		"id": "miner_plan",
 		"title": "ach_miner_plan_title",
 		"desc": "ach_miner_plan_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"god": {
 		"id": "god",
 		"title": "ach_god_title",
 		"desc": "ach_god_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"mad_scientist": {
 		"id": "mad_scientist",
 		"title": "ach_mad_scientist_title",
 		"desc": "ach_mad_scientist_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"paint": {
 		"id": "paint",
 		"title": "ach_paint_title",
 		"desc": "ach_paint_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"party_rock": {
 		"id": "party_rock",
 		"title": "ach_party_rock_title",
 		"desc": "ach_party_rock_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"wind_master": {
 		"id": "wind_master",
@@ -1383,61 +1390,71 @@ var achievements = {
 		"id": "compositor",
 		"title": "ach_compositor_title",
 		"desc": "ach_compositor_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"tsunami_master": {
 		"id": "tsunami_master",
 		"title": "ach_tsunami_master_title",
 		"desc": "ach_tsunami_master_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"retro_time": {
 		"id": "retro_time",
 		"title": "ach_retro_time_title",
 		"desc": "ach_retro_time_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"good_night": {
 		"id": "good_night",
 		"title": "ach_good_night_title",
 		"desc": "ach_good_night_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"volcano_giant": {
 		"id": "volcano_giant",
 		"title": "ach_volcano_title",
 		"desc": "ach_volcano_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"boom": {
 		"id": "boom",
 		"title": "ach_boom_title",
 		"desc": "ach_boom_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"special_boom": {
 		"id": "special_boom",
 		"title": "ach_special_boom_title",
 		"desc": "ach_special_boom_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"short_circuit": {
 		"id": "short_circuit",
 		"title": "ach_short_circuit_title",
 		"desc": "ach_short_circuit_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"world_war": {
 		"id": "world_war",
 		"title": "ach_world_war_title",
 		"desc": "ach_world_war_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	},
 	"supreme_alchemist": {
 		"id": "supreme_alchemist",
 		"title": "ach_alchemist_title",
 		"desc": "ach_alchemist_desc",
-		"unlocked": false
+		"unlocked": false,
+		"seen": true
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -1447,6 +1464,7 @@ var achievement_sequence_step: int = -1 # -1: Idle, 0+: Current group frame
 var _tnt_chain_count: int = 0
 var _tnt_chain_flags: int = 0
 var _tnt_chain_timer: float = 0.0
+var _tnt_buckets_this_frame: Dictionary = {}
 
 # Music Achievement Tracking
 var composition_note_count: int = 0
@@ -1457,16 +1475,51 @@ func _save_global_achievements():
 	config.set_value("progression", "achievements_unlocked_menu", is_achievement_menu_unlocked)
 	
 	var unlocked_list = []
+	var seen_list = []
 	for id in achievements:
 		if achievements[id].unlocked:
 			unlocked_list.append(id)
+			if achievements[id].get("seen", false):
+				seen_list.append(id)
 		
 		# Save extra progress data (like discovered types)
 		if achievements[id].has("discovered"):
 			config.set_value("progression", "ach_data_" + id, achievements[id].discovered)
 			
 	config.set_value("progression", "unlocked_ids", unlocked_list)
+	config.set_value("progression", "seen_ids", seen_list)
 	config.save("user://achievements.cfg")
+
+func _has_unseen_achievements() -> bool:
+	for id in achievements:
+		if achievements[id].unlocked and not achievements[id].get("seen", false):
+			return true
+	return false
+
+func _pulse_achievement_button():
+	if not is_instance_valid(achievement_btn): return
+	
+	if not _has_unseen_achievements():
+		achievement_btn.modulate = Color.WHITE
+		achievement_btn.set_meta("is_pulsing", false)
+		return
+	
+	if achievement_btn.get_meta("is_pulsing", false): return # Already in loop
+	
+	achievement_btn.set_meta("is_pulsing", true)
+	_do_pulse_loop()
+
+func _do_pulse_loop():
+	if not is_instance_valid(achievement_btn) or not achievement_btn.get_meta("is_pulsing", false) or not _has_unseen_achievements():
+		if is_instance_valid(achievement_btn):
+			achievement_btn.modulate = Color.WHITE
+			achievement_btn.set_meta("is_pulsing", false)
+		return
+		
+	var t = achievement_btn.create_tween()
+	t.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+	t.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
+	t.finished.connect(_do_pulse_loop)
 
 func _load_global_achievements():
 	var config = ConfigFile.new()
@@ -1474,9 +1527,14 @@ func _load_global_achievements():
 	if err == OK:
 		is_achievement_menu_unlocked = config.get_value("progression", "achievements_unlocked_menu", false)
 		var unlocked_list = config.get_value("progression", "unlocked_ids", [])
+		var seen_list = config.get_value("progression", "seen_ids", [])
 		for id in achievements:
 			if id in unlocked_list:
 				achievements[id].unlocked = true
+			if id in seen_list:
+				achievements[id].seen = true
+			elif achievements[id].unlocked:
+				achievements[id].seen = false # Was unlocked but never seen
 			
 			# Load extra progress data if exists
 			if achievements[id].has("discovered"):
@@ -1606,17 +1664,16 @@ func _check_achievement_step(step: int):
 							if volcano_pixels >= 1000:
 								_unlock_achievement("volcano_giant")
 								return
-		6: # --- GROUP 6: EXPLOSIONS (BOOM) ---
-			if not achievements["boom"].unlocked and _tnt_chain_count >= 10:
+		6: # --- GROUP 6: EXPLOSIONS (BOOM & SPECIAL) ---
+			if not achievements["boom"].unlocked and _tnt_chain_count >= 20:
 				_unlock_achievement("boom")
-			if not achievements["special_boom"].unlocked and _tnt_chain_count >= 10:
-				# Check for at least 2 distinct flags (Acid=64, Elec=128, or 0=Fire vs others)
+			
+			if not achievements["special_boom"].unlocked and _tnt_chain_count >= 25:
 				var has_acid = (_tnt_chain_flags & 64) > 0
 				var has_elec = (_tnt_chain_flags & 128) > 0
-				# If we have at least one special type in a 10+ chain, it's special enough
-				# but user asked for "distintos tipos", so let's require Acid AND Elec or similar
 				if has_acid and has_elec:
 					_unlock_achievement("special_boom")
+					
 		7: # --- GROUP 7: ELECTRICITY (SHORT CIRCUIT) ---
 			if not achievements["short_circuit"].unlocked:
 				var electric_count = 0
@@ -1657,6 +1714,7 @@ func _unlock_achievement(id: String):
 	if not achievements.has(id) or achievements[id].unlocked: return
 	
 	achievements[id].unlocked = true
+	achievements[id].seen = false # Mark as NEW (unseen)
 	_save_global_achievements()
 	_show_achievement_notification(achievements[id].title)
 
@@ -1920,12 +1978,10 @@ func _setup_main_ui_containers():
 		
 		action_hbox.add_child(achievement_btn)
 		
-		action_hbox.add_child(achievement_btn)
-		
-		# Pulse Animation (Safe creation for mobile)
-		var pulse = achievement_btn.create_tween().set_loops()
-		pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-		pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
+		if _has_unseen_achievements():
+			_pulse_achievement_button()
+		else:
+			achievement_btn.modulate = Color.WHITE
 
 
 # Helper for intelligent panel positioning above the HUD
@@ -4257,6 +4313,9 @@ func _is_any_ui_blocking() -> bool:
 	if is_instance_valid(save_panel) and save_panel.get_global_rect().has_point(m_pos):
 		return true
 		
+	if is_instance_valid(achievement_panel) and achievement_panel.visible and achievement_panel.get_global_rect().has_point(m_pos):
+		return true
+		
 	return false
 
 
@@ -4343,6 +4402,7 @@ func _play_action_sound(action: String, min_interval: float = 0.08):
 
 func _process(delta):
 	if not is_grid_ready: return
+	_tnt_buckets_this_frame.clear()
 	_frame_count += 1
 	_check_achievement_conditions(delta)
 	
@@ -4490,6 +4550,7 @@ func _process(delta):
 				if is_instance_valid(disaster_panel) and disaster_panel.visible: disaster_panel.visible = false
 				if is_instance_valid(npc_panel) and npc_panel.visible: npc_panel.visible = false
 				if is_instance_valid(music_panel) and music_panel.visible: _close_music_menu()
+				if is_instance_valid(achievement_panel) and achievement_panel.visible: achievement_panel.visible = false
 				if is_instance_valid(save_panel): save_panel.queue_free()
 
 		# DRAW LOGIC (Only if touch session started on Sandbox, current position is Sandbox, and NOT in selection mode)
@@ -5831,10 +5892,13 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		if timer <= 0:
 			_explode(x, y, 12 if not is_gunpowder else 8, "explosion", flags)
 			
-			# LOGRO: TNT Chain tracking
-			_tnt_chain_count += 1
-			_tnt_chain_flags |= flags
-			_tnt_chain_timer = 0.6 # 0.6s to continue chain
+			# LOGRO: TNT Chain tracking (Bucket-based to count clusters, not pixels)
+			var b_idx = (y / 8) * 1000 + (x / 8)
+			if not _tnt_buckets_this_frame.has(b_idx):
+				_tnt_buckets_this_frame[b_idx] = true
+				_tnt_chain_count += 1
+				_tnt_chain_flags |= flags
+				_tnt_chain_timer = 0.6 # 0.6s to continue chain
 			return
 		
 		charge_array[idx] = flags | timer
@@ -9843,6 +9907,7 @@ func _show_achievement_notification(title: String):
 	var origin_pos = Vector2(viewport_w - 100 * s, get_viewport_rect().size.y - 40 * s)
 	if is_instance_valid(achievement_btn):
 		origin_pos = achievement_btn.global_position + achievement_btn.size / 2.0
+		_pulse_achievement_button()
 	
 	var toast_layer = CanvasLayer.new()
 	toast_layer.layer = 100
@@ -9982,11 +10047,26 @@ func _setup_achievement_menu():
 		_update_menu_highlights()
 		return
 		
+	# MARK ALL AS SEEN
+	var changed = false
+	for id in achievements:
+		if achievements[id].unlocked and not achievements[id].get("seen", false):
+			achievements[id].seen = true
+			changed = true
+	if changed:
+		_save_global_achievements()
+		# Break the pulse loop immediately
+		if is_instance_valid(achievement_btn):
+			achievement_btn.set_meta("is_pulsing", false)
+			achievement_btn.modulate = Color.WHITE
+		
 	_toggle_category_panel(null) # Close others
 	
 	if not is_instance_valid(achievement_panel):
 		achievement_panel = PanelContainer.new()
 		ui_root.add_child(achievement_panel)
+		achievement_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
+		achievement_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 		
 		var p_style = StyleBoxFlat.new()
 		p_style.bg_color = Color(0.12, 0.12, 0.14, 0.98)
