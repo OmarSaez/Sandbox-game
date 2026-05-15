@@ -1347,6 +1347,12 @@ var achievements = {
 		"title": "ach_miner_plan_title",
 		"desc": "ach_miner_plan_desc",
 		"unlocked": false
+	},
+	"god": {
+		"id": "god",
+		"title": "ach_god_title",
+		"desc": "ach_god_desc",
+		"unlocked": false
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -1405,6 +1411,22 @@ func _check_achievement_conditions(delta):
 				if id == 2 and charge_array[idx] > 0: # 2 is Water
 					_unlock_achievement("electrifying")
 					return # Found! Stop scanning
+					
+	# 3. DIOS TODO PODEROSO (Optimized scan)
+	if not achievements["god"].unlocked:
+		var req = [1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 16, 4, 18, 20, 21, 24, 25, 26, 27, 70]
+		var found = {}
+		var total = req.size()
+		
+		# High performance 4x4 sampling
+		for y in range(0, dynamic_grid_height, 4):
+			for x in range(0, grid_width, 4):
+				var pid = cells[y * grid_width + x] & 0xFF
+				if pid in req:
+					found[pid] = true
+					if found.size() >= total:
+						_unlock_achievement("god")
+						return # Achievement found, exit early
 
 func _unlock_achievement(id: String):
 	if not achievements.has(id) or achievements[id].unlocked: return
