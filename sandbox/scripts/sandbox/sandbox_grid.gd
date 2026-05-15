@@ -10073,63 +10073,87 @@ func _setup_achievement_menu():
 		item_vbox.add_theme_constant_override("separation", 10 * s)
 		scroll.add_child(item_vbox)
 
-	# REFRESH LIST (Clear and rebuild to show latest unlocks)
+	# REFRESH LIST (Reuse existing nodes to avoid stutter)
 	achievement_panel.visible = true
 	var list = achievement_panel.find_child("AchieveList", true, false)
-	for child in list.get_children(): child.queue_free()
 	
+	var existing_items = list.get_children()
+	var idx = 0
 	for id in achievements:
 		var a = achievements[id]
-		var item = PanelContainer.new()
-		item.custom_minimum_size.y = 90 * s
-		item.mouse_filter = Control.MOUSE_FILTER_PASS # Allow scrolling through items
-		list.add_child(item)
+		var item: PanelContainer
 		
-		var i_style = StyleBoxFlat.new()
-		i_style.set_corner_radius_all(12 * s)
+		if idx < existing_items.size():
+			item = existing_items[idx]
+		else:
+			# CREATE ONLY IF MISSING
+			item = PanelContainer.new()
+			item.custom_minimum_size.y = 90 * s
+			item.mouse_filter = Control.MOUSE_FILTER_PASS
+			list.add_child(item)
+			
+			var i_margin = MarginContainer.new()
+			i_margin.add_theme_constant_override("margin_all", 12 * s)
+			item.add_child(i_margin)
+			
+			var i_hbox = HBoxContainer.new()
+			i_hbox.add_theme_constant_override("separation", 15 * s)
+			i_margin.add_child(i_hbox)
+			
+			var icon = Label.new()
+			icon.name = "Icon"
+			i_hbox.add_child(icon)
+			
+			var text_vbox = VBoxContainer.new()
+			text_vbox.name = "TextVBox"
+			text_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			text_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+			i_hbox.add_child(text_vbox)
+			
+			var a_title = Label.new()
+			a_title.name = "Title"
+			text_vbox.add_child(a_title)
+			
+			var a_desc = Label.new()
+			a_desc.name = "Desc"
+			text_vbox.add_child(a_desc)
 		
-		var i_margin = MarginContainer.new()
-		i_margin.add_theme_constant_override("margin_all", 12 * s)
-		item.add_child(i_margin)
+		# UPDATE VISUAL STATE (Cheap)
+		var icon = item.find_child("Icon", true, false)
+		var a_title = item.find_child("Title", true, false)
+		var a_desc = item.find_child("Desc", true, false)
 		
-		var i_hbox = HBoxContainer.new()
-		i_hbox.add_theme_constant_override("separation", 15 * s)
-		i_margin.add_child(i_hbox)
-		
-		var icon = Label.new()
 		icon.text = "🏆" if a.unlocked else "🔒"
 		icon.add_theme_font_size_override("font_size", 28 * s)
 		icon.modulate.a = 1.0 if a.unlocked else 0.4
-		i_hbox.add_child(icon)
 		
-		var text_vbox = VBoxContainer.new()
-		text_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		text_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-		i_hbox.add_child(text_vbox)
-		
-		var a_title = Label.new()
 		a_title.text = tr(a.title)
 		a_title.add_theme_font_size_override("font_size", 22 * s)
-		text_vbox.add_child(a_title)
+		
+		var i_style = StyleBoxFlat.new()
+		i_style.set_corner_radius_all(12 * s)
 		
 		if a.unlocked:
 			i_style.bg_color = Color(0.85, 0.65, 0.2, 0.15)
 			i_style.set_border_width_all(2 * s)
 			i_style.border_color = Color(0.9, 0.75, 0.3, 0.8)
 			a_title.add_theme_color_override("font_color", Color(1.0, 0.9, 0.6))
+			a_title.modulate.a = 1.0
 			
-			var a_desc = Label.new()
 			a_desc.text = tr(a.desc)
+			a_desc.visible = true
 			a_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			a_desc.add_theme_font_size_override("font_size", 14 * s)
 			a_desc.modulate = Color(1, 0.95, 0.8, 0.9)
-			text_vbox.add_child(a_desc)
 		else:
 			i_style.bg_color = Color(0.18, 0.18, 0.2, 0.6)
 			i_style.set_border_width_all(1 * s)
 			i_style.border_color = Color(0.3, 0.3, 0.35, 0.4)
+			a_title.remove_theme_color_override("font_color")
 			a_title.modulate.a = 0.4
+			a_desc.visible = false
 			
 		item.add_theme_stylebox_override("panel", i_style)
+		idx += 1
 
 	_update_menu_highlights()
