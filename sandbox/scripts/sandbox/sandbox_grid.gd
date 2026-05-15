@@ -854,7 +854,6 @@ func _ready():
 		tw.tween_callback(curtain_layer.queue_free)
 	
 	_show_welcome_message()
-	_setup_achievement_debug_ui()
 
 func _show_welcome_message():
 	var save_path = "user://welcome_shown.save"
@@ -9981,43 +9980,6 @@ func _show_achievement_notification(title: String):
 	
 	if is_instance_valid(toast_layer):
 		toast_layer.queue_free()
-
-
-
-
-
-
-
-
-
-
-
-
-func _debug_reset_achievements():
-	is_achievement_menu_unlocked = false
-	for id in achievements:
-		achievements[id].unlocked = false
-	_save_global_achievements()
-	if is_instance_valid(achievement_btn):
-		achievement_btn.queue_free()
-	achievement_btn = null
-	# Reset scroll to see the animation again
-	action_scroll.scroll_horizontal = 0
-	print("DEBUG: Achievements Reset!")
-
-func _setup_achievement_debug_ui():
-	var debug_layer = CanvasLayer.new()
-	debug_layer.layer = 128
-	add_child(debug_layer)
-	
-	var btn_reset = Button.new()
-	btn_reset.text = " [ RESETEAR TODO (LOGROS) ] "
-	btn_reset.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	btn_reset.offset_top = 20
-	btn_reset.custom_minimum_size = Vector2(300, 60)
-	btn_reset.modulate = Color(1, 0, 0, 1) # Rojo sólido
-	btn_reset.pressed.connect(_debug_reset_achievements)
-	debug_layer.add_child(btn_reset)
 
 func _setup_achievement_menu():
 	_play_action_sound("ui_click")
