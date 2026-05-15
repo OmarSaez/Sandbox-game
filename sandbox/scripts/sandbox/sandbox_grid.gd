@@ -1371,6 +1371,13 @@ var achievements = {
 		"title": "ach_party_rock_title",
 		"desc": "ach_party_rock_desc",
 		"unlocked": false
+	},
+	"wind_master": {
+		"id": "wind_master",
+		"title": "ach_wind_master_title",
+		"desc": "ach_wind_master_desc",
+		"unlocked": false,
+		"discovered": []
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -1384,6 +1391,11 @@ func _save_global_achievements():
 	for id in achievements:
 		if achievements[id].unlocked:
 			unlocked_list.append(id)
+		
+		# Save extra progress data (like discovered types)
+		if achievements[id].has("discovered"):
+			config.set_value("progression", "ach_data_" + id, achievements[id].discovered)
+			
 	config.set_value("progression", "unlocked_ids", unlocked_list)
 	config.save("user://achievements.cfg")
 
@@ -1393,9 +1405,14 @@ func _load_global_achievements():
 	if err == OK:
 		is_achievement_menu_unlocked = config.get_value("progression", "achievements_unlocked_menu", false)
 		var unlocked_list = config.get_value("progression", "unlocked_ids", [])
-		for id in unlocked_list:
-			if achievements.has(id):
+		for id in achievements:
+			if id in unlocked_list:
 				achievements[id].unlocked = true
+			
+			# Load extra progress data if exists
+			if achievements[id].has("discovered"):
+				achievements[id].discovered = config.get_value("progression", "ach_data_" + id, [])
+		
 
 func _check_achievement_conditions(delta):
 	# --- ACHIEVEMENT POLLING SEQUENCE ---
@@ -1423,14 +1440,17 @@ func _check_achievement_step(step: int):
 					if teams[t_id] >= 10: valid_teams += 1
 				if valid_teams >= 2: _unlock_achievement("massive_fight")
 			
-			# 3. PARTY ROCK (Celebrating NPCs - Victory only)
+			# 3. PARTY ROCK (Celebrating NPCs - Victory only, same team)
 			if not achievements["party_rock"].unlocked:
-				var celebrating_count = 0
+				var team_counts = {}
 				for npc in active_npcs:
 					if npc.hp > 0 and npc.get("dance_timer", 0.0) > 0 and npc.get("recently_celebrated", false):
-						celebrating_count += 1
-				if celebrating_count >= 20:
-					_unlock_achievement("party_rock")
+						var t = npc.team
+						team_counts[t] = team_counts.get(t, 0) + 1
+				for t_id in team_counts:
+					if team_counts[t_id] >= 20:
+						_unlock_achievement("party_rock")
+						break
 					
 			if not achievements["electrifying"].unlocked:
 				for y in range(0, dynamic_grid_height, 4):
@@ -4618,6 +4638,15 @@ func _process_tornado(delta):
 			if tornado_element_timer <= 0:
 				tornado_element = 0
 		
+		# --- LOGRO: MAESTRO DE VIENTOS (Detección de descubrimiento) ---
+		if tornado_intensity > 0 and not achievements["wind_master"].unlocked:
+			var disc = achievements["wind_master"].discovered
+			if not tornado_element in disc:
+				disc.append(tornado_element)
+				_save_global_achievements() # Persist progress immediately
+				if disc.size() >= 4:
+					_unlock_achievement("wind_master")
+
 		# Absorption decay
 		tornado_absorb_fire = lerp(tornado_absorb_fire, 0.0, delta * 2.0)
 		tornado_absorb_acid = lerp(tornado_absorb_acid, 0.0, delta * 2.0)
@@ -8773,6 +8802,7 @@ func _trigger_npc_dance():
 		if npc.hp > 0 and _get_lut_rand() < 0.85:
 			npc["dance_timer"] = 3.5 
 			npc["has_spotted_enemy"] = false 
+			npc["recently_celebrated"] = false # Ensure music dance doesn't trigger victory achievement
 			npc["celebration_mode"] = 3 # 3 = JUST DANCE (No fireworks for music)
 			var music_emojis = ["🎵", "🕺", "💃", "🎶"]
 			_set_npc_emoji(npc, music_emojis[randi() % music_emojis.size()], 3.5)
