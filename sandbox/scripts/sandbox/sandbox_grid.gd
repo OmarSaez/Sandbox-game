@@ -1315,12 +1315,16 @@ func _setup_ui():
 
 var material_grid: HFlowContainer
 var action_hbox: HBoxContainer
+var action_scroll: ScrollContainer
+var achievement_btn: Button
+static var is_achievement_menu_unlocked: bool = false
 var action_vbox: VBoxContainer
 
 var material_scroll: ScrollContainer
 var cached_hud_height: float = 362.0 # Performance optimization: Cached for panel alignment
 
 func _setup_main_ui_containers():
+	_load_global_achievements() # PERSISTENCE FIRST
 	var s = _get_ui_scale()
 	ui_root = get_parent().get_node("UI")
 	main_controls = ui_root.get_node("Controls")
@@ -1426,22 +1430,55 @@ func _setup_main_ui_containers():
 	material_scroll.offset_left = 0
 	material_scroll.offset_right = -qa_width - (5 * s) # Space for ActionButtons (dynamic)
 
-	# 3.5 FRESH CATEGORY BAR (Smart Horizontal Row)
-	# Removed ScrollContainer to allow auto-expansion/shrinking across full width
+	# 3.5 FRESH CATEGORY BAR (Smart Horizontal Row with Scroll)
+	action_scroll = ScrollContainer.new()
+	action_scroll.name = "ActionScroll"
+	action_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	action_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	main_controls.add_child(action_scroll)
+	
+	action_scroll.anchor_top = 1.0
+	action_scroll.anchor_bottom = 1.0
+	action_scroll.anchor_left = 0
+	action_scroll.anchor_right = 1.0
+	action_scroll.offset_top = -h
+	action_scroll.offset_bottom = -h + h_cat
+	action_scroll.offset_left = 0
+	action_scroll.offset_right = 0
+	
 	action_hbox = HBoxContainer.new()
 	action_hbox.name = "ActionButtons"
-	main_controls.add_child(action_hbox)
+	action_scroll.add_child(action_hbox)
 	
-	action_hbox.anchor_top = 1.0
-	action_hbox.anchor_bottom = 1.0
-	action_hbox.anchor_left = 0
-	action_hbox.anchor_right = 1.0
-	action_hbox.offset_top = -h
-	action_hbox.offset_bottom = -h + h_cat
-	action_hbox.offset_left = 0
-	action_hbox.offset_right = 0
-	
+	# DYNAMIC STATE: If not unlocked, expand to fill screen (Static look)
+	if not is_achievement_menu_unlocked:
+		action_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	else:
+		action_hbox.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		
+	action_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	action_hbox.add_theme_constant_override("separation", 2 * s)
+
+	# -------------------------
+
+	
+	# --- TEST CONTROLS (CENTERED IN SCREEN) ---
+	var test_vbox = VBoxContainer.new()
+	test_vbox.name = "AchievementTestControls"
+	test_vbox.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	test_vbox.offset_left = -100 * s; test_vbox.offset_right = 100 * s
+	test_vbox.offset_top = -100 * s; test_vbox.offset_bottom = 100 * s
+	ui_root.add_child(test_vbox)
+	
+	var b_unlock = Button.new()
+	b_unlock.text = "TEST: UNLOCK"
+	b_unlock.pressed.connect(func(): _trigger_achievement_reveal())
+	test_vbox.add_child(b_unlock)
+	
+	var b_reset = Button.new()
+	b_reset.text = "TEST: RESET"
+	b_reset.pressed.connect(func(): _reset_achievements())
+	test_vbox.add_child(b_reset)
 
 	# PUSH GAME VIEW (TextureRect) ABOVE HUD
 	if not is_instance_valid(texture_rect): 
@@ -1528,6 +1565,54 @@ func _setup_main_ui_containers():
 	_update_material_highlights()
 	_update_menu_highlights()
 
+	_update_menu_highlights()
+
+	# --- HIDDEN ACHIEVEMENT BUTTON (ALWAYS AT THE END / RIGHT) ---
+	if is_achievement_menu_unlocked:
+		# Calculate dynamic fixed width based on screen to ensure original buttons fill the view
+		var screen_w = get_viewport_rect().size.x
+		var fixed_w = (screen_w - (5 * 2 * s)) / 6.0 # 6 buttons + separations
+		
+		# Apply fixed width to all existing buttons
+		for child in action_hbox.get_children():
+			if child is Button:
+				child.custom_minimum_size = Vector2(fixed_w, 0) # Fill height automatically
+				child.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+				child.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+		# ADD A SPACER to separate it from the rest
+		var spacer = Control.new()
+		spacer.custom_minimum_size = Vector2(40 * s, 0)
+		action_hbox.add_child(spacer)
+		
+		achievement_btn = _create_vertical_category_btn("🏆", "achievement")
+		achievement_btn.name = "AchievementBtn"
+		# FORCE TOTAL HEIGHT
+		achievement_btn.custom_minimum_size = Vector2(fixed_w, h_cat)
+		achievement_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		achievement_btn.visible = true
+		
+		var gold_style = StyleBoxFlat.new()
+		gold_style.bg_color = Color("#D4AF37")
+		gold_style.border_width_left = 2; gold_style.border_width_top = 2
+		gold_style.border_width_right = 2; gold_style.border_width_bottom = 2
+		gold_style.border_color = Color("#FFFACD")
+		gold_style.set_corner_radius_all(4 * s)
+		gold_style.content_margin_top = 0; gold_style.content_margin_bottom = 0
+		
+		achievement_btn.add_theme_stylebox_override("normal", gold_style)
+		achievement_btn.add_theme_stylebox_override("hover", gold_style)
+		achievement_btn.add_theme_stylebox_override("pressed", gold_style)
+		
+		action_hbox.add_child(achievement_btn)
+		# Force the button to match the container's height perfectly
+		achievement_btn.set_anchors_and_offsets_preset(Control.PRESET_VCENTER_WIDE)
+		
+		# Pulse Animation (Subtle glow)
+		var pulse = create_tween().set_loops()
+		pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+		pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
+
 
 # Helper for intelligent panel positioning above the HUD
 func _align_panel_to_hud(panel: Control, p_width: float, p_height: float):
@@ -1550,8 +1635,17 @@ func _align_panel_to_hud(panel: Control, p_width: float, p_height: float):
 func _create_vertical_category_btn(emoji: String, text_key: String) -> Button:
 	var s = _get_ui_scale()
 	var btn = Button.new()
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.custom_minimum_size = Vector2(0, 51 * s)
+	# ADAPTIVE WIDTH: Initially expand to fill screen, then freeze when scrolling is needed
+	if not is_achievement_menu_unlocked:
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	else:
+		btn.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		# Minimum width is handled dynamically in _rebuild_ui to ensure screen fill
+		btn.custom_minimum_size = Vector2(80 * s, 0) 
+	
+	btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size.y = 0 # Let the parent HBox dictate height
+
 	
 	var vbox = VBoxContainer.new()
 	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1665,6 +1759,7 @@ func _setup_tools_ui():
 	tools_btn.add_theme_stylebox_override("normal", btn_style)
 	tools_btn.add_theme_stylebox_override("hover", btn_style)
 	tools_btn.add_theme_stylebox_override("pressed", btn_style)
+
 	
 	# CREATE FRESH PANEL WITH STYLE
 	tools_panel = PanelContainer.new()
@@ -9182,7 +9277,8 @@ func _save_to_slot(idx, custom_name: String = ""):
 		"cell_paint": cell_paint_colors,
 		"bg_paint": background_img.get_data().to_int32_array(),
 		"lab_data": _get_cleaned_lab_data(),
-		"npcs": active_npcs
+		"npcs": active_npcs,
+		"ach_unlocked": is_achievement_menu_unlocked
 	}
 	
 	var file = FileAccess.open_compressed(path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
@@ -9251,6 +9347,10 @@ func _load_from_slot(idx):
 			# 3. RESTORE LABORATORY EXPERIMENTS
 			if dict.has("lab_data"):
 				_restore_lab_data(dict["lab_data"])
+			
+			if dict.has("ach_unlocked"):
+				is_achievement_menu_unlocked = dict["ach_unlocked"]
+				_setup_main_ui_containers() # Ensure menu appears if unlocked
 				
 			_update_texture()
 			queue_redraw()
@@ -9300,3 +9400,76 @@ func _restore_lab_data(lab_data: Array):
 	
 	# Always update tool list
 	_update_custom_mats_in_material_grid()
+
+func _trigger_achievement_reveal():
+	if is_achievement_menu_unlocked: return
+	
+	# 1. Capture current button widths to prevent shrinking
+	var screen_w = get_viewport_rect().size.x
+	var s = _get_ui_scale()
+	var fixed_w = (screen_w - (5 * 2 * s)) / 6.0
+	
+	for child in action_hbox.get_children():
+		if child is Button:
+			child.custom_minimum_size = Vector2(fixed_w, action_hbox.size.y)
+			child.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			child.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	
+	# 2. Unlock state
+	is_achievement_menu_unlocked = true
+	_save_global_achievements()
+	
+	# 3. Enable scrolling behavior
+	action_hbox.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	
+	# 4. Add the items manually for the animation (before the next full rebuild)
+	var spacer = Control.new()
+	spacer.custom_minimum_size = Vector2(40 * s, 0)
+	action_hbox.add_child(spacer)
+	
+	achievement_btn = _create_vertical_category_btn("🏆", "achievement")
+	achievement_btn.name = "AchievementBtn"
+	achievement_btn.modulate.a = 0
+	achievement_btn.custom_minimum_size = Vector2(fixed_w, action_hbox.size.y)
+	achievement_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	
+	var gold_style = StyleBoxFlat.new()
+	gold_style.bg_color = Color("#D4AF37")
+	gold_style.set_corner_radius_all(4 * s)
+	achievement_btn.add_theme_stylebox_override("normal", gold_style)
+	achievement_btn.add_theme_stylebox_override("hover", gold_style)
+	achievement_btn.add_theme_stylebox_override("pressed", gold_style)
+	action_hbox.add_child(achievement_btn)
+	
+	# 5. Animation
+	var tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
+	tween.tween_property(action_scroll, "scroll_horizontal", 2000, 1.5)
+	
+	var fade_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	fade_tween.tween_interval(0.6)
+	fade_tween.tween_property(achievement_btn, "modulate:a", 1.0, 0.8)
+	
+	fade_tween.tween_callback(func():
+		var pulse = create_tween().set_loops()
+		pulse.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
+		pulse.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
+	)
+	
+	_play_action_sound("ui_pop")
+
+func _reset_achievements():
+	is_achievement_menu_unlocked = false
+	_save_global_achievements()
+	_setup_main_ui_containers()
+	_play_action_sound("ui_click")
+
+func _save_global_achievements():
+	var config = ConfigFile.new()
+	config.set_value("progression", "achievements_unlocked", is_achievement_menu_unlocked)
+	config.save("user://achievements.cfg")
+
+func _load_global_achievements():
+	var config = ConfigFile.new()
+	var err = config.load("user://achievements.cfg")
+	if err == OK:
+		is_achievement_menu_unlocked = config.get_value("progression", "achievements_unlocked", false)
