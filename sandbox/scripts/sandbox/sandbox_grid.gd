@@ -1460,8 +1460,14 @@ func _setup_main_ui_containers():
 	action_hbox.add_theme_constant_override("separation", 2 * s)
 
 	# -------------------------
-
 	
+	# --- TEST NOTIFICATION BUTTON ---
+	var test_btn = Button.new()
+	test_btn.text = "TEST NOTIFICATION"
+	test_btn.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	test_btn.offset_top = 80 * s
+	test_btn.pressed.connect(func(): _show_achievement_notification("Bienvenido al Sandbox"))
+	main_controls.add_child(test_btn)
 
 
 	# PUSH GAME VIEW (TextureRect) ABOVE HUD
@@ -9436,6 +9442,65 @@ func _trigger_achievement_reveal():
 	)
 	
 	_play_action_sound("ui_pop")
+
+func _show_achievement_notification(title: String):
+	var s = _get_ui_scale()
+	
+	# 1. REVEAL & SCROLL: Ensure the bar moves to show the achievement button
+	if not is_achievement_menu_unlocked:
+		_trigger_achievement_reveal()
+		await get_tree().create_timer(1.2).timeout
+	else:
+		# If already unlocked, just scroll to it to make sure it's visible
+		var scroll_tween = create_tween().set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
+		scroll_tween.tween_property(action_scroll, "scroll_horizontal", 2000, 1.0)
+		await scroll_tween.finished
+	
+	# 2. FIND BUTTON POSITION
+	var origin_pos = Vector2(get_viewport_rect().size.x - 100 * s, get_viewport_rect().size.y - 40 * s)
+	if is_instance_valid(achievement_btn):
+		origin_pos = achievement_btn.global_position + achievement_btn.size / 2.0
+
+	var toast_layer = CanvasLayer.new()
+	toast_layer.layer = 100
+	ui_root.add_child(toast_layer)
+	
+	# 3. THE ICON ALONE (No panel, no text yet)
+	var icon_container = Control.new() # Simple wrapper for scaling/pivoting
+	icon_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast_layer.add_child(icon_container)
+	
+	var icon_tex = TextureRect.new()
+	icon_tex.texture = load("res://assets/icon_game/icono_google_sandbox.png")
+	icon_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon_tex.custom_minimum_size = Vector2(50 * s, 50 * s)
+	icon_tex.position = -icon_tex.custom_minimum_size / 2.0 # Center on container
+	icon_container.add_child(icon_tex)
+	
+	# Initial position at the button center
+	icon_container.global_position = origin_pos
+	icon_container.scale = Vector2.ZERO
+	icon_container.modulate.a = 0
+	
+	# --- FIRST SEGMENT ANIMATION ---
+	var t = create_tween().set_parallel(false).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	
+	# Pop out of the button and float up slightly
+	t.parallel().tween_property(icon_container, "scale", Vector2.ONE, 0.5)
+	t.parallel().tween_property(icon_container, "modulate:a", 1.0, 0.3)
+	t.parallel().tween_property(icon_container, "global_position:y", origin_pos.y - 100 * s, 0.6)
+	
+	# Pause here to see the result
+	t.tween_interval(1.5)
+	
+	# Temporary cleanup for this test segment
+	t.tween_property(icon_container, "modulate:a", 0.0, 0.5)
+	t.tween_callback(toast_layer.queue_free)
+	
+	_play_action_sound("ui_pop")
+
+
 
 func _save_global_achievements():
 	var config = ConfigFile.new()
