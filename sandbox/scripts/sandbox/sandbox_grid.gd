@@ -1364,6 +1364,27 @@ const GOOGLE_PLAY_ACHIEVEMENTS = {
 	"supreme_alchemist": "CgkIx9-23rkFEAIQEQ"
 }
 
+const ACHIEVEMENT_ICONS = {
+	"massive_fight": "res://assets/icon_ach/ach_massive_fight.png",
+	"electrifying": "res://assets/icon_ach/ach_electrifying.png",
+	"miner_plan": "res://assets/icon_ach/ach_miner_plan.png",
+	"god": "res://assets/icon_ach/ach_god.png",
+	"mad_scientist": "res://assets/icon_ach/ach_mad_scientist.png",
+	"paint": "res://assets/icon_ach/ach_pain.png",
+	"party_rock": "res://assets/icon_ach/ach_party_rock.png",
+	"wind_master": "res://assets/icon_ach/ach_wind_master.png",
+	"compositor": "res://assets/icon_ach/ach_compositor.png",
+	"tsunami_master": "res://assets/icon_ach/ach_tsunami_master.png",
+	"retro_time": "res://assets/icon_ach/ach_retro_time.png",
+	"good_night": "res://assets/icon_ach/ach_good_night.png",
+	"volcano_giant": "res://assets/icon_ach/ach_volcano.png",
+	"boom": "res://assets/icon_ach/ach_boom.png",
+	"special_boom": "res://assets/icon_ach/ach_special_boom.png",
+	"short_circuit": "res://assets/icon_ach/ach_short_circui.png",
+	"world_war": "res://assets/icon_ach/ach_world_war.png",
+	"supreme_alchemist": "res://assets/icon_ach/ach_alchemist.png"
+}
+
 # --- ACHIEVEMENT SYSTEM DATA ---
 var achievements = {
 	"massive_fight": {
@@ -1736,7 +1757,7 @@ func _unlock_achievement(id: String):
 	achievements[id].unlocked = true
 	achievements[id].seen = false # Mark as NEW (unseen)
 	_save_global_achievements()
-	_show_achievement_notification(achievements[id].title)
+	_show_achievement_notification(id)
 	
 	# Sync unlock with Google Play Games Services if available on Android
 	if play_games_achievements_client and GOOGLE_PLAY_ACHIEVEMENTS.has(id):
@@ -9983,9 +10004,12 @@ func _trigger_achievement_reveal():
 
 
 
-func _show_achievement_notification(title: String):
+func _show_achievement_notification(id: String):
 	var s = _get_ui_scale()
 	var viewport_w = get_viewport_rect().size.x
+	
+	var a = achievements[id]
+	var title = a.title
 	
 	# 1. Ensure menu is visible (Cinematic Chain for the first time)
 	if not is_achievement_menu_unlocked:
@@ -10019,7 +10043,10 @@ func _show_achievement_notification(title: String):
 	toast_layer.add_child(icon_container)
 	
 	var icon_tex = TextureRect.new()
-	icon_tex.texture = load("res://assets/icon_game/icono_google_sandbox.png")
+	if ACHIEVEMENT_ICONS.has(id):
+		icon_tex.texture = load(ACHIEVEMENT_ICONS[id])
+	else:
+		icon_tex.texture = load("res://assets/icon_game/icono_google_sandbox.png")
 	icon_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon_tex.custom_minimum_size = Vector2(icon_size, icon_size)
@@ -10220,10 +10247,27 @@ func _setup_achievement_menu():
 			i_hbox.add_theme_constant_override("separation", 22 * s)
 			i_margin.add_child(i_hbox)
 			
-			var icon = Label.new()
-			icon.name = "Icon"
-			icon.add_theme_font_override("font", _get_safe_font())
-			i_hbox.add_child(icon)
+			var icon_container = Control.new()
+			icon_container.name = "IconContainer"
+			icon_container.custom_minimum_size = Vector2(75 * s, 75 * s)
+			i_hbox.add_child(icon_container)
+			
+			var icon_tex = TextureRect.new()
+			icon_tex.name = "IconTexture"
+			icon_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon_tex.size = Vector2(75 * s, 75 * s)
+			icon_container.add_child(icon_tex)
+			
+			var lock_label = Label.new()
+			lock_label.name = "LockLabel"
+			lock_label.text = "🔒"
+			lock_label.add_theme_font_override("font", _get_safe_font())
+			lock_label.add_theme_font_size_override("font_size", 24 * s)
+			lock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			lock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			lock_label.size = Vector2(75 * s, 75 * s)
+			icon_container.add_child(lock_label)
 			
 			var text_vbox = VBoxContainer.new()
 			text_vbox.name = "TextVBox"
@@ -10243,13 +10287,19 @@ func _setup_achievement_menu():
 			text_vbox.add_child(a_desc)
 		
 		# UPDATE VISUAL STATE (Cheap)
-		var icon = item.find_child("Icon", true, false)
+		var icon_tex = item.find_child("IconTexture", true, false)
+		var lock_label = item.find_child("LockLabel", true, false)
 		var a_title = item.find_child("Title", true, false)
 		var a_desc = item.find_child("Desc", true, false)
 		
-		icon.text = "🏆" if a.unlocked else "🔒"
-		icon.add_theme_font_size_override("font_size", 28 * s)
-		icon.modulate.a = 1.0 if a.unlocked else 0.4
+		if icon_tex and ACHIEVEMENT_ICONS.has(id):
+			icon_tex.texture = load(ACHIEVEMENT_ICONS[id])
+			if a.unlocked:
+				icon_tex.modulate = Color.WHITE
+				if lock_label: lock_label.visible = false
+			else:
+				icon_tex.modulate = Color(0.2, 0.2, 0.2, 0.7) # Dark and translucent
+				if lock_label: lock_label.visible = true
 		
 		a_title.text = tr(a.title)
 		a_title.add_theme_font_size_override("font_size", 22 * s)
