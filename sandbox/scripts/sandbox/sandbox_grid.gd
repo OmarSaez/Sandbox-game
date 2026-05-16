@@ -1649,7 +1649,7 @@ func _check_achievement_step(step: int):
 						var pid = cells[y * grid_width + x] & 0xFFFF
 						if pid == 27 or pid == 29:
 							volcano_pixels += 4 # Weighted for 2x2 sampling
-							if volcano_pixels >= 1000:
+							if volcano_pixels >= 700:
 								_unlock_achievement("volcano_giant")
 								return
 		6: # --- GROUP 6: EXPLOSIONS (BOOM & SPECIAL) ---
@@ -6099,10 +6099,23 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		
 	# 6. VOLCANO LOGIC (pure_id 27, 28, 29)
 	if pure_id == 27: # Static block
-		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY) or charge_array[idx] > 50:
-			_set_cell(x, y, 29) # Transform to ACTIVE BASE
-			# Life duration for 3-5 shots (Approx 80-120 frames)
-			charge_array[idx] = _get_lut_rand_range(80, 120)
+		# TRIGGER: Neighboring fire/lava OR being "pre-heated" by an active neighbor
+		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY) or charge_array[idx] > 10:
+			# Staggered activation: only 5% chance per frame to actually start erupting
+			if _get_lut_rand() < 0.05:
+				_set_cell(x, y, 29) # Transform to ACTIVE BASE
+				# Life duration for shots
+				charge_array[idx] = _get_lut_rand_range(80, 150)
+			else:
+				# Heat up neighbors slowly to propagate the "wave"
+				charge_array[idx] += 1 
+				if _get_lut_rand() < 0.1: # Spread heat to a random neighbor
+					var nx = x + _get_lut_rand_range(-1, 1)
+					var ny = y + _get_lut_rand_range(-1, 1)
+					if nx >= 0 and nx < grid_width and ny >= 0 and ny < dynamic_grid_height:
+						var nidx = ny * grid_width + nx
+						charge_array[nidx] += 10
+						_register_charge(nidx)
 	
 	elif pure_id == 29: # Erupting Base
 		is_volcano_active = true
@@ -6130,71 +6143,91 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			_draw_circle(x, y, 5, 11) # Burnout cluster (Slightly bigger)
 			_explode(x, y, 10, "volcan_burst") # Bigger final burnout
 
-	elif pure_id == 28: # Ascending projectile
+	elif pure_id == 28: # Ascending projectile (The "Core")
 		is_volcano_active = true
 		var current_fuel = charge_array[idx]
-		for i in range(3):
+		
+		for i in range(1): # Reduced speed to 1 to feel the "struggle" and pressure
 			if current_fuel <= 0:
-				_draw_circle(x, y, 8, 11) # Bigger burnout crater
-				_draw_circle(x, y, 6, 15) 
-				_explode(x, y, 15, "volcan_burst") # Massive explosion at the top
-				for _j in range(50):
-					_add_spark(float(x), float(y), _get_lut_rand_range(-150, 150), _get_lut_rand_range(-200, 50), [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(), _get_lut_rand_range(0.4, 0.8))
+				# Final Death Burst
+				_draw_circle(x, y, 6, 11) 
+				_draw_circle(x, y, 4, 15) 
+				_explode(x, y, 12, "volcan_burst")
+				for _j in range(30):
+					_add_spark(float(x), float(y), _get_lut_rand_range(-120, 120), _get_lut_rand_range(-150, 50), [Color.YELLOW, Color.WHITE, Color.ORANGE].pick_random(), _get_lut_rand_range(0.3, 0.6))
 				return
+				
 			var next_y = y - 1
-			if next_y < 5: _set_cell(x, y, 11); _explode(x, y, 6); return
+			if next_y < 5: 
+				_set_cell(x, y, 11)
+				_explode(x, y, 6)
+				return
 			
-			var next_id = _get_cell(x, next_y)
-			var n_tags = material_tags_raw[next_id & 0xFFFF] if next_id > 0 else 0
+			# INTELLIGENT PATHFINDING: Up, then diagonals, then pure lateral
+			var dirs = [Vector2i(0, -1), Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 0), Vector2i(1, 0)]
+			var moved = false
 			
-			# DEVASTATING ERUPTION: Penetrate all non-invincible materials
-			if next_id == 0 or not (n_tags & SandboxMaterial.Tags.INVINCIBLE):
-				var is_solid = (next_id > 0 and next_id != 11 and next_id != 15 and next_id != 3 and next_id != 9)
+			for d in dirs:
+				var tx = x + d.x
+				var ty = y + d.y
+				var nid = _get_cell(tx, ty)
 				
-				if is_solid:
-					# RESISTENCIA: 30% de probabilidad de luchar contra el material sólido
-					if _get_lut_rand() < 0.30:
-						current_fuel -= 1 # Gasta combustible intentando romper
-						charge_array[idx] = current_fuel
-						# Crear efecto visual de lucha (chisporroteo lateral)
-						if _get_lut_rand() < 0.4:
-							for _k in range(3):
-								_add_spark(float(x), float(y), _get_lut_rand_range(-60, 60), _get_lut_rand_range(-20, 20), [Color.RED, Color.ORANGE].pick_random(), 0.3)
-						break # Frena el avance este frame, dando efecto de destrucción lenta pero imparable
+				if nid == 28: continue 
+				
+				var n_tags = material_tags_raw[nid & 0xFFFF] if nid > 0 else 0
+				
+				if nid == 0 or not (n_tags & SandboxMaterial.Tags.INVINCIBLE):
+					var is_solid = (nid > 0 and nid != 11 and nid != 15 and nid != 3 and nid != 9)
+					
+					if is_solid:
+						# HYPER HARDNESS: 98% chance to stay stuck per frame (Maximum struggle)
+						var break_chance = 0.02 if d.y < 0 else 0.01 
+						if _get_lut_rand() > break_chance:
+							current_fuel -= 2 # Heavier pressure consumption
+							charge_array[idx] = current_fuel
+							if _get_lut_rand() < 0.25:
+								_add_spark(float(x), float(y), _get_lut_rand_range(-50, 50), _get_lut_rand_range(-30, 20), [Color.RED, Color.ORANGE].pick_random(), 0.3)
+							continue 
 						
-					current_fuel -= 2 # Small penalty for drilling, allows deep penetration
-					if _get_lut_rand() < 0.2:
-						_add_spark(float(x), float(y), _get_lut_rand_range(-50, 50), _get_lut_rand_range(-50, 50), Color.RED, 0.3)
-						
-				_swap_cells(x, y, x, next_y)
-				_set_cell(x, y, 11 if _get_lut_rand() < 0.8 else 15) # Leave lava 80% of the time for a fiery trail
+						# Successful break (5 fuel)
+						current_fuel -= 5 
+						# Narrow Chimney (Radius 1)
+						for dx in range(-1, 2):
+							for dy in range(-1, 2):
+								var cx = tx + dx; var cy = ty + dy
+								var cid = _get_cell(cx, cy)
+								if cid > 0 and cid != 28:
+									if not (material_tags_raw[cid & 0xFFFF] & SandboxMaterial.Tags.INVINCIBLE):
+										var r = _get_lut_rand()
+										if r < 0.3: _set_cell(cx, cy, 11) 
+										elif r < 0.5 and current_fuel < 60: _set_cell(cx, cy, 15) 
+										else: _set_cell(cx, cy, 0) 
+					
+					# Perform the move
+					var trail_id = 11
+					if current_fuel < 60 and _get_lut_rand() < 0.2: trail_id = 15
+					_set_cell(x, y, trail_id) 
+					
+					x = tx; y = ty; nid = 28; 
+					_set_cell(x, y, 28)
+					idx = y * grid_width + x
+					current_fuel -= 1
+					charge_array[idx] = current_fuel
+					moved = true
+					break 
+			
+			if not moved:
+				current_fuel -= 1 
+				charge_array[idx] = current_fuel
 				
-				# Drill a chimney (radius 2)
-				for dx in range(-2, 3):
-					for dy in range(-2, 2):
-						if dx == 0 and dy == 0: continue
-						if abs(dx) + abs(dy) > 3: continue # Diamond shape to look natural
-						var cx = x + dx; var cy = next_y + dy
-						var cid = _get_cell(cx, cy)
-						if cid > 0 and cid != 28:
-							var ctags = material_tags_raw[cid & 0xFFFF]
-							if not (ctags & SandboxMaterial.Tags.INVINCIBLE):
-								var rand_val = _get_lut_rand()
-								if rand_val < 0.35: # 35% lava (Creates a massive flow down the chimney)
-									_set_cell(cx, cy, 11)
-								elif rand_val < 0.60: # 25% smoke
-									_set_cell(cx, cy, 15)
-								else: # 40% empty (carving the hole)
-									_set_cell(cx, cy, 0)
-									
-				y = next_y; idx = y * grid_width + x; current_fuel -= 1; charge_array[idx] = current_fuel
-				for _j in range(12): _add_spark(float(x) + _get_lut_rand_range(-6, 6), float(y) + _get_lut_rand_range(0, 10), _get_lut_rand_range(-60, 60), _get_lut_rand_range(40, 100), [Color.YELLOW, Color("#FFFF33"), Color.WHITE, Color.ORANGE].pick_random(), _get_lut_rand_range(0.2, 0.5))
-			else: 
-				current_fuel = 0; break # Hit invincible wall
-				
-		if _get_lut_rand() < 0.8:
-			var e_colors = [Color.YELLOW, Color.CYAN, Color.WHITE, Color("#FFFF33")]
-			for _i in range(4): _add_spark(float(x) + _get_lut_rand_range(-3, 3), float(y + 1), _get_lut_rand_range(-50, 50), _get_lut_rand_range(20, 80), e_colors[_get_lut_rand_range(0, e_colors.size()-1)], _get_lut_rand_range(0.1, 0.4))
+				# CRITICAL PRESSURE: Much more patient. 
+				# Only check every 20 frames (approx 0.3s) AND only when fuel is below 60 (has struggled a lot)
+				if current_fuel < 60 and current_fuel > 5 and (current_fuel % 20 == 0):
+					if _get_lut_rand() < 0.15: # 15% chance EVERY 20 FRAMES (Very rare overall)
+						_draw_circle(x, y, 10, 11)
+						_explode(x, y, 18, "volcan_burst")
+						return
+				break
 	
 	# 7. FRESH CEMENT HARDENING 
 	if pure_id == 25:
