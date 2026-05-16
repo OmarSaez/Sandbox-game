@@ -3158,23 +3158,15 @@ func _toggle_category_panel(target_panel: Control):
 	_play_action_sound("ui_click")
 	var was_visible = is_instance_valid(target_panel) and target_panel.visible
 	
-	# CLOSE ALL
-	if is_instance_valid(tools_panel): tools_panel.visible = false
-	if is_instance_valid(lab_panel): lab_panel.visible = false
-	if is_instance_valid(disaster_panel): disaster_panel.visible = false
-	if is_instance_valid(npc_panel): npc_panel.visible = false
-	if is_instance_valid(achievement_panel): achievement_panel.visible = false
-	if is_instance_valid(paint_panel): paint_panel.visible = false
-	if is_instance_valid(save_panel): save_panel.queue_free()
-	_close_music_menu()
-	# Only reset paint tool if we are NOT toggling the paint panel itself
+	_close_all_popups()
+	
 	if target_panel != paint_panel:
 		is_paint_tool_active = false
 	
 	# TOGGLE TARGET
 	if is_instance_valid(target_panel):
 		target_panel.visible = !was_visible
-		if target_panel == paint_panel:
+		if target_panel == paint_panel and target_panel.visible:
 			is_paint_tool_active = true
 	
 	_update_menu_highlights()
@@ -4016,6 +4008,16 @@ func _setup_disaster_ui():
 	create_row.call("sinkhole", ["off", "light", "med", "heavy"], func(l): sinkhole_intensity = l; _update_menu_highlights(), true)
 	create_row.call("sand_storm", ["off", "light", "med", "storm"], func(l): sand_storm_intensity = l; _update_menu_highlights(), true)
 
+func _close_all_popups():
+	if is_instance_valid(tools_panel): tools_panel.visible = false
+	if is_instance_valid(disaster_panel): disaster_panel.visible = false
+	if is_instance_valid(npc_panel): npc_panel.visible = false
+	if is_instance_valid(paint_panel): paint_panel.visible = false
+	if is_instance_valid(achievement_panel): achievement_panel.visible = false
+	if is_instance_valid(lab_panel): lab_panel.visible = false
+	if is_instance_valid(save_panel): save_panel.queue_free()
+	_close_music_menu()
+
 func _refresh_ui_text():
 	# This function is now mostly legacy as we prefer rebuilding the UI
 	# to preserve complex layouts and premium formatting perfectly.
@@ -4114,6 +4116,7 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 				
 				_update_material_highlights()
 				_update_menu_highlights()
+				_close_all_popups()
 				
 				# Music is no longer in MaterialGrid, so this part can be simplified/removed for MaterialGrid
 				# But specifically if we ever call it from elsewhere:
@@ -9398,13 +9401,7 @@ func _setup_music_button():
 		
 		# EXCLUSIVE SELECTION: Close all other panels
 		is_paint_tool_active = false
-		if is_instance_valid(tools_panel): tools_panel.visible = false
-		if is_instance_valid(disaster_panel): disaster_panel.visible = false
-		if is_instance_valid(npc_panel): npc_panel.visible = false
-		if is_instance_valid(paint_panel): paint_panel.visible = false
-		if is_instance_valid(save_panel): save_panel.queue_free()
-		if is_instance_valid(achievement_panel): achievement_panel.visible = false
-		if is_instance_valid(lab_panel): lab_panel.visible = false
+		_close_all_popups()
 		
 		_setup_music_ui()
 		_update_menu_highlights()
@@ -9445,10 +9442,7 @@ func _setup_save_ui():
 	save_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 	
 	# Close other menus for exclusive focus
-	if is_instance_valid(tools_panel): tools_panel.visible = false
-	if is_instance_valid(disaster_panel): disaster_panel.visible = false
-	if is_instance_valid(npc_panel): npc_panel.visible = false
-	_close_music_menu()
+	_close_all_popups()
 
 	var m_width = 530 * s
 	var m_height = min(650 * s, get_viewport_rect().size.y * 0.8)
