@@ -243,7 +243,7 @@ var firework_player: AudioStreamPlayer # Dedicated for rocket fuse
 var ascent_player: AudioStreamPlayer   # Dedicated for rocket flying up
 var volcano_loop_player: AudioStreamPlayer # Dedicated for volcano bubbling loop
 var fire_loop_player: AudioStreamPlayer    # Dedicated for global crackling/burning
-const SFX_POOL_SIZE = 8
+const SFX_POOL_SIZE = 32
 var action_btn_font_size: int = 16 # Unified size for main ActionButtons (Shrunk for space)
 
 # Mapeo: ID del Material -> Nombre del archivo (SONIDO EN BUCLE / LOOP) MP3
@@ -6147,94 +6147,73 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			_explode(x, y, 10, "volcan_burst") # Bigger final burnout
 			_play_action_sound("explosion", 0.08, -10.0) # Layered quiet TNT
 
-	elif pure_id == 28: # Ascending projectile (The "Core")
+	elif pure_id == 28: # Ascending Core
 		is_volcano_active = true
 		var current_fuel = charge_array[idx]
 		
-		for i in range(1): # Reduced speed to 1 to feel the "struggle" and pressure
-			if current_fuel <= 0:
-				# Final Death Burst
-				_draw_circle(x, y, 6, 11) 
-				_draw_circle(x, y, 4, 15) 
-				_explode(x, y, 12, "volcan_burst")
-				_play_action_sound("explosion", 0.08, -8.0) # Layered TNT
-				for _j in range(30):
-					_add_spark(float(x), float(y), _get_lut_rand_range(-120, 120), _get_lut_rand_range(-150, 50), [Color.YELLOW, Color.WHITE, Color.ORANGE].pick_random(), _get_lut_rand_range(0.3, 0.6))
-				return
-				
-			var next_y = y - 1
-			if next_y < 5: 
-				_set_cell(x, y, 11)
-				_explode(x, y, 6, "volcan_burst")
-				_play_action_sound("explosion", 0.08, -12.0) # Very quiet thud at map top
-				return
+		# OPTIMIZATION: Only 1 step per frame (already decided for 'struggle' feel)
+		if current_fuel <= 0:
+			_draw_circle(x, y, 6, 11); _draw_circle(x, y, 4, 15) 
+			_explode(x, y, 12, "volcan_burst")
+			_play_action_sound("explosion", 0.08, -8.0)
+			for _j in range(25): # Slightly reduced sparks
+				_add_spark(float(x), float(y), _get_lut_rand_range(-120, 120), _get_lut_rand_range(-150, 50), [Color.YELLOW, Color.WHITE, Color.ORANGE].pick_random(), 0.3)
+			return
 			
-			# INTELLIGENT PATHFINDING: Up, then diagonals, then pure lateral
-			var dirs = [Vector2i(0, -1), Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 0), Vector2i(1, 0)]
-			var moved = false
+		if y < 5: 
+			_set_cell(x, y, 11); _explode(x, y, 6, "volcan_burst"); return
+		
+		# MOVEMENT & PENETRATION LOGIC
+		var moved = false
+		# Up, Diagonals, Lateral
+		var dirs = [Vector2i(0, -1), Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 0), Vector2i(1, 0)]
+		
+		for d in dirs:
+			var tx = x + d.x; var ty = y + d.y
+			var tidx = ty * grid_width + tx
+			var nid = cells[tidx] & 0xFFFF
 			
-			for d in dirs:
-				var tx = x + d.x
-				var ty = y + d.y
-				var nid = _get_cell(tx, ty)
-				
-				if nid == 28: continue 
-				
-				var n_tags = material_tags_raw[nid & 0xFFFF] if nid > 0 else 0
-				
-				if nid == 0 or not (n_tags & SandboxMaterial.Tags.INVINCIBLE):
-					var is_solid = (nid > 0 and nid != 11 and nid != 15 and nid != 3 and nid != 9)
+			if nid == 28: continue # Skip brothers
+			
+			var n_tags = material_tags_raw[nid]
+			if nid == 0 or not (n_tags & SandboxMaterial.Tags.INVINCIBLE):
+				if nid > 0 and nid != 11 and nid != 15 and nid != 3 and nid != 9:
+					# SOLID STRUGGLE
+					var break_prob = 0.02 if d.y < 0 else 0.01 
+					if _get_lut_rand() > break_prob:
+						current_fuel -= 2; charge_array[idx] = current_fuel
+						if _get_lut_rand() < 0.2: _add_spark(float(x), float(y), _get_lut_rand_range(-40, 40), _get_lut_rand_range(-30, 10), Color.ORANGE, 0.2)
+						continue 
 					
-					if is_solid:
-						# HYPER HARDNESS: 98% chance to stay stuck per frame (Maximum struggle)
-						var break_chance = 0.02 if d.y < 0 else 0.01 
-						if _get_lut_rand() > break_chance:
-							current_fuel -= 2 # Heavier pressure consumption
-							charge_array[idx] = current_fuel
-							if _get_lut_rand() < 0.25:
-								_add_spark(float(x), float(y), _get_lut_rand_range(-50, 50), _get_lut_rand_range(-30, 20), [Color.RED, Color.ORANGE].pick_random(), 0.3)
-							continue 
-						
-						# Successful break (5 fuel)
-						current_fuel -= 5 
-						# Narrow Chimney (Radius 1)
+					# BREAK SUCCESS
+					current_fuel -= 5
+					# Fast Chimney (3x3)
+					for dy in range(-1, 2):
 						for dx in range(-1, 2):
-							for dy in range(-1, 2):
-								var cx = tx + dx; var cy = ty + dy
-								var cid = _get_cell(cx, cy)
-								if cid > 0 and cid != 28:
-									if not (material_tags_raw[cid & 0xFFFF] & SandboxMaterial.Tags.INVINCIBLE):
-										var r = _get_lut_rand()
-										if r < 0.3: _set_cell(cx, cy, 11) 
-										elif r < 0.5 and current_fuel < 60: _set_cell(cx, cy, 15) 
-										else: _set_cell(cx, cy, 0) 
-					
-					# Perform the move
-					var trail_id = 11
-					if current_fuel < 60 and _get_lut_rand() < 0.2: trail_id = 15
-					_set_cell(x, y, trail_id) 
-					
-					x = tx; y = ty; nid = 28; 
-					_set_cell(x, y, 28)
-					idx = y * grid_width + x
-					current_fuel -= 1
-					charge_array[idx] = current_fuel
-					moved = true
-					break 
-			
-			if not moved:
-				current_fuel -= 1 
-				charge_array[idx] = current_fuel
+							var cx = tx + dx; var cy = ty + dy
+							var cidx = cy * grid_width + cx
+							var cid = cells[cidx] & 0xFFFF
+							if cid > 0 and cid != 28 and not (tags_array[cidx] & SandboxMaterial.Tags.INVINCIBLE):
+								var r = _get_lut_rand()
+								if r < 0.3: cells[cidx] = (cells[cidx] & 0xFFFF0000) | 11
+								elif r < 0.5 and current_fuel < 60: cells[cidx] = (cells[cidx] & 0xFFFF0000) | 15
+								else: cells[cidx] = (cells[cidx] & 0xFFFF0000) | 0
 				
-				# CRITICAL PRESSURE: Much more patient. 
-				# Only check every 20 frames (approx 0.3s) AND only when fuel is below 60 (has struggled a lot)
-				if current_fuel < 60 and current_fuel > 5 and (current_fuel % 20 == 0):
-					if _get_lut_rand() < 0.15: # 15% chance EVERY 20 FRAMES (Very rare overall)
-						_draw_circle(x, y, 10, 11)
-						_explode(x, y, 18, "volcan_burst")
-						_play_action_sound("explosion", 0.08, -6.0) # Louder TNT layer for pressure blowout
-						return
-				break
+				# EXECUTE MOVE
+				var trail = 15 if (current_fuel < 60 and _get_lut_rand() < 0.2) else 11
+				_set_cell(x, y, trail)
+				x = tx; y = ty; _set_cell(x, y, 28)
+				idx = tidx; current_fuel -= 1; charge_array[idx] = current_fuel
+				moved = true; break 
+		
+		if not moved:
+			current_fuel -= 2; charge_array[idx] = current_fuel
+			if current_fuel < 60 and current_fuel > 5 and (current_fuel % 20 == 0):
+				if _get_lut_rand() < 0.15:
+					_draw_circle(x, y, 10, 11)
+					_explode(x, y, 18, "volcan_burst")
+					_play_action_sound("explosion", 0.08, -6.0)
+					return
 	
 	# 7. FRESH CEMENT HARDENING 
 	if pure_id == 25:
