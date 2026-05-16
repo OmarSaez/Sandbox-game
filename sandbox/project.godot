@@ -24,6 +24,7 @@ config/icon="res://icon.svg"
 AdMobManager="*res://scripts/admob_manager.gd"
 NotificationScheduler="*res://addons/NotificationSchedulerPlugin/NotificationScheduler.gd"
 NotificationManager="*res://scripts/notification_manager.gd"
+GodotPlayGameServices="*uid://cnutnba63py8a"
 
 [display]
 
@@ -34,10 +35,11 @@ window/size/window_height_override=960
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=1
+enabled=PackedStringArray("res://addons/NotificationSchedulerPlugin/plugin.cfg", "res://addons/admob/plugin.cfg", "res://addons/GodotPlayGameServices/plugin.cfg")
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/NotificationSchedulerPlugin/plugin.cfg", "res://addons/admob/plugin.cfg")
+enabled=PackedStringArray("res://addons/GodotPlayGameServices/plugin.cfg", "res://addons/NotificationSchedulerPlugin/plugin.cfg", "res://addons/admob/plugin.cfg")
 
 [internationalization]
 

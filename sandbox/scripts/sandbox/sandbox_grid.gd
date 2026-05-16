@@ -446,6 +446,15 @@ func _load_tool_settings():
 
 func _ready():
 	_load_global_achievements() # Load global state once at startup
+	
+	# Initialize Google Play Game Services on Android
+	if OS.has_feature("android") and Engine.has_singleton("GodotPlayGameServices"):
+		var init_status = GodotPlayGameServices.initialize()
+		if init_status == 0: # PlayGamesPluginError.OK
+			play_games_achievements_client = PlayGamesAchievementsClient.new()
+			add_child(play_games_achievements_client)
+			print("Google Play Games Services client successfully setup!")
+			
 	Engine.max_fps = 60 # Cierra la puerta al stutter en pantallas 120Hz/LTPO
 	is_grid_ready = false # Safeguard during async _ready
 	
@@ -1332,6 +1341,29 @@ var action_vbox: VBoxContainer
 var material_scroll: ScrollContainer
 var cached_hud_height: float = 362.0 # Performance optimization: Cached for panel alignment
 
+var play_games_achievements_client: PlayGamesAchievementsClient = null
+
+const GOOGLE_PLAY_ACHIEVEMENTS = {
+	"massive_fight": "CgkIx9-23rkFEAIQAA",
+	"electrifying": "CgkIx9-23rkFEAIQAQ",
+	"miner_plan": "CgkIx9-23rkFEAIQAg",
+	"god": "CgkIx9-23rkFEAIQAw",
+	"mad_scientist": "CgkIx9-23rkFEAIQBA",
+	"paint": "CgkIx9-23rkFEAIQBQ",
+	"party_rock": "CgkIx9-23rkFEAIQBg",
+	"wind_master": "CgkIx9-23rkFEAIQBw",
+	"compositor": "CgkIx9-23rkFEAIQCA",
+	"tsunami_master": "CgkIx9-23rkFEAIQCQ",
+	"retro_time": "CgkIx9-23rkFEAIQCg",
+	"good_night": "CgkIx9-23rkFEAIQCw",
+	"volcano_giant": "CgkIx9-23rkFEAIQDA",
+	"boom": "CgkIx9-23rkFEAIQDQ",
+	"special_boom": "CgkIx9-23rkFEAIQDg",
+	"short_circuit": "CgkIx9-23rkFEAIQDw",
+	"world_war": "CgkIx9-23rkFEAIQEA",
+	"supreme_alchemist": "CgkIx9-23rkFEAIQEQ"
+}
+
 # --- ACHIEVEMENT SYSTEM DATA ---
 var achievements = {
 	"massive_fight": {
@@ -1705,6 +1737,10 @@ func _unlock_achievement(id: String):
 	achievements[id].seen = false # Mark as NEW (unseen)
 	_save_global_achievements()
 	_show_achievement_notification(achievements[id].title)
+	
+	# Sync unlock with Google Play Games Services if available on Android
+	if play_games_achievements_client and GOOGLE_PLAY_ACHIEVEMENTS.has(id):
+		play_games_achievements_client.unlock_achievement(GOOGLE_PLAY_ACHIEVEMENTS[id])
 
 func _record_tornado_discovery(type: int):
 	if not achievements.has("wind_master"): return
