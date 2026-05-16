@@ -10111,6 +10111,7 @@ func _setup_achievement_menu():
 		
 		# Header
 		var title = Label.new()
+		title.name = "AchievementMenuTitle"
 		title.text = tr("achievement_menu_title")
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		title.add_theme_font_override("font", _get_safe_font())
@@ -10133,6 +10134,12 @@ func _setup_achievement_menu():
 
 	# REFRESH LIST (Reuse existing nodes to avoid stutter)
 	achievement_panel.visible = true
+	
+	# Update Title Language
+	var menu_title = achievement_panel.find_child("AchievementMenuTitle", true, false)
+	if is_instance_valid(menu_title):
+		menu_title.text = tr("achievement_menu_title")
+
 	var list = achievement_panel.find_child("AchieveList", true, false)
 	
 	var existing_items = list.get_children()
