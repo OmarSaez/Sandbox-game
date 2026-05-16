@@ -4430,7 +4430,7 @@ func _play_achievement_unlock_sfx(is_menu_unlock: bool = false):
 	else:
 		_play_sfx("achievement_unlock", 5.0)
 
-func _play_action_sound(action: String, min_interval: float = 0.08):
+func _play_action_sound(action: String, min_interval: float = 0.08, volume_boost: float = 0.0):
 	if action_sfx.has(action):
 		# Sistema de seguridad contra saturación: 
 		# No permite que la MISMA acción suene repetidamente en menos de min_interval segundos
@@ -4440,7 +4440,7 @@ func _play_action_sound(action: String, min_interval: float = 0.08):
 				return
 		
 		last_action_times[action] = now
-		_play_sfx(action_sfx[action])
+		_play_sfx(action_sfx[action], volume_boost)
 
 func _process(delta):
 	if not is_grid_ready: return
@@ -6120,15 +6120,18 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 	elif pure_id == 29: # Erupting Base
 		is_volcano_active = true
 		charge_array[idx] -= 1
-		# Launch projectile every 20-25 frames
+		# Launch projectile every 25 frames
 		if charge_array[idx] % 25 == 0:
 			var tx = x + _get_lut_rand_range(-1, 1)
 			var n_id = _get_cell(tx, y-1)
-			# Launch if NOT a core solid (Metal, Cement, Earth, or another Volcan)
+			# Launch if NOT a core solid
 			if n_id != 13 and n_id != 26 and n_id != 5 and n_id != 27:
-				_explode(x, y-1, 2, "volcan_burst") # PUSH the plug out of the way!
+				# Alternate sound to reduce noise saturation (only odd shots sound)
+				var shot_count = charge_array[idx] / 25
+				var sfx = "volcan_burst" if (shot_count % 2 != 0) else ""
+				_explode(x, y-1, 2, sfx) # PUSH the plug out of the way!
 				_set_cell(tx, y-1, 28)
-				charge_array[(y-1) * grid_width + tx] = _get_lut_rand_range(80, 150) # Projectile fuel (increased for devastating penetration)
+				charge_array[(y-1) * grid_width + tx] = _get_lut_rand_range(80, 150) 
 		
 		# Smoking Base + LAVA PUDDLES (Triple effect)
 		if _get_lut_rand() < 0.3: # Reduced from 0.6
@@ -6142,6 +6145,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		if charge_array[idx] <= 0:
 			_draw_circle(x, y, 5, 11) # Burnout cluster (Slightly bigger)
 			_explode(x, y, 10, "volcan_burst") # Bigger final burnout
+			_play_action_sound("explosion", 0.08, -10.0) # Layered quiet TNT
 
 	elif pure_id == 28: # Ascending projectile (The "Core")
 		is_volcano_active = true
@@ -6153,6 +6157,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				_draw_circle(x, y, 6, 11) 
 				_draw_circle(x, y, 4, 15) 
 				_explode(x, y, 12, "volcan_burst")
+				_play_action_sound("explosion", 0.08, -8.0) # Layered TNT
 				for _j in range(30):
 					_add_spark(float(x), float(y), _get_lut_rand_range(-120, 120), _get_lut_rand_range(-150, 50), [Color.YELLOW, Color.WHITE, Color.ORANGE].pick_random(), _get_lut_rand_range(0.3, 0.6))
 				return
@@ -6160,7 +6165,8 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			var next_y = y - 1
 			if next_y < 5: 
 				_set_cell(x, y, 11)
-				_explode(x, y, 6)
+				_explode(x, y, 6, "volcan_burst")
+				_play_action_sound("explosion", 0.08, -12.0) # Very quiet thud at map top
 				return
 			
 			# INTELLIGENT PATHFINDING: Up, then diagonals, then pure lateral
@@ -6226,6 +6232,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					if _get_lut_rand() < 0.15: # 15% chance EVERY 20 FRAMES (Very rare overall)
 						_draw_circle(x, y, 10, 11)
 						_explode(x, y, 18, "volcan_burst")
+						_play_action_sound("explosion", 0.08, -6.0) # Louder TNT layer for pressure blowout
 						return
 				break
 	
@@ -8443,8 +8450,9 @@ func _prime_explosive(x, y, id, manual_flags = -1):
 	if x < 0 or x >= grid_width or y < 0 or y >= grid_height: return
 	var idx = y * grid_width + x; var current_id = cells[idx] & 0xFFFF
 	
-	# Handle already primed cells
+	# Handle already primed cells or Volcano states (Volcanos handle their own activation)
 	if current_id == 7 or current_id == 77 or current_id == 71 or current_id == 72: return 
+	if id == 27 or id == 28 or id == 29: return
 	
 	# Determine explosion type
 	var m_tags = material_tags_raw[id]
@@ -8547,7 +8555,7 @@ var _explosion_queue = [] # Queue of [x, y, radius, sfx, flags]
 var explosions_sfx_budget = 0
 var explosions_sfx_timer = 0.0
 
-func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0, ignore_budget = false):
+func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0, ignore_budget = false, volume_boost: float = 0.0):
 	sim_mutex.lock()
 	# BUDGET CHECK: If we exceed limit, queue for next frame
 	if not ignore_budget and explosions_this_frame >= MAX_EXPLOSIONS_PER_FRAME:
@@ -8565,7 +8573,7 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 	
 	# Limit sound spam: Only play sound if budget allows (max 30 per second)
 	if explosions_sfx_budget < 30:
-		_play_action_sound(sfx_action)
+		_play_action_sound(sfx_action, 0.08, volume_boost)
 		explosions_sfx_budget += 1
 	var center = Vector2i(x, y)
 	var nearby = _get_nearby_npcs(x, y, radius + 5)
@@ -8590,11 +8598,12 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 				var t_idx = ty * grid_width + tx; var t_tags = tags_array[t_idx]
 				if (t_tags & SandboxMaterial.Tags.INVINCIBLE): continue
 				if (t_tags & SandboxMaterial.Tags.EXPLOSIVE):
-					if t_id == 27: 
-						_set_cell(tx, ty, 29)
-						var ci = tx + ty * grid_width
-						charge_array[ci] = _get_lut_rand_range(80, 120)
-						_register_charge(ci)
+					if t_id == 27 or t_id == 28 or t_id == 29: 
+						if t_id == 27: # Only activate if static
+							_set_cell(tx, ty, 29)
+							var ci = tx + ty * grid_width
+							charge_array[ci] = _get_lut_rand_range(80, 150)
+							_register_charge(ci)
 					else: _prime_explosive(tx, ty, t_id, ignition_flags)
 					continue
 				if (t_tags & SandboxMaterial.Tags.ANTI_EXPLOSIVE): continue
