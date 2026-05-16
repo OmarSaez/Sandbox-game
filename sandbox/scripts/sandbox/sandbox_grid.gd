@@ -10177,10 +10177,13 @@ func _setup_achievement_menu():
 		achievement_panel.add_theme_stylebox_override("panel", p_style)
 		
 		# Position it exactly like tools/npcs
-		_align_panel_to_hud(achievement_panel, 550 * s, 500 * s)
+		_align_panel_to_hud(achievement_panel, 600 * s, 500 * s)
 		
 		var margin = MarginContainer.new()
-		margin.add_theme_constant_override("margin_all", 20 * s)
+		margin.add_theme_constant_override("margin_left", int(35 * s))
+		margin.add_theme_constant_override("margin_right", int(35 * s))
+		margin.add_theme_constant_override("margin_top", int(20 * s))
+		margin.add_theme_constant_override("margin_bottom", int(20 * s))
 		achievement_panel.add_child(margin)
 		
 		var vbox = VBoxContainer.new()
