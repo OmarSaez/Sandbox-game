@@ -10301,7 +10301,7 @@ func _setup_achievement_menu():
 				icon_tex.modulate = Color.WHITE
 				if lock_label: lock_label.visible = false
 			else:
-				icon_tex.modulate = Color(0.2, 0.2, 0.2, 0.7) # Dark and translucent
+				icon_tex.modulate = Color(0.08, 0.08, 0.08, 0.85) # Dark silhouette for organic mystery
 				if lock_label: lock_label.visible = true
 		
 		a_title.text = tr(a.title)
@@ -10328,7 +10328,14 @@ func _setup_achievement_menu():
 			i_style.border_color = Color(0.3, 0.3, 0.35, 0.4)
 			a_title.remove_theme_color_override("font_color")
 			a_title.modulate.a = 0.4
-			a_desc.visible = false
+			
+			# Show subtle hint for locked achievements instead of hiding description
+			var hint_key = a.desc.replace("_desc", "_hint")
+			a_desc.text = tr(hint_key)
+			a_desc.visible = true
+			a_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			a_desc.add_theme_font_size_override("font_size", 16 * s)
+			a_desc.modulate = Color(0.55, 0.55, 0.6, 0.65) # Dark and mysterious gray
 			
 		item.add_theme_stylebox_override("panel", i_style)
 		idx += 1
