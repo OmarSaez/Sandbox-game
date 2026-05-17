@@ -1890,7 +1890,9 @@ func _setup_main_ui_containers():
 	action_scroll = ScrollContainer.new()
 	action_scroll.name = "ActionScroll"
 	action_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	action_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	action_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	action_scroll.get_h_scroll_bar().visible = false
+	action_scroll.get_h_scroll_bar().modulate.a = 0
 	main_controls.add_child(action_scroll)
 	
 	action_scroll.anchor_top = 1.0
@@ -2038,7 +2040,7 @@ func _setup_main_ui_containers():
 		gold_style.border_width_left = 2; gold_style.border_width_top = 2
 		gold_style.border_width_right = 2; gold_style.border_width_bottom = 2
 		gold_style.border_color = Color("#FFFACD")
-		gold_style.set_corner_radius_all(4 * s)
+		gold_style.set_corner_radius_all(0)
 		gold_style.content_margin_top = 0; gold_style.content_margin_bottom = 0
 		
 		achievement_btn.add_theme_stylebox_override("normal", gold_style)
@@ -9444,7 +9446,7 @@ func _setup_music_button():
 	m_style.border_width_left = 1; m_style.border_width_top = 1
 	m_style.border_width_right = 1; m_style.border_width_bottom = 1
 	m_style.border_color = Color(0.4, 0.4, 0.5) # Same border color as others
-	m_style.set_corner_radius_all(5)
+	m_style.set_corner_radius_all(0)
 	
 	# Apply FIXED style to all states
 	btn.add_theme_stylebox_override("normal", m_style)
@@ -9476,13 +9478,13 @@ func _is_music_active() -> bool:
 # --- SAVE / LOAD SYSTEM ---
 
 func _setup_save_ui():
+	# Close other menus first (this frees any old save_panel via queue_free)
+	_close_all_popups()
+	
 	_set_panning_mode(false)
 	var s = _get_ui_scale()
 	ui_root = get_parent().get_node("UI")
 	
-	if is_instance_valid(save_panel):
-		save_panel.queue_free()
-		
 	save_panel = PanelContainer.new()
 	save_panel.name = "SavePanel"
 	ui_root.add_child(save_panel)
@@ -9497,9 +9499,6 @@ func _setup_save_ui():
 	save_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	save_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	save_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
-	
-	# Close other menus for exclusive focus
-	_close_all_popups()
 
 	var m_width = 530 * s
 	var m_height = min(650 * s, get_viewport_rect().size.y * 0.8)
