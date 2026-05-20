@@ -9650,9 +9650,28 @@ func _get_slot_data(idx):
 
 func _confirm_save(idx, current_name):
 	var s = _get_ui_scale()
+	
+	# Create a generic Control container to bypass PanelContainer layout rules on children
+	var dialog_container = Control.new()
+	dialog_container.name = "DialogContainer"
+	dialog_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	dialog_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dialog_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	save_panel.add_child(dialog_container)
+	
+	# Add a premium dimming background overlay to focus on the dialog
+	var overlay = Panel.new()
+	var overlay_style = StyleBoxFlat.new()
+	overlay_style.bg_color = Color(0, 0, 0, 0.6)
+	overlay_style.corner_radius_top_left = 30 * s
+	overlay_style.corner_radius_top_right = 30 * s
+	overlay.add_theme_stylebox_override("panel", overlay_style)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dialog_container.add_child(overlay)
+	
 	var dialog = PanelContainer.new()
 	dialog.name = "ConfirmDialog"
-	save_panel.add_child(dialog)
+	dialog_container.add_child(dialog)
 	
 	var d_style = StyleBoxFlat.new()
 	d_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
@@ -9663,9 +9682,9 @@ func _confirm_save(idx, current_name):
 	dialog.add_theme_stylebox_override("panel", d_style)
 	
 	dialog.anchor_left = 0.5; dialog.anchor_right = 0.5
-	dialog.anchor_top = 0.5; dialog.anchor_bottom = 0.5
+	dialog.anchor_top = 0.0; dialog.anchor_bottom = 0.0
 	dialog.offset_left = -260 * s; dialog.offset_right = 260 * s
-	dialog.offset_top = -180 * s; dialog.offset_bottom = 180 * s
+	dialog.offset_top = 50 * s; dialog.offset_bottom = 440 * s
 	
 	var margin = MarginContainer.new()
 	margin.add_theme_constant_override("margin_top", 20 * s)
@@ -9710,7 +9729,7 @@ func _confirm_save(idx, current_name):
 	yes_btn.add_theme_stylebox_override("normal", yes_style)
 	yes_btn.pressed.connect(func(): 
 		_save_to_slot(idx, name_edit.text)
-		dialog.queue_free()
+		dialog_container.queue_free()
 	)
 	hbox.add_child(yes_btn)
 	
@@ -9722,7 +9741,7 @@ func _confirm_save(idx, current_name):
 	no_style.bg_color = Color(0.6, 0.2, 0.2)
 	no_style.set_corner_radius_all(10 * s)
 	no_btn.add_theme_stylebox_override("normal", no_style)
-	no_btn.pressed.connect(func(): dialog.queue_free())
+	no_btn.pressed.connect(func(): dialog_container.queue_free())
 	hbox.add_child(no_btn)
 
 func _confirm_load(idx, current_name):
