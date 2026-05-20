@@ -2066,7 +2066,6 @@ func _setup_main_ui_containers():
 
 # Helper for intelligent panel positioning above the HUD
 func _align_panel_to_hud(panel: Control, p_width: float, p_height: float):
-	var s = _get_ui_scale()
 	panel.anchor_left = 0.5
 	panel.anchor_right = 0.5
 	panel.anchor_top = 1.0
@@ -5407,8 +5406,8 @@ func _set_cell(x, y, mat_id):
 func _activate_chunk(gx, gy):
 	var ix = int(gx)
 	var iy = int(gy)
-	var cx = int(ix / CHUNK_SIZE)
-	var cy = int(iy / CHUNK_SIZE)
+	var cx = int(float(ix) / CHUNK_SIZE)
+	var cy = int(float(iy) / CHUNK_SIZE)
 	if cx >= 0 and cx < chunks_x and cy >= 0 and cy < chunks_y:
 		var c_idx = cy * chunks_x + cx
 		if next_chunks_active[c_idx] >= 60: return
@@ -5954,7 +5953,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					_prime_explosive(x, y, pure_id, trigger_type)
 			elif pure_id == 18:
 				_set_cell(x, y, 19)
-				charge_array[idx] = _get_lut_rand_range(20, 70)
+				charge_array[idx] = int(_get_lut_rand_range(20, 70))
 				_register_charge(idx)
 				_play_action_sound("fuse_burning", 0.1)
 
@@ -6145,7 +6144,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 							# DENSITY FIX: Only sprout vines if no other vines are nearby (Separation)
 							if _count_neighbor_id_radius(x, y, 24, 4) < 1:
 								_set_cell(x, y-1, 24)
-								charge_array[idx - grid_width] = _get_lut_rand_range(4, 8)
+								charge_array[idx - grid_width] = int(_get_lut_rand_range(4, 8))
 				else:
 					if current_weather == 0 and _get_lut_rand() < 0.1:
 						_set_cell(x, y, 1 if pure_id == 22 else 6)
@@ -6167,13 +6166,13 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			if _get_lut_rand() < 0.05:
 				_set_cell(x, y, 29) # Transform to ACTIVE BASE
 				# Life duration for shots
-				charge_array[idx] = _get_lut_rand_range(80, 150)
+				charge_array[idx] = int(_get_lut_rand_range(80, 150))
 			else:
 				# Heat up neighbors slowly to propagate the "wave"
 				charge_array[idx] += 1 
 				if _get_lut_rand() < 0.1: # Spread heat to a random neighbor
-					var nx = x + _get_lut_rand_range(-1, 1)
-					var ny = y + _get_lut_rand_range(-1, 1)
+					var nx = x + int(_get_lut_rand_range(-1, 1))
+					var ny = y + int(_get_lut_rand_range(-1, 1))
 					if nx >= 0 and nx < grid_width and ny >= 0 and ny < dynamic_grid_height:
 						var nidx = ny * grid_width + nx
 						charge_array[nidx] += 10
@@ -6184,24 +6183,24 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		charge_array[idx] -= 1
 		# Launch projectile every 25 frames
 		if charge_array[idx] % 25 == 0:
-			var tx = x + _get_lut_rand_range(-1, 1)
+			var tx = x + int(_get_lut_rand_range(-1, 1))
 			var n_id = _get_cell(tx, y-1)
 			# Launch if NOT a core solid
 			if n_id != 13 and n_id != 26 and n_id != 5 and n_id != 27:
 				# Alternate sound to reduce noise saturation (only odd shots sound)
-				var shot_count = charge_array[idx] / 25
+				var shot_count = int(float(charge_array[idx]) / 25)
 				var sfx = "volcan_burst" if (shot_count % 2 != 0) else ""
 				_explode(x, y-1, 2, sfx) # PUSH the plug out of the way!
 				_set_cell(tx, y-1, 28)
-				charge_array[(y-1) * grid_width + tx] = _get_lut_rand_range(80, 150) 
+				charge_array[(y-1) * grid_width + tx] = int(_get_lut_rand_range(80, 150)) 
 		
 		# Smoking Base + LAVA PUDDLES (Triple effect)
 		if _get_lut_rand() < 0.3: # Reduced from 0.6
-			var sx = x + _get_lut_rand_range(-2, 2)
+			var sx = x + int(_get_lut_rand_range(-2, 2))
 			if _get_cell(sx, y-1) == 0: _set_cell(sx, y-1, 15)
 		
 		if _get_lut_rand() < 0.15: # Leak real lava at base
-			var lx = x + _get_lut_rand_range(-2, 2)
+			var lx = x + int(_get_lut_rand_range(-2, 2))
 			if _get_cell(lx, y-1) == 0: _set_cell(lx, y-1, 11)
 			
 		if charge_array[idx] <= 0:
@@ -6279,7 +6278,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 	
 	# 7. FRESH CEMENT HARDENING 
 	if pure_id == 25:
-		if charge_array[idx] == 0: charge_array[idx] = _get_lut_rand_range(60, 120) 
+		if charge_array[idx] == 0: charge_array[idx] = int(_get_lut_rand_range(60, 120)) 
 		charge_array[idx] -= 1
 		if charge_array[idx] <= 1: _set_cell(x, y, 26) 
 
@@ -8558,7 +8557,7 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 					if (n_tags & SandboxMaterial.Tags.FLAMMABLE):
 						if n_id == 14: continue
 						if _get_lut_rand() < 0.8:
-							if n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = _get_lut_rand_range(20, 70)
+							if n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = int(_get_lut_rand_range(20, 70))
 							elif (n_tags & SandboxMaterial.Tags.BURN_COAL): _set_cell(nx, ny, 14 if _get_lut_rand() < 0.5 else 3)
 							elif (n_tags & SandboxMaterial.Tags.BURN_SMOKE):
 								if _get_cell(nx, ny - 1) == 0: _set_cell(nx, ny - 1, 15)
@@ -8566,8 +8565,8 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 								else: _set_cell(nx, ny, 0)
 							else: _set_cell(nx, ny, 3)
 					elif (n_tags & SandboxMaterial.Tags.EXPLOSIVE):
-						if n_id == 27: _set_cell(nx, ny, 29); charge_array[nx + ny * grid_width] = _get_lut_rand_range(80, 120)
-						elif n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = _get_lut_rand_range(20, 70)
+						if n_id == 27: _set_cell(nx, ny, 29); charge_array[nx + ny * grid_width] = int(_get_lut_rand_range(80, 120))
+						elif n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = int(_get_lut_rand_range(20, 70))
 						else:
 							# Trigger check: If I am electricity, neighbor MUST be ELECTRIC_ACTIVATED
 							var source_is_elec = (my_id == 9 or (my_tags & SandboxMaterial.Tags.ELECTRICITY))
@@ -8582,8 +8581,8 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 				else:
 					if (n_tags & SandboxMaterial.Tags.CONDUCTOR) and charge_array[n_idx] == 0: charge_array[n_idx] = 101
 					elif (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
-						if n_id == 27: _set_cell(nx, ny, 29); charge_array[n_idx] = _get_lut_rand_range(80, 120)
-						elif n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = _get_lut_rand_range(20, 70)
+						if n_id == 27: _set_cell(nx, ny, 29); charge_array[n_idx] = int(_get_lut_rand_range(80, 120))
+						elif n_id == 18: _set_cell(nx, ny, 19); charge_array[n_idx] = int(_get_lut_rand_range(20, 70))
 						else:
 							_prime_explosive(nx, ny, n_id)
 
@@ -8643,7 +8642,7 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 						if t_id == 27: # Only activate if static
 							_set_cell(tx, ty, 29)
 							var ci = tx + ty * grid_width
-							charge_array[ci] = _get_lut_rand_range(80, 150)
+							charge_array[ci] = int(_get_lut_rand_range(80, 150))
 							_register_charge(ci)
 					else: _prime_explosive(tx, ty, t_id, ignition_flags)
 					continue
@@ -9436,7 +9435,6 @@ func _close_music_menu():
 	_on_arcade_selection_made(false)
 	
 func _setup_music_button():
-	var s = _get_ui_scale()
 	var btn = _create_vertical_category_btn("🎹", "music")
 	btn.name = "MusicBtn"
 	ui_elements["music_btn"] = btn
@@ -10330,22 +10328,22 @@ func _setup_achievement_menu():
 			icon_container.custom_minimum_size = Vector2(75 * s, 75 * s)
 			i_hbox.add_child(icon_container)
 			
-			var icon_tex = TextureRect.new()
-			icon_tex.name = "IconTexture"
-			icon_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			icon_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			icon_tex.size = Vector2(75 * s, 75 * s)
-			icon_container.add_child(icon_tex)
+			var new_icon_tex = TextureRect.new()
+			new_icon_tex.name = "IconTexture"
+			new_icon_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			new_icon_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			new_icon_tex.size = Vector2(75 * s, 75 * s)
+			icon_container.add_child(new_icon_tex)
 			
-			var lock_label = Label.new()
-			lock_label.name = "LockLabel"
-			lock_label.text = "🔒"
-			lock_label.add_theme_font_override("font", _get_safe_font())
-			lock_label.add_theme_font_size_override("font_size", 24 * s)
-			lock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			lock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			lock_label.size = Vector2(75 * s, 75 * s)
-			icon_container.add_child(lock_label)
+			var new_lock_label = Label.new()
+			new_lock_label.name = "LockLabel"
+			new_lock_label.text = "🔒"
+			new_lock_label.add_theme_font_override("font", _get_safe_font())
+			new_lock_label.add_theme_font_size_override("font_size", 24 * s)
+			new_lock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			new_lock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			new_lock_label.size = Vector2(75 * s, 75 * s)
+			icon_container.add_child(new_lock_label)
 			
 			var text_vbox = VBoxContainer.new()
 			text_vbox.name = "TextVBox"
@@ -10354,15 +10352,15 @@ func _setup_achievement_menu():
 			text_vbox.add_theme_constant_override("separation", 2 * s)
 			i_hbox.add_child(text_vbox)
 			
-			var a_title = Label.new()
-			a_title.name = "Title"
-			a_title.add_theme_font_override("font", _get_safe_font())
-			text_vbox.add_child(a_title)
+			var new_title = Label.new()
+			new_title.name = "Title"
+			new_title.add_theme_font_override("font", _get_safe_font())
+			text_vbox.add_child(new_title)
 			
-			var a_desc = Label.new()
-			a_desc.name = "Desc"
-			a_desc.add_theme_font_override("font", _get_safe_font())
-			text_vbox.add_child(a_desc)
+			var new_desc = Label.new()
+			new_desc.name = "Desc"
+			new_desc.add_theme_font_override("font", _get_safe_font())
+			text_vbox.add_child(new_desc)
 		
 		# UPDATE VISUAL STATE (Cheap)
 		var icon_tex = item.find_child("IconTexture", true, false)
