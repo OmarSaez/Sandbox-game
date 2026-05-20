@@ -12,6 +12,7 @@ var _interstitial_ad : InterstitialAd
 var _rewarded_ad : RewardedAd
 var _lab_rewarded_ad : RewardedAd
 var _active_ad # Keeps the current ad alive
+var _active_consent_form : ConsentForm # Keeps the UMP consent form alive
 var _interstitial_loading : bool = false
 var _rewarded_loading : bool = false
 var _lab_rewarded_loading : bool = false
@@ -36,6 +37,8 @@ func _process(delta: float) -> void:
 			ad_free_time = 0
 			print("ADMOB: El tiempo libre SE HA AGOTADO. Los anuncios volverán.")
 
+var _is_sdk_initialized: bool = false
+
 func _ready() -> void:
 	# Verificamos plataforma para no dar error en PC
 	if OS.get_name() != "Android" and OS.get_name() != "iOS":
@@ -45,9 +48,109 @@ func _ready() -> void:
 	# Esperamos un pequeño momento para asegurar que el motor está estable
 	await get_tree().create_timer(1.0).timeout
 	
+	_update_consent_info()
+
+func _update_consent_info():
+	print("ADMOB: Actualizando información de consentimiento...")
+	var params := ConsentRequestParameters.new()
+	params.tag_for_under_age_of_consent = false
+
+	# Para depurar consentimiento en desarrollo (puedes descomentar en dispositivo de test):
+	# var debug_settings := ConsentDebugSettings.new()
+	# debug_settings.debug_geography = DebugGeography.Values.EEA
+	# debug_settings.test_device_hashed_ids.append("63C11C9CC2D48590AE31E6C4E9C6B175")
+	# debug_settings.test_device_hashed_ids.append("63c11c9cc2d48590ae31e6c4e9c6b175")
+	# params.consent_debug_settings = debug_settings
+
+	UserMessagingPlatform.consent_information.update(params, _on_consent_update_success, _on_consent_update_failure)
+
+func _on_consent_update_success():
+	print("ADMOB: Información de consentimiento actualizada con éxito.")
+	
+	var status = UserMessagingPlatform.consent_information.get_consent_status()
+	if status == UserMessagingPlatform.consent_information.ConsentStatus.NOT_REQUIRED:
+		print("ADMOB: [GEOGRAFÍA] Se detectó que el jugador NO es de Europa (Consentimiento no requerido).")
+	elif status == UserMessagingPlatform.consent_information.ConsentStatus.OBTAINED:
+		print("ADMOB: [GEOGRAFÍA] Jugador de Europa, pero ya aceptó/denegó anteriormente.")
+	elif status == UserMessagingPlatform.consent_information.ConsentStatus.REQUIRED:
+		print("ADMOB: [GEOGRAFÍA] Jugador de Europa y se requiere solicitar consentimiento.")
+	else:
+		print("ADMOB: [GEOGRAFÍA] Estado de consentimiento desconocido: ", status)
+		
+	if UserMessagingPlatform.consent_information.get_is_consent_form_available():
+		_load_consent_form()
+	else:
+		print("ADMOB: Formulario no disponible. Inicializando SDK...")
+		_initialize_sdk()
+
+func _on_consent_update_failure(error: FormError):
+	print("ADMOB: Error al actualizar información de consentimiento -> ", error.message)
+	print("ADMOB: Usando fallback: Inicializando SDK...")
 	_initialize_sdk()
 
+func _load_consent_form():
+	print("ADMOB: Cargando formulario de consentimiento...")
+	UserMessagingPlatform.load_consent_form(_on_form_load_success, _on_form_load_failure)
+
+func _on_form_load_success(consent_form: ConsentForm):
+	print("ADMOB: Formulario cargado correctamente.")
+	_active_consent_form = consent_form
+	var status = UserMessagingPlatform.consent_information.get_consent_status()
+	
+	if status == UserMessagingPlatform.consent_information.ConsentStatus.REQUIRED:
+		print("ADMOB: Formulario requerido. Mostrando...")
+		consent_form.show(_on_form_dismissed)
+	else:
+		print("ADMOB: Formulario no requerido en esta región (o ya fue respondido). Inicializando SDK...")
+		_active_consent_form = null
+		_initialize_sdk()
+
+func _on_form_load_failure(error: FormError):
+	print("ADMOB: Error al cargar formulario de consentimiento -> ", error.message)
+	_active_consent_form = null
+	print("ADMOB: Usando fallback: Inicializando SDK...")
+	_initialize_sdk()
+
+func _on_form_dismissed(error: FormError):
+	if error:
+		print("ADMOB: Formulario cerrado con error -> ", error.message)
+	else:
+		print("ADMOB: Formulario cerrado por el usuario.")
+	_active_consent_form = null
+	_initialize_sdk()
+
+# Función pública para reabrir las opciones de privacidad (invocada desde el panel de configuración)
+func show_consent_options():
+	print("ADMOB: Solicitando mostrar opciones de consentimiento...")
+	if OS.get_name() != "Android" and OS.get_name() != "iOS":
+		return
+	
+	# Usamos el singleton PoingGodotAdMob para cargar el formulario
+	if not Engine.has_singleton("PoingGodotAdMob"):
+		print("ADMOB: Singleton de AdMob no disponible.")
+		return
+		
+	# Para reabrir el formulario, UMP requiere cargarlo de nuevo
+	var on_success = func(consent_form: ConsentForm):
+		print("ADMOB: Formulario de privacidad reabierto con éxito.")
+		_active_consent_form = consent_form
+		var on_dismissed = func(error: FormError):
+			if error:
+				print("ADMOB: Error al cerrar el formulario reabierto -> ", error.message)
+			_active_consent_form = null
+		consent_form.show(on_dismissed)
+		
+	var on_failure = func(error: FormError):
+		print("ADMOB: Error al cargar el formulario de privacidad para reabrir -> ", error.message)
+		_active_consent_form = null
+		
+	UserMessagingPlatform.load_consent_form(on_success, on_failure)
+
 func _initialize_sdk():
+	if _is_sdk_initialized:
+		print("ADMOB: SDK ya inicializado previamente.")
+		return
+	_is_sdk_initialized = true
 	print("ADMOB: Inicializando SDK de Google...")
 	
 	var init_listener = OnInitializationCompleteListener.new()

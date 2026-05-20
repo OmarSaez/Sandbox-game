@@ -2474,7 +2474,21 @@ func _setup_tools_ui():
 	pause_btn.custom_minimum_size = Vector2(0, 50 * s) # SCALED
 	pause_btn.add_theme_font_size_override("font_size", 24 * s) # SCALED
 	pause_btn.add_theme_font_override("font", _get_safe_font())
+	
+	var pause_style = StyleBoxFlat.new()
+	pause_style.bg_color = Color(0.15, 0.15, 0.18, 0.9)
+	pause_style.border_width_left = 2; pause_style.border_width_top = 2
+	pause_style.border_width_right = 2; pause_style.border_width_bottom = 2
+	pause_style.border_color = Color(0.25, 0.5, 0.8) # Blue border for control
+	pause_style.corner_radius_top_left = 12 * s; pause_style.corner_radius_top_right = 12 * s
+	pause_style.corner_radius_bottom_left = 12 * s; pause_style.corner_radius_bottom_right = 12 * s
+	
+	pause_btn.add_theme_stylebox_override("normal", pause_style)
+	pause_btn.add_theme_stylebox_override("hover", pause_style)
+	pause_btn.add_theme_stylebox_override("pressed", pause_style)
+	pause_btn.add_theme_color_override("font_color", Color.WHITE)
 	pause_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	
 	pause_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
 		
@@ -2509,7 +2523,15 @@ func _setup_tools_ui():
 				p.stream_paused = is_paused
 	)
 	ui_elements["pause_btn"] = pause_btn
-	v_box.add_child(pause_btn)
+	
+	# Wrap pause button in a MarginContainer to add lateral spacing
+	var pause_margin = MarginContainer.new()
+	pause_margin.add_theme_constant_override("margin_left", 32 * s)
+	pause_margin.add_theme_constant_override("margin_right", 32 * s)
+	pause_margin.add_theme_constant_override("margin_top", 4 * s)
+	pause_margin.add_theme_constant_override("margin_bottom", 4 * s)
+	v_box.add_child(pause_margin)
+	pause_margin.add_child(pause_btn)
 
 	# 3. DIRECT RESET BUTTON (Bottom of Tools)
 	var reset_btn_node = Button.new() # Named local variable to avoid conflict with field
@@ -2517,7 +2539,21 @@ func _setup_tools_ui():
 	reset_btn_node.custom_minimum_size = Vector2(0, 50 * s)
 	reset_btn_node.add_theme_font_size_override("font_size", 24 * s)
 	reset_btn_node.add_theme_font_override("font", _get_safe_font())
+	
+	var reset_style = StyleBoxFlat.new()
+	reset_style.bg_color = Color(0.15, 0.15, 0.18, 0.9)
+	reset_style.border_width_left = 2; reset_style.border_width_top = 2
+	reset_style.border_width_right = 2; reset_style.border_width_bottom = 2
+	reset_style.border_color = Color(0.8, 0.35, 0.35) # Reddish border for reset
+	reset_style.corner_radius_top_left = 12 * s; reset_style.corner_radius_top_right = 12 * s
+	reset_style.corner_radius_bottom_left = 12 * s; reset_style.corner_radius_bottom_right = 12 * s
+	
+	reset_btn_node.add_theme_stylebox_override("normal", reset_style)
+	reset_btn_node.add_theme_stylebox_override("hover", reset_style)
+	reset_btn_node.add_theme_stylebox_override("pressed", reset_style)
+	reset_btn_node.add_theme_color_override("font_color", Color.WHITE)
 	reset_btn_node.mouse_filter = Control.MOUSE_FILTER_PASS
+	
 	reset_btn_node.pressed.connect(func():
 		_play_action_sound("ui_click")
 		# RESET FIRST
@@ -2527,7 +2563,15 @@ func _setup_tools_ui():
 			AdMobManager.check_and_show_interstitial("reset")
 	)
 	ui_elements["reset_btn"] = reset_btn_node
-	v_box.add_child(reset_btn_node)
+	
+	# Wrap reset button in a MarginContainer to add lateral spacing
+	var reset_margin = MarginContainer.new()
+	reset_margin.add_theme_constant_override("margin_left", 32 * s)
+	reset_margin.add_theme_constant_override("margin_right", 32 * s)
+	reset_margin.add_theme_constant_override("margin_top", 4 * s)
+	reset_margin.add_theme_constant_override("margin_bottom", 4 * s)
+	v_box.add_child(reset_margin)
+	reset_margin.add_child(reset_btn_node)
 	
 	# 4. VOLUME CONTROL ROW
 	var vol_lbl = Label.new()
@@ -2591,6 +2635,43 @@ func _setup_tools_ui():
 		update_mute_icon.call(game_volume)
 		_save_tool_settings()
 	)
+
+	# 5. PRIVACY / GDPR CONSENT BUTTON (Only for mobile)
+	if OS.get_name() == "Android" or OS.get_name() == "iOS":
+		var privacy_btn = Button.new()
+		privacy_btn.text = tr("privacy_settings")
+		privacy_btn.custom_minimum_size = Vector2(0, 50 * s)
+		privacy_btn.add_theme_font_size_override("font_size", 24 * s)
+		privacy_btn.add_theme_font_override("font", _get_safe_font())
+		
+		var privacy_style = StyleBoxFlat.new()
+		privacy_style.bg_color = Color(0.15, 0.4, 0.75, 0.9) # Elegant informative blue
+		privacy_style.border_width_left = 2; privacy_style.border_width_top = 2
+		privacy_style.border_width_right = 2; privacy_style.border_width_bottom = 2
+		privacy_style.border_color = Color(0.3, 0.6, 0.9)
+		privacy_style.corner_radius_top_left = 12 * s; privacy_style.corner_radius_top_right = 12 * s
+		privacy_style.corner_radius_bottom_left = 12 * s; privacy_style.corner_radius_bottom_right = 12 * s
+		
+		privacy_btn.add_theme_stylebox_override("normal", privacy_style)
+		privacy_btn.add_theme_stylebox_override("hover", privacy_style)
+		privacy_btn.add_theme_stylebox_override("pressed", privacy_style)
+		privacy_btn.add_theme_color_override("font_color", Color.WHITE)
+		privacy_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+		
+		privacy_btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			if Engine.has_singleton("PoingGodotAdMob"):
+				AdMobManager.show_consent_options()
+		)
+		
+		# Wrap in a MarginContainer to detach it from the left/right boundaries of the tools panel
+		var btn_margin = MarginContainer.new()
+		btn_margin.add_theme_constant_override("margin_left", 24 * s)
+		btn_margin.add_theme_constant_override("margin_right", 24 * s)
+		btn_margin.add_theme_constant_override("margin_top", 8 * s)
+		btn_margin.add_theme_constant_override("margin_bottom", 8 * s)
+		v_box.add_child(btn_margin)
+		btn_margin.add_child(privacy_btn)
 
 	_add_ui_header(v_box, "coming_soon")
 	
