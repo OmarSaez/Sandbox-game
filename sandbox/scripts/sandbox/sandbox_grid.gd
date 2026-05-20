@@ -9650,6 +9650,8 @@ func _get_slot_data(idx):
 
 func _confirm_save(idx, current_name):
 	var s = _get_ui_scale()
+	var slot_data = _get_slot_data(idx)
+	var has_thumb = slot_data.has("thumbnail")
 	
 	# Create a generic Control container to bypass PanelContainer layout rules on children
 	var dialog_container = Control.new()
@@ -9658,16 +9660,6 @@ func _confirm_save(idx, current_name):
 	dialog_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dialog_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	save_panel.add_child(dialog_container)
-	
-	# Add a premium dimming background overlay to focus on the dialog
-	var overlay = Panel.new()
-	var overlay_style = StyleBoxFlat.new()
-	overlay_style.bg_color = Color(0, 0, 0, 0.6)
-	overlay_style.corner_radius_top_left = 30 * s
-	overlay_style.corner_radius_top_right = 30 * s
-	overlay.add_theme_stylebox_override("panel", overlay_style)
-	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dialog_container.add_child(overlay)
 	
 	var dialog = PanelContainer.new()
 	dialog.name = "ConfirmDialog"
@@ -9678,17 +9670,19 @@ func _confirm_save(idx, current_name):
 	d_style.border_width_left = 3; d_style.border_width_top = 3
 	d_style.border_width_right = 3; d_style.border_width_bottom = 3
 	d_style.border_color = Color(0.6, 0.5, 0.2)
-	d_style.set_corner_radius_all(15 * s)
+	# Corner radius matching the save_panel stylebox exactly
+	d_style.corner_radius_top_left = 30
+	d_style.corner_radius_top_right = 30
+	d_style.corner_radius_bottom_left = 0
+	d_style.corner_radius_bottom_right = 0
 	dialog.add_theme_stylebox_override("panel", d_style)
 	
-	dialog.anchor_left = 0.5; dialog.anchor_right = 0.5
-	dialog.anchor_top = 0.0; dialog.anchor_bottom = 0.0
-	dialog.offset_left = -260 * s; dialog.offset_right = 260 * s
-	dialog.offset_top = 50 * s; dialog.offset_bottom = 440 * s
+	# Cover the entire save panel layout area
+	dialog.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	
 	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_top", 20 * s)
-	margin.add_theme_constant_override("margin_bottom", 20 * s)
+	margin.add_theme_constant_override("margin_top", 25 * s)
+	margin.add_theme_constant_override("margin_bottom", 25 * s)
 	margin.add_theme_constant_override("margin_left", 20 * s)
 	margin.add_theme_constant_override("margin_right", 20 * s)
 	dialog.add_child(margin)
@@ -9696,6 +9690,8 @@ func _confirm_save(idx, current_name):
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 25 * s)
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	margin.add_child(vbox)
 	
 	var msg = Label.new()
@@ -9743,29 +9739,65 @@ func _confirm_save(idx, current_name):
 	no_btn.add_theme_stylebox_override("normal", no_style)
 	no_btn.pressed.connect(func(): dialog_container.queue_free())
 	hbox.add_child(no_btn)
+	
+	# Add reference image below buttons if slot has existing data
+	if has_thumb:
+		var rect = TextureRect.new()
+		rect.texture = slot_data.thumbnail
+		rect.ignore_texture_size = true
+		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		rect.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rect.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		
+		var img_panel = PanelContainer.new()
+		img_panel.clip_contents = true
+		img_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		img_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		var img_style = StyleBoxFlat.new()
+		img_style.bg_color = Color(0.1, 0.1, 0.1, 0.5)
+		img_style.border_width_left = 2; img_style.border_width_top = 2
+		img_style.border_width_right = 2; img_style.border_width_bottom = 2
+		img_style.border_color = Color(0.3, 0.3, 0.3)
+		img_style.set_corner_radius_all(15 * s)
+		img_panel.add_theme_stylebox_override("panel", img_style)
+		img_panel.add_child(rect)
+		vbox.add_child(img_panel)
 
 func _confirm_load(idx, current_name):
 	var s = _get_ui_scale()
+	var slot_data = _get_slot_data(idx)
+	var has_thumb = slot_data.has("thumbnail")
+	
+	# Create a generic Control container to bypass PanelContainer layout rules on children
+	var dialog_container = Control.new()
+	dialog_container.name = "DialogContainer"
+	dialog_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	dialog_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dialog_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	save_panel.add_child(dialog_container)
+	
 	var dialog = PanelContainer.new()
 	dialog.name = "ConfirmLoadDialog"
-	save_panel.add_child(dialog)
+	dialog_container.add_child(dialog)
 	
 	var d_style = StyleBoxFlat.new()
 	d_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
 	d_style.border_width_left = 3; d_style.border_width_top = 3
 	d_style.border_width_right = 3; d_style.border_width_bottom = 3
 	d_style.border_color = Color(0.2, 0.5, 0.7)
-	d_style.set_corner_radius_all(15 * s)
+	# Corner radius matching the save_panel stylebox exactly
+	d_style.corner_radius_top_left = 30
+	d_style.corner_radius_top_right = 30
+	d_style.corner_radius_bottom_left = 0
+	d_style.corner_radius_bottom_right = 0
 	dialog.add_theme_stylebox_override("panel", d_style)
 	
-	dialog.anchor_left = 0.5; dialog.anchor_right = 0.5
-	dialog.anchor_top = 0.5; dialog.anchor_bottom = 0.5
-	dialog.offset_left = -260 * s; dialog.offset_right = 260 * s
-	dialog.offset_top = -140 * s; dialog.offset_bottom = 140 * s
+	# Cover the entire save panel layout area
+	dialog.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	
 	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_top", 20 * s)
-	margin.add_theme_constant_override("margin_bottom", 20 * s)
+	margin.add_theme_constant_override("margin_top", 25 * s)
+	margin.add_theme_constant_override("margin_bottom", 25 * s)
 	margin.add_theme_constant_override("margin_left", 20 * s)
 	margin.add_theme_constant_override("margin_right", 20 * s)
 	dialog.add_child(margin)
@@ -9773,6 +9805,8 @@ func _confirm_load(idx, current_name):
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 25 * s)
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	margin.add_child(vbox)
 	
 	var msg = Label.new()
@@ -9797,7 +9831,7 @@ func _confirm_load(idx, current_name):
 	yes_btn.add_theme_stylebox_override("normal", yes_style)
 	yes_btn.pressed.connect(func(): 
 		_load_from_slot(idx)
-		dialog.queue_free()
+		dialog_container.queue_free()
 		save_panel.queue_free()
 	)
 	hbox.add_child(yes_btn)
@@ -9810,8 +9844,31 @@ func _confirm_load(idx, current_name):
 	no_style.bg_color = Color(0.6, 0.2, 0.2)
 	no_style.set_corner_radius_all(10 * s)
 	no_btn.add_theme_stylebox_override("normal", no_style)
-	no_btn.pressed.connect(func(): dialog.queue_free())
+	no_btn.pressed.connect(func(): dialog_container.queue_free())
 	hbox.add_child(no_btn)
+	
+	# Add reference image below buttons if slot has existing data
+	if has_thumb:
+		var rect = TextureRect.new()
+		rect.texture = slot_data.thumbnail
+		rect.ignore_texture_size = true
+		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		rect.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rect.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		
+		var img_panel = PanelContainer.new()
+		img_panel.clip_contents = true
+		img_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		img_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		var img_style = StyleBoxFlat.new()
+		img_style.bg_color = Color(0.1, 0.1, 0.1, 0.5)
+		img_style.border_width_left = 2; img_style.border_width_top = 2
+		img_style.border_width_right = 2; img_style.border_width_bottom = 2
+		img_style.border_color = Color(0.3, 0.3, 0.3)
+		img_style.set_corner_radius_all(15 * s)
+		img_panel.add_theme_stylebox_override("panel", img_style)
+		img_panel.add_child(rect)
+		vbox.add_child(img_panel)
 
 func _save_to_slot(idx, custom_name: String = ""):
 	var path = "user://save_slot_" + str(idx) + ".dat"
