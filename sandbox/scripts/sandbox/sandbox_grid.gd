@@ -9499,7 +9499,9 @@ func _setup_save_ui():
 	save_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
 	var m_width = 530 * s
-	var m_height = min(650 * s, get_viewport_rect().size.y * 0.8)
+	var is_landscape = get_viewport_rect().size.x > get_viewport_rect().size.y
+	var base_height = 530 * s if is_landscape else 650 * s
+	var m_height = min(base_height, get_viewport_rect().size.y * 0.8)
 	_align_panel_to_hud(save_panel, m_width, m_height)
 	
 	var main_vbox = VBoxContainer.new()
@@ -9808,7 +9810,7 @@ func _confirm_load(idx, current_name):
 	margin.add_child(vbox)
 	
 	var msg = Label.new()
-	msg.text = "¿Cargar el mundo: " + current_name + "?"
+	msg.text = tr("load_confirm").format([current_name])
 	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	msg.add_theme_font_size_override("font_size", 22 * s)
