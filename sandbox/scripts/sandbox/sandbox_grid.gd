@@ -9667,7 +9667,7 @@ func _confirm_save(idx, current_name):
 	d_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
 	d_style.border_width_left = 3; d_style.border_width_top = 3
 	d_style.border_width_right = 3; d_style.border_width_bottom = 3
-	d_style.border_color = Color(0.6, 0.5, 0.2)
+	d_style.border_color = Color("#27F527")
 	# Corner radius matching the save_panel stylebox exactly
 	d_style.corner_radius_top_left = 30
 	d_style.corner_radius_top_right = 30
@@ -9687,7 +9687,7 @@ func _confirm_save(idx, current_name):
 	
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 25 * s)
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.alignment = BoxContainer.ALIGNMENT_BEGIN
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	margin.add_child(vbox)
@@ -9782,7 +9782,7 @@ func _confirm_load(idx, current_name):
 	d_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
 	d_style.border_width_left = 3; d_style.border_width_top = 3
 	d_style.border_width_right = 3; d_style.border_width_bottom = 3
-	d_style.border_color = Color(0.2, 0.5, 0.7)
+	d_style.border_color = Color("#278EF5")
 	# Corner radius matching the save_panel stylebox exactly
 	d_style.corner_radius_top_left = 30
 	d_style.corner_radius_top_right = 30
@@ -9802,7 +9802,7 @@ func _confirm_load(idx, current_name):
 	
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 25 * s)
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.alignment = BoxContainer.ALIGNMENT_BEGIN
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	margin.add_child(vbox)
