@@ -4192,6 +4192,12 @@ func _setup_disaster_ui():
 		_update_menu_highlights()
 		_on_arcade_selection_made(true)
 	)
+	var int_keys = ["off", "light", "med", "heavy"]
+	create_row.call("acid_rain", int_keys, func(l): 
+		acid_rain_intensity = l
+		_update_menu_highlights()
+		_on_arcade_selection_made(true)
+	)
 	create_row.call("quake", ["off", "light", "med", "brutal"], func(l): 
 		earthquake_intensity = l
 		if l > 0: 
@@ -4242,8 +4248,6 @@ func _setup_disaster_ui():
 	
 	_add_ui_header(v_box, "coming_soon")
 	
-	var int_keys = ["off", "light", "med", "heavy"]
-	create_row.call("acid_rain", int_keys, func(l): acid_rain_intensity = l; _update_menu_highlights(), true)
 	create_row.call("lava_rain", int_keys, func(l): lava_rain_intensity = l; _update_menu_highlights(), true)
 	create_row.call("met_storm", ["off", "light", "med", "storm"], func(l): meteor_storm_intensity = l; _update_menu_highlights(), true)
 	create_row.call("black_hole", ["off", "light", "med", "heavy"], func(l): black_hole_intensity = l; _update_menu_highlights(), true)
@@ -4511,6 +4515,8 @@ func _update_menu_highlights():
 				if idx == ui_scale_level: is_active = true
 			elif key.begins_with("weather_btn_"):
 				if int(key.split("_")[-1]) == current_weather and not is_selecting_npc_to_control: is_active = true
+			elif key.begins_with("acid_rain_btn_"):
+				if int(key.split("_")[-1]) == acid_rain_intensity and not is_selecting_npc_to_control: is_active = true
 			elif key.begins_with("quake_btn_"):
 				if int(key.split("_")[-1]) == earthquake_intensity and not is_selecting_npc_to_control: is_active = true
 			elif key.begins_with("tornado_btn_"):
@@ -5538,31 +5544,41 @@ func _process_earthquake(delta):
 		earthquake_intensity = 0
 
 func _process_weather():
-	if current_weather == 0: 
+	if current_weather == 0 and acid_rain_intensity == 0: 
 		if weather_player.playing: weather_player.stop()
 		return
 	
 	# Manage weather sound loop (rain_light, rain_med, rain_storm)
-	var w_key = "weather_" + str(current_weather)
+	var max_intensity = max(current_weather, acid_rain_intensity)
+	var w_key = "weather_" + str(max_intensity)
 	_manage_looping_player(weather_player, w_key)
 	
-	# Always spawn some clouds at the top if weather is active
+	# Always spawn some clouds at the top if weather or acid rain is active
 	for i in range(5):
 		_set_cell(int(_get_lut_rand() * grid_width), 1, 17)
 	
-	# Spawn rain based on intensity
-	var rain_chance = 0.05 if current_weather == 1 else (0.2 if current_weather == 2 else 0.5)
-	if _get_lut_rand() < rain_chance:
-		# Spawn multiple droplets based on level
-		for i in range(current_weather * 2):
-			_set_cell(int(_get_lut_rand() * grid_width), 5 + int(_get_lut_rand() * 5), 2) # Spawn Water
+	# Spawn normal rain based on intensity
+	if current_weather > 0:
+		var rain_chance = 0.05 if current_weather == 1 else (0.2 if current_weather == 2 else 0.5)
+		if _get_lut_rand() < rain_chance:
+			# Spawn multiple droplets based on level
+			for i in range(current_weather * 2):
+				_set_cell(int(_get_lut_rand() * grid_width), 5 + int(_get_lut_rand() * 5), 2) # Spawn Water
+				
+	# Spawn acid rain based on intensity
+	if acid_rain_intensity > 0:
+		var acid_rain_chance = 0.05 if acid_rain_intensity == 1 else (0.2 if acid_rain_intensity == 2 else 0.5)
+		if _get_lut_rand() < acid_rain_chance:
+			# Spawn multiple acid droplets based on level
+			for i in range(acid_rain_intensity * 2):
+				_set_cell(int(_get_lut_rand() * grid_width), 5 + int(_get_lut_rand() * 5), 13) # Spawn Acid
 			
 	# Lightning in Storm (Level 3)
-	if current_weather == 3 and _get_lut_rand() < 0.01: # Rare but impactful
+	if max_intensity == 3 and _get_lut_rand() < 0.01: # Rare but impactful
 		_strike_lightning()
 		
-	# Spontaneous Grass growth during rain or near water (SURFACE ONLY)
-	if _get_lut_rand() < 0.2: # Check in 20% of frames
+	# Spontaneous Grass growth during normal rain or near water (SURFACE ONLY)
+	if current_weather > 0 and _get_lut_rand() < 0.2: # Check in 20% of frames
 		for i in range(100): # 100 random samples per check
 			var rx = int(_get_lut_rand() * grid_width)
 			var ry = int(_get_lut_rand() * (grid_height - 10)) + 5
@@ -9812,6 +9828,8 @@ func _update_arcade_dynamic_button():
 	# Check Disasters (Priority)
 	if current_weather > 0:
 		active_name = tr("weather"); active_val = tr(intensity_labels[current_weather]); active_color = Color.SKY_BLUE; is_disaster = true
+	elif acid_rain_intensity > 0:
+		active_name = tr("acid_rain"); active_val = tr(intensity_labels[acid_rain_intensity]); active_color = Color("#7ae267"); is_disaster = true
 	elif earthquake_intensity > 0:
 		active_name = tr("quake"); active_val = tr(intensity_labels[earthquake_intensity]); active_color = Color.GOLD; is_disaster = true
 	elif tornado_intensity > 0:
