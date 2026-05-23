@@ -256,6 +256,7 @@ var material_sfx = {
 	4: "oil",       # Petróleo
 	5: "tnt",       # TNT
 	6: "earth",     # Tierra
+	30: "stone",    # Piedra
 	8: "metal",     # Metal
 	9: "elec",      # Electricidad
 	10: "gravel",   # Grava
@@ -750,6 +751,8 @@ func _ready():
 	_register_material(5, Color("E30000"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.EXP_ELECTRIC | SandboxMaterial.Tags.GRAV_STATIC) # TNT + Chispas
 	# 6: Tierra
 	_register_material(6, Color("#66380C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#4D2A09")) # Tierra
+	# 30: Piedra
+	_register_material(30, Color("#8A8A8A"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.TEXTURE_DOUBLE, Color("#AFAFAF")) # Piedra
 	
 	# 8: Metal
 	_register_material(8, Color("E3E3E3"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.GRAV_STATIC) # Metal
@@ -1377,6 +1380,7 @@ func _setup_materials_within_grid():
 	_add_button("fire", 3)
 	_add_button("tnt", 5)
 	_add_button("earth", 6)
+	_add_button("stone", 30)
 	_add_button("metal", 8)
 	_add_button("elec", 9)
 	_add_button("gravel", 10)
