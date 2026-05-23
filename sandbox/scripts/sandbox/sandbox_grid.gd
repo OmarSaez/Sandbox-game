@@ -288,6 +288,8 @@ var action_sfx = {
 	"earthquake": "quake",        # Inicio de Terremoto
 	"tornado": "tornado",         # Inicio de Tornado
 	"tsunami": "tsunami",         # Inicio de Tsunami
+	"bomb_drop": "bomb_drop",     # Sonido de bomba cayendo
+	"bomber_engine": "bomber_engine", # Sonido de motor de avión
 	"ui_click": "click",          # Al pulsar botones de la interfaz
 	"warrior_attack": "sword_swing", # Ataque de Guerrero
 	"archer_shoot": "bow_shoot",     # Disparo de Arquero
@@ -411,6 +413,17 @@ var tsunami_intensity: int = 0
 var tsunami_timer: float = 0.0
 var tsunami_wave_x: float = 0.0
 var surface_cache = PackedInt32Array()
+
+# Bomber settings
+var bombardero_intensity: int = 0
+var bombardero_x: float = 0.0
+var bombardero_y: float = 12.0
+var bombardero_dir: float = 1.0
+var bombardero_speed: float = 0.0
+var bombardero_drop_prob: float = 0.0
+var bombardero_pending_checks: Array = []
+var bombardero_player: AudioStreamPlayer
+var bombardero_texture: Texture2D
 
 # Future Disaster settings (Scalability)
 # Future Disaster settings (Scalability)
@@ -617,6 +630,10 @@ func _ready():
 	ascent_player = AudioStreamPlayer.new(); add_child(ascent_player)
 	volcano_loop_player = AudioStreamPlayer.new(); add_child(volcano_loop_player)
 	fire_loop_player = AudioStreamPlayer.new(); add_child(fire_loop_player)
+	
+	# Bomber Audio & Texture
+	bombardero_player = AudioStreamPlayer.new(); add_child(bombardero_player)
+	bombardero_texture = load("res://assets/icon_game/avion_bombardero.png")
 	
 	# Initialize material arrays to a safe size for all IDs (including music 500+)
 	mat_colors_1.resize(1024); mat_colors_1.fill(Color.BLACK)
@@ -2592,7 +2609,7 @@ func _setup_tools_ui():
 			if Engine.has_singleton("PoingGodotAdMob"):
 				AdMobManager.check_and_show_interstitial("pause")
 		
-		var players = [weather_player, quake_player, tornado_player, tsunami_player, firework_player, ascent_player, volcano_loop_player, fire_loop_player]
+		var players = [weather_player, quake_player, tornado_player, tsunami_player, firework_player, ascent_player, volcano_loop_player, fire_loop_player, bombardero_player]
 		for p in players:
 			if is_instance_valid(p):
 				p.stream_paused = is_paused
@@ -4212,6 +4229,17 @@ func _setup_disaster_ui():
 		_on_arcade_selection_made(true)
 	)
 	
+	create_row.call("bomber", ["off", "light", "med", "heavy"], func(l):
+		bombardero_intensity = l
+		if l > 0:
+			_start_bombardero()
+			_toggle_category_panel(disaster_panel)
+		else:
+			_stop_bombardero()
+		_update_menu_highlights()
+		_on_arcade_selection_made(true)
+	)
+	
 	_add_ui_header(v_box, "coming_soon")
 	
 	var int_keys = ["off", "light", "med", "heavy"]
@@ -4489,6 +4517,8 @@ func _update_menu_highlights():
 				if int(key.split("_")[-1]) == tornado_intensity and not is_selecting_npc_to_control: is_active = true
 			elif key.begins_with("tsunami_btn_"):
 				if int(key.split("_")[-1]) == tsunami_intensity and not is_selecting_npc_to_control: is_active = true
+			elif key.begins_with("bomber_btn_"):
+				if int(key.split("_")[-1]) == bombardero_intensity and not is_selecting_npc_to_control: is_active = true
 			elif key == "warrior_btn":
 				if selected_material == 1000 and not is_selecting_npc_to_control: is_active = true
 			elif key == "archer_btn":
@@ -4927,6 +4957,9 @@ func _process(delta):
 		# Tsunami processing
 		_process_tsunami(delta)
 		
+		# Bomber processing
+		_process_bombardero(delta)
+		
 		# Fireworks updates
 		_update_active_fireworks(delta)
 		_update_visual_sparks(delta)
@@ -5022,6 +5055,33 @@ func _draw():
 			if npc.get("is_lying", false): offset = Vector2(-40.0 * s, 8.0 * s) # Lower emoji for lying NPCs
 			draw_string(f, world_pos + offset, npc.current_emoji, HORIZONTAL_ALIGNMENT_CENTER, 80.0 * s, 20 * s)
 
+	# BOMBARDERO (PLANE) VISUAL
+	if bombardero_intensity > 0 and bombardero_texture:
+		var size = Vector2(32.0, 32.0) * g_scale
+		var offset = size / 2.0
+		var center_pos = Vector2(bombardero_x, bombardero_y) * g_scale
+		if bombardero_dir < 0.0:
+			draw_set_transform(center_pos, 0.0, Vector2(-1.0, 1.0))
+			draw_texture_rect(bombardero_texture, Rect2(-offset, size), false)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 1.0))
+		else:
+			draw_texture_rect(bombardero_texture, Rect2(center_pos - offset, size), false)
+			
+	# BOMBS VISUAL
+	for p in active_projectiles:
+		if p.type == "bomber_bomb":
+			var world_pos = p.pos * g_scale
+			# Draw a premium black bomb with a lit red fuse (scaling visual size with explosion radius)
+			var size_factor = 0.75
+			var r_val = p.get("explosion_radius", 6)
+			if r_val == 12:
+				size_factor = 1.0
+			elif r_val == 20:
+				size_factor = 1.35
+			var rad = g_scale * size_factor
+			draw_circle(world_pos, rad, Color("202020"))
+			draw_circle(world_pos + Vector2(0, -rad * 0.8), rad * 0.35, Color("FF3333"))
+
 func _process_tsunami(delta):
 	if tsunami_timer <= 0:
 		tsunami_intensity = 0
@@ -5090,6 +5150,112 @@ func _process_tsunami(delta):
 					if check_id > 0 and check_id < material_tags_raw.size():
 						if (material_tags_raw[check_id] & SandboxMaterial.Tags.LIQUID):
 							_set_cell(rx, source_y, 0)
+
+func _start_bombardero():
+	# Decide random direction: -1 (right to left) or 1 (left to right)
+	bombardero_dir = 1.0 if _get_lut_rand() < 0.5 else -1.0
+	
+	# Determine speed (crosses in 4.0s)
+	bombardero_speed = grid_width / 4.0
+	
+	# Determine Y position
+	bombardero_y = 12.0
+	
+	# Start position outside grid
+	if bombardero_dir == 1.0:
+		bombardero_x = -40.0
+	else:
+		bombardero_x = grid_width + 40.0
+		
+	# Determine check count and drop probability based on intensity
+	var checks_count = 4
+	if bombardero_intensity == 1:
+		bombardero_drop_prob = 0.3
+		checks_count = 4
+	elif bombardero_intensity == 2:
+		bombardero_drop_prob = 0.55
+		checks_count = 8
+	elif bombardero_intensity == 3:
+		bombardero_drop_prob = 0.8
+		checks_count = 12
+		
+	# Distribute check points between x = 15.0 and x = grid_width - 15.0
+	bombardero_pending_checks.clear()
+	var check_xs = []
+	for i in range(checks_count):
+		var fraction = (float(i) + 0.5) / float(checks_count)
+		var cx = lerp(15.0, float(grid_width) - 15.0, fraction)
+		check_xs.append(cx)
+		
+	if bombardero_dir == 1.0:
+		check_xs.sort()
+	else:
+		check_xs.sort()
+		check_xs.reverse()
+		
+	bombardero_pending_checks = check_xs
+	
+	if not bombardero_texture:
+		bombardero_texture = load("res://assets/icon_game/avion_bombardero.png")
+		
+	_manage_looping_player(bombardero_player, "bomber_engine")
+	if is_instance_valid(bombardero_player):
+		bombardero_player.volume_db = -6.0
+
+func _stop_bombardero():
+	bombardero_intensity = 0
+	bombardero_pending_checks.clear()
+	if is_instance_valid(bombardero_player) and bombardero_player.playing:
+		bombardero_player.stop()
+
+func _spawn_bomber_bomb(x, y):
+	var bomb_r = 6
+	if bombardero_intensity == 2:
+		bomb_r = 12
+	elif bombardero_intensity == 3:
+		bomb_r = 20
+		
+	active_projectiles.append({
+		"pos": Vector2(x, y),
+		"vel": Vector2(bombardero_dir * 15.0, 50.0), # forward momentum + initial downward vel
+		"team": -1,
+		"type": "bomber_bomb",
+		"life": 8.0,
+		"explosion_radius": bomb_r
+	})
+	_play_action_sound("bomb_drop", 0.05)
+
+func _process_bombardero(delta):
+	if bombardero_intensity <= 0:
+		return
+		
+	# Move the plane
+	bombardero_x += bombardero_dir * bombardero_speed * delta
+	
+	# Perform checks
+	if bombardero_dir == 1.0:
+		while bombardero_pending_checks.size() > 0 and bombardero_x >= bombardero_pending_checks[0]:
+			var _cx = bombardero_pending_checks.pop_front()
+			if _get_lut_rand() < bombardero_drop_prob:
+				_spawn_bomber_bomb(bombardero_x, bombardero_y)
+	else:
+		while bombardero_pending_checks.size() > 0 and bombardero_x <= bombardero_pending_checks[0]:
+			var _cx = bombardero_pending_checks.pop_front()
+			if _get_lut_rand() < bombardero_drop_prob:
+				_spawn_bomber_bomb(bombardero_x, bombardero_y)
+				
+	# Check exit
+	var is_finished = false
+	if bombardero_dir == 1.0:
+		if bombardero_x > grid_width + 40.0:
+			is_finished = true
+	else:
+		if bombardero_x < -40.0:
+			is_finished = true
+			
+	if is_finished:
+		_stop_bombardero()
+		_update_menu_highlights()
 
 func _process_tornado(delta):
 	if tornado_timer <= 0:
@@ -8163,10 +8329,6 @@ func _process_npcs(delta):
 									_set_npc_emoji(npc, "👋", 1.2); _set_npc_emoji(other, "👋", 1.2)
 									is_socializing = true
 									break
-						
-						# 5. Cold (High Altitude simulation)
-						elif np.y < 250 and chance < 0.3:
-							_set_npc_emoji(npc, "🥶", 3.0)
 							
 						# 6. Boredom (Linked to Social)
 						elif npc.get("social_cooldown", 0.0) <= 0 and chance < 0.25:
@@ -8745,7 +8907,8 @@ func _process_projectiles(delta):
 						if tid == mat: _set_cell(tx, ty, 0)
 		else:
 			if last_gx >= 0 and last_gx < grid_width and last_gy >= 0 and last_gy < dynamic_grid_height:
-				_set_cell(last_gx, last_gy, 0)
+				if p.type != "bomber_bomb":
+					_set_cell(last_gx, last_gy, 0)
 				
 		# 2. Advance projectile physics
 		p.pos += p.vel * delta
@@ -8773,12 +8936,25 @@ func _process_projectiles(delta):
 			if is_enemy and other.hp > 0:
 				var ow = 3 if other.type == "zombie_tank" else 2
 				var oh = 6 if other.type == "zombie_tank" else 5
-				if gx >= other.pos.x and gx < other.pos.x + ow and gy >= other.pos.y and gy < other.pos.y + oh:
+				var overlaps = false
+				if p.type == "bomber_bomb":
+					for ox in range(-1, 1):
+						for oy in range(-1, 1):
+							var px = gx + ox; var py = gy + oy
+							if px >= other.pos.x and px < other.pos.x + ow and py >= other.pos.y and py < other.pos.y + oh:
+								overlaps = true; break
+						if overlaps: break
+				else:
+					overlaps = (gx >= other.pos.x and gx < other.pos.x + ow and gy >= other.pos.y and gy < other.pos.y + oh)
+					
+				if overlaps:
 					hit_npc = other; break
 					
 		if hit_npc:
 			if p.type == "thrown_rock":
 				_trigger_rock_impact(gx, gy, p)
+			elif p.type == "bomber_bomb":
+				_explode(gx, gy, p.get("explosion_radius", 6))
 			else:
 				hit_npc.hp -= 40.0 * p.get("atk_dmg", 1.0); hit_npc.hit_flash = 4; hit_npc.hit_type = "normal"
 				if p.get("is_fire", false):
@@ -8798,6 +8974,17 @@ func _process_projectiles(delta):
 						if tid != 0 and tid != 15 and tid != 3 and tid != 17:
 							collides_block = true; break
 				if collides_block: break
+		elif p.type == "bomber_bomb":
+			var collides = false
+			for ox in range(-1, 1):
+				for oy in range(-1, 1):
+					var tx = gx + ox; var ty = gy + oy
+					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+						if _get_cell(tx, ty) != 0:
+							collides = true; break
+				if collides: break
+			if collides:
+				collides_block = true
 		else:
 			var tid = _get_cell(gx, gy)
 			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
@@ -8806,6 +8993,8 @@ func _process_projectiles(delta):
 		if collides_block:
 			if p.type == "thrown_rock":
 				_trigger_rock_impact(gx, gy, p)
+			elif p.type == "bomber_bomb":
+				_explode(gx, gy, p.get("explosion_radius", 6))
 			else:
 				if p.get("is_fire", false):
 					var px = gx - int(sign(p.vel.x))
@@ -8820,6 +9009,8 @@ func _process_projectiles(delta):
 					var tx = gx + ox; var ty = gy + oy
 					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 						if _get_cell(tx, ty) == 0: _set_cell(tx, ty, mat)
+		elif p.type == "bomber_bomb":
+			pass
 		else:
 			_set_cell(gx, gy, 1012)
 			
@@ -9570,6 +9761,7 @@ func _reset_all_disasters():
 	earthquake_intensity = 0; earthquake_timer = 0.0
 	tornado_intensity = 0; tornado_timer = 0.0
 	tsunami_intensity = 0; tsunami_timer = 0.0
+	bombardero_intensity = 0
 	
 	# Future/Upcoming Resets
 	acid_rain_intensity = 0
@@ -9585,6 +9777,8 @@ func _reset_all_disasters():
 	if is_instance_valid(tornado_player) and tornado_player.playing: tornado_player.stop()
 	if is_instance_valid(tsunami_player) and tsunami_player.playing: tsunami_player.stop()
 	if is_instance_valid(volcano_loop_player) and volcano_loop_player.playing: volcano_loop_player.stop()
+	if is_instance_valid(bombardero_player) and bombardero_player.playing: bombardero_player.stop()
+	bombardero_pending_checks.clear()
 
 func _on_arcade_selection_made(is_team_change = false):
 	# Removed "npc_control_gui.visible" AND "controlled_npc" guards.
@@ -9624,6 +9818,8 @@ func _update_arcade_dynamic_button():
 		active_name = tr("tornado"); active_val = tr(intensity_labels[tornado_intensity]); active_color = Color.GRAY; is_disaster = true
 	elif tsunami_intensity > 0:
 		active_name = tr("tsunami"); active_val = tr(intensity_labels[tsunami_intensity]); active_color = Color.ROYAL_BLUE; is_disaster = true
+	elif bombardero_intensity > 0:
+		active_name = tr("bomber"); active_val = tr(intensity_labels[bombardero_intensity]); active_color = Color.INDIAN_RED; is_disaster = true
 	# Check NPCs
 	elif selected_material >= 1000:
 		if selected_material == 1000 or selected_material == 1001: active_name = tr("warrior")
