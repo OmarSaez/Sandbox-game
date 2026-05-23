@@ -225,6 +225,7 @@ func _get_safe_font() -> Font:
 var touch_started_on_ui: bool = false # NEW: Track if the touch session began over UI
 var sim_mutex := Mutex.new() # Protects global arrays from parallel threads
 var active_npcs = [] # Array of dicts: { "pos": Vector2i, "team": int, "dir": int, "type": string, "hp": float, etc }
+var _cached_has_zombies: bool = false
 var _world_peace_timer = 0.0 # Track global inactivity for sleeping NPCs
 const SPATIAL_CELL_SIZE = 32
 var npc_spatial_grid = [] 
@@ -4671,6 +4672,14 @@ func _play_action_sound(action: String, min_interval: float = 0.08, volume_boost
 
 func _process(delta):
 	if not is_grid_ready: return
+	
+	# Update cached zombie state once per frame for O(1) performance in nested loops
+	_cached_has_zombies = false
+	for npc in active_npcs:
+		if npc.hp > 0 and (npc.type == "zombie" or npc.type == "zombie_tank"):
+			_cached_has_zombies = true
+			break
+			
 	_tnt_buckets_this_frame.clear()
 	_frame_count += 1
 	_check_achievement_conditions(delta)
@@ -7202,7 +7211,7 @@ func _trigger_controlled_npc_action():
 				})
 				
 				var p_scale = 0.65 + float((controlled_npc.id * 23) % 40) / 40.0 * 0.40
-				_play_action_sound("zombie_tank_attack", 0.08, -12.0, p_scale)
+				_play_action_sound("zombie_tank_attack", 0.08, -17.0, p_scale)
 				_set_npc_emoji(controlled_npc, "🪨", 1.2)
 				controlled_npc.attack_cooldown = 2.0
 		"archer":
@@ -8292,7 +8301,7 @@ func _process_npcs(delta):
 								})
 								
 								var p_scale = 0.65 + float((npc.id * 23) % 40) / 40.0 * 0.40
-								_play_action_sound("zombie_tank_attack", 0.08, -12.0, p_scale)
+								_play_action_sound("zombie_tank_attack", 0.08, -17.0, p_scale)
 								_set_npc_emoji(npc, "🪨", 1.2)
 								npc.attack_cooldown = 2.5
 								
@@ -8868,10 +8877,7 @@ func _is_zombie(type: String) -> bool:
 	return type == "zombie" or type == "zombie_tank"
 
 func _has_active_zombies() -> bool:
-	for npc in active_npcs:
-		if _is_zombie(npc.type) and npc.hp > 0:
-			return true
-	return false
+	return _cached_has_zombies
 
 func _is_ally(me, other, has_zombies) -> bool:
 	if _is_zombie(me.type):
@@ -8902,7 +8908,7 @@ func _attack_npc(attacker, victim):
 	var p_scale = 1.0
 	if _is_zombie(attacker.type):
 		p_scale = 0.65 + float((attacker.id * 23) % 40) / 40.0 * 0.40
-	var v_boost = -12.0 if a_sound == "zombie_tank_attack" else 0.0
+	var v_boost = -17.0 if a_sound == "zombie_tank_attack" else 0.0
 	_play_action_sound(a_sound, 0.08, v_boost, p_scale)
 	
 	var t_colors = [Color.RED, Color("1E90FF"), Color.YELLOW, Color.GREEN]
