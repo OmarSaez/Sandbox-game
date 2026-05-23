@@ -1251,10 +1251,14 @@ func _show_main_tutorial_step():
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(lbl)
 	
+	var btn_hbox = HBoxContainer.new()
+	btn_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_hbox.add_theme_constant_override("separation", 20 * s)
+	vbox.add_child(btn_hbox)
+	
 	var ok_btn = Button.new()
 	ok_btn.text = "OK"
 	ok_btn.custom_minimum_size = Vector2(120 * s, 50 * s)
-	ok_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	ok_btn.add_theme_font_override("font", _get_safe_font())
 	ok_btn.add_theme_font_size_override("font_size", 24 * s)
 	var ok_style = StyleBoxFlat.new()
@@ -1270,7 +1274,27 @@ func _show_main_tutorial_step():
 		main_tutorial_step += 1
 		call_deferred("_show_main_tutorial_step")
 	)
-	vbox.add_child(ok_btn)
+	btn_hbox.add_child(ok_btn)
+	
+	var skip_btn = Button.new()
+	skip_btn.text = tr("skip_tutorial")
+	skip_btn.custom_minimum_size = Vector2(150 * s, 50 * s)
+	skip_btn.add_theme_font_override("font", _get_safe_font())
+	skip_btn.add_theme_font_size_override("font_size", 24 * s)
+	var skip_style = StyleBoxFlat.new()
+	skip_style.bg_color = Color(0.7, 0.2, 0.2)
+	skip_style.set_corner_radius_all(10 * s)
+	skip_btn.add_theme_stylebox_override("normal", skip_style)
+	skip_btn.add_theme_stylebox_override("hover", skip_style)
+	skip_btn.add_theme_stylebox_override("pressed", skip_style)
+	
+	skip_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		skip_btn.disabled = true
+		main_tutorial_step = steps.size()
+		call_deferred("_show_main_tutorial_step")
+	)
+	btn_hbox.add_child(skip_btn)
 	
 	# DYNAMIC POSITIONING (Closer to target)
 	var p_size = panel.get_combined_minimum_size()
