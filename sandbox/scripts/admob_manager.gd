@@ -23,6 +23,10 @@ var _initial_banner_loaded : bool = false
 var ad_free_time : float = 0.0 # Segundos restantes sin anuncios
 var first_pause_used : bool = false
 var first_reset_used : bool = false
+const GPU_BLACKLIST = ["adreno 630"]
+var _is_gpu_blacklisted : bool = false
+var _app_is_paused : bool = false
+var _banner_needs_to_show_on_resume : bool = false
 
 func _process(delta: float) -> void:
 	if ad_free_time > 0:
@@ -46,8 +50,24 @@ func _ready() -> void:
 		print("ADMOB: Saltado (No es plataforma móvil)")
 		return
 
-	# Esperamos un pequeño momento para asegurar que el motor está estable
+	# Esperamos un pequeño momento para asegurar que el motor está estable y la GPU reporte su nombre
 	await get_tree().create_timer(1.0).timeout
+
+	# DETECTOR GPU BLACKLIST
+	var gpu_name = RenderingServer.get_video_adapter_name().to_lower()
+	print("ADMOB: GPU detectada -> ", gpu_name)
+	for blacklisted in GPU_BLACKLIST:
+		if blacklisted == "": continue
+		var parts = blacklisted.split(" ")
+		var matches = true
+		for part in parts:
+			if part != "" and not gpu_name.contains(part):
+				matches = false
+				break
+		if matches:
+			print("ADMOB: GPU conflictiva detectada (%s). Desactivando AdMob para evitar crashes OpenGL en pause." % gpu_name)
+			_is_gpu_blacklisted = true
+			return
 	
 	_update_consent_info()
 
@@ -123,6 +143,9 @@ func _on_form_dismissed(error: FormError):
 # Función pública para reabrir las opciones de privacidad (invocada desde el panel de configuración)
 func show_consent_options():
 	print("ADMOB: Solicitando mostrar opciones de consentimiento...")
+	if _is_gpu_blacklisted:
+		print("ADMOB: Saltado (GPU Blacklisted)")
+		return
 	if OS.get_name() != "Android" and OS.get_name() != "iOS":
 		return
 	
@@ -148,6 +171,8 @@ func show_consent_options():
 	UserMessagingPlatform.load_consent_form(on_success, on_failure)
 
 func _initialize_sdk():
+	if _is_gpu_blacklisted:
+		return
 	if _is_sdk_initialized:
 		print("ADMOB: SDK ya inicializado previamente.")
 		return
@@ -157,24 +182,29 @@ func _initialize_sdk():
 	var init_listener = OnInitializationCompleteListener.new()
 	init_listener.on_initialization_complete = func(_status):
 		print("ADMOB: SDK Inicializado. Iniciando carga escalonada...")
+		if _app_is_paused: return
 		_create_banner()
 		
 		# PRIORITY: Wait for the banner to finish loading before starting other network requests!
 		await self.banner_finished_loading
 		
-		# Continue staggered loading for the rest
+		if _app_is_paused: return
 		await get_tree().create_timer(3.0).timeout
+		if _app_is_paused: return
 		_load_interstitial()
 		
 		await get_tree().create_timer(6.0).timeout
+		if _app_is_paused: return
 		_load_rewarded()
 		
 		await get_tree().create_timer(6.0).timeout
+		if _app_is_paused: return
 		_load_lab_rewarded()
 	
 	MobileAds.initialize(init_listener)
 
 func _create_banner():
+	if _app_is_paused: return
 	print("ADMOB: Creando Banner oficial...")
 	var unit_id = "ca-app-pub-6982275568315854/6392385312"
 	
@@ -184,8 +214,15 @@ func _create_banner():
 	
 	ad_listener.on_ad_loaded = func():
 		print("ADMOB: ¡Banner cargado con éxito!")
-		_banner_is_showing = true
-		_banner_view.show()
+		if _app_is_paused:
+			print("ADMOB: La app está en segundo plano. Destruyendo banner cargado por seguridad.")
+			if _banner_view:
+				_banner_view.destroy()
+				_banner_view = null
+			_banner_is_showing = false
+		else:
+			_banner_is_showing = true
+			_banner_view.show()
 		if not _initial_banner_loaded:
 			_initial_banner_loaded = true
 			banner_finished_loading.emit()
@@ -227,6 +264,7 @@ func show_toast(text: String):
 # --- SISTEMA DE REWARDED (APOYO AL CREADOR) ---
 
 func _load_rewarded():
+	if _app_is_paused: return
 	if _rewarded_loading or _rewarded_ad: return
 	_rewarded_loading = true
 	
@@ -239,14 +277,25 @@ func _load_rewarded():
 
 	load_callback.on_ad_loaded = func(ad : RewardedAd):
 		print("ADMOB: Rewarded CARGADO.")
-		_rewarded_ad = ad
-		_rewarded_loading = false
+		if _app_is_paused:
+			print("ADMOB: App pausada, descartando rewarded cargado por seguridad.")
+			ad.destroy()
+			_rewarded_loading = false
+		else:
+			_rewarded_ad = ad
+			_rewarded_loading = false
 	
 	var request = AdRequest.new()
 	print("ADMOB: Cargando Rewarded (Apoyo)...")
 	RewardedAdLoader.new().load(unit_id, request, load_callback)
 
 func show_rewarded() -> bool:
+	if _is_gpu_blacklisted:
+		print("ADMOB: show_rewarded() saltado (GPU Blacklisted).")
+		return false
+	if not Engine.has_singleton("PoingGodotAdMob"):
+		print("ADMOB: show_rewarded() saltado (Plugin desactivado).")
+		return false
 	if _rewarded_ad:
 		print("ADMOB: Mostrando Rewarded...")
 		_active_ad = _rewarded_ad
@@ -276,6 +325,7 @@ func show_rewarded() -> bool:
 # --- SISTEMA DE REWARDED (LABORATORIO) ---
 
 func _load_lab_rewarded():
+	if _app_is_paused: return
 	if _lab_rewarded_loading or _lab_rewarded_ad: return
 	_lab_rewarded_loading = true
 	
@@ -288,14 +338,31 @@ func _load_lab_rewarded():
 
 	load_callback.on_ad_loaded = func(ad : RewardedAd):
 		print("ADMOB: Lab Rewarded CARGADO.")
-		_lab_rewarded_ad = ad
-		_lab_rewarded_loading = false
+		if _app_is_paused:
+			print("ADMOB: App pausada, descartando lab rewarded cargado por seguridad.")
+			ad.destroy()
+			_lab_rewarded_loading = false
+		else:
+			_lab_rewarded_ad = ad
+			_lab_rewarded_loading = false
 	
 	var request = AdRequest.new()
 	print("ADMOB: Cargando Rewarded (Laboratorio)...")
 	RewardedAdLoader.new().load(unit_id, request, load_callback)
 
 func show_lab_rewarded() -> bool:
+	if _is_gpu_blacklisted:
+		print("ADMOB: [GPU BLACKLISTED] Laboratorio Desbloqueado de forma gratuita.")
+		lab_unlocked.emit()
+		ad_dismissed.emit()
+		return true
+
+	if not Engine.has_singleton("PoingGodotAdMob"):
+		print("ADMOB: [PLUGIN DESACTIVADO] Laboratorio Desbloqueado de forma gratuita.")
+		lab_unlocked.emit()
+		ad_dismissed.emit()
+		return true
+
 	if OS.get_name() != "Android" and OS.get_name() != "iOS":
 		print("ADMOB: [PC EMULADOR] Laboratorio Desbloqueado.")
 		lab_unlocked.emit()
@@ -331,6 +398,7 @@ func show_lab_rewarded() -> bool:
 # --- SISTEMA DE INTERSTITIAL (PAUSA / RESET) ---
 
 func _load_interstitial():
+	if _app_is_paused: return
 	if _interstitial_loading or _interstitial_ad: return
 	_interstitial_loading = true
 	
@@ -343,13 +411,23 @@ func _load_interstitial():
 
 	load_callback.on_ad_loaded = func(ad : InterstitialAd):
 		print("ADMOB: Intersticial CARGADO.")
-		_interstitial_ad = ad
-		_interstitial_loading = false
+		if _app_is_paused:
+			print("ADMOB: App pausada, descartando intersticial cargado por seguridad.")
+			ad.destroy()
+			_interstitial_loading = false
+		else:
+			_interstitial_ad = ad
+			_interstitial_loading = false
 	
 	var request = AdRequest.new()
 	InterstitialAdLoader.new().load(unit_id, request, load_callback)
 
 func show_interstitial() -> bool:
+	if _is_gpu_blacklisted:
+		print("ADMOB: show_interstitial() saltado (GPU Blacklisted).")
+		return false
+	if not Engine.has_singleton("PoingGodotAdMob"):
+		return false
 	if _interstitial_ad:
 		print("ADMOB: Mostrando Intersticial...")
 		_active_ad = _interstitial_ad
@@ -373,6 +451,10 @@ func show_interstitial() -> bool:
 		return false
 
 func check_and_show_interstitial(button_type: String = "") -> bool:
+	if _is_gpu_blacklisted:
+		return false
+	if not Engine.has_singleton("PoingGodotAdMob"):
+		return false
 	# PRIMERA VEZ GRACIA: Si es la primera vez que se pulsa un botón específico, NO mostrar.
 	if button_type == "pause" and not first_pause_used:
 		print("ADMOB: Primera pausa gratis.")
@@ -391,17 +473,24 @@ func check_and_show_interstitial(button_type: String = "") -> bool:
 		return false
 
 func _notification(what: int) -> void:
+	if _is_gpu_blacklisted:
+		return
+		
 	if what == NOTIFICATION_APPLICATION_PAUSED:
+		_app_is_paused = true
 		if _banner_view and _banner_is_showing:
 			print("ADMOB: App pausada, ocultando banner...")
 			_banner_view.hide()
 			
 	elif what == NOTIFICATION_APPLICATION_RESUMED:
+		_app_is_paused = false
 		if _banner_view and _banner_is_showing:
 			print("ADMOB: App reanudada, mostrando banner...")
 			_banner_view.show()
 
 func _exit_tree() -> void:
+	if _is_gpu_blacklisted:
+		return
 	if _banner_view:
 		_banner_is_showing = false
 		_banner_view.destroy()
