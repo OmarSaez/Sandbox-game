@@ -293,6 +293,7 @@ var action_sfx = {
 	"miner_dig": "pickaxe_hit",      # Minero picando tierra
 	"medic_heal": "medic_heal",      # SONIDO DEL MÉDICO
 	"zombie_attack": "zombie_attack", # Ataque y gruñido de Zombie
+	"zombie_tank_attack": "zombie_tank_attack", # Ataque pesado de Zombie Tanque
 	
 	# Sonidos Continuos de Clima / Desastres (LOOP EN TIEMPO REAL) MP3
 	"weather_1": "rain_light",
@@ -369,6 +370,15 @@ const NPC_PROFILES = {
 		"can_flee": false,
 		"can_panic_disaster": false,
 		"attack_sound": "zombie_attack",
+		"hit_emoji": "🧟"
+	},
+	"zombie_tank": {
+		"can_socialize": false,
+		"can_sleep": false,
+		"can_celebrate": false,
+		"can_flee": false,
+		"can_panic_disaster": false,
+		"attack_sound": "zombie_tank_attack",
 		"hit_emoji": "🧟"
 	}
 }
@@ -829,6 +839,13 @@ func _ready():
 	_register_material(1052, Color("#4B245C"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Polera morada oscura
 	_register_material(1053, Color("#717E80"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Pantalón gris
 	_register_material(1054, Color("#5D9C36"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Pies verdes (descalzo)
+	
+	# --- NPC SYSTEM: ZOMBIE TANK (1060-1064) ---
+	_register_material(1060, Color("#365C1F"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Master
+	_register_material(1061, Color("#4E822E"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Cabeza/Piel
+	_register_material(1062, Color("#361B43"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Torso morado muy oscuro
+	_register_material(1063, Color("#555F61"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Pantalón gris oscuro
+	_register_material(1064, Color("#4E822E"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Pies descalzos
 	
 	# --- SISTEMA DE DAÑO Y HIT (1030-1035) ---
 	_register_material(1030, npc_color_acid, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
@@ -4492,6 +4509,8 @@ func _update_menu_highlights():
 				is_active = not is_selecting_npc_to_control and not is_instance_valid(controlled_npc)
 			elif key == "zombie_btn":
 				if selected_material == 1050 and not is_selecting_npc_to_control: is_active = true
+			elif key == "zombie_tank_btn":
+				if selected_material == 1060 and not is_selecting_npc_to_control: is_active = true
 			
 			if btn.get_meta("is_currently_active", false) != is_active:
 				btn.set_meta("is_currently_active", is_active)
@@ -4513,7 +4532,7 @@ func _update_menu_highlights():
 					btn.remove_theme_color_override("font_color")
 	
 	# Ocultar o mostrar el selector de equipo según si el NPC seleccionado es neutral (Sin bando)
-	var is_neutral_npc = (selected_material == 1050)
+	var is_neutral_npc = (selected_material == 1050 or selected_material == 1060)
 	if ui_elements.has("team_lbl") and is_instance_valid(ui_elements["team_lbl"]):
 		ui_elements["team_lbl"].visible = not is_neutral_npc
 	if ui_elements.has("team_flow") and is_instance_valid(ui_elements["team_flow"]):
@@ -7147,6 +7166,45 @@ func _trigger_controlled_npc_action():
 				var p_scale = 0.65 + float((controlled_npc.id * 23) % 40) / 40.0 * 0.40
 				_play_action_sound("zombie_attack", 0.08, 0.0, p_scale)
 				controlled_npc.attack_cooldown = 0.5
+		"zombie_tank":
+			var target = _find_closest_enemy(controlled_npc, 30.0)
+			if target and controlled_npc.pos.distance_to(target.pos) < 20.0:
+				_attack_npc(controlled_npc, target)
+				controlled_npc.attack_cooldown = 1.0
+			else:
+				var face_dir = controlled_npc.get("last_dir", 1)
+				var found_x = -1; var found_y = -1; var found_mat = 2
+				for dy in range(-4, 7):
+					for dx in range(-5, 6):
+						var tx = controlled_npc.pos.x + dx; var ty = controlled_npc.pos.y + dy
+						if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+							var tid = _get_cell(tx, ty)
+							if tid > 0 and tid != 1 and not (material_tags_raw[tid] & SandboxMaterial.Tags.NPC):
+								found_x = tx; found_y = ty; found_mat = tid; break
+					if found_x != -1: break
+					
+				if found_x != -1:
+					_set_cell(found_x, found_y, 0)
+					for _s in range(5):
+						_add_spark(float(found_x), float(found_y), _get_lut_rand_range(-30, 30), _get_lut_rand_range(-50, -10), mat_colors_1[found_mat] if found_mat < mat_colors_1.size() else Color.GRAY, 0.4)
+						
+				var vx = face_dir * 120.0
+				var vy = -80.0
+				
+				active_projectiles.append({
+					"pos": Vector2(controlled_npc.pos.x + face_dir * 3, controlled_npc.pos.y + 1),
+					"vel": Vector2(vx, vy),
+					"team": controlled_npc.team,
+					"type": "thrown_rock",
+					"life": 3.0,
+					"block_material": found_mat,
+					"atk_dmg": 1.5
+				})
+				
+				var p_scale = 0.65 + float((controlled_npc.id * 23) % 40) / 40.0 * 0.40
+				_play_action_sound("zombie_tank_attack", 0.08, -12.0, p_scale)
+				_set_npc_emoji(controlled_npc, "🪨", 1.2)
+				controlled_npc.attack_cooldown = 2.0
 		"archer":
 			# Shoot arrow in current face direction
 			var face_dir = controlled_npc.get("last_dir", 1)
@@ -7367,6 +7425,7 @@ func _setup_npc_ui():
 		v_box.add_child(neutral_flow)
 		
 		create_npc_btn.call("zombie", 1050, neutral_flow)
+		create_npc_btn.call("zombie_tank", 1060, neutral_flow)
 		
 		_add_ui_header(v_box, "coming_soon")
 		
@@ -7430,14 +7489,15 @@ func _place_npc(x, y):
 	elif selected_material == 1020 or selected_material == 1021: n_type = "miner"
 	elif selected_material == 1040 or selected_material == 1041: n_type = "medic"
 	elif selected_material == 1050 or selected_material == 1051: n_type = "zombie"
+	elif selected_material == 1060 or selected_material == 1061: n_type = "zombie_tank"
 	
 	# Register in entity list
 	var new_npc = {
 		"pos": Vector2i(start_x, start_y),
-		"team": -1 if n_type == "zombie" else selected_team,
+		"team": -1 if (n_type == "zombie" or n_type == "zombie_tank") else selected_team,
 		"dir": 1 if _get_lut_rand() > 0.5 else -1,
 		"type": n_type,
-		"hp": _get_lut_rand_range(85.0, 115.0), # Variación en resistencia base
+		"hp": _get_lut_rand_range(280.0, 320.0) if n_type == "zombie_tank" else _get_lut_rand_range(85.0, 115.0), # Variación en resistencia base
 		"attack_cooldown": 0.0,
 		"hit_flash": 0,
 		"hit_type": "none",
@@ -7528,10 +7588,12 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	if override_mat == 0:
 		# DUAL-ZONE CLEANUP: Wipe both current physics pos AND the last jittered render pos
 		var was_lying = npc.get("last_render_lying", false)
+		var is_tank = (npc.type == "zombie_tank")
 		var zones = [npc.pos, Vector2i(int(npc.get("last_render_x", npc.pos.x)), int(npc.get("last_render_y", npc.pos.y)))]
 		for p in zones:
-			var xr = range(-5, 6) if was_lying else range(-1, 3)
-			for oy in range(-1, 6):
+			var xr = range(-7, 8) if was_lying else (range(-1, 4) if is_tank else range(-1, 3))
+			var yr_max = 7 if is_tank else 6
+			for oy in range(-1, yr_max):
 				for ox in xr:
 					var tx = p.x + ox; var ty = p.y + oy
 					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
@@ -7564,6 +7626,8 @@ func _draw_npc_pixels(npc, override_mat = -1):
 		m_head = 1044; m_skin = 1042; m_torso = 1043; m_shoes = 1045
 	elif npc.type == "zombie":
 		m_head = 1051; m_skin = 1051; m_torso = 1052; m_shoes = 1054; team_mat = 1053
+	elif npc.type == "zombie_tank":
+		m_head = 1061; m_skin = 1061; m_torso = 1062; m_shoes = 1064; team_mat = 1063
 	
 	# 2. Aplicar Overrides (Daño/Muerte)
 	if override_mat != -1:
@@ -7582,40 +7646,71 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	else: npc["last_dir"] = face_dir
 		
 	if is_lying:
-		# --- LYING DOWN (Horizontal 5x2 - Face Up) ---
-		var lx = sx; var ly = sy + 3
-		if face_dir > 0:
-			# Fila Superior (Cara y pecho mirando arriba)
-			_set_cell(lx, ly, m_head); _set_cell(lx+1, ly, m_skin)
-			_set_cell(lx+2, ly, team_mat); _set_cell(lx+3, ly, m_torso)
-			_set_cell(lx+4, ly, m_shoes)
-			# Fila Inferior (Base del cuerpo)
-			_set_cell(lx, ly+1, m_head); _set_cell(lx+1, ly+1, m_head)
-			_set_cell(lx+2, ly+1, m_torso); _set_cell(lx+3, ly+1, team_mat)
-			_set_cell(lx+4, ly+1, m_shoes)
+		if npc.type == "zombie_tank":
+			# --- LYING DOWN ZOMBIE TANK (6x3) ---
+			var lx = sx; var ly = sy + 3
+			if face_dir > 0:
+				_set_cell(lx, ly, m_head); _set_cell(lx+1, ly, m_skin); _set_cell(lx+2, ly, team_mat); _set_cell(lx+3, ly, m_torso); _set_cell(lx+4, ly, team_mat); _set_cell(lx+5, ly, m_shoes)
+				_set_cell(lx, ly+1, m_head); _set_cell(lx+1, ly+1, m_head); _set_cell(lx+2, ly+1, m_torso); _set_cell(lx+3, ly+1, team_mat); _set_cell(lx+4, ly+1, team_mat); _set_cell(lx+5, ly+1, m_shoes)
+				_set_cell(lx, ly+2, m_head); _set_cell(lx+1, ly+2, m_skin); _set_cell(lx+2, ly+2, m_torso); _set_cell(lx+3, ly+2, m_torso); _set_cell(lx+4, ly+2, team_mat); _set_cell(lx+5, ly+2, m_shoes)
+			else:
+				_set_cell(lx, ly, m_shoes); _set_cell(lx+1, ly, team_mat); _set_cell(lx+2, ly, m_torso); _set_cell(lx+3, ly, team_mat); _set_cell(lx+4, ly, m_skin); _set_cell(lx+5, ly, m_head)
+				_set_cell(lx, ly+1, m_shoes); _set_cell(lx+1, ly+1, team_mat); _set_cell(lx+2, ly+1, team_mat); _set_cell(lx+3, ly+1, m_torso); _set_cell(lx+4, ly+1, m_head); _set_cell(lx+5, ly+1, m_head)
+				_set_cell(lx, ly+2, m_shoes); _set_cell(lx+1, ly+2, team_mat); _set_cell(lx+2, ly+2, m_torso); _set_cell(lx+3, ly+2, m_torso); _set_cell(lx+4, ly+2, m_skin); _set_cell(lx+5, ly+2, m_head)
 		else:
-			# Espejo
-			_set_cell(lx, ly, m_shoes); _set_cell(lx, ly+1, m_shoes)
-			_set_cell(lx-1, ly, team_mat); _set_cell(lx-2, ly, m_torso)
-			_set_cell(lx-1, ly+1, m_torso); _set_cell(lx-2, ly+1, team_mat)
-			_set_cell(lx-3, ly, m_skin); _set_cell(lx-4, ly, m_head)
-			_set_cell(lx-3, ly+1, m_head); _set_cell(lx-4, ly+1, m_head)
+			# --- LYING DOWN (Horizontal 5x2 - Face Up) ---
+			var lx = sx; var ly = sy + 3
+			if face_dir > 0:
+				# Fila Superior (Cara y pecho mirando arriba)
+				_set_cell(lx, ly, m_head); _set_cell(lx+1, ly, m_skin)
+				_set_cell(lx+2, ly, team_mat); _set_cell(lx+3, ly, m_torso)
+				_set_cell(lx+4, ly, m_shoes)
+				# Fila Inferior (Base del cuerpo)
+				_set_cell(lx, ly+1, m_head); _set_cell(lx+1, ly+1, m_head)
+				_set_cell(lx+2, ly+1, m_torso); _set_cell(lx+3, ly+1, team_mat)
+				_set_cell(lx+4, ly+1, m_shoes)
+			else:
+				# Espejo
+				_set_cell(lx, ly, m_shoes); _set_cell(lx, ly+1, m_shoes)
+				_set_cell(lx-1, ly, team_mat); _set_cell(lx-2, ly, m_torso)
+				_set_cell(lx-1, ly+1, m_torso); _set_cell(lx-2, ly+1, team_mat)
+				_set_cell(lx-3, ly, m_skin); _set_cell(lx-4, ly, m_head)
+				_set_cell(lx-3, ly+1, m_head); _set_cell(lx-4, ly+1, m_head)
 	else:
-		# --- STANDING (Vertical 2x5) ---
-		var px0 = sx if face_dir > 0 else sx + 1
-		var px1 = sx + 1 if face_dir > 0 else sx
-		_set_cell(px0, sy, m_head); _set_cell(px1, sy, m_head)
-		_set_cell(px0, sy+1, m_head); _set_cell(px1, sy+1, m_skin)
-		if npc.type == "medic" and override_mat == -1 and !is_flashing:
-			_set_cell(px0, sy+2, 1041); _set_cell(px1, sy+2, 1041)
-			_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, team_mat)
-		elif npc.type == "archer" and override_mat == -1 and !is_flashing:
-			_set_cell(px0, sy+2, team_mat); _set_cell(px1, sy+2, team_mat)
-			_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, team_mat)
+		if npc.type == "zombie_tank":
+			# --- STANDING ZOMBIE TANK (3x6) ---
+			var px0 = sx if face_dir > 0 else sx + 2
+			var px1 = sx + 1
+			var px2 = sx + 2 if face_dir > 0 else sx
+			
+			# Fila 0 (Parte superior de la cabeza)
+			_set_cell(px0, sy, m_head); _set_cell(px1, sy, m_head); _set_cell(px2, sy, m_head)
+			# Fila 1 (Cara y nuca)
+			_set_cell(px0, sy+1, m_head); _set_cell(px1, sy+1, m_skin); _set_cell(px2, sy+1, m_skin)
+			# Fila 2 (Torso alto / Hombros)
+			_set_cell(px0, sy+2, team_mat); _set_cell(px1, sy+2, m_torso); _set_cell(px2, sy+2, m_torso)
+			# Fila 3 (Torso bajo)
+			_set_cell(px0, sy+3, m_torso); _set_cell(px1, sy+3, team_mat); _set_cell(px2, sy+3, team_mat)
+			# Fila 4 (Pantalones)
+			_set_cell(px0, sy+4, team_mat); _set_cell(px1, sy+4, team_mat); _set_cell(px2, sy+4, team_mat)
+			# Fila 5 (Pies descalzos)
+			_set_cell(px0, sy+5, m_shoes); _set_cell(px1, sy+5, m_shoes); _set_cell(px2, sy+5, m_shoes)
 		else:
-			_set_cell(px0, sy+2, m_torso); _set_cell(px1, sy+2, team_mat)
-			_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, m_torso)
-		_set_cell(px0, sy+4, m_shoes); _set_cell(px1, sy+4, m_shoes)
+			# --- STANDING (Vertical 2x5) ---
+			var px0 = sx if face_dir > 0 else sx + 1
+			var px1 = sx + 1 if face_dir > 0 else sx
+			_set_cell(px0, sy, m_head); _set_cell(px1, sy, m_head)
+			_set_cell(px0, sy+1, m_head); _set_cell(px1, sy+1, m_skin)
+			if npc.type == "medic" and override_mat == -1 and !is_flashing:
+				_set_cell(px0, sy+2, 1041); _set_cell(px1, sy+2, 1041)
+				_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, team_mat)
+			elif npc.type == "archer" and override_mat == -1 and !is_flashing:
+				_set_cell(px0, sy+2, team_mat); _set_cell(px1, sy+2, team_mat)
+				_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, team_mat)
+			else:
+				_set_cell(px0, sy+2, m_torso); _set_cell(px1, sy+2, team_mat)
+				_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, m_torso)
+			_set_cell(px0, sy+4, m_shoes); _set_cell(px1, sy+4, m_shoes)
 
 func _update_npc_spatial_hash():
 	for cell in npc_spatial_grid:
@@ -7720,7 +7815,7 @@ func _process_npcs(delta):
 		_check_npc_environment_damage(npc)
 		
 		# Infección Zombie: si la vida baja del 20% y no ha sido verificado aún
-		if npc.type != "zombie" and npc.hp > 0 and npc.hp < npc.max_hp * 0.2 and not npc.get("zombie_checked", false):
+		if not _is_zombie(npc.type) and npc.hp > 0 and npc.hp < npc.max_hp * 0.2 and not npc.get("zombie_checked", false):
 			npc["zombie_checked"] = true
 			if _get_lut_rand() < 0.5:
 				_convert_to_zombie(npc)
@@ -8087,7 +8182,7 @@ func _process_npcs(delta):
 							var start_drop_x = np.x + (1 if npc.dir == -1 else 0)
 							if _get_cell(start_drop_x, np.y) == 0: _set_cell(start_drop_x, np.y, 2)
 					
-					if npc.type != "miner" and npc.type != "medic" and npc.type != "zombie":
+					if npc.type != "miner" and npc.type != "medic" and npc.type != "zombie" and npc.type != "zombie_tank":
 						if npc.get("is_fleeing", false):
 							if target: npc.dir = 1 if target.pos.x < np.x else -1
 							if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
@@ -8127,6 +8222,101 @@ func _process_npcs(delta):
 									_shoot_arrow(npc, target); npc.miss_counter += 1
 									if npc.miss_counter >= 3: npc.miss_counter = -40
 									npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
+					elif npc.type == "zombie_tank":
+						if target:
+							npc["recently_celebrated"] = false
+							npc["contagion_wait_timer"] = 0.0
+							npc["has_spotted_enemy"] = true
+							_world_peace_timer = 0.0
+							
+							var dist_x = target.pos.x - np.x
+							var dx_abs = abs(dist_x)
+							var dy_abs = abs(target.pos.y - np.y)
+							var target_below = target.pos.y > np.y + 8
+							
+							# Heavy slower movement decisions
+							if _get_lut_rand() < 0.08:
+								var r_choice = _get_lut_rand()
+								if r_choice < 0.4:
+									npc.dir = 0
+									if _get_lut_rand() < 0.3:
+										_set_npc_emoji(npc, "🧟", 1.0)
+								elif r_choice < 0.7:
+									npc.dir = -1 if dist_x > 0 else 1
+								else:
+									if !_can_npc_fit(np.x, np.y + 1, npc):
+										npc.vy = -3.5 - (_get_lut_rand() * 1.5)
+							else:
+								if target_below:
+									if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
+								else:
+									npc.dir = 1 if dist_x > 0 else -1
+							
+							# Melee attack
+							if dx_abs < 7 and dy_abs < 7:
+								if npc.attack_cooldown <= 0:
+									_attack_npc(npc, target)
+									npc.attack_cooldown = 1.0
+									
+							# Ranged block throw
+							var dist = npc.pos.distance_to(target.pos)
+							if dist >= 35.0 and dist <= 150.0 and npc.attack_cooldown <= 0:
+								var found_x = -1; var found_y = -1; var found_mat = 2
+								for dy in range(-4, 7):
+									for dx in range(-5, 6):
+										var tx = np.x + dx; var ty = np.y + dy
+										if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+											var tid = _get_cell(tx, ty)
+											if tid > 0 and tid != 1 and not (material_tags_raw[tid] & SandboxMaterial.Tags.NPC):
+												found_x = tx; found_y = ty; found_mat = tid; break
+									if found_x != -1: break
+									
+								if found_x != -1:
+									_set_cell(found_x, found_y, 0)
+									for _s in range(5):
+										_add_spark(float(found_x), float(found_y), _get_lut_rand_range(-30, 30), _get_lut_rand_range(-50, -10), mat_colors_1[found_mat] if found_mat < mat_colors_1.size() else Color.GRAY, 0.4)
+										
+								var time_to_target = abs(dist_x) / 120.0
+								time_to_target = clamp(time_to_target, 0.4, 2.5)
+								var vx = dist_x / time_to_target
+								var vy = (target.pos.y - np.y) / time_to_target - (0.5 * 200.0 * time_to_target)
+								
+								active_projectiles.append({
+									"pos": Vector2(np.x + (1 if dist_x > 0 else -1) * 3, np.y + 1),
+									"vel": Vector2(vx, vy),
+									"team": npc.team,
+									"type": "thrown_rock",
+									"life": 3.0,
+									"block_material": found_mat,
+									"atk_dmg": 1.5
+								})
+								
+								var p_scale = 0.65 + float((npc.id * 23) % 40) / 40.0 * 0.40
+								_play_action_sound("zombie_tank_attack", 0.08, -12.0, p_scale)
+								_set_npc_emoji(npc, "🪨", 1.2)
+								npc.attack_cooldown = 2.5
+								
+							if dx_abs < 4 and not target_below:
+								npc.dir = 0
+						else:
+							npc["has_spotted_enemy"] = false
+							var rethink_chance = 0.08 if npc.dir == 0 else 0.03
+							if _get_lut_rand() < rethink_chance:
+								var r = _get_lut_rand()
+								if r < 0.4: npc.dir = 1
+								elif r < 0.8: npc.dir = -1
+								else: npc.dir = 0
+								
+								if _get_lut_rand() < 0.15 and !_can_npc_fit(np.x, np.y + 1, npc):
+									npc.vy = -3.5 - (_get_lut_rand() * 1.2)
+								
+								if _get_lut_rand() < 0.08:
+									_set_npc_emoji(npc, "🧟", 1.5)
+							
+							# Slow down wandering tank (move only on 1/4 of the ticks)
+							if (npc.id + _ai_tick_count) % 4 != 0:
+								npc.dir = 0
+								
 					elif npc.type == "zombie":
 						if target:
 							npc["recently_celebrated"] = false
@@ -8297,11 +8487,13 @@ func _process_npcs(delta):
 		# --- 3. MOVIMIENTO IA (SI NO HAY FISICA ACTIVA Y NO ESTÁ POSEÍDO) ---
 		if not moved_by_physics and npc != controlled_npc:
 			# 1. GRAVEDAD SOBERANA: Chequeo solo bajo los pies para evitar "colgarse" lateralmente
-			var feet_y = np.y + 5
+			var w = 3 if npc.type == "zombie_tank" else 2
+			var h = 6 if npc.type == "zombie_tank" else 5
+			var feet_y = np.y + h
 			var can_fall = true
 			if feet_y >= dynamic_grid_height: can_fall = false
 			else:
-				for ox in range(2):
+				for ox in range(w):
 					var tid = _get_cell(np.x + ox, feet_y)
 					if tid != 0 and tid != 15 and tid != 3 and tid != 17:
 						if !(material_tags_raw[tid] & (SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.PLANT)):
@@ -8382,7 +8574,9 @@ func _process_npcs(delta):
 						var has_z = _has_active_zombies()
 						for other in nearby:
 							if _is_ally(npc, other, has_z) and other != npc:
-								if tx_test < other.pos.x + 2 and tx_test + 2 > other.pos.x and np.y < other.pos.y + 5 and np.y + 5 > other.pos.y:
+								var ow = 3 if other.type == "zombie_tank" else 2
+								var oh = 6 if other.type == "zombie_tank" else 5
+								if tx_test < other.pos.x + ow and tx_test + w > other.pos.x and np.y < other.pos.y + oh and np.y + h > other.pos.y:
 									bumped_ally = true; break
 						
 						if bumped_ally: 
@@ -8524,31 +8718,139 @@ func _convert_to_zombie(npc):
 func _process_projectiles(delta):
 	var to_remove = []
 	for i in range(active_projectiles.size()):
-		var p = active_projectiles[i]; _set_cell(int(p.pos.x), int(p.pos.y), 0)
-		p.pos += p.vel * delta; p.vel.y += 200.0 * delta; p.life -= delta
+		var p = active_projectiles[i]
+		
+		# 1. Clear last frame's pixels
+		var last_gx = int(p.pos.x); var last_gy = int(p.pos.y)
+		if p.type == "thrown_rock":
+			var mat = p.get("block_material", 2)
+			for ox in range(2):
+				for oy in range(2):
+					var tx = last_gx + ox; var ty = last_gy + oy
+					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+						var tid = cells[ty * grid_width + tx] & 0xFFFF
+						if tid == mat: _set_cell(tx, ty, 0)
+		else:
+			if last_gx >= 0 and last_gx < grid_width and last_gy >= 0 and last_gy < dynamic_grid_height:
+				_set_cell(last_gx, last_gy, 0)
+				
+		# 2. Advance projectile physics
+		p.pos += p.vel * delta
+		p.vel.y += 200.0 * delta
+		p.life -= delta
+		
 		var gx = int(p.pos.x); var gy = int(p.pos.y)
-		if gx < 0 or gx >= grid_width or gy < 0 or gy >= dynamic_grid_height or p.life <= 0: to_remove.append(i); continue
+		if gx < 0 or gx >= grid_width or gy < 0 or gy >= dynamic_grid_height or p.life <= 0:
+			to_remove.append(i); continue
+			
+		# 3. Check NPC collisions
 		var hit_npc = null
-		var nearby = _get_nearby_npcs(gx, gy, 8.0)
+		var nearby = _get_nearby_npcs(gx, gy, 12.0)
+		var has_z = _has_active_zombies()
 		for other in nearby:
-			if other.team != p.team:
-				if gx >= other.pos.x and gx <= other.pos.x + 1 and gy >= other.pos.y and gy <= other.pos.y + 4: hit_npc = other; break
+			var is_enemy = false
+			if p.team == -1:
+				is_enemy = (other.team != -1)
+			else:
+				if has_z:
+					is_enemy = (other.type == "zombie" or other.type == "zombie_tank")
+				else:
+					is_enemy = (other.team != p.team)
+					
+			if is_enemy and other.hp > 0:
+				var ow = 3 if other.type == "zombie_tank" else 2
+				var oh = 6 if other.type == "zombie_tank" else 5
+				if gx >= other.pos.x and gx < other.pos.x + ow and gy >= other.pos.y and gy < other.pos.y + oh:
+					hit_npc = other; break
+					
 		if hit_npc:
-			hit_npc.hp -= 40.0 * p.get("atk_dmg", 1.0); hit_npc.hit_flash = 4; hit_npc.hit_type = "normal"
-			if p.get("is_fire", false):
-				if _get_cell(gx, gy) == 0: _set_cell(gx, gy, 3)
-			_play_action_sound("npc_hit")
-			for _j in range(5): _add_spark(float(gx),float(gy),_get_lut_rand_range(-40,40),_get_lut_rand_range(-40,0),Color.WHITE,0.3)
+			if p.type == "thrown_rock":
+				_trigger_rock_impact(gx, gy, p)
+			else:
+				hit_npc.hp -= 40.0 * p.get("atk_dmg", 1.0); hit_npc.hit_flash = 4; hit_npc.hit_type = "normal"
+				if p.get("is_fire", false):
+					if _get_cell(gx, gy) == 0: _set_cell(gx, gy, 3)
+				_play_action_sound("npc_hit")
+				for _j in range(5): _add_spark(float(gx), float(gy), _get_lut_rand_range(-40, 40), _get_lut_rand_range(-40, 0), Color.WHITE, 0.3)
 			to_remove.append(i); continue
-		var tid = _get_cell(gx, gy)
-		if tid != 0 and tid != 15 and tid != 3 and tid != 17:
-			if p.get("is_fire", false):
-				var px = gx - int(sign(p.vel.x))
-				if px >= 0 and px < grid_width and _get_cell(px, gy) == 0: _set_cell(px, gy, 3)
+			
+		# 4. Check Grid collisions (Solid blocks)
+		var collides_block = false
+		if p.type == "thrown_rock":
+			for ox in range(2):
+				for oy in range(2):
+					var tx = gx + ox; var ty = gy + oy
+					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+						var tid = _get_cell(tx, ty)
+						if tid != 0 and tid != 15 and tid != 3 and tid != 17:
+							collides_block = true; break
+				if collides_block: break
+		else:
+			var tid = _get_cell(gx, gy)
+			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
+				collides_block = true
+				
+		if collides_block:
+			if p.type == "thrown_rock":
+				_trigger_rock_impact(gx, gy, p)
+			else:
+				if p.get("is_fire", false):
+					var px = gx - int(sign(p.vel.x))
+					if px >= 0 and px < grid_width and _get_cell(px, gy) == 0: _set_cell(px, gy, 3)
 			to_remove.append(i); continue
-		_set_cell(gx, gy, 1012)
+			
+		# 5. Draw projectile pixels
+		if p.type == "thrown_rock":
+			var mat = p.get("block_material", 2)
+			for ox in range(2):
+				for oy in range(2):
+					var tx = gx + ox; var ty = gy + oy
+					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+						if _get_cell(tx, ty) == 0: _set_cell(tx, ty, mat)
+		else:
+			_set_cell(gx, gy, 1012)
+			
 	to_remove.reverse()
 	for idx in to_remove: active_projectiles.remove_at(idx)
+
+func _trigger_rock_impact(gx, gy, p):
+	# 1. Destroy cells in a radius of 3
+	var rad = 3
+	var mat = p.get("block_material", 2)
+	var mat_color = mat_colors_1[mat] if mat < mat_colors_1.size() else Color("#717E80")
+	for dy in range(-rad, rad + 1):
+		for dx in range(-rad, rad + 1):
+			if dx*dx + dy*dy <= rad*rad:
+				var tx = gx + dx; var ty = gy + dy
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					var tid = _get_cell(tx, ty)
+					if tid > 0 and tid != 1:
+						_set_cell(tx, ty, 0)
+						
+	# 2. Damage nearby NPCs in a radius of 18
+	var nearby_npcs = _get_nearby_npcs(gx, gy, 18.0)
+	var has_z = _has_active_zombies()
+	for other in nearby_npcs:
+		var is_enemy = false
+		if p.team == -1:
+			is_enemy = (other.team != -1)
+		else:
+			if has_z:
+				is_enemy = (other.type == "zombie" or other.type == "zombie_tank")
+			else:
+				is_enemy = (other.team != p.team)
+				
+		if is_enemy and other.hp > 0:
+			var dist = other.pos.distance_to(Vector2(gx, gy))
+			if dist < 18.0:
+				var dmg_ratio = 1.0 - (dist / 18.0)
+				other.hp -= 50.0 * dmg_ratio * p.get("atk_dmg", 1.0)
+				other.hit_flash = 5; other.hit_type = "explosive"
+				
+	# 3. Sound and particle effects
+	_play_action_sound("explosion", 0.1)
+	for _j in range(12):
+		_add_spark(float(gx) + _get_lut_rand_range(-1, 2), float(gy) + _get_lut_rand_range(-1, 2), _get_lut_rand_range(-80, 80), _get_lut_rand_range(-100, -30), mat_color if _get_lut_rand() > 0.4 else Color.WHITE, _get_lut_rand_range(0.3, 0.7))
 
 func _find_closest_enemy(me, radar_range):
 	var closest = null; var min_dist_sq = radar_range * radar_range
@@ -8562,18 +8864,21 @@ func _find_closest_enemy(me, radar_range):
 				if d_sq < min_dist_sq: min_dist_sq = d_sq; closest = other
 	return closest
 
+func _is_zombie(type: String) -> bool:
+	return type == "zombie" or type == "zombie_tank"
+
 func _has_active_zombies() -> bool:
 	for npc in active_npcs:
-		if npc.type == "zombie" and npc.hp > 0:
+		if _is_zombie(npc.type) and npc.hp > 0:
 			return true
 	return false
 
 func _is_ally(me, other, has_zombies) -> bool:
-	if me.type == "zombie":
-		return other.type == "zombie"
+	if _is_zombie(me.type):
+		return _is_zombie(other.type)
 	else:
 		if has_zombies:
-			return other.type != "zombie"
+			return not _is_zombie(other.type)
 		else:
 			return other.team == me.team
 
@@ -8595,12 +8900,13 @@ func _attack_npc(attacker, victim):
 	_play_action_sound("npc_hit")
 	var a_sound = a_profile.get("attack_sound", "warrior_attack")
 	var p_scale = 1.0
-	if attacker.type == "zombie":
+	if _is_zombie(attacker.type):
 		p_scale = 0.65 + float((attacker.id * 23) % 40) / 40.0 * 0.40
-	_play_action_sound(a_sound, 0.08, 0.0, p_scale)
+	var v_boost = -12.0 if a_sound == "zombie_tank_attack" else 0.0
+	_play_action_sound(a_sound, 0.08, v_boost, p_scale)
 	
 	var t_colors = [Color.RED, Color("1E90FF"), Color.YELLOW, Color.GREEN]
-	var bleed_color = Color("#5D9C36") if victim.type == "zombie" else (t_colors[victim.team] if (victim.team < t_colors.size() and victim.team >= 0) else Color.WHITE)
+	var bleed_color = Color("#5D9C36") if _is_zombie(victim.type) else (t_colors[victim.team] if (victim.team < t_colors.size() and victim.team >= 0) else Color.WHITE)
 	for _i in range(10): _add_spark(float(victim.pos.x) + _get_lut_rand_range(0, 2), float(victim.pos.y) + _get_lut_rand_range(0, 5), _get_lut_rand_range(-80, 80), _get_lut_rand_range(-120, -30), bleed_color if _get_lut_rand() > 0.4 else Color.WHITE, _get_lut_rand_range(0.3, 0.7))
 	var ldir = 1 if attacker.pos.x < victim.pos.x else -1
 	for d in range(3, 0, -1):
@@ -8632,13 +8938,15 @@ func _check_npc_environment_damage(npc) -> bool:
 		if charge_array[cell_idx] > 50:
 			npc.hp -= 2.5 * dmg_mult; took_damage = true; npc.hit_flash = 5; npc.hit_type = "electric"
 			if _get_lut_rand() < 0.4: _add_spark(float(pt.x),float(pt.y),_get_lut_rand_range(-20,20),_get_lut_rand_range(-40,-10),Color.CYAN,0.4)
+	var w = 3 if npc.type == "zombie_tank" else 2
+	var h = 6 if npc.type == "zombie_tank" else 5
 	var air_found = false
-	for oy in range(-1, 6):
+	for oy in range(-1, h + 1):
 		var ty = npc.pos.y + oy
 		if ty < 0 or ty >= dynamic_grid_height: continue
 		var row_offset = ty * grid_width
-		for ox in range(-1, 3):
-			if oy >= 0 and oy <= 4 and ox >= 0 and ox <= 1: continue
+		for ox in range(-1, w + 1):
+			if oy >= 0 and oy < h and ox >= 0 and ox < w: continue
 			var tx = npc.pos.x + ox
 			if tx < 0 or tx >= grid_width: continue
 			var nid = cells[row_offset + tx] & 0xFFFF
@@ -8656,12 +8964,18 @@ func _set_npc_emoji(npc, emoji_text: String, duration: float = 2.0):
 	npc.emoji_timer = duration
 
 func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
-	if gx < 0 or gx + 1 >= grid_width or gy < 0 or gy + 4 >= dynamic_grid_height: return false
+	var w = 2
+	var h = 5
+	if moving_npc != null and moving_npc.type == "zombie_tank":
+		w = 3
+		h = 6
+		
+	if gx < 0 or gx + w - 1 >= grid_width or gy < 0 or gy + h - 1 >= dynamic_grid_height: return false
 	
 	# Chequeo de píxeles: Ignorar Plantas y NPCs para fluidez
-	for oy in range(5):
+	for oy in range(h):
 		var row_offset = (gy + oy) * grid_width
-		for ox in range(2):
+		for ox in range(w):
 			var tid = cells[row_offset + gx + ox] & 0xFFFF
 			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
 				# Si es sólido, pero es una PLANTA, permitimos el paso (los soldados las pisan/atraviesan)
@@ -8671,12 +8985,16 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 				
 	# Chequeo de lista de NPCs: Ignorar aliados para evitar atascos de grupo
 	if moving_npc != null:
-		var nearby = _get_nearby_npcs(gx, gy, 10.0)
+		var nearby = _get_nearby_npcs(gx, gy, 15.0)
+		var has_z = _has_active_zombies()
 		for other in nearby:
 			if other == moving_npc: continue
 			# Regla de oro: Aliados no se estorban
-			if other.team == moving_npc.team: continue 
-			if gx < other.pos.x + 2 and gx + 2 > other.pos.x and gy < other.pos.y + 5 and gy + 5 > other.pos.y: return false
+			if _is_ally(moving_npc, other, has_z): continue 
+			
+			var ow = 3 if other.type == "zombie_tank" else 2
+			var oh = 6 if other.type == "zombie_tank" else 5
+			if gx < other.pos.x + ow and gx + w > other.pos.x and gy < other.pos.y + oh and gy + h > other.pos.y: return false
 	return true
 
 func _has_tag_neighbor(x, y, tag):
@@ -9304,9 +9622,10 @@ func _update_arcade_dynamic_button():
 		elif selected_material == 1020 or selected_material == 1021: active_name = tr("miner")
 		elif selected_material == 1040 or selected_material == 1041: active_name = tr("medic")
 		elif selected_material == 1050 or selected_material == 1051: active_name = tr("zombie")
+		elif selected_material == 1060 or selected_material == 1061: active_name = tr("zombie_tank")
 		
-		if selected_material == 1050 or selected_material == 1051:
-			active_color = Color("#5D9C36") # Zombie green
+		if selected_material == 1050 or selected_material == 1051 or selected_material == 1060 or selected_material == 1061:
+			active_color = Color("#4E822E") if (selected_material == 1060 or selected_material == 1061) else Color("#5D9C36")
 			active_val = tr("factionless")
 		else:
 			var t_colors = [Color.RED, Color.CORNFLOWER_BLUE, Color.GOLD, Color.GREEN]
