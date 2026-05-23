@@ -8,6 +8,7 @@ extends Node
 signal ad_dismissed
 
 var _banner_view : AdView
+var _banner_is_showing : bool = false
 var _interstitial_ad : InterstitialAd
 var _rewarded_ad : RewardedAd
 var _lab_rewarded_ad : RewardedAd
@@ -183,6 +184,7 @@ func _create_banner():
 	
 	ad_listener.on_ad_loaded = func():
 		print("ADMOB: ¡Banner cargado con éxito!")
+		_banner_is_showing = true
 		_banner_view.show()
 		if not _initial_banner_loaded:
 			_initial_banner_loaded = true
@@ -190,6 +192,7 @@ func _create_banner():
 	
 	ad_listener.on_ad_failed_to_load = func(error : LoadAdError):
 		print("ADMOB: Fallo de carga -> ", error.message)
+		_banner_is_showing = false
 		if not _initial_banner_loaded:
 			_initial_banner_loaded = true
 			banner_finished_loading.emit()
@@ -389,19 +392,17 @@ func check_and_show_interstitial(button_type: String = "") -> bool:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_PAUSED:
-		if _banner_view:
-			print("ADMOB: App pausada, destruyendo banner...")
-			_banner_view.destroy()
-			_banner_view = null
-			_initial_banner_loaded = false
+		if _banner_view and _banner_is_showing:
+			print("ADMOB: App pausada, ocultando banner...")
+			_banner_view.hide()
 			
 	elif what == NOTIFICATION_APPLICATION_RESUMED:
-		if OS.get_name() == "Android" or OS.get_name() == "iOS":
-			print("ADMOB: App reanudada, recreando banner...")
-			await get_tree().create_timer(0.5).timeout
-			_create_banner()
+		if _banner_view and _banner_is_showing:
+			print("ADMOB: App reanudada, mostrando banner...")
+			_banner_view.show()
 
 func _exit_tree() -> void:
 	if _banner_view:
+		_banner_is_showing = false
 		_banner_view.destroy()
 		_banner_view = null

@@ -8165,7 +8165,7 @@ func _process_npcs(delta):
 									break
 						
 						# 5. Cold (High Altitude simulation)
-						elif np.y < 130 and chance < 0.3:
+						elif np.y < 250 and chance < 0.3:
 							_set_npc_emoji(npc, "🥶", 3.0)
 							
 						# 6. Boredom (Linked to Social)

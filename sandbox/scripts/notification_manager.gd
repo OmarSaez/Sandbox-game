@@ -4,7 +4,8 @@ extends Node
 # Se encarga de programar recordatorios cuando el usuario deja el juego.
 
 const CHANNEL_ID = "reminders"
-const NOTIFICATION_ID = 1001
+const NOTIFICATION_ID_1 = 1001
+const NOTIFICATION_ID_2 = 1002
 
 var _is_scheduled: bool = false
 
@@ -18,7 +19,8 @@ func _ready() -> void:
 	
 	# Cancelar cualquier notificación pendiente al iniciar (Cold Start)
 	print("NOTIFICACIONES: Juego iniciado. Cancelando recordatorios previos...")
-	NotificationScheduler.cancel(NOTIFICATION_ID)
+	NotificationScheduler.cancel(NOTIFICATION_ID_1)
+	NotificationScheduler.cancel(NOTIFICATION_ID_2)
 	_is_scheduled = false
 	
 	# Crear el canal de notificaciones (requerido en Android 8+)
@@ -40,18 +42,22 @@ func _notification(what: int) -> void:
 		if _is_scheduled: return # Evitar doble disparo
 		
 		# El usuario ha minimizado o cerrado el juego.
-		# Programamos una notificación para dentro de 2 días (172,800,000 ms)
-		print("NOTIFICACIONES: Aplicación pausada. Programando recordatorio para dentro de 48h...")
+		# Programamos 1 notificación aleatoria entre 42 y 70 horas.
+		# 42h = 151200 segundos | 70h = 252000 segundos
+		var delay_seconds = randi_range(42 * 3600, 70 * 3600)
+		var hours: float = float(delay_seconds) / 3600.0
+		print("NOTIFICACIONES: Aplicación pausada. Programando 1 recordatorio con retardo de %d segundos (%.2f horas)..." % [delay_seconds, hours])
 		_is_scheduled = true
-		_schedule_reminder(172800000) 
+		_schedule_reminder(NOTIFICATION_ID_1, delay_seconds) 
 	elif what == NOTIFICATION_APPLICATION_RESUMED:
-		# El usuario ha vuelto al juego. Cancelamos la notificación pendiente.
+		# El usuario ha vuelto al juego. Cancelamos las notificaciones pendientes.
 		print("NOTIFICACIONES: Aplicación resumida. Cancelando notificaciones pendientes...")
 		_is_scheduled = false
 		if OS.get_name() == "Android":
-			NotificationScheduler.cancel(NOTIFICATION_ID)
+			NotificationScheduler.cancel(NOTIFICATION_ID_1)
+			NotificationScheduler.cancel(NOTIFICATION_ID_2)
 
-func _schedule_reminder(delay_ms: int) -> void:
+func _schedule_reminder(notif_id: int, delay_seconds: int) -> void:
 	# Elegir un mensaje al azar
 	var messages = [
 		"NOTIF_LAVA_ICE",
@@ -77,16 +83,15 @@ func _schedule_reminder(delay_ms: int) -> void:
 	]
 	var random_key = messages[randi() % messages.size()]
 	
-	print("NOTIFICACIONES: Programando ID ", NOTIFICATION_ID, " con mensaje: ", random_key)
+	print("NOTIFICACIONES: Programando ID ", notif_id, " con retraso de ", delay_seconds, "s con mensaje: ", random_key)
 	
 	if OS.get_name() == "Android":
 		var data = NotificationData.new()
-		data.set_id(NOTIFICATION_ID)
+		data.set_id(notif_id)
 		data.set_channel_id(CHANNEL_ID)
 		data.set_title("Sandbox")
 		data.set_content(tr(random_key))
-		data.set_delay(delay_ms)
+		data.set_delay(delay_seconds)
 		NotificationScheduler.schedule(data)
 	else:
 		print("NOTIFICACIONES: (Simulado) La notificación se enviaría si estuviéramos en Android.")
-
