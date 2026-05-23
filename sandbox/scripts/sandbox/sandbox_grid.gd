@@ -294,7 +294,8 @@ var action_sfx = {
 	"miner_dig": "pickaxe_hit",      # Minero picando tierra
 	"medic_heal": "medic_heal",      # SONIDO DEL MÉDICO
 	"zombie_attack": "zombie_attack", # Ataque y gruñido de Zombie
-	"zombie_tank_attack": "zombie_tank_attack", # Ataque pesado de Zombie Tanque
+	"zombie_tank_throw": "zombie_tank_attack", # Lanzar bloque (audio actual)
+	"zombie_tank_melee": "zombie_tank_melee", # Ataque melee de cerca (audio nuevo)
 	
 	# Sonidos Continuos de Clima / Desastres (LOOP EN TIEMPO REAL) MP3
 	"weather_1": "rain_light",
@@ -379,7 +380,7 @@ const NPC_PROFILES = {
 		"can_celebrate": false,
 		"can_flee": false,
 		"can_panic_disaster": false,
-		"attack_sound": "zombie_tank_attack",
+		"attack_sound": "zombie_tank_melee",
 		"hit_emoji": "🧟"
 	}
 }
@@ -4610,12 +4611,15 @@ func _play_sfx(sfx_name: String, volume_boost: float = 0.0, pitch_scale: float =
 	next_sfx_idx = (next_sfx_idx + 1) % SFX_POOL_SIZE
 	sim_mutex.unlock()
 	
-	# Apply local boost if any
-	player.set_deferred("volume_db", volume_boost)
-	player.set_deferred("pitch_scale", pitch_scale)
-	# DEFER to main thread to prevent Node access errors from WorkerThreadPool!
-	player.set_deferred("stream", stream)
-	player.call_deferred("play")
+	# DEFER to main thread atomically using a helper to prevent threading issues and order race conditions
+	call_deferred("_play_sfx_main_thread", player, stream, volume_boost, pitch_scale)
+
+func _play_sfx_main_thread(player: AudioStreamPlayer, stream: AudioStream, volume_boost: float, pitch_scale: float):
+	if is_instance_valid(player) and stream != null:
+		player.volume_db = volume_boost
+		player.pitch_scale = pitch_scale
+		player.stream = stream
+		player.play()
 
 func _manage_brush_sound(id: int):
 	# Si no hay ID, es un NPC o está sobre la UI -> DETENER SONIDO
@@ -7211,7 +7215,7 @@ func _trigger_controlled_npc_action():
 				})
 				
 				var p_scale = 0.65 + float((controlled_npc.id * 23) % 40) / 40.0 * 0.40
-				_play_action_sound("zombie_tank_attack", 0.08, -17.0, p_scale)
+				_play_action_sound("zombie_tank_throw", 0.08, 0.0, p_scale)
 				_set_npc_emoji(controlled_npc, "🪨", 1.2)
 				controlled_npc.attack_cooldown = 2.0
 		"archer":
@@ -8301,7 +8305,7 @@ func _process_npcs(delta):
 								})
 								
 								var p_scale = 0.65 + float((npc.id * 23) % 40) / 40.0 * 0.40
-								_play_action_sound("zombie_tank_attack", 0.08, -17.0, p_scale)
+								_play_action_sound("zombie_tank_throw", 0.08, 0.0, p_scale)
 								_set_npc_emoji(npc, "🪨", 1.2)
 								npc.attack_cooldown = 2.5
 								
@@ -8908,8 +8912,7 @@ func _attack_npc(attacker, victim):
 	var p_scale = 1.0
 	if _is_zombie(attacker.type):
 		p_scale = 0.65 + float((attacker.id * 23) % 40) / 40.0 * 0.40
-	var v_boost = -17.0 if a_sound == "zombie_tank_attack" else 0.0
-	_play_action_sound(a_sound, 0.08, v_boost, p_scale)
+	_play_action_sound(a_sound, 0.08, 0.0, p_scale)
 	
 	var t_colors = [Color.RED, Color("1E90FF"), Color.YELLOW, Color.GREEN]
 	var bleed_color = Color("#5D9C36") if _is_zombie(victim.type) else (t_colors[victim.team] if (victim.team < t_colors.size() and victim.team >= 0) else Color.WHITE)
