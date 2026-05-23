@@ -4575,7 +4575,7 @@ func _get_sfx_stream(sfx_name: String) -> AudioStream:
 			return stream
 	return null
 
-func _play_sfx(sfx_name: String, volume_boost: float = 0.0):
+func _play_sfx(sfx_name: String, volume_boost: float = 0.0, pitch_scale: float = 1.0):
 	if sfx_name == "": return
 	
 	var stream = _get_sfx_stream(sfx_name)
@@ -4592,6 +4592,7 @@ func _play_sfx(sfx_name: String, volume_boost: float = 0.0):
 	
 	# Apply local boost if any
 	player.set_deferred("volume_db", volume_boost)
+	player.set_deferred("pitch_scale", pitch_scale)
 	# DEFER to main thread to prevent Node access errors from WorkerThreadPool!
 	player.set_deferred("stream", stream)
 	player.call_deferred("play")
@@ -4637,7 +4638,7 @@ func _play_achievement_unlock_sfx(is_menu_unlock: bool = false):
 	else:
 		_play_sfx("achievement_unlock", 5.0)
 
-func _play_action_sound(action: String, min_interval: float = 0.08, volume_boost: float = 0.0):
+func _play_action_sound(action: String, min_interval: float = 0.08, volume_boost: float = 0.0, pitch_scale: float = 1.0):
 	if action_sfx.has(action):
 		# Sistema de seguridad contra saturación: 
 		# No permite que la MISMA acción suene repetidamente en menos de min_interval segundos
@@ -4647,7 +4648,7 @@ func _play_action_sound(action: String, min_interval: float = 0.08, volume_boost
 				return
 		
 		last_action_times[action] = now
-		_play_sfx(action_sfx[action], volume_boost)
+		_play_sfx(action_sfx[action], volume_boost, pitch_scale)
 
 func _process(delta):
 	if not is_grid_ready: return
@@ -7143,7 +7144,8 @@ func _trigger_controlled_npc_action():
 				_attack_npc(controlled_npc, target)
 				controlled_npc.attack_cooldown = 0.8
 			else:
-				_play_action_sound("zombie_attack")
+				var p_scale = 0.65 + float((controlled_npc.id * 23) % 40) / 40.0 * 0.40
+				_play_action_sound("zombie_attack", 0.08, 0.0, p_scale)
 				controlled_npc.attack_cooldown = 0.5
 		"archer":
 			# Shoot arrow in current face direction
@@ -7156,8 +7158,9 @@ func _trigger_controlled_npc_action():
 			# Simple AOE heal
 			var nearby = _get_nearby_npcs(controlled_npc.pos.x, controlled_npc.pos.y, 60.0)
 			var healed_somebody = false
+			var has_z = _has_active_zombies()
 			for other in nearby:
-				if other.team == controlled_npc.team and other != controlled_npc and other.hp > 0:
+				if _is_ally(controlled_npc, other, has_z) and other != controlled_npc and other.hp > 0:
 					var mhp = other.get("max_hp", 100.0)
 					if other.hp < mhp:
 						other.hp = min(other.hp + controlled_npc.get("heal_power", 25.0), mhp)
@@ -7693,8 +7696,9 @@ func _process_npcs(delta):
 				if npc.hp < (npc.max_hp * 0.3): emotes.append("🤕")
 				else: emotes.append("😴")
 			elif !npc.get("has_spotted_enemy", false) and !is_losing:
-				emotes.append("👀")
-				if is_winning: emotes.append("😎")
+				if npc.type != "zombie":
+					emotes.append("👀")
+					if is_winning: emotes.append("😎")
 		
 		# Lógica de visualización
 		if npc.emoji_timer > 0:
@@ -7801,8 +7805,9 @@ func _process_npcs(delta):
 					if npc.get("is_leader", false):
 						# Leader's Aura: Boost morale of nearby allies
 						var allies = _get_nearby_npcs(np.x, np.y, 140.0)
+						var has_z = _has_active_zombies()
 						for a in allies:
-							if a.team == npc.team and a != npc: a["morale_boost_timer"] = 2.0
+							if _is_ally(npc, a, has_z) and a != npc: a["morale_boost_timer"] = 2.0
 						if _ai_tick_count % 30 == 0 and npc.get("emoji_timer", 0.0) <= 0: _set_npc_emoji(npc, "👑", 2.0)
 					else:
 						# Promotion Check: If 5+ allies are together without a leader
@@ -7889,8 +7894,9 @@ func _process_npcs(delta):
 						if can_think:
 							closest_enemy = _find_closest_enemy(npc, 180.0)
 							var nearby = _get_nearby_npcs(npc.pos.x, npc.pos.y, 180.0)
+							var has_z = _has_active_zombies()
 							for other in nearby:
-								if other.team == npc.team and other != npc and other.hp > 0 and other.type != "medic":
+								if _is_ally(npc, other, has_z) and other != npc and other.hp > 0 and other.type != "medic":
 									var mhp = other.get("max_hp", 100.0)
 									if other.hp < mhp: 
 										var d = npc.pos.distance_to(other.pos)
@@ -8036,8 +8042,9 @@ func _process_npcs(delta):
 						var social_chance = 0.2 if is_bored else 0.012
 						if profile.get("can_socialize", true) and _get_lut_rand() < social_chance and npc.get("social_cooldown", 0.0) <= 0:
 							var nearby = _get_nearby_npcs(np.x, np.y, 42.0) 
+							var has_z = _has_active_zombies()
 							for other in nearby:
-								if other.team == npc.team and other != npc and abs(other.vx) < 0.2 and not other.get("dance_timer", 0.0) > 0 and other.get("social_cooldown", 0.0) <= 0 and not other.get("is_lying", false):
+								if _is_ally(npc, other, has_z) and other != npc and abs(other.vx) < 0.2 and not other.get("dance_timer", 0.0) > 0 and other.get("social_cooldown", 0.0) <= 0 and not other.get("is_lying", false):
 									var meet_t = _get_lut_rand_range(3.0, 5.0)
 									var topics = [
 										"🍎", "🧪", "🔥", "🏠", "⚔️", "💎", "🌧️", "🌳", "⚡", "📜", "💰", "👑", "🗣️", "🍻", "🐺", "💀", "🗺️", "🏹", "🛡️", "🔮", "👁️", "☄️", "🍄", "🗝️", "🍞", "⚒️", "⚖️", "🐎", "🕯️" ];
@@ -8137,7 +8144,8 @@ func _process_npcs(delta):
 								if r_choice < 0.4:
 									npc.dir = 0
 									if _get_lut_rand() < 0.3:
-										_set_npc_emoji(npc, "🧟", 1.0)
+										var z_emotes = ["🧟", "🧠", "🥩"]
+										_set_npc_emoji(npc, z_emotes[randi() % z_emotes.size()], 1.0)
 								elif r_choice < 0.7:
 									npc.dir = -1 if dist_x > 0 else 1
 								else:
@@ -8168,7 +8176,12 @@ func _process_npcs(delta):
 									npc.vy = -3.0 - (_get_lut_rand() * 1.2)
 								
 								if _get_lut_rand() < 0.08:
-									_set_npc_emoji(npc, "🧟", 1.5)
+									var z_emotes = ["🧟", "🧠", "🥩"]
+									_set_npc_emoji(npc, z_emotes[randi() % z_emotes.size()], 1.5)
+							
+							# Slow down wandering zombie (move only on 1/3 of the ticks)
+							if (npc.id + _ai_tick_count) % 3 != 0:
+								npc.dir = 0
 					
 					if npc.type == "miner":
 						var dig_speed = 0.15 if npc.hp < 100.0 else 0.05 
@@ -8366,8 +8379,9 @@ func _process_npcs(delta):
 						
 						var nearby = _get_nearby_npcs(tx_test, np.y, 10.0)
 						var bumped_ally = false
+						var has_z = _has_active_zombies()
 						for other in nearby:
-							if other.team == npc.team and other != npc:
+							if _is_ally(npc, other, has_z) and other != npc:
 								if tx_test < other.pos.x + 2 and tx_test + 2 > other.pos.x and np.y < other.pos.y + 5 and np.y + 5 > other.pos.y:
 									bumped_ally = true; break
 						
@@ -8539,20 +8553,29 @@ func _process_projectiles(delta):
 func _find_closest_enemy(me, radar_range):
 	var closest = null; var min_dist_sq = radar_range * radar_range
 	var nearby = _get_nearby_npcs(me.pos.x, me.pos.y, radar_range)
+	var has_zombies = _has_active_zombies()
 	for other in nearby:
 		if other.hp > 0:
-			var is_enemy = false
-			if me.type == "zombie":
-				if other.type != "zombie":
-					is_enemy = true
-			else:
-				if other.type == "zombie" or other.team != me.team:
-					is_enemy = true
-			
+			var is_enemy = not _is_ally(me, other, has_zombies)
 			if is_enemy:
 				var d_sq = me.pos.distance_squared_to(other.pos)
 				if d_sq < min_dist_sq: min_dist_sq = d_sq; closest = other
 	return closest
+
+func _has_active_zombies() -> bool:
+	for npc in active_npcs:
+		if npc.type == "zombie" and npc.hp > 0:
+			return true
+	return false
+
+func _is_ally(me, other, has_zombies) -> bool:
+	if me.type == "zombie":
+		return other.type == "zombie"
+	else:
+		if has_zombies:
+			return other.type != "zombie"
+		else:
+			return other.team == me.team
 
 func _attack_npc(attacker, victim):
 	if attacker.hp <= 0 or victim.hp <= 0: return
@@ -8571,7 +8594,10 @@ func _attack_npc(attacker, victim):
 	
 	_play_action_sound("npc_hit")
 	var a_sound = a_profile.get("attack_sound", "warrior_attack")
-	_play_action_sound(a_sound)
+	var p_scale = 1.0
+	if attacker.type == "zombie":
+		p_scale = 0.65 + float((attacker.id * 23) % 40) / 40.0 * 0.40
+	_play_action_sound(a_sound, 0.08, 0.0, p_scale)
 	
 	var t_colors = [Color.RED, Color("1E90FF"), Color.YELLOW, Color.GREEN]
 	var bleed_color = Color("#5D9C36") if victim.type == "zombie" else (t_colors[victim.team] if (victim.team < t_colors.size() and victim.team >= 0) else Color.WHITE)
