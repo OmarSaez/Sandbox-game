@@ -292,6 +292,7 @@ var action_sfx = {
 	"archer_shoot": "bow_shoot",     # Disparo de Arquero
 	"miner_dig": "pickaxe_hit",      # Minero picando tierra
 	"medic_heal": "medic_heal",      # SONIDO DEL MÉDICO
+	"zombie_attack": "zombie_attack", # Ataque y gruñido de Zombie
 	
 	# Sonidos Continuos de Clima / Desastres (LOOP EN TIEMPO REAL) MP3
 	"weather_1": "rain_light",
@@ -323,6 +324,54 @@ var tutorial_rects: Array[Control] = []
 var _frame_count = 0
 var _npc_id_counter = 0
 var active_metronome_indices = {} # Using Dictionary as a Set [index] -> true
+
+const NPC_PROFILES = {
+	"warrior": {
+		"can_socialize": true,
+		"can_sleep": true,
+		"can_celebrate": true,
+		"can_flee": true,
+		"can_panic_disaster": true,
+		"attack_sound": "warrior_attack",
+		"hit_emoji": "⚔️"
+	},
+	"archer": {
+		"can_socialize": true,
+		"can_sleep": true,
+		"can_celebrate": true,
+		"can_flee": true,
+		"can_panic_disaster": true,
+		"attack_sound": "archer_shoot",
+		"hit_emoji": "🏹"
+	},
+	"miner": {
+		"can_socialize": true,
+		"can_sleep": true,
+		"can_celebrate": true,
+		"can_flee": true,
+		"can_panic_disaster": true,
+		"attack_sound": "miner_dig",
+		"hit_emoji": "⚒️"
+	},
+	"medic": {
+		"can_socialize": true,
+		"can_sleep": true,
+		"can_celebrate": true,
+		"can_flee": true,
+		"can_panic_disaster": true,
+		"attack_sound": "medic_heal",
+		"hit_emoji": "💚"
+	},
+	"zombie": {
+		"can_socialize": false,
+		"can_sleep": false,
+		"can_celebrate": false,
+		"can_flee": false,
+		"can_panic_disaster": false,
+		"attack_sound": "zombie_attack",
+		"hit_emoji": "🧟"
+	}
+}
 
 var sfx_cache = {} # Cache for loaded AudioStreams
 
@@ -773,6 +822,13 @@ func _ready():
 	_register_material(1043, Color("#EEEEEE"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Torso Médico
 	_register_material(1044, Color("#FFFFFF"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Cabeza Médica
 	_register_material(1045, Color("#DEDEDE"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Zapatos Médico
+	
+	# --- NPC SYSTEM: ZOMBIE (1050-1054) ---
+	_register_material(1050, Color("#4A7C2A"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Master
+	_register_material(1051, Color("#5D9C36"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Cabeza/Piel
+	_register_material(1052, Color("#4B245C"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Polera morada oscura
+	_register_material(1053, Color("#717E80"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Pantalón gris
+	_register_material(1054, Color("#5D9C36"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Pies verdes (descalzo)
 	
 	# --- SISTEMA DE DAÑO Y HIT (1030-1035) ---
 	_register_material(1030, npc_color_acid, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
@@ -4434,6 +4490,8 @@ func _update_menu_highlights():
 				btn.text = tr("selecting_npc") if is_selecting_npc_to_control else tr("active")
 			elif key == "control_disabled_btn":
 				is_active = not is_selecting_npc_to_control and not is_instance_valid(controlled_npc)
+			elif key == "zombie_btn":
+				if selected_material == 1050 and not is_selecting_npc_to_control: is_active = true
 			
 			if btn.get_meta("is_currently_active", false) != is_active:
 				btn.set_meta("is_currently_active", is_active)
@@ -4453,6 +4511,13 @@ func _update_menu_highlights():
 						btn.remove_theme_stylebox_override("hover")
 						btn.remove_theme_stylebox_override("pressed")
 					btn.remove_theme_color_override("font_color")
+	
+	# Ocultar o mostrar el selector de equipo según si el NPC seleccionado es neutral (Sin bando)
+	var is_neutral_npc = (selected_material == 1050)
+	if ui_elements.has("team_lbl") and is_instance_valid(ui_elements["team_lbl"]):
+		ui_elements["team_lbl"].visible = not is_neutral_npc
+	if ui_elements.has("team_flow") and is_instance_valid(ui_elements["team_flow"]):
+		ui_elements["team_flow"].visible = not is_neutral_npc
 
 func _is_any_ui_blocking() -> bool:
 	if is_blocking: return true # GLOBAL MODAL BLOCKER
@@ -7072,6 +7137,14 @@ func _trigger_controlled_npc_action():
 				# Swing at air
 				_play_action_sound("warrior_attack")
 				controlled_npc.attack_cooldown = 0.4
+		"zombie":
+			var target = _find_closest_enemy(controlled_npc, 30.0)
+			if target:
+				_attack_npc(controlled_npc, target)
+				controlled_npc.attack_cooldown = 0.8
+			else:
+				_play_action_sound("zombie_attack")
+				controlled_npc.attack_cooldown = 0.5
 		"archer":
 			# Shoot arrow in current face direction
 			var face_dir = controlled_npc.get("last_dir", 1)
@@ -7219,7 +7292,7 @@ func _setup_npc_ui():
 		npc_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		v_box.add_child(npc_flow)
 		
-		var create_npc_btn = func(key: String, id: int):
+		var create_npc_btn = func(key: String, id: int, target_flow = npc_flow):
 			var btn = Button.new()
 			btn.text = tr(key)
 			btn.custom_minimum_size = Vector2(100 * s, 45 * s)
@@ -7239,7 +7312,7 @@ func _setup_npc_ui():
 				_on_arcade_selection_made(false)
 			)
 			ui_elements[key + "_btn"] = btn
-			npc_flow.add_child(btn)
+			target_flow.add_child(btn)
 		
 		create_npc_btn.call("warrior", 1000)
 		create_npc_btn.call("archer", 1010)
@@ -7255,6 +7328,7 @@ func _setup_npc_ui():
 		
 		var team_flow = HFlowContainer.new()
 		team_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ui_elements["team_flow"] = team_flow
 		v_box.add_child(team_flow)
 		
 		var team_keys = ["team_red", "team_blue", "team_yellow", "team_green"]
@@ -7276,6 +7350,20 @@ func _setup_npc_ui():
 			)
 			ui_elements["team_btn_" + str(i)] = t_btn
 			team_flow.add_child(t_btn)
+
+		# Neutral / Factionless Row (NOW RESPONSIVE)
+		var neutral_lbl = Label.new()
+		neutral_lbl.text = tr("factionless") + ": "
+		neutral_lbl.add_theme_font_size_override("font_size", 22 * s)
+		ui_elements["neutral_lbl"] = neutral_lbl
+		v_box.add_child(neutral_lbl)
+		
+		var neutral_flow = HFlowContainer.new()
+		neutral_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ui_elements["neutral_flow"] = neutral_flow
+		v_box.add_child(neutral_flow)
+		
+		create_npc_btn.call("zombie", 1050, neutral_flow)
 		
 		_add_ui_header(v_box, "coming_soon")
 		
@@ -7294,7 +7382,6 @@ func _setup_npc_ui():
 			npc_flow_fut.add_child(btn)
 			ui_elements[key + "_btn"] = btn # Support refresh
 		
-		create_fut_npc.call("zombie")
 		create_fut_npc.call("summoner")
 		create_fut_npc.call("bomber")
 		create_fut_npc.call("mage")
@@ -7339,11 +7426,12 @@ func _place_npc(x, y):
 	if selected_material == 1010 or selected_material == 1011: n_type = "archer"
 	elif selected_material == 1020 or selected_material == 1021: n_type = "miner"
 	elif selected_material == 1040 or selected_material == 1041: n_type = "medic"
+	elif selected_material == 1050 or selected_material == 1051: n_type = "zombie"
 	
 	# Register in entity list
 	var new_npc = {
 		"pos": Vector2i(start_x, start_y),
-		"team": selected_team,
+		"team": -1 if n_type == "zombie" else selected_team,
 		"dir": 1 if _get_lut_rand() > 0.5 else -1,
 		"type": n_type,
 		"hp": _get_lut_rand_range(85.0, 115.0), # Variación en resistencia base
@@ -7471,6 +7559,8 @@ func _draw_npc_pixels(npc, override_mat = -1):
 		m_head = 1021; m_skin = 1022; m_torso = 1023; m_shoes = 1024
 	elif npc.type == "medic":
 		m_head = 1044; m_skin = 1042; m_torso = 1043; m_shoes = 1045
+	elif npc.type == "zombie":
+		m_head = 1051; m_skin = 1051; m_torso = 1052; m_shoes = 1054; team_mat = 1053
 	
 	# 2. Aplicar Overrides (Daño/Muerte)
 	if override_mat != -1:
@@ -7579,6 +7669,7 @@ func _process_npcs(delta):
 	var dead_indices = []
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
+		var profile = NPC_PROFILES.get(npc.type, {})
 		
 		# Procesar timers de emojis y visibilidad (Lógica de Ciclo Emocional Optimizado)
 		var emotes = []
@@ -7623,6 +7714,13 @@ func _process_npcs(delta):
 			if npc.hit_flash == 0: npc.hit_type = "none"
 		_draw_npc_pixels(npc, 0)
 		_check_npc_environment_damage(npc)
+		
+		# Infección Zombie: si la vida baja del 20% y no ha sido verificado aún
+		if npc.type != "zombie" and npc.hp > 0 and npc.hp < npc.max_hp * 0.2 and not npc.get("zombie_checked", false):
+			npc["zombie_checked"] = true
+			if _get_lut_rand() < 0.5:
+				_convert_to_zombie(npc)
+		
 		var np = npc.pos; var target = null
 		if npc.hp > 0:
 			# Update common timers
@@ -7770,12 +7868,12 @@ func _process_npcs(delta):
 						for other in nearby:
 							if other.team == npc.team and other != npc:
 								# 1. Join celebration?
-								if other.get("dance_timer", 0.0) > 1.0 and not npc.get("recently_celebrated", false):
+								if profile.get("can_celebrate", true) and other.get("dance_timer", 0.0) > 1.0 and not npc.get("recently_celebrated", false):
 									if _get_lut_rand() < 0.35 and npc.get("contagion_wait_timer", 0.0) <= 0:
 										npc["contagion_wait_timer"] = _get_lut_rand_range(0.4, 2.0)
 										break
 								# 2. Join panic? (If we see an ally fleeing with a scare emoji)
-								elif other.get("is_fleeing", false) and other.current_emoji in ["😱", "😰", "🏃", "😨"]:
+								elif profile.get("can_flee", true) and other.get("is_fleeing", false) and other.current_emoji in ["😱", "😰", "🏃", "😨"]:
 									if not npc.get("is_fleeing", false) and _get_lut_rand() < npc.get("cowardice", 0.3):
 										npc["is_fleeing"] = true
 										_set_npc_emoji(npc, other.current_emoji, 2.0)
@@ -7827,7 +7925,7 @@ func _process_npcs(delta):
 							else:
 								if npc.get("has_spotted_enemy", false):
 									# VICTORY CELEBRATION (Medic variant)
-									if _get_lut_rand() < 0.4:
+									if profile.get("can_celebrate", true) and _get_lut_rand() < 0.4:
 										npc["dance_timer"] = 5.0
 										npc["recently_celebrated"] = true
 										npc["celebration_mode"] = randi() % 4
@@ -7866,7 +7964,7 @@ func _process_npcs(delta):
 						elif !target:
 							if npc.get("has_spotted_enemy", false):
 								# VICTORY CELEBRATION!
-								if _get_lut_rand() < 0.4:
+								if profile.get("can_celebrate", true) and _get_lut_rand() < 0.4:
 									npc["dance_timer"] = 5.0
 									npc["recently_celebrated"] = true
 									npc["celebration_mode"] = randi() % 4
@@ -7884,7 +7982,7 @@ func _process_npcs(delta):
 					if earthquake_intensity > 1.2:
 						disaster_near = true
 					
-					if disaster_near:
+					if disaster_near and profile.get("can_panic_disaster", true):
 						_world_peace_timer = 0.0 # Disasters reset peace
 						if not npc.get("is_fleeing", false):
 							var panic_chance = npc.get("cowardice", 0.3) * 1.8
@@ -7936,7 +8034,7 @@ func _process_npcs(delta):
 						# 4. Socialize (Move to chat with ally)
 						var is_bored = npc.get("recently_bored", false)
 						var social_chance = 0.2 if is_bored else 0.012
-						if _get_lut_rand() < social_chance and npc.get("social_cooldown", 0.0) <= 0:
+						if profile.get("can_socialize", true) and _get_lut_rand() < social_chance and npc.get("social_cooldown", 0.0) <= 0:
 							var nearby = _get_nearby_npcs(np.x, np.y, 42.0) 
 							for other in nearby:
 								if other.team == npc.team and other != npc and abs(other.vx) < 0.2 and not other.get("dance_timer", 0.0) > 0 and other.get("social_cooldown", 0.0) <= 0 and not other.get("is_lying", false):
@@ -7961,7 +8059,7 @@ func _process_npcs(delta):
 								_set_npc_emoji(npc, "🥱", 2.0); npc["recently_bored"] = true
 							
 							# 7. Sleeping (If world has been at peace for 2+ minutes)
-							if _world_peace_timer > 120.0 and _get_lut_rand() < 0.25: # Significantly higher chance
+							if profile.get("can_sleep", true) and _world_peace_timer > 120.0 and _get_lut_rand() < 0.25: # Significantly higher chance
 								if not npc.get("is_leader", false) or _get_lut_rand() < 0.15: 
 									npc["is_lying"] = true; npc["lying_timer"] = 9999.0 
 									_set_npc_emoji(npc, "😴", 9999.0); npc["recently_bored"] = false
@@ -7969,12 +8067,12 @@ func _process_npcs(delta):
 							if _get_lut_rand() < 0.01: npc["recently_bored"] = false
 						
 						# 8. Collapse (If very low HP)
-						if npc.hp < (npc.max_hp * 0.2) and _get_lut_rand() < 0.03:
+						if profile.get("can_sleep", true) and npc.hp < (npc.max_hp * 0.2) and _get_lut_rand() < 0.03:
 							npc["is_lying"] = true; npc["lying_timer"] = _get_lut_rand_range(3.0, 6.0)
 							_set_npc_emoji(npc, "🤕", 2.5)
 					
 					var critical_hp = npc.get("max_hp", 100.0) * 0.3
-					if npc.hp <= critical_hp and not npc.get("morale_broken", false):
+					if profile.get("can_flee", true) and npc.hp <= critical_hp and not npc.get("morale_broken", false):
 						npc["morale_broken"] = true
 						if _get_lut_rand() < npc.get("cowardice", 0.30):
 							npc["is_fleeing"] = true
@@ -7982,7 +8080,7 @@ func _process_npcs(delta):
 							var start_drop_x = np.x + (1 if npc.dir == -1 else 0)
 							if _get_cell(start_drop_x, np.y) == 0: _set_cell(start_drop_x, np.y, 2)
 					
-					if npc.type != "miner" and npc.type != "medic":
+					if npc.type != "miner" and npc.type != "medic" and npc.type != "zombie":
 						if npc.get("is_fleeing", false):
 							if target: npc.dir = 1 if target.pos.x < np.x else -1
 							if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
@@ -8022,6 +8120,55 @@ func _process_npcs(delta):
 									_shoot_arrow(npc, target); npc.miss_counter += 1
 									if npc.miss_counter >= 3: npc.miss_counter = -40
 									npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
+					elif npc.type == "zombie":
+						if target:
+							npc["recently_celebrated"] = false
+							npc["contagion_wait_timer"] = 0.0
+							npc["has_spotted_enemy"] = true
+							_world_peace_timer = 0.0
+							
+							var dist_x = target.pos.x - np.x
+							var dx_abs = abs(dist_x)
+							var dy_abs = abs(target.pos.y - np.y)
+							var target_below = target.pos.y > np.y + 8
+							
+							if _get_lut_rand() < 0.12:
+								var r_choice = _get_lut_rand()
+								if r_choice < 0.4:
+									npc.dir = 0
+									if _get_lut_rand() < 0.3:
+										_set_npc_emoji(npc, "🧟", 1.0)
+								elif r_choice < 0.7:
+									npc.dir = -1 if dist_x > 0 else 1
+								else:
+									if !_can_npc_fit(np.x, np.y + 1, npc):
+										npc.vy = -3.2 - (_get_lut_rand() * 1.5)
+							else:
+								if target_below:
+									if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
+								else:
+									npc.dir = 1 if dist_x > 0 else -1
+							
+							if dx_abs < 6 and dy_abs < 6:
+								if npc.attack_cooldown <= 0:
+									_attack_npc(npc, target)
+									npc.attack_cooldown = 0.8
+							if dx_abs < 4 and not target_below:
+								npc.dir = 0
+						else:
+							npc["has_spotted_enemy"] = false
+							var rethink_chance = 0.08 if npc.dir == 0 else 0.03
+							if _get_lut_rand() < rethink_chance:
+								var r = _get_lut_rand()
+								if r < 0.4: npc.dir = 1
+								elif r < 0.8: npc.dir = -1
+								else: npc.dir = 0
+								
+								if _get_lut_rand() < 0.15 and !_can_npc_fit(np.x, np.y + 1, npc):
+									npc.vy = -3.0 - (_get_lut_rand() * 1.2)
+								
+								if _get_lut_rand() < 0.08:
+									_set_npc_emoji(npc, "🧟", 1.5)
 					
 					if npc.type == "miner":
 						var dig_speed = 0.15 if npc.hp < 100.0 else 0.05 
@@ -8335,6 +8482,31 @@ func _shoot_arrow(npc, target):
 	var arrow_gravity = 200.0; var vy = (aim_dy / t) - (0.5 * arrow_gravity * t); vy += npc.get("precision", 0.0) * 15.0; vy = clamp(vy, -280.0, 40.0)
 	active_projectiles.append({ "pos": Vector2(npc.pos.x + dir*2, npc.pos.y + 1), "vel": Vector2(vx, vy), "team": npc.team, "type": "arrow", "life": 2.5, "atk_dmg": npc.get("atk_dmg", 1.0), "is_fire": npc.get("is_fire_variant", false) })
 
+func _convert_to_zombie(npc):
+	_draw_npc_pixels(npc, 0)
+	npc.type = "zombie"
+	npc.team = -1
+	npc.max_hp = _get_lut_rand_range(80.0, 110.0)
+	npc.hp = npc.max_hp
+	npc["morale_broken"] = false
+	npc["is_fleeing"] = false
+	npc["social_timer"] = 0.0
+	npc["dance_timer"] = 0.0
+	npc["zombie_checked"] = true
+	npc["has_spotted_enemy"] = false
+	npc.current_emoji = ""
+	_play_action_sound("damage_npc")
+	_set_npc_emoji(npc, "🧟", 2.0)
+	for _i in range(12):
+		_add_spark(
+			float(npc.pos.x) + _get_lut_rand_range(0.0, 2.0),
+			float(npc.pos.y) + _get_lut_rand_range(0.0, 5.0),
+			_get_lut_rand_range(-60.0, 60.0),
+			_get_lut_rand_range(-100.0, -30.0),
+			Color("#5D9C36"),
+			_get_lut_rand_range(0.4, 0.8)
+		)
+
 func _process_projectiles(delta):
 	var to_remove = []
 	for i in range(active_projectiles.size()):
@@ -8368,14 +8540,27 @@ func _find_closest_enemy(me, radar_range):
 	var closest = null; var min_dist_sq = radar_range * radar_range
 	var nearby = _get_nearby_npcs(me.pos.x, me.pos.y, radar_range)
 	for other in nearby:
-		if other.team != me.team and other.hp > 0:
-			var d_sq = me.pos.distance_squared_to(other.pos)
-			if d_sq < min_dist_sq: min_dist_sq = d_sq; closest = other
+		if other.hp > 0:
+			var is_enemy = false
+			if me.type == "zombie":
+				if other.type != "zombie":
+					is_enemy = true
+			else:
+				if other.type == "zombie" or other.team != me.team:
+					is_enemy = true
+			
+			if is_enemy:
+				var d_sq = me.pos.distance_squared_to(other.pos)
+				if d_sq < min_dist_sq: min_dist_sq = d_sq; closest = other
 	return closest
 
 func _attack_npc(attacker, victim):
 	if attacker.hp <= 0 or victim.hp <= 0: return
-	if !attacker.get("morale_broken", false): _set_npc_emoji(attacker, "⚔️", 0.5)
+	
+	var a_profile = NPC_PROFILES.get(attacker.type, {})
+	var hit_emoji = a_profile.get("hit_emoji", "⚔️")
+	if !attacker.get("morale_broken", false): _set_npc_emoji(attacker, hit_emoji, 0.5)
+	
 	var dmg = 15.0 * attacker.get("atk_dmg", 1.0)
 	if victim == controlled_npc: dmg *= 0.6 # 40% reduction for the player's controlled NPC
 	victim.hp -= dmg; victim.hit_flash = 5; victim.hit_type = "normal"
@@ -8383,8 +8568,13 @@ func _attack_npc(attacker, victim):
 		var fx = victim.pos.x + _get_lut_rand_range(0, 1); var fy = victim.pos.y + _get_lut_rand_range(2, 4)
 		if fx >= 0 and fx < grid_width and fy >= 0 and fy < dynamic_grid_height:
 			if _get_cell(fx, fy) == 0: _set_cell(fx, fy, 3)
-	_play_action_sound("npc_hit"); _play_action_sound("warrior_attack")
-	var t_colors = [Color.RED, Color("1E90FF"), Color.YELLOW, Color.GREEN]; var bleed_color = t_colors[victim.team] if victim.team < t_colors.size() else Color.WHITE
+	
+	_play_action_sound("npc_hit")
+	var a_sound = a_profile.get("attack_sound", "warrior_attack")
+	_play_action_sound(a_sound)
+	
+	var t_colors = [Color.RED, Color("1E90FF"), Color.YELLOW, Color.GREEN]
+	var bleed_color = Color("#5D9C36") if victim.type == "zombie" else (t_colors[victim.team] if (victim.team < t_colors.size() and victim.team >= 0) else Color.WHITE)
 	for _i in range(10): _add_spark(float(victim.pos.x) + _get_lut_rand_range(0, 2), float(victim.pos.y) + _get_lut_rand_range(0, 5), _get_lut_rand_range(-80, 80), _get_lut_rand_range(-120, -30), bleed_color if _get_lut_rand() > 0.4 else Color.WHITE, _get_lut_rand_range(0.3, 0.7))
 	var ldir = 1 if attacker.pos.x < victim.pos.x else -1
 	for d in range(3, 0, -1):
@@ -9087,10 +9277,15 @@ func _update_arcade_dynamic_button():
 		elif selected_material == 1010 or selected_material == 1011: active_name = tr("archer")
 		elif selected_material == 1020 or selected_material == 1021: active_name = tr("miner")
 		elif selected_material == 1040 or selected_material == 1041: active_name = tr("medic")
+		elif selected_material == 1050 or selected_material == 1051: active_name = tr("zombie")
 		
-		var t_colors = [Color.RED, Color.CORNFLOWER_BLUE, Color.GOLD, Color.GREEN]
-		active_color = t_colors[selected_team] if selected_team < 4 else Color.WHITE
-		active_val = "T." + str(selected_team + 1)
+		if selected_material == 1050 or selected_material == 1051:
+			active_color = Color("#5D9C36") # Zombie green
+			active_val = tr("factionless")
+		else:
+			var t_colors = [Color.RED, Color.CORNFLOWER_BLUE, Color.GOLD, Color.GREEN]
+			active_color = t_colors[selected_team] if selected_team < 4 else Color.WHITE
+			active_val = "T." + str(selected_team + 1)
 	# Check Material
 	elif selected_material > 0:
 		if mat_id_to_key.has(selected_material):
