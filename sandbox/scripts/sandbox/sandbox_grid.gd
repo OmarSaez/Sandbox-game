@@ -1641,7 +1641,11 @@ const GOOGLE_PLAY_ACHIEVEMENTS = {
 	"special_boom": "CgkIx9-23rkFEAIQDg",
 	"short_circuit": "CgkIx9-23rkFEAIQDw",
 	"world_war": "CgkIx9-23rkFEAIQEA",
-	"supreme_alchemist": "CgkIx9-23rkFEAIQEQ"
+	"supreme_alchemist": "CgkIx9-23rkFEAIQEQ",
+	"war-z": "CgkIx9-23rkFEAIQEw",
+	"patient-zero": "CgkIx9-23rkFEAIQFA",
+	"dancing-rain": "CgkIx9-23rkFEAIQFQ",
+	"great-bomber": "CgkIx9-23rkFEAIQFg"
 }
 
 const ACHIEVEMENT_ICONS = {
@@ -11421,6 +11425,18 @@ func _setup_achievement_menu():
 			item = PanelContainer.new()
 			item.custom_minimum_size.y = 100 * s
 			item.mouse_filter = Control.MOUSE_FILTER_PASS
+			item.gui_input.connect(func(event):
+				if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+					if event.pressed:
+						item.set_meta("press_pos", event.global_position)
+					else:
+						var start_pos = item.get_meta("press_pos", event.global_position)
+						var dist = start_pos.distance_to(event.global_position)
+						if dist < 12 * s: # Small threshold in screen pixels to count as tap
+							var ach_id = item.get_meta("achievement_id", "")
+							if ach_id != "":
+								_on_achievement_item_clicked(ach_id)
+			)
 			list.add_child(item)
 			
 			var i_margin = MarginContainer.new()
@@ -11475,6 +11491,7 @@ func _setup_achievement_menu():
 			text_vbox.add_child(new_desc)
 		
 		# UPDATE VISUAL STATE (Cheap)
+		item.set_meta("achievement_id", id)
 		var icon_tex = item.find_child("IconTexture", true, false)
 		var lock_label = item.find_child("LockLabel", true, false)
 		var a_title = item.find_child("Title", true, false)
@@ -11526,3 +11543,148 @@ func _setup_achievement_menu():
 		idx += 1
 
 	_update_menu_highlights()
+
+func _on_achievement_item_clicked(ach_id: String):
+	if not achievements.has(ach_id) or not achievements[ach_id].unlocked:
+		return
+	
+	_play_action_sound("ui_click")
+	
+	var s = _get_ui_scale()
+	var screen_size = get_viewport_rect().size
+	
+	# Full-screen overlay
+	var overlay = Control.new()
+	overlay.name = "AchievementDetailPopup"
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(overlay)
+	
+	var dim = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.75)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(dim)
+	
+	# Close on tap/click outside/anywhere on dim
+	dim.gui_input.connect(func(event):
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			_play_action_sound("ui_click")
+			overlay.queue_free()
+	)
+	
+	# Panel
+	var panel = PanelContainer.new()
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.1, 0.1, 0.15, 0.96)
+	p_style.set_border_width_all(int(4 * s))
+	p_style.border_color = Color("#D4AF37") # Gold border
+	p_style.set_corner_radius_all(20 * s)
+	panel.add_theme_stylebox_override("panel", p_style)
+	overlay.add_child(panel)
+	
+	var marg = MarginContainer.new()
+	var m_val = int(30 * s)
+	marg.add_theme_constant_override("margin_top", m_val)
+	marg.add_theme_constant_override("margin_bottom", m_val + int(20 * s)) # Extra bottom margin for position label
+	marg.add_theme_constant_override("margin_left", m_val)
+	marg.add_theme_constant_override("margin_right", m_val)
+	panel.add_child(marg)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", int(18 * s))
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	marg.add_child(vbox)
+	
+	var a = achievements[ach_id]
+	
+	# 1. Icon (Large)
+	var icon_rect = TextureRect.new()
+	icon_rect.custom_minimum_size = Vector2(180 * s, 180 * s)
+	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	if ACHIEVEMENT_ICONS.has(ach_id):
+		icon_rect.texture = load(ACHIEVEMENT_ICONS[ach_id])
+	icon_rect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vbox.add_child(icon_rect)
+	
+	# 2. Title (Gold)
+	var title_lbl = Label.new()
+	title_lbl.text = tr(a.title)
+	title_lbl.add_theme_font_override("font", _get_safe_font())
+	title_lbl.add_theme_font_size_override("font_size", int(26 * s))
+	title_lbl.add_theme_color_override("font_color", Color("#D4AF37"))
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_lbl.custom_minimum_size = Vector2(320 * s, 0)
+	vbox.add_child(title_lbl)
+	
+	# 3. Hint (Gray)
+	var hint_lbl = Label.new()
+	var hint_key = a.desc.replace("_desc", "_hint")
+	hint_lbl.text = tr(hint_key)
+	hint_lbl.add_theme_font_override("font", _get_safe_font())
+	hint_lbl.add_theme_font_size_override("font_size", int(18 * s))
+	hint_lbl.add_theme_color_override("font_color", Color(0.65, 0.65, 0.65))
+	hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint_lbl.custom_minimum_size = Vector2(320 * s, 0)
+	vbox.add_child(hint_lbl)
+	
+	# 4. Description (Gold)
+	var desc_lbl = Label.new()
+	desc_lbl.text = tr(a.desc)
+	desc_lbl.add_theme_font_override("font", _get_safe_font())
+	desc_lbl.add_theme_font_size_override("font_size", int(22 * s))
+	desc_lbl.add_theme_color_override("font_color", Color("#D4AF37"))
+	desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	desc_lbl.custom_minimum_size = Vector2(320 * s, 0)
+	vbox.add_child(desc_lbl)
+	
+	# Close / OK Button (Premium styled)
+	var close_btn = Button.new()
+	close_btn.text = "OK"
+	close_btn.custom_minimum_size = Vector2(120 * s, 50 * s)
+	close_btn.add_theme_font_override("font", _get_safe_font())
+	close_btn.add_theme_font_size_override("font_size", int(22 * s))
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.2, 0.2, 0.25, 0.9)
+	btn_style.set_border_width_all(int(2 * s))
+	btn_style.border_color = Color("#D4AF37")
+	btn_style.set_corner_radius_all(10 * s)
+	close_btn.add_theme_stylebox_override("normal", btn_style)
+	close_btn.add_theme_stylebox_override("hover", btn_style)
+	close_btn.add_theme_stylebox_override("pressed", btn_style)
+	close_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	close_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		overlay.queue_free()
+	)
+	vbox.add_child(close_btn)
+	
+	# Position Label (Bottom-right corner)
+	var keys = achievements.keys()
+	var total = keys.size()
+	var pos = keys.find(ach_id) + 1
+	
+	var corner_margin = MarginContainer.new()
+	corner_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	corner_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	corner_margin.add_theme_constant_override("margin_right", int(15 * s))
+	corner_margin.add_theme_constant_override("margin_bottom", int(10 * s))
+	panel.add_child(corner_margin)
+	
+	var pos_lbl = Label.new()
+	pos_lbl.text = tr("ACHIEVEMENT_POSITION_FORMAT").format([pos, total])
+	pos_lbl.add_theme_font_override("font", _get_safe_font())
+	pos_lbl.add_theme_font_size_override("font_size", int(14 * s))
+	pos_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	pos_lbl.size_flags_horizontal = Control.SIZE_SHRINK_END
+	pos_lbl.size_flags_vertical = Control.SIZE_SHRINK_END
+	corner_margin.add_child(pos_lbl)
+	
+	# Center panel on screen
+	await get_tree().process_frame
+	var p_size = panel.get_combined_minimum_size()
+	panel.position = (screen_size - p_size) / 2.0
