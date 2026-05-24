@@ -1662,7 +1662,11 @@ const ACHIEVEMENT_ICONS = {
 	"special_boom": "res://assets/icon_ach/ach_special_boom.png",
 	"short_circuit": "res://assets/icon_ach/ach_short_circui.png",
 	"world_war": "res://assets/icon_ach/ach_world_war.png",
-	"supreme_alchemist": "res://assets/icon_ach/ach_alchemist.png"
+	"supreme_alchemist": "res://assets/icon_ach/ach_alchemist.png",
+	"war-z": "res://assets/icon_ach/ach_war-z.png",
+	"patient-zero": "res://assets/icon_ach/ach_patient-zero.png",
+	"dancing-rain": "res://assets/icon_ach/ach_dancing-rain.png",
+	"great-bomber": "res://assets/icon_ach/ach_great-bomber.png"
 }
 
 # --- ACHIEVEMENT SYSTEM DATA ---
@@ -1793,6 +1797,34 @@ var achievements = {
 		"desc": "ach_alchemist_desc",
 		"unlocked": false,
 		"seen": true
+	},
+	"war-z": {
+		"id": "war-z",
+		"title": "ach_war-z_title",
+		"desc": "ach_war-z_desc",
+		"unlocked": false,
+		"seen": true
+	},
+	"patient-zero": {
+		"id": "patient-zero",
+		"title": "ach_patient-zero_title",
+		"desc": "ach_patient-zero_desc",
+		"unlocked": false,
+		"seen": true
+	},
+	"dancing-rain": {
+		"id": "dancing-rain",
+		"title": "ach_dancing-rain_title",
+		"desc": "ach_dancing-rain_desc",
+		"unlocked": false,
+		"seen": true
+	},
+	"great-bomber": {
+		"id": "great-bomber",
+		"title": "ach_great-bomber_title",
+		"desc": "ach_great-bomber_desc",
+		"unlocked": false,
+		"seen": true
 	}
 }
 var achievement_check_timer: float = 0.0
@@ -1881,7 +1913,7 @@ func _check_achievement_conditions(delta):
 	if achievement_sequence_step != -1:
 		_check_achievement_step(achievement_sequence_step)
 		achievement_sequence_step += 1
-		if achievement_sequence_step >= 10: # 10 groups total (0-9)
+		if achievement_sequence_step >= 13: # 13 groups total (0-12)
 			achievement_sequence_step = -1 # End sequence
 	
 func _check_achievement_step(step: int):
@@ -2023,6 +2055,30 @@ func _check_achievement_step(step: int):
 							if lab_found.size() >= 3:
 								_unlock_achievement("supreme_alchemist")
 								return
+		10: # --- GROUP 10: WAR-Z ---
+			if not achievements["war-z"].unlocked:
+				var zombie_count = 0
+				var zombie_tank_count = 0
+				var team_counts = {0: 0, 1: 0, 2: 0, 3: 0}
+				for npc in active_npcs:
+					if npc.hp > 0:
+						if npc.type == "zombie":
+							zombie_count += 1
+						elif npc.type == "zombie_tank":
+							zombie_tank_count += 1
+						elif npc.team >= 0 and npc.team < 4:
+							team_counts[npc.team] += 1
+				if zombie_count >= 3 and zombie_tank_count >= 3 and team_counts[0] >= 3 and team_counts[1] >= 3 and team_counts[2] >= 3 and team_counts[3] >= 3:
+					_unlock_achievement("war-z")
+		11: # --- GROUP 11: DANCING RAIN ---
+			if not achievements["dancing-rain"].unlocked and acid_rain_intensity > 0:
+				for npc in active_npcs:
+					if npc.hp > 0:
+						_unlock_achievement("dancing-rain")
+						break
+		12: # --- GROUP 12: GREAT BOMBER ---
+			if not achievements["great-bomber"].unlocked and bombardero_intensity == 3:
+				_unlock_achievement("great-bomber")
 
 func _unlock_retro_time_delayed():
 	# Esperar 2 segundos para que el usuario vea el mando y se mueva
@@ -8204,11 +8260,13 @@ func _process_npcs(delta):
 		_draw_npc_pixels(npc, 0)
 		_check_npc_environment_damage(npc)
 		
-		# Infección Zombie: si la vida baja del 20% y no ha sido verificado aún
+		# Infección Zombie: si la vida baja del 20% y no ha sido verificado aún (solo por ataque zombie o daño por ácido)
 		if not _is_zombie(npc.type) and npc.hp > 0 and npc.hp < npc.max_hp * 0.2 and not npc.get("zombie_checked", false):
-			npc["zombie_checked"] = true
-			if _get_lut_rand() < 0.5:
-				_convert_to_zombie(npc)
+			var can_infect = npc.get("zombie_infected", false) or npc.get("hit_type", "") == "acid"
+			if can_infect:
+				npc["zombie_checked"] = true
+				if _get_lut_rand() < 0.5:
+					_convert_to_zombie(npc)
 		
 		var np = npc.pos; var target = null
 		if npc.hp > 0:
@@ -9012,14 +9070,17 @@ func _process_npcs(delta):
 		
 		npc.pos = np; _draw_npc_pixels(npc)
 		if npc.hp <= 0 and npc.hit_flash <= 0:
-			_set_npc_emoji(npc, "💀", 2.0)
-			_draw_npc_pixels(npc, 0); _play_action_sound("npc_death")
-			if npc.type == "miner" and npc.has("mine_state") and npc.mine_state == "saboteur":
-				for fx in range(-2, 3):
-					var f_idx = np.x + fx
-					if f_idx >= 0 and f_idx < grid_width: _set_cell(f_idx, np.y + 5, 3); _set_cell(f_idx, np.y - 1, 3)
-			npc.current_emoji = ""
-			dead_indices.append(i)
+			if not _is_zombie(npc.type) and npc.get("hit_type", "") == "acid":
+				_convert_to_zombie(npc)
+			else:
+				_set_npc_emoji(npc, "💀", 2.0)
+				_draw_npc_pixels(npc, 0); _play_action_sound("npc_death")
+				if npc.type == "miner" and npc.has("mine_state") and npc.mine_state == "saboteur":
+					for fx in range(-2, 3):
+						var f_idx = np.x + fx
+						if f_idx >= 0 and f_idx < grid_width: _set_cell(f_idx, np.y + 5, 3); _set_cell(f_idx, np.y - 1, 3)
+				npc.current_emoji = ""
+				dead_indices.append(i)
 	dead_indices.sort(); dead_indices.reverse()
 	for idx in dead_indices: active_npcs.remove_at(idx)
 	for npc in active_npcs: _draw_npc_pixels(npc)
@@ -9078,9 +9139,14 @@ func _shoot_arrow(npc, target):
 
 func _convert_to_zombie(npc):
 	_draw_npc_pixels(npc, 0)
-	npc.type = "zombie"
+	var is_tank = _get_lut_rand() < 0.2
+	if is_tank:
+		npc.type = "zombie_tank"
+		npc.max_hp = _get_lut_rand_range(280.0, 320.0)
+	else:
+		npc.type = "zombie"
+		npc.max_hp = _get_lut_rand_range(80.0, 110.0)
 	npc.team = -1
-	npc.max_hp = _get_lut_rand_range(80.0, 110.0)
 	npc.hp = npc.max_hp
 	npc["morale_broken"] = false
 	npc["is_fleeing"] = false
@@ -9100,6 +9166,7 @@ func _convert_to_zombie(npc):
 			Color("#5D9C36"),
 			_get_lut_rand_range(0.4, 0.8)
 		)
+	_unlock_achievement("patient-zero")
 
 func _process_projectiles(delta):
 	var to_remove = []
@@ -9304,6 +9371,10 @@ func _attack_npc(attacker, victim):
 	var dmg = 15.0 * attacker.get("atk_dmg", 1.0)
 	if victim == controlled_npc: dmg *= 0.6 # 40% reduction for the player's controlled NPC
 	victim.hp -= dmg; victim.hit_flash = 5; victim.hit_type = "normal"
+	if _is_zombie(attacker.type):
+		victim["zombie_infected"] = true
+	if victim.hp <= 0 and not _is_zombie(victim.type) and _is_zombie(attacker.type):
+		_convert_to_zombie(victim)
 	if attacker.get("is_fire_variant", false):
 		var fx = victim.pos.x + _get_lut_rand_range(0, 1); var fy = victim.pos.y + _get_lut_rand_range(2, 4)
 		if fx >= 0 and fx < grid_width and fy >= 0 and fy < dynamic_grid_height:
