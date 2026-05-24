@@ -2800,10 +2800,51 @@ func _setup_tools_ui():
 
 	support_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
+		
+		# Guardar el estado de pausa original
+		var prev_paused = is_paused
+		
+		# Pausar el juego si no está pausado
+		if not is_paused:
+			is_paused = true
+			var p_btn = ui_elements.get("pause_btn")
+			if is_instance_valid(p_btn):
+				p_btn.text = tr("play")
+			
+			var players = [weather_player, quake_player, tornado_player, tsunami_player, firework_player, ascent_player, volcano_loop_player, fire_loop_player, bombardero_player]
+			for p in players:
+				if is_instance_valid(p):
+					p.stream_paused = true
+		
 		if Engine.has_singleton("PoingGodotAdMob"):
-			AdMobManager.show_rewarded()
+			# Conectarse a ad_dismissed como ONE_SHOT para abrir el popup de agradecimiento cuando vuelva
+			var on_ad_dismissed_callable = func():
+				_show_thank_you_popup(prev_paused)
+			
+			AdMobManager.ad_dismissed.connect(on_ad_dismissed_callable, CONNECT_ONE_SHOT)
+			
+			var ad_shown = AdMobManager.show_rewarded()
+			if not ad_shown:
+				# Si el anuncio no se pudo mostrar (no cargó, etc.), desconectamos y restauramos la pausa previa
+				if AdMobManager.ad_dismissed.is_connected(on_ad_dismissed_callable):
+					AdMobManager.ad_dismissed.disconnect(on_ad_dismissed_callable)
+				
+				# Restaurar pausa previa si no estaba pausado
+				if not prev_paused:
+					is_paused = false
+					var p_btn = ui_elements.get("pause_btn")
+					if is_instance_valid(p_btn):
+						p_btn.text = tr("pause")
+					
+					var players = [weather_player, quake_player, tornado_player, tsunami_player, firework_player, ascent_player, volcano_loop_player, fire_loop_player, bombardero_player]
+					for p in players:
+						if is_instance_valid(p):
+							p.stream_paused = false
 		else:
 			print("DEBUG: Anuncio apoyo (PC)")
+			# En PC simulamos la vuelta del anuncio tras 1.0 segundos
+			await get_tree().create_timer(1.0).timeout
+			_show_thank_you_popup(prev_paused)
 	)
 	ui_elements["support_btn"] = support_btn
 	v_box.add_child(support_btn)
@@ -11688,3 +11729,375 @@ func _on_achievement_item_clicked(ach_id: String):
 	await get_tree().process_frame
 	var p_size = panel.get_combined_minimum_size()
 	panel.position = (screen_size - p_size) / 2.0
+
+
+func _show_thank_you_popup(prev_paused: bool):
+	var s = _get_ui_scale()
+	var screen_size = get_viewport_rect().size
+	
+	# Full-screen dimmed overlay
+	var overlay = Control.new()
+	overlay.name = "ThankYouPopupOverlay"
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(overlay)
+	
+	# Translucent background
+	var dim = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.75) # Deep dimmer
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(dim)
+	
+	# PanelContainer (Background container with slate/navy fill and corner radius)
+	var panel = PanelContainer.new()
+	var bg_style = StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.08, 0.08, 0.12, 0.98) # Elegant dark slate/navy
+	bg_style.set_corner_radius_all(24 * s) # Smooth rounded corners
+	bg_style.shadow_size = 0 # No shadow on the background container itself
+	panel.add_theme_stylebox_override("panel", bg_style)
+	
+	# Center the panel in the overlay
+	panel.anchor_left = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_bottom = 0.5
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	overlay.add_child(panel)
+	
+	# Glow Panel (Renders the white border and shadow, colored by the neon shader)
+	var glow_panel = Panel.new()
+	glow_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.0, 0.0, 0.0, 0.0) # Transparent background
+	p_style.set_border_width_all(int(6 * s)) # Thicker border for a neon tube look
+	p_style.border_color = Color(1.0, 1.0, 1.0, 1.0) # White base border to be replaced by shader
+	p_style.set_corner_radius_all(24 * s)
+	p_style.draw_center = false # Do not draw background for the glow panel (prevents overlapping parent)
+	
+	# Add shadow properties to simulate neon glow aura (colored by shader)
+	p_style.shadow_color = Color(1.0, 1.0, 1.0, 1.0) # Fully bright white shadow base
+	p_style.shadow_size = int(72 * s) # Wide, diffuse shadow size for a soft neon glow
+	p_style.shadow_offset = Vector2.ZERO
+	glow_panel.add_theme_stylebox_override("panel", p_style)
+	
+	# Neon rotating multicolor border shader
+	var neon_shader = Shader.new()
+	neon_shader.code = "shader_type canvas_item;
+uniform float time_speed = 1.0;
+void fragment() {
+	vec2 center = vec2(0.5, 0.5);
+	vec2 dir = UV - center;
+	float angle = atan(dir.y, dir.x);
+	float hue = (angle / 6.2831853) + TIME * time_speed;
+	hue = fract(hue);
+	
+	vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+	vec3 p = abs(fract(vec3(hue) + K.xyz) * 6.0 - K.www);
+	vec3 rgb = clamp(p - K.xxx, 0.0, 1.0);
+	
+	// Bright core effect: blend with white where alpha is high (border itself)
+	// Completely branchless transition using clamp
+	float core_factor = clamp((COLOR.a - 0.7) / 0.3, 0.0, 1.0);
+	vec3 neon_color = mix(rgb, vec3(1.0), core_factor * 0.55);
+	
+	// Soft/diffuse fade: use a power curve (> 1.0) to make the outer edges
+	// blend completely imperceptibly into the dark background, avoiding hard contours.
+	float alpha = pow(COLOR.a, 2.2);
+	
+	COLOR = vec4(neon_color, alpha * 0.95);
+}"
+	var neon_mat = ShaderMaterial.new()
+	neon_mat.shader = neon_shader
+	neon_mat.set_shader_parameter("time_speed", 0.06) # Slower, elegant neon rotation
+	glow_panel.material = neon_mat
+	panel.add_child(glow_panel)
+	
+	# Margin Container
+	var marg = MarginContainer.new()
+	var m_val = int(25 * s)
+	marg.add_theme_constant_override("margin_top", m_val)
+	marg.add_theme_constant_override("margin_bottom", m_val)
+	marg.add_theme_constant_override("margin_left", m_val)
+	marg.add_theme_constant_override("margin_right", m_val)
+	panel.add_child(marg)
+	
+	# VBoxContainer for layout
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", int(15 * s))
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	marg.add_child(vbox)
+	
+	# Images and messages setup
+	var images = [
+		"res://assets/Gracias/Editando_Primer_Trailer.jpg",
+		"res://assets/Gracias/Foto_Agradecimiento.jpg",
+		"res://assets/Gracias/Primera_Interfaz.jpg",
+		"res://assets/Gracias/Primera_Prueba_musical.jpg",
+		"res://assets/Gracias/Primera_vez_en_Google_Play.jpg",
+		"res://assets/Gracias/Primeros_Logros.jpg"
+	]
+	
+	var messages_es = [
+		"¡Mil gracias! Al ver este anuncio, me ayudas directamente a pagar el servidor y seguir dedicándole tiempo a mejorar Sandbox Ultra. Eres parte de este sueño. ❤️",
+		"Cada anuncio que decides ver voluntariamente es un impulso enorme para este proyecto. Gracias por valorar mi trabajo. ¡Gracias jugador! 🎮",
+		"¡Gracias por el apoyo! No solo estás viendo un anuncio, estás ayudando a que Sandbox Ultra sea cada vez más grande. ¡Es genial tenerte en esta aventura, gracias! ✨",
+		"De verdad, gracias. Sé que los anuncios pueden ser molestos, pero que elijas ver este voluntariamente significa mucho para mí. ¡Gracias por creer en este proyecto! 🚀",
+		"¡Gracias! Gracias a este apoyo, podré traer más elementos, experimentos, caos y nuevas funciones pronto. Eres el motor detrás de las actualizaciones. 🙌",
+		"Gracias por el apoyo. Tu granito de arena hace posible que siga desarrollando este juego con toda la energía. ¡Disfruta el juego! ❤️"
+	]
+	
+	var messages_en = [
+		"A thousand thanks! By watching this ad, you directly help me pay for the server and continue dedicating time to improve Sandbox Ultra. You are part of this dream. ❤️",
+		"Every ad you decide to watch voluntarily is a huge boost for this project. Thank you for valuing my work. Thank you, player! 🎮",
+		"Thanks for the support! You're not just watching an ad, you're helping Sandbox Ultra grow bigger and bigger. It's great to have you on this adventure, thank you! ✨",
+		"Thank you, truly. I know ads can be annoying, but you choosing to watch this voluntarily means a lot to me. Thank you for believing in this project! 🚀",
+		"Thank you! Thanks to this support, I will be able to bring more elements, experiments, chaos, and new features soon. You are the engine behind the updates. 🙌",
+		"Thank you for the support. Your contribution makes it possible for me to keep developing this game with all my energy. Enjoy the game! ❤️"
+	]
+	
+	# Cargar o inicializar los pools persistentes para que no se repitan
+	var support_config = ConfigFile.new()
+	var load_err = support_config.load("user://creator_support.cfg")
+	
+	var remaining_images = []
+	var remaining_messages = []
+	
+	if load_err == OK:
+		var saved_images = support_config.get_value("creator_support", "remaining_images", [])
+		var saved_messages = support_config.get_value("creator_support", "remaining_messages", [])
+		for val in saved_images:
+			remaining_images.append(int(val))
+		for val in saved_messages:
+			remaining_messages.append(int(val))
+			
+	# Si están vacíos, rellenar y mezclar
+	if remaining_images.size() == 0:
+		remaining_images = [0, 1, 2, 3, 4, 5]
+		remaining_images.shuffle()
+	if remaining_messages.size() == 0:
+		remaining_messages = [0, 1, 2, 3, 4, 5]
+		remaining_messages.shuffle()
+		
+	# Tomar el último elemento de cada pool
+	var img_idx = remaining_images.pop_back()
+	var msg_idx = remaining_messages.pop_back()
+	
+	# Guardar los pools actualizados de inmediato
+	support_config.set_value("creator_support", "remaining_images", remaining_images)
+	support_config.set_value("creator_support", "remaining_messages", remaining_messages)
+	support_config.save("user://creator_support.cfg")
+	
+	var img_path = images[img_idx]
+	
+	var texture: Texture2D = null
+	var aspect_ratio = 1.0
+	
+	var loaded_tex = load(img_path)
+	if loaded_tex:
+		var raw_img = loaded_tex.get_image()
+		if raw_img:
+			# Rotar 90 grados en sentido de las agujas del reloj si es una foto vertical guardada en horizontal
+			if img_path.ends_with("Editando_Primer_Trailer.jpg") or img_path.ends_with("Primera_vez_en_Google_Play.jpg") or img_path.ends_with("Primeros_Logros.jpg"):
+				raw_img.rotate_90(0) # 0 is CLOCKWISE in Godot 4
+			aspect_ratio = float(raw_img.get_width()) / float(raw_img.get_height())
+			texture = ImageTexture.create_from_image(raw_img)
+		else:
+			texture = loaded_tex
+			aspect_ratio = float(loaded_tex.get_width()) / float(loaded_tex.get_height())
+		
+	# Determine sizing based on screen constraints and aspect ratio
+	var is_portrait = screen_size.y > screen_size.x
+	var max_img_h = 0.0
+	if is_portrait:
+		if aspect_ratio < 1.0: # Vertical
+			max_img_h = 320.0 * s
+		else: # Horizontal
+			max_img_h = 200.0 * s
+	else:
+		if aspect_ratio < 1.0: # Vertical
+			max_img_h = 180.0 * s
+		else: # Horizontal
+			max_img_h = 140.0 * s
+			
+	# Panel width constraint
+	panel.custom_minimum_size = Vector2(min(screen_size.x * 0.9, 450 * s), 0)
+	
+	# Aspect Ratio Container for image
+	var aspect_container = AspectRatioContainer.new()
+	aspect_container.ratio = aspect_ratio
+	aspect_container.stretch_mode = AspectRatioContainer.STRETCH_FIT
+	aspect_container.custom_minimum_size = Vector2(max_img_h * aspect_ratio, max_img_h)
+	aspect_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vbox.add_child(aspect_container)
+	
+	var tex_rect = TextureRect.new()
+	tex_rect.texture = texture
+	tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	aspect_container.add_child(tex_rect)
+	
+	# Make image interactive (clickable to zoom)
+	tex_rect.mouse_filter = Control.MOUSE_FILTER_STOP
+	tex_rect.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	tex_rect.gui_input.connect(func(event: InputEvent):
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_play_action_sound("ui_click")
+			_show_fullscreen_image(texture, aspect_ratio)
+	)
+	
+	# Image descriptions mapping
+	var img_keys = [
+		"THANKS_IMG_TRAILER",
+		"THANKS_IMG_PHOTO",
+		"THANKS_IMG_INTERFACE",
+		"THANKS_IMG_MUSIC",
+		"THANKS_IMG_GOOGLE_PLAY",
+		"THANKS_IMG_ACHIEVEMENTS"
+	]
+	
+	# Small caption explaining the image
+	var caption_lbl = Label.new()
+	caption_lbl.text = tr(img_keys[img_idx])
+	caption_lbl.add_theme_font_override("font", _get_safe_font())
+	caption_lbl.add_theme_font_size_override("font_size", int(17 * s)) # Enlarged caption font size
+	caption_lbl.add_theme_color_override("font_color", Color(0.75, 0.75, 0.75)) # Brighter gray
+	caption_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	caption_lbl.custom_minimum_size = Vector2(min(screen_size.x * 0.8, 380 * s), 0)
+	vbox.add_child(caption_lbl)
+	
+	# Golden legend text
+	var legend_lbl = Label.new()
+	var is_es = current_language.begins_with("es")
+	var selected_messages = messages_es if is_es else messages_en
+	legend_lbl.text = selected_messages[msg_idx]
+	legend_lbl.add_theme_font_override("font", _get_safe_font())
+	legend_lbl.add_theme_font_size_override("font_size", int(21 * s)) # Enlarged thank-you legend font size
+	legend_lbl.add_theme_color_override("font_color", Color("#D4AF37")) # Gold
+	legend_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	legend_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	legend_lbl.custom_minimum_size = Vector2(min(screen_size.x * 0.8, 400 * s), 0)
+	vbox.add_child(legend_lbl)
+	
+	# Back Button: "Volver a Sandbox Ultra"
+	var back_btn = Button.new()
+	back_btn.text = tr("Volver a Sandbox Ultra")
+	back_btn.custom_minimum_size = Vector2(200 * s, 50 * s)
+	back_btn.add_theme_font_override("font", _get_safe_font())
+	back_btn.add_theme_font_size_override("font_size", int(22 * s))
+	back_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.12, 0.45, 0.22, 0.9) # Emerald green
+	btn_style.border_width_left = 2; btn_style.border_width_top = 2
+	btn_style.border_width_right = 2; btn_style.border_width_bottom = 2
+	btn_style.border_color = Color(0.3, 0.7, 0.4)
+	btn_style.corner_radius_top_left = 12 * s; btn_style.corner_radius_top_right = 12 * s
+	btn_style.corner_radius_bottom_left = 12 * s; btn_style.corner_radius_bottom_right = 12 * s
+	
+	back_btn.add_theme_stylebox_override("normal", btn_style)
+	back_btn.add_theme_stylebox_override("hover", btn_style)
+	back_btn.add_theme_stylebox_override("pressed", btn_style)
+	back_btn.add_theme_color_override("font_color", Color.WHITE)
+	
+	back_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		overlay.queue_free()
+		
+		# Restore original pause state
+		is_paused = prev_paused
+		
+		var p_btn = ui_elements.get("pause_btn")
+		if is_instance_valid(p_btn):
+			p_btn.text = tr("play") if is_paused else tr("pause")
+			
+		var players = [weather_player, quake_player, tornado_player, tsunami_player, firework_player, ascent_player, volcano_loop_player, fire_loop_player, bombardero_player]
+		for p in players:
+			if is_instance_valid(p):
+				p.stream_paused = is_paused
+	)
+	vbox.add_child(back_btn)
+
+
+func _show_fullscreen_image(tex: Texture2D, ratio: float):
+	var s = _get_ui_scale()
+	var v_size = get_viewport_rect().size
+	
+	# Zoom overlay on top of everything
+	var zoom_overlay = Control.new()
+	zoom_overlay.name = "ZoomOverlay"
+	zoom_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	zoom_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(zoom_overlay)
+	
+	# Solid/Deep black background
+	var bg = ColorRect.new()
+	bg.color = Color(0.02, 0.02, 0.04, 0.98) # Dark elegant backdrop
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	zoom_overlay.add_child(bg)
+	
+	# Center VBox layout to align the aspect container and the close button
+	var center_vbox = VBoxContainer.new()
+	center_vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	center_vbox.add_theme_constant_override("separation", int(20 * s))
+	zoom_overlay.add_child(center_vbox)
+	
+	# Calculate maximum size for zoomed image to fit nicely within viewport
+	var max_w = v_size.x * 0.95
+	var max_h = v_size.y * 0.8
+	
+	var fit_w = max_w
+	var fit_h = fit_w / ratio
+	if fit_h > max_h:
+		fit_h = max_h
+		fit_w = fit_h * ratio
+		
+	var aspect_container = AspectRatioContainer.new()
+	aspect_container.ratio = ratio
+	aspect_container.stretch_mode = AspectRatioContainer.STRETCH_FIT
+	aspect_container.custom_minimum_size = Vector2(fit_w, fit_h)
+	aspect_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	center_vbox.add_child(aspect_container)
+	
+	var tex_rect = TextureRect.new()
+	tex_rect.texture = tex
+	tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	aspect_container.add_child(tex_rect)
+	
+	# Close button ("X")
+	var close_btn = Button.new()
+	close_btn.text = "X"
+	close_btn.custom_minimum_size = Vector2(60 * s, 60 * s)
+	close_btn.add_theme_font_override("font", _get_safe_font())
+	close_btn.add_theme_font_size_override("font_size", int(28 * s))
+	close_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	
+	var x_style = StyleBoxFlat.new()
+	x_style.bg_color = Color(0.25, 0.25, 0.3, 0.85)
+	x_style.border_width_left = int(2 * s); x_style.border_width_top = int(2 * s)
+	x_style.border_width_right = int(2 * s); x_style.border_width_bottom = int(2 * s)
+	x_style.border_color = Color(0.83, 0.69, 0.22) # Gold border matches panel
+	x_style.set_corner_radius_all(30 * s) # Circular button
+	
+	close_btn.add_theme_stylebox_override("normal", x_style)
+	close_btn.add_theme_stylebox_override("hover", x_style)
+	close_btn.add_theme_stylebox_override("pressed", x_style)
+	close_btn.add_theme_color_override("font_color", Color.WHITE)
+	
+	close_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		zoom_overlay.queue_free()
+	)
+	center_vbox.add_child(close_btn)
+	
+	# Clicking anywhere on the background also closes it
+	zoom_overlay.gui_input.connect(func(event):
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_play_action_sound("ui_click")
+			zoom_overlay.queue_free()
+	)
