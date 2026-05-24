@@ -288,3 +288,7 @@ load_confirm,"¿Cargar el mundo: {0}?","Load the world: {0}?","Caricare il mondo
 privacy_settings,Configuración de Privacidad,Privacy Settings,Impostazioni Privacy,Paramètres de confidentialité,Datenschutzeinstellungen,Configurações de Privacidade
 factionless,Sin bando,Factionless,Senza fazione,Sans faction,Fraktionslos,Sem facção
 zombie_tank,Zombie Tanque,Zombie Tank,Zombie Tank,Zombie Tank,Zombie Tank,Zombie Tank
+RATING_TITLE,"¿Qué te está pareciendo Sandbox Ultra?","How are you enjoying Sandbox Ultra?","Come ti sembra Sandbox Ultra?","Comment trouvez-vous Sandbox Ultra ?","Wie gefällt dir Sandbox Ultra?","O que está achando do Sandbox Ultra?"
+RATING_SUBTITLE,"¡Valóranos en Google Play Store!","Rate us on the Google Play Store!","Valutaci sul Google Play Store!","Évaluez-nous sur le Google Play Store !","Bewerte uns im Google Play Store!","Avalie-nos na Google Play Store!"
+RATING_RATE_BTN,"⭐ Valorar","⭐ Rate","⭐ Valuta","⭐ Évaluer","⭐ Bewerten","⭐ Avaliar"
+RATING_LATER_BTN,"Ahora no","Not now","Non ora","Pas maintenant","Nicht jetzt","Agora não"

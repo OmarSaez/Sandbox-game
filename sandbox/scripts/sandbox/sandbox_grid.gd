@@ -522,6 +522,9 @@ func _load_tool_settings():
 func _ready():
 	_load_global_achievements() # Load global state once at startup
 	
+	if FileAccess.file_exists("user://rating_popup_shown.save"):
+		rating_popup_shown = true
+	
 	# Initialize Google Play Game Services on Android
 	if OS.has_feature("android") and Engine.has_singleton("GodotPlayGameServices"):
 		var init_status = GodotPlayGameServices.initialize()
@@ -1112,6 +1115,163 @@ func _show_welcome_message():
 
 var main_tutorial_step = 0
 var main_tutorial_overlay: Control = null
+
+var play_time_for_rating: float = 0.0
+var rating_popup_shown: bool = false
+
+func _show_rating_popup():
+	var s = _get_ui_scale()
+	var screen_size = get_viewport_rect().size
+	
+	# Full-screen dim overlay
+	var overlay = Control.new()
+	overlay.name = "RatingPopupOverlay"
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(overlay)
+	
+	var dim = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.7)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(dim)
+	
+	# Panel
+	var panel = PanelContainer.new()
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.1, 0.1, 0.18, 0.97)
+	p_style.set_border_width_all(int(3 * s))
+	p_style.border_color = Color(0.95, 0.75, 0.2)
+	p_style.set_corner_radius_all(20 * s)
+	panel.add_theme_stylebox_override("panel", p_style)
+	overlay.add_child(panel)
+	
+	var marg = MarginContainer.new()
+	var m_val = int(25 * s)
+	marg.add_theme_constant_override("margin_top", m_val)
+	marg.add_theme_constant_override("margin_bottom", m_val)
+	marg.add_theme_constant_override("margin_left", m_val)
+	marg.add_theme_constant_override("margin_right", m_val)
+	panel.add_child(marg)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", int(15 * s))
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	marg.add_child(vbox)
+	
+	# Star emoji header
+	var star_lbl = Label.new()
+	star_lbl.text = "⭐⭐⭐⭐⭐"
+	star_lbl.add_theme_font_override("font", _get_safe_font())
+	star_lbl.add_theme_font_size_override("font_size", int(32 * s))
+	star_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(star_lbl)
+	
+	# Title
+	var title_lbl = Label.new()
+	title_lbl.text = tr("RATING_TITLE")
+	title_lbl.add_theme_font_override("font", _get_safe_font())
+	title_lbl.add_theme_font_size_override("font_size", int(26 * s))
+	title_lbl.add_theme_color_override("font_color", Color(1, 1, 1))
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_lbl.custom_minimum_size = Vector2(280 * s, 0)
+	vbox.add_child(title_lbl)
+	
+	# Subtitle
+	var sub_lbl = Label.new()
+	sub_lbl.text = tr("RATING_SUBTITLE")
+	sub_lbl.add_theme_font_override("font", _get_safe_font())
+	sub_lbl.add_theme_font_size_override("font_size", int(20 * s))
+	sub_lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	sub_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sub_lbl.custom_minimum_size = Vector2(280 * s, 0)
+	vbox.add_child(sub_lbl)
+	
+	# Buttons
+	var btn_hbox = HBoxContainer.new()
+	btn_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_hbox.add_theme_constant_override("separation", int(20 * s))
+	vbox.add_child(btn_hbox)
+	
+	# "Rate" button (green)
+	var rate_btn = Button.new()
+	rate_btn.text = tr("RATING_RATE_BTN")
+	rate_btn.custom_minimum_size = Vector2(140 * s, 55 * s)
+	rate_btn.add_theme_font_override("font", _get_safe_font())
+	rate_btn.add_theme_font_size_override("font_size", int(22 * s))
+	var rate_style = StyleBoxFlat.new()
+	rate_style.bg_color = Color(0.2, 0.65, 0.3)
+	rate_style.set_corner_radius_all(12 * s)
+	rate_btn.add_theme_stylebox_override("normal", rate_style)
+	rate_btn.add_theme_stylebox_override("hover", rate_style)
+	rate_btn.add_theme_stylebox_override("pressed", rate_style)
+	
+	rate_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		# Persist so it never shows again
+		var f = FileAccess.open("user://rating_popup_shown.save", FileAccess.WRITE)
+		if f:
+			f.store_string("shown")
+			f.close()
+		
+		if Engine.has_singleton("InappReviewPlugin"):
+			var InappReviewScript = preload("res://addons/InappReviewPlugin/InappReview.gd")
+			var inapp_review = InappReviewScript.new()
+			add_child(inapp_review)
+			
+			inapp_review.review_info_generated.connect(func():
+				inapp_review.launch_review_flow()
+			)
+			inapp_review.review_info_generation_failed.connect(func():
+				OS.shell_open("https://play.google.com/store/apps/details?id=com.sandbox.elexstudio")
+				inapp_review.queue_free()
+			)
+			inapp_review.review_flow_launched.connect(func():
+				inapp_review.queue_free()
+			)
+			inapp_review.review_flow_launch_failed.connect(func():
+				OS.shell_open("https://play.google.com/store/apps/details?id=com.sandbox.elexstudio")
+				inapp_review.queue_free()
+			)
+			inapp_review.generate_review_info()
+		else:
+			# Open Google Play Store page
+			OS.shell_open("https://play.google.com/store/apps/details?id=com.sandbox.elexstudio")
+			
+		overlay.queue_free()
+	)
+	btn_hbox.add_child(rate_btn)
+	
+	# "Not now" button (subtle gray)
+	var later_btn = Button.new()
+	later_btn.text = tr("RATING_LATER_BTN")
+	later_btn.custom_minimum_size = Vector2(140 * s, 55 * s)
+	later_btn.add_theme_font_override("font", _get_safe_font())
+	later_btn.add_theme_font_size_override("font_size", int(22 * s))
+	var later_style = StyleBoxFlat.new()
+	later_style.bg_color = Color(0.35, 0.35, 0.4)
+	later_style.set_corner_radius_all(12 * s)
+	later_btn.add_theme_stylebox_override("normal", later_style)
+	later_btn.add_theme_stylebox_override("hover", later_style)
+	later_btn.add_theme_stylebox_override("pressed", later_style)
+	
+	later_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		# Persist so it never shows again
+		var f = FileAccess.open("user://rating_popup_shown.save", FileAccess.WRITE)
+		if f:
+			f.store_string("shown")
+			f.close()
+		overlay.queue_free()
+	)
+	btn_hbox.add_child(later_btn)
+	
+	# Center panel on screen
+	await get_tree().process_frame
+	var p_size = panel.get_combined_minimum_size()
+	panel.position = (screen_size - p_size) / 2.0
 
 func _start_interactive_tutorial():
 	# Si ya lo vio, no lo volvemos a mostrar
@@ -4752,6 +4912,13 @@ func _process(delta):
 	_frame_count += 1
 	_check_achievement_conditions(delta)
 	# (Debug HUD removed)
+	
+	# --- Rating popup timer ---
+	if not rating_popup_shown:
+		play_time_for_rating += delta
+		if play_time_for_rating >= 270.0:
+			rating_popup_shown = true
+			call_deferred("_show_rating_popup")
 	
 	# Update camera bounds for virtual physical walls
 	if is_instance_valid(sim_camera) and view_zoom > 1.0:

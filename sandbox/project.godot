@@ -39,7 +39,7 @@ enabled=PackedStringArray("res://addons/NotificationSchedulerPlugin/plugin.cfg",
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/GodotPlayGameServices/plugin.cfg", "res://addons/NotificationSchedulerPlugin/plugin.cfg", "res://addons/admob/plugin.cfg")
+enabled=PackedStringArray("res://addons/GodotPlayGameServices/plugin.cfg", "res://addons/NotificationSchedulerPlugin/plugin.cfg", "res://addons/admob/plugin.cfg", "res://addons/InappReviewPlugin/plugin.cfg")
 
 [internationalization]
 
