@@ -472,7 +472,7 @@ var charge_queued_frame := PackedInt32Array()
 var img: Image
 
 # VOLUME SYSTEM
-var game_volume: float = 1.3
+var game_volume: float = 1.2
 var pre_mute_volume: float = 1.0
 var is_muted: bool = false
 var achievement_pulse_tween: Tween = null
@@ -11899,8 +11899,8 @@ void fragment() {
 	if loaded_tex:
 		var raw_img = loaded_tex.get_image()
 		if raw_img:
-			# Rotar 90 grados en sentido de las agujas del reloj si es una foto vertical guardada en horizontal
-			if img_path.ends_with("Editando_Primer_Trailer.jpg") or img_path.ends_with("Primera_vez_en_Google_Play.jpg") or img_path.ends_with("Primeros_Logros.jpg"):
+			# Si es una foto de contenido vertical (todas excepto la horizontal Primera_Interfaz.jpg) pero el archivo viene guardado en formato horizontal, rotar 90°
+			if not img_path.ends_with("Primera_Interfaz.jpg") and raw_img.get_width() > raw_img.get_height():
 				raw_img.rotate_90(0) # 0 is CLOCKWISE in Godot 4
 			aspect_ratio = float(raw_img.get_width()) / float(raw_img.get_height())
 			texture = ImageTexture.create_from_image(raw_img)
@@ -11924,6 +11924,17 @@ void fragment() {
 			
 	# Panel width constraint
 	panel.custom_minimum_size = Vector2(min(screen_size.x * 0.9, 450 * s), 0)
+	
+	# Title "Gracias por tu apoyo" in gold
+	var title_lbl = Label.new()
+	title_lbl.text = tr("THANKS_TITLE")
+	title_lbl.add_theme_font_override("font", _get_safe_font())
+	title_lbl.add_theme_font_size_override("font_size", int(26 * s)) # Large size for presence
+	title_lbl.add_theme_color_override("font_color", Color("#D4AF37")) # Gold
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_lbl.custom_minimum_size = Vector2(min(screen_size.x * 0.8, 380 * s), 0)
+	vbox.add_child(title_lbl)
 	
 	# Aspect Ratio Container for image
 	var aspect_container = AspectRatioContainer.new()
