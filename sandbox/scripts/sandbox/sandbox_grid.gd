@@ -2099,6 +2099,9 @@ func _unlock_achievement(id: String):
 	_save_global_achievements()
 	_show_achievement_notification(id)
 	
+	# Log to Firebase Analytics
+	AnalyticsManager.log_event("achievement_unlocked", {"id": id, "title": achievements[id].get("title", "")})
+	
 	# Sync unlock with Google Play Games Services if available on Android
 	if play_games_achievements_client and GOOGLE_PLAY_ACHIEVEMENTS.has(id):
 		play_games_achievements_client.unlock_achievement(GOOGLE_PLAY_ACHIEVEMENTS[id])
@@ -2801,6 +2804,9 @@ func _setup_tools_ui():
 	support_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
 		
+		# Log to Firebase Analytics
+		AnalyticsManager.log_event("support_creator_clicked", {})
+		
 		# Guardar el estado de pausa original
 		var prev_paused = is_paused
 		
@@ -2819,6 +2825,7 @@ func _setup_tools_ui():
 		if Engine.has_singleton("PoingGodotAdMob"):
 			# Conectarse a ad_dismissed como ONE_SHOT para abrir el popup de agradecimiento cuando vuelva
 			var on_ad_dismissed_callable = func():
+				AnalyticsManager.log_event("support_creator_completed", {})
 				_show_thank_you_popup(prev_paused)
 			
 			AdMobManager.ad_dismissed.connect(on_ad_dismissed_callable, CONNECT_ONE_SHOT)
@@ -2844,6 +2851,7 @@ func _setup_tools_ui():
 			print("DEBUG: Anuncio apoyo (PC)")
 			# En PC simulamos la vuelta del anuncio tras 1.0 segundos
 			await get_tree().create_timer(1.0).timeout
+			AnalyticsManager.log_event("support_creator_completed", {})
 			_show_thank_you_popup(prev_paused)
 	)
 	ui_elements["support_btn"] = support_btn
@@ -3053,6 +3061,15 @@ func _setup_tools_ui():
 		btn_margin.add_theme_constant_override("margin_bottom", 8 * s)
 		v_box.add_child(btn_margin)
 		btn_margin.add_child(privacy_btn)
+		
+		# Set initial visibility (only show if privacy options are actually required/available)
+		btn_margin.visible = AdMobManager.is_privacy_button_required()
+		
+		# Connect to dynamic updates of the consent information
+		AdMobManager.consent_info_updated.connect(func():
+			if is_instance_valid(btn_margin):
+				btn_margin.visible = AdMobManager.is_privacy_button_required()
+		)
 
 	_add_ui_header(v_box, "coming_soon")
 	
@@ -3808,6 +3825,9 @@ func _update_lab_tutorial_highlight():
 		tw.set_loops() # Infinite loop safely managed by icon lifecycle
 
 func _save_lab_state():
+	# Log to Firebase Analytics
+	AnalyticsManager.log_event("custom_material_saved", {})
+	
 	var clean_data = []
 	for d in lab_custom_data:
 		var c = d.duplicate()
@@ -5128,6 +5148,10 @@ func _process(delta):
 				var nearby = _get_nearby_npcs(gx, gy, 12.0)
 				if nearby.size() > 0:
 					controlled_npc = nearby[0]
+					
+					# Log to Firebase Analytics
+					AnalyticsManager.log_event("npc_controlled", {"npc_type": controlled_npc.get("type", "unknown")})
+					
 					# Boost HP for player control (Hero unit)
 					controlled_npc.hp = max(controlled_npc.hp, 160.0)
 					controlled_npc["max_hp"] = max(controlled_npc.get("max_hp", 100.0), 160.0)
@@ -11029,6 +11053,9 @@ func _save_to_slot(idx, custom_name: String = ""):
 	var path = "user://save_slot_" + str(idx) + ".dat"
 	var thumb_path = "user://save_slot_" + str(idx) + ".png"
 	
+	# Log to Firebase Analytics
+	AnalyticsManager.log_event("save_game", {"slot": int(idx)})
+	
 	var time = Time.get_datetime_dict_from_system()
 	var date_str = "{0}/{1}/{2} {3}:{4}".format([time.day, time.month, time.year, time.hour, time.minute])
 	var save_name = custom_name if custom_name != "" else ("Save " + str(idx))
@@ -11098,6 +11125,9 @@ func _save_to_slot(idx, custom_name: String = ""):
 func _load_from_slot(idx):
 	var path = "user://save_slot_" + str(idx) + ".dat"
 	if not FileAccess.file_exists(path): return
+	
+	# Log to Firebase Analytics
+	AnalyticsManager.log_event("load_game", {"slot": int(idx)})
 	
 	var file = FileAccess.open_compressed(path, FileAccess.READ, FileAccess.COMPRESSION_ZSTD)
 	if file:

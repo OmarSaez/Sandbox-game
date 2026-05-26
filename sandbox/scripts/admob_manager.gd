@@ -6,6 +6,7 @@ extends Node
 # 3. Solo logs internos por consola (si se desea).
 
 signal ad_dismissed
+signal consent_info_updated
 
 var _banner_view : AdView
 var _banner_is_showing : bool = false
@@ -98,6 +99,8 @@ func _on_consent_update_success():
 	else:
 		print("ADMOB: [GEOGRAFÍA] Estado de consentimiento desconocido: ", status)
 		
+	consent_info_updated.emit()
+	
 	if UserMessagingPlatform.consent_information.get_is_consent_form_available():
 		_load_consent_form()
 	else:
@@ -106,8 +109,15 @@ func _on_consent_update_success():
 
 func _on_consent_update_failure(error: FormError):
 	print("ADMOB: Error al actualizar información de consentimiento -> ", error.message)
+	consent_info_updated.emit()
 	print("ADMOB: Usando fallback: Inicializando SDK...")
 	_initialize_sdk()
+
+func is_privacy_button_required() -> bool:
+	if not Engine.has_singleton("PoingGodotAdMob"):
+		return false
+	var status = UserMessagingPlatform.consent_information.get_consent_status()
+	return status == UserMessagingPlatform.consent_information.ConsentStatus.REQUIRED or status == UserMessagingPlatform.consent_information.ConsentStatus.OBTAINED
 
 func _load_consent_form():
 	print("ADMOB: Cargando formulario de consentimiento...")

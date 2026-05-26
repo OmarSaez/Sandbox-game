@@ -22,6 +22,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 AdMobManager="*res://scripts/admob_manager.gd"
+AnalyticsManager="*res://scripts/analytics_manager.gd"
 NotificationScheduler="*res://addons/NotificationSchedulerPlugin/NotificationScheduler.gd"
 NotificationManager="*res://scripts/notification_manager.gd"
 GodotPlayGameServices="*uid://cnutnba63py8a"
