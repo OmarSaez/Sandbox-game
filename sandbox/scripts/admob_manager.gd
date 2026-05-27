@@ -10,6 +10,7 @@ signal consent_info_updated
 
 var _banner_view : AdView
 var _banner_is_showing : bool = false
+var _banner_loading : bool = false
 var _interstitial_ad : InterstitialAd
 var _rewarded_ad : RewardedAd
 var _lab_rewarded_ad : RewardedAd
@@ -178,7 +179,7 @@ func _initialize_sdk():
 		if _app_is_paused: return
 		await get_tree().create_timer(3.0).timeout
 		if _app_is_paused: return
-		_load_interstitial()
+		_load_lab_rewarded()
 		
 		await get_tree().create_timer(6.0).timeout
 		if _app_is_paused: return
@@ -186,12 +187,14 @@ func _initialize_sdk():
 		
 		await get_tree().create_timer(6.0).timeout
 		if _app_is_paused: return
-		_load_lab_rewarded()
+		_load_interstitial()
 	
 	MobileAds.initialize(init_listener)
 
 func _create_banner():
 	if _app_is_paused: return
+	if _banner_loading or _banner_view: return
+	_banner_loading = true
 	print("ADMOB: Creando Banner oficial...")
 	var unit_id = "ca-app-pub-6982275568315854/6392385312"
 	
@@ -201,6 +204,7 @@ func _create_banner():
 	
 	ad_listener.on_ad_loaded = func():
 		print("ADMOB: ¡Banner cargado con éxito!")
+		_banner_loading = false
 		if _app_is_paused:
 			print("ADMOB: La app está en segundo plano. Destruyendo banner cargado por seguridad.")
 			if _banner_view:
@@ -215,11 +219,19 @@ func _create_banner():
 			banner_finished_loading.emit()
 	
 	ad_listener.on_ad_failed_to_load = func(error : LoadAdError):
-		print("ADMOB: Fallo de carga -> ", error.message)
+		print("ADMOB: Fallo de carga de Banner -> ", error.message)
+		_banner_loading = false
 		_banner_is_showing = false
+		if _banner_view:
+			_banner_view.destroy()
+			_banner_view = null
+		
 		if not _initial_banner_loaded:
-			_initial_banner_loaded = true
-			banner_finished_loading.emit()
+			if _app_is_paused: return
+			print("ADMOB: Reintentando cargar el banner en 5 segundos...")
+			await get_tree().create_timer(5.0).timeout
+			if _app_is_paused: return
+			_create_banner()
 		
 	_banner_view.ad_listener = ad_listener
 	_banner_view.load_ad(AdRequest.new())
@@ -255,7 +267,7 @@ func _load_rewarded():
 	if _rewarded_loading or _rewarded_ad: return
 	_rewarded_loading = true
 	
-	var unit_id = "ca-app-pub-6982275568315854/2842922463"
+	var unit_id = "ca-app-pub-6982275568315854/5277514113"
 	var load_callback := RewardedAdLoadCallback.new()
 	
 	load_callback.on_ad_failed_to_load = func(error : LoadAdError):
@@ -383,7 +395,7 @@ func _load_interstitial():
 	if _interstitial_loading or _interstitial_ad: return
 	_interstitial_loading = true
 	
-	var unit_id = "ca-app-pub-6982275568315854/5277514113"
+	var unit_id = "ca-app-pub-6982275568315854/2842922463"
 	var load_callback := InterstitialAdLoadCallback.new()
 	
 	load_callback.on_ad_failed_to_load = func(error : LoadAdError):
@@ -464,6 +476,9 @@ func _notification(what: int) -> void:
 		if _banner_view and _banner_is_showing:
 			print("ADMOB: App reanudada, mostrando banner...")
 			_banner_view.show()
+		elif not _initial_banner_loaded and not _banner_loading:
+			print("ADMOB: App reanudada y el banner inicial aún no está cargado. Reintentando...")
+			_create_banner()
 
 func _exit_tree() -> void:
 
