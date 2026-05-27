@@ -24,8 +24,7 @@ var _initial_banner_loaded : bool = false
 var ad_free_time : float = 0.0 # Segundos restantes sin anuncios
 var first_pause_used : bool = false
 var first_reset_used : bool = false
-const GPU_BLACKLIST = ["adreno 630"]
-var _is_gpu_blacklisted : bool = false
+
 var _app_is_paused : bool = false
 var _banner_needs_to_show_on_resume : bool = false
 
@@ -51,25 +50,6 @@ func _ready() -> void:
 		print("ADMOB: Saltado (No es plataforma móvil)")
 		return
 
-	# Esperamos un pequeño momento para asegurar que el motor está estable y la GPU reporte su nombre
-	await get_tree().create_timer(1.0).timeout
-
-	# DETECTOR GPU BLACKLIST
-	var gpu_name = RenderingServer.get_video_adapter_name().to_lower()
-	print("ADMOB: GPU detectada -> ", gpu_name)
-	for blacklisted in GPU_BLACKLIST:
-		if blacklisted == "": continue
-		var parts = blacklisted.split(" ")
-		var matches = true
-		for part in parts:
-			if part != "" and not gpu_name.contains(part):
-				matches = false
-				break
-		if matches:
-			print("ADMOB: GPU conflictiva detectada (%s). Desactivando AdMob para evitar crashes OpenGL en pause." % gpu_name)
-			_is_gpu_blacklisted = true
-			return
-	
 	_update_consent_info()
 
 func _update_consent_info():
@@ -153,9 +133,7 @@ func _on_form_dismissed(error: FormError):
 # Función pública para reabrir las opciones de privacidad (invocada desde el panel de configuración)
 func show_consent_options():
 	print("ADMOB: Solicitando mostrar opciones de consentimiento...")
-	if _is_gpu_blacklisted:
-		print("ADMOB: Saltado (GPU Blacklisted)")
-		return
+
 	if OS.get_name() != "Android" and OS.get_name() != "iOS":
 		return
 	
@@ -181,8 +159,7 @@ func show_consent_options():
 	UserMessagingPlatform.load_consent_form(on_success, on_failure)
 
 func _initialize_sdk():
-	if _is_gpu_blacklisted:
-		return
+
 	if _is_sdk_initialized:
 		print("ADMOB: SDK ya inicializado previamente.")
 		return
@@ -300,9 +277,7 @@ func _load_rewarded():
 	RewardedAdLoader.new().load(unit_id, request, load_callback)
 
 func show_rewarded() -> bool:
-	if _is_gpu_blacklisted:
-		print("ADMOB: show_rewarded() saltado (GPU Blacklisted).")
-		return false
+
 	if not Engine.has_singleton("PoingGodotAdMob"):
 		print("ADMOB: show_rewarded() saltado (Plugin desactivado).")
 		return false
@@ -361,11 +336,7 @@ func _load_lab_rewarded():
 	RewardedAdLoader.new().load(unit_id, request, load_callback)
 
 func show_lab_rewarded() -> bool:
-	if _is_gpu_blacklisted:
-		print("ADMOB: [GPU BLACKLISTED] Laboratorio Desbloqueado de forma gratuita.")
-		lab_unlocked.emit()
-		ad_dismissed.emit()
-		return true
+
 
 	if not Engine.has_singleton("PoingGodotAdMob"):
 		print("ADMOB: [PLUGIN DESACTIVADO] Laboratorio Desbloqueado de forma gratuita.")
@@ -433,9 +404,7 @@ func _load_interstitial():
 	InterstitialAdLoader.new().load(unit_id, request, load_callback)
 
 func show_interstitial() -> bool:
-	if _is_gpu_blacklisted:
-		print("ADMOB: show_interstitial() saltado (GPU Blacklisted).")
-		return false
+
 	if not Engine.has_singleton("PoingGodotAdMob"):
 		return false
 	if _interstitial_ad:
@@ -461,8 +430,7 @@ func show_interstitial() -> bool:
 		return false
 
 func check_and_show_interstitial(button_type: String = "") -> bool:
-	if _is_gpu_blacklisted:
-		return false
+
 	if not Engine.has_singleton("PoingGodotAdMob"):
 		return false
 	# PRIMERA VEZ GRACIA: Si es la primera vez que se pulsa un botón específico, NO mostrar.
@@ -483,8 +451,7 @@ func check_and_show_interstitial(button_type: String = "") -> bool:
 		return false
 
 func _notification(what: int) -> void:
-	if _is_gpu_blacklisted:
-		return
+
 		
 	if what == NOTIFICATION_APPLICATION_PAUSED:
 		_app_is_paused = true
@@ -499,9 +466,31 @@ func _notification(what: int) -> void:
 			_banner_view.show()
 
 func _exit_tree() -> void:
-	if _is_gpu_blacklisted:
-		return
+
+	print("ADMOB: _exit_tree() detectado. Limpiando todos los anuncios para evitar crashes.")
 	if _banner_view:
 		_banner_is_showing = false
 		_banner_view.destroy()
 		_banner_view = null
+	if _interstitial_ad:
+		print("ADMOB: Destruyendo _interstitial_ad")
+		_interstitial_ad.destroy()
+		_interstitial_ad = null
+	if _rewarded_ad:
+		print("ADMOB: Destruyendo _rewarded_ad")
+		_rewarded_ad.destroy()
+		_rewarded_ad = null
+	if _lab_rewarded_ad:
+		print("ADMOB: Destruyendo _lab_rewarded_ad")
+		_lab_rewarded_ad.destroy()
+		_lab_rewarded_ad = null
+	if _active_ad:
+		print("ADMOB: Destruyendo _active_ad")
+		_active_ad.destroy()
+		_active_ad = null
+
+	# Matar el proceso en Android para evitar que los hilos nativos de WebView/AdMob (Java)
+	# intenten llamar a JNI/EGL cuando el motor C++ de Godot ya ha sido destruido (evita crash en caché).
+	if OS.get_name() == "Android":
+		print("ADMOB: Forzando salida del proceso en Android para evitar crashes en caché.")
+		OS.kill(OS.get_process_id())

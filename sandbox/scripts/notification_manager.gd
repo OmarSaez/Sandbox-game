@@ -37,13 +37,11 @@ func _ready() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_PAUSED:
-		print("NOTIFICACIONES: Aplicación pausada. Sin llamadas JNI para evitar crashes.")
+		print("[Lifecycle] Aplicación pausada (PAUSED)")
 	elif what == NOTIFICATION_APPLICATION_RESUMED:
-		print("NOTIFICACIONES: Aplicación reanudada. Reprogramando recordatorio en diferido de forma segura...")
-		# Esperar 2.0 segundos antes de reprogramar para dar tiempo al motor a reanudar EGL de forma segura
-		get_tree().create_timer(2.0).timeout.connect(func():
-			_reschedule_reminders()
-		)
+		print("[Lifecycle] Aplicación reanudada (RESUMED)")
+	elif what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		print("[Lifecycle] Solicitud de cierre/salida detectada (%d)" % what)
 
 func _reschedule_reminders() -> void:
 	if OS.get_name() == "Android":
