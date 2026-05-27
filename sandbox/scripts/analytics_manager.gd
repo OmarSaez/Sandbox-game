@@ -1,8 +1,7 @@
 extends Node
 
 var _plugin: Object = null
-var current_screen: String = "gameplay"
-var gameplay_time_accumulator: float = 0.0
+var current_screen: String = ""
 var check_timer: float = 0.0
 
 func _ready() -> void:
@@ -13,31 +12,12 @@ func _ready() -> void:
 	else:
 		print("[AnalyticsManager] FirebaseAnalyticsPlugin not found (PC editor / other platforms). Using local console logs.")
 
-	# Log initial application start
-	log_event("app_start", {})
-
 func _process(delta: float) -> void:
 	# Periodically check active UI screens (every 200ms for performance optimization)
 	check_timer += delta
 	if check_timer >= 0.2:
 		check_timer = 0.0
 		_update_current_screen()
-	
-	# Accumulate active gameplay time when no menu is open
-	if current_screen == "gameplay":
-		gameplay_time_accumulator += delta
-		# Periodically flush every 60 seconds of continuous gameplay to prevent losing data on crash/force close
-		if gameplay_time_accumulator >= 60.0:
-			flush_gameplay_time()
-
-func _notification(what: int) -> void:
-	match what:
-		NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED:
-			print("[AnalyticsManager] App suspended/paused, flushing active play time.")
-			flush_gameplay_time()
-		NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_WM_GO_BACK_REQUEST:
-			print("[AnalyticsManager] App closing, flushing active play time.")
-			flush_gameplay_time()
 
 func log_event(event_name: String, params: Dictionary = {}) -> void:
 	if _plugin:
@@ -49,25 +29,12 @@ func set_screen(screen_name: String) -> void:
 	if current_screen == screen_name:
 		return
 		
-	# If we are transitioning away from gameplay, record the gameplay duration first
-	if current_screen == "gameplay":
-		flush_gameplay_time()
-		
 	current_screen = screen_name
 	
 	if _plugin:
 		_plugin.setScreenName(screen_name)
 	else:
 		print("[AnalyticsManager] [Editor Log] Screen View: '%s'" % screen_name)
-
-func flush_gameplay_time() -> void:
-	if gameplay_time_accumulator >= 1.0:
-		var duration = int(gameplay_time_accumulator)
-		log_event("gameplay_duration", {
-			"seconds": duration,
-			"duration_seconds": duration
-		})
-		gameplay_time_accumulator = 0.0
 
 # Recursively finds the SandboxGrid node in the active scene tree
 func _find_sandbox_grid(node: Node) -> Node:
