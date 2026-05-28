@@ -5037,7 +5037,7 @@ func _process(delta):
 	# --- Rating popup timer ---
 	if not rating_popup_shown:
 		play_time_for_rating += delta
-		if play_time_for_rating >= 270.0:
+		if play_time_for_rating >= 600.0:
 			rating_popup_shown = true
 			call_deferred("_show_rating_popup")
 	
