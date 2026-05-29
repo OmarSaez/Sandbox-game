@@ -47,6 +47,10 @@ func _process(delta: float) -> void:
 var _is_sdk_initialized: bool = false
 
 func _ready() -> void:
+	# Interceptar salida para matar el proceso antes del teardown natural de Godot
+	get_tree().auto_accept_quit = false
+	get_tree().quit_on_go_back = false
+	
 	# Verificamos plataforma para no dar error en PC
 	if OS.get_name() != "Android" and OS.get_name() != "iOS":
 		print("ADMOB: Saltado (No es plataforma móvil)")
@@ -675,9 +679,15 @@ func check_and_show_interstitial(button_type: String = "") -> bool:
 		return false
 
 func _notification(what: int) -> void:
-
-		
-	if what == NOTIFICATION_APPLICATION_PAUSED:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		# ¡LA GUILLOTINA (Botón Atrás)!
+		if OS.get_name() == "Android":
+			print("ADMOB: Interceptando botón Atrás. Ejecutando OS.kill() instantáneo.")
+			OS.kill(OS.get_process_id())
+		else:
+			get_tree().quit()
+			
+	elif what == NOTIFICATION_APPLICATION_PAUSED:
 		_app_is_paused = true
 		if _banner_view and _banner_is_showing:
 			print("ADMOB: App pausada, ocultando banner...")
@@ -694,31 +704,27 @@ func _notification(what: int) -> void:
 			_create_banner()
 
 func _exit_tree() -> void:
+	# ¡LA GUILLOTINA (Fondo / Low Memory Killer)!
+	# Si Android mata la app o el usuario cierra por Task Manager, Godot fuerza _exit_tree.
+	# OS.kill debe ser la PRIMERA instrucción para ganar la carrera contra la destrucción de GLThread.
+	if OS.get_name() == "Android":
+		print("ADMOB: _exit_tree() detectado. Ejecutando OS.kill() de emergencia.")
+		OS.kill(OS.get_process_id())
 
-	print("ADMOB: _exit_tree() detectado. Limpiando todos los anuncios para evitar crashes.")
+	print("ADMOB: _exit_tree() detectado. Limpiando todos los anuncios.")
 	if _banner_view:
 		_banner_is_showing = false
 		_banner_view.destroy()
 		_banner_view = null
 	if _interstitial_ad:
-		print("ADMOB: Destruyendo _interstitial_ad")
 		_interstitial_ad.destroy()
 		_interstitial_ad = null
 	if _rewarded_ad:
-		print("ADMOB: Destruyendo _rewarded_ad")
 		_rewarded_ad.destroy()
 		_rewarded_ad = null
 	if _lab_rewarded_ad:
-		print("ADMOB: Destruyendo _lab_rewarded_ad")
 		_lab_rewarded_ad.destroy()
 		_lab_rewarded_ad = null
 	if _active_ad:
-		print("ADMOB: Destruyendo _active_ad")
 		_active_ad.destroy()
 		_active_ad = null
-
-	# Matar el proceso en Android para evitar que los hilos nativos de WebView/AdMob (Java)
-	# intenten llamar a JNI/EGL cuando el motor C++ de Godot ya ha sido destruido (evita crash en caché).
-	if OS.get_name() == "Android":
-		print("ADMOB: Forzando salida del proceso en Android para evitar crashes en caché.")
-		OS.kill(OS.get_process_id())
