@@ -2830,7 +2830,7 @@ func _setup_tools_ui():
 			
 			AdMobManager.ad_dismissed.connect(on_ad_dismissed_callable, CONNECT_ONE_SHOT)
 			
-			var ad_shown = AdMobManager.show_rewarded()
+			var ad_shown = await AdMobManager.show_rewarded()
 			if not ad_shown:
 				# Si el anuncio no se pudo mostrar (no cargó, etc.), desconectamos y restauramos la pausa previa
 				if AdMobManager.ad_dismissed.is_connected(on_ad_dismissed_callable):
@@ -3243,7 +3243,7 @@ func _setup_lab_ui():
 	ad_btn.add_theme_stylebox_override("normal", ad_st)
 	ad_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
-		AdMobManager.show_lab_rewarded()
+		await AdMobManager.show_lab_rewarded()
 	)
 	btn_hbox.add_child(ad_btn)
 	

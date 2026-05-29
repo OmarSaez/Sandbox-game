@@ -7,6 +7,9 @@ extends Node
 
 signal ad_dismissed
 signal consent_info_updated
+signal rewarded_ad_loaded(success: bool)
+signal lab_rewarded_ad_loaded(success: bool)
+signal interstitial_ad_loaded(success: bool)
 
 var _banner_view : AdView
 var _banner_is_showing : bool = false
@@ -169,25 +172,9 @@ func _initialize_sdk():
 	
 	var init_listener = OnInitializationCompleteListener.new()
 	init_listener.on_initialization_complete = func(_status):
-		print("ADMOB: SDK Inicializado. Iniciando carga escalonada...")
+		print("ADMOB: SDK Inicializado. Cargando banner...")
 		if _app_is_paused: return
 		_create_banner()
-		
-		# PRIORITY: Wait for the banner to finish loading before starting other network requests!
-		await self.banner_finished_loading
-		
-		if _app_is_paused: return
-		await get_tree().create_timer(3.0).timeout
-		if _app_is_paused: return
-		_load_lab_rewarded()
-		
-		await get_tree().create_timer(6.0).timeout
-		if _app_is_paused: return
-		_load_rewarded()
-		
-		await get_tree().create_timer(6.0).timeout
-		if _app_is_paused: return
-		_load_interstitial()
 	
 	MobileAds.initialize(init_listener)
 
@@ -240,25 +227,158 @@ func show_toast(text: String):
 	# Intenta encontrar el CanvasLayer de la UI para mostrar un mensaje temporal
 	var canvas = get_tree().root.find_child("UI", true, false)
 	if not canvas:
-		# Fallback a alerta de sistema si no hay UI
 		OS.alert(text, "AdMob")
 		return
 		
+	# Contenedor para posicionar en la pantalla (usando CenterContainer de tamaño completo pero mouse passthrough)
+	var overlay = CenterContainer.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_PASS # No bloquear clicks
+	
+	# Tarjeta del mensaje
+	var panel = PanelContainer.new()
+	panel.custom_minimum_size = Vector2(700, 160)
+	
+	# Estilo oscuro y borde rojo suave para errores / advertencias
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.15, 0.1, 0.1, 0.95) # Rojo/oscuro moderno
+	style.corner_radius_top_left = 18
+	style.corner_radius_top_right = 18
+	style.corner_radius_bottom_left = 18
+	style.corner_radius_bottom_right = 18
+	style.shadow_color = Color(0, 0, 0, 0.4)
+	style.shadow_size = 12
+	style.shadow_offset = Vector2(0, 6)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.border_color = Color(0.8, 0.2, 0.2, 0.8) # Borde rojo de aviso
+	panel.add_theme_stylebox_override("panel", style)
+	overlay.add_child(panel)
+	
+	# Contenedor de márgenes
+	var margin_container = MarginContainer.new()
+	margin_container.add_theme_constant_override("margin_left", 30)
+	margin_container.add_theme_constant_override("margin_top", 20)
+	margin_container.add_theme_constant_override("margin_right", 30)
+	margin_container.add_theme_constant_override("margin_bottom", 20)
+	panel.add_child(margin_container)
+	
+	# Label del texto
 	var label = Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", 28)
+	label.add_theme_color_override("font_color", Color(1.0, 0.9, 0.9)) # Blanco rojizo
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
-	label.add_theme_constant_override("outline_size", 8)
-	label.add_theme_font_size_override("font_size", 40)
-	canvas.add_child(label)
+	label.add_theme_constant_override("outline_size", 4)
+	margin_container.add_child(label)
 	
-	# Animación simple de desaparición
-	var timer = get_tree().create_timer(2.5)
-	await timer.timeout
-	if is_instance_valid(label):
-		label.queue_free()
+	canvas.add_child(overlay)
+	
+	# Animación de desvanecimiento
+	var tween = overlay.create_tween()
+	tween.tween_interval(2.5) # Espera 2.5s antes de desvanecerse
+	tween.tween_property(overlay, "modulate:a", 0.0, 0.4) # Desvanecer en 0.4s
+	await tween.finished
+	
+	if is_instance_valid(overlay):
+		overlay.queue_free()
+
+func _show_loading_overlay(message: String) -> Control:
+	var canvas = get_tree().root.find_child("UI", true, false)
+	if not canvas:
+		return null
+		
+	# Contenedor principal de pantalla completa (oscurece el fondo)
+	var overlay = PanelContainer.new()
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP # Con esto bloqueamos clics en el fondo
+	
+	var bg_style = StyleBoxFlat.new()
+	bg_style.bg_color = Color(0, 0, 0, 0.6) # Fondo semi-transparente
+	overlay.add_theme_stylebox_override("panel", bg_style)
+	
+	# CenterContainer para forzar el centrado robusto de la tarjeta
+	var center = CenterContainer.new()
+	overlay.add_child(center)
+	
+	# Panel contenedor central (la tarjeta)
+	var panel = PanelContainer.new()
+	panel.custom_minimum_size = Vector2(800, 380)
+	
+	# StyleBoxFlat para diseño premium
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.12, 0.16, 0.95) # Oscuro moderno
+	style.corner_radius_top_left = 24
+	style.corner_radius_top_right = 24
+	style.corner_radius_bottom_left = 24
+	style.corner_radius_bottom_right = 24
+	style.shadow_color = Color(0, 0, 0, 0.5)
+	style.shadow_size = 20
+	style.shadow_offset = Vector2(0, 10)
+	style.border_width_left = 3
+	style.border_width_top = 3
+	style.border_width_right = 3
+	style.border_width_bottom = 3
+	style.border_color = Color(0.25, 0.27, 0.35, 0.8) # Borde sutil
+	panel.add_theme_stylebox_override("panel", style)
+	center.add_child(panel)
+	
+	# Contenedor de márgenes para separar el contenido del borde
+	var margin_container = MarginContainer.new()
+	margin_container.add_theme_constant_override("margin_left", 40)
+	margin_container.add_theme_constant_override("margin_top", 40)
+	margin_container.add_theme_constant_override("margin_right", 40)
+	margin_container.add_theme_constant_override("margin_bottom", 40)
+	panel.add_child(margin_container)
+	
+	var vbox = VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 24)
+	margin_container.add_child(vbox)
+	
+	# Título del anuncio (ej: "Laboratorio")
+	var label = Label.new()
+	label.text = message
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", 34)
+	label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3)) # Dorado premium
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 6)
+	vbox.add_child(label)
+	
+	# Spinner animado en lugar de la barra de progreso
+	var spinner = Control.new()
+	spinner.custom_minimum_size = Vector2(240, 120)
+	spinner.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	spinner.set_script(load("res://scripts/loading_spinner.gd"))
+	vbox.add_child(spinner)
+	
+	# Subtítulo ("Cargando anuncio... Por favor, espera unos segundos")
+	var sublabel = Label.new()
+	sublabel.text = tr("LOADING_AD")
+	sublabel.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sublabel.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	sublabel.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sublabel.add_theme_font_size_override("font_size", 26)
+	sublabel.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9)) # Blanco suave
+	sublabel.add_theme_color_override("font_outline_color", Color.BLACK)
+	sublabel.add_theme_constant_override("outline_size", 4)
+	vbox.add_child(sublabel)
+	
+	canvas.add_child(overlay)
+	
+	# Guardar referencias para el estado de fallo
+	overlay.set_meta("spinner", spinner)
+	overlay.set_meta("sublabel", sublabel)
+	
+	return overlay
 
 # --- SISTEMA DE REWARDED (APOYO AL CREADOR) ---
 
@@ -273,6 +393,7 @@ func _load_rewarded():
 	load_callback.on_ad_failed_to_load = func(error : LoadAdError):
 		print("ADMOB: Rewarded falló -> ", error.message)
 		_rewarded_loading = false
+		rewarded_ad_loaded.emit(false)
 
 	load_callback.on_ad_loaded = func(ad : RewardedAd):
 		print("ADMOB: Rewarded CARGADO.")
@@ -280,9 +401,11 @@ func _load_rewarded():
 			print("ADMOB: App pausada, descartando rewarded cargado por seguridad.")
 			ad.destroy()
 			_rewarded_loading = false
+			rewarded_ad_loaded.emit(false)
 		else:
 			_rewarded_ad = ad
 			_rewarded_loading = false
+			rewarded_ad_loaded.emit(true)
 	
 	var request = AdRequest.new()
 	print("ADMOB: Cargando Rewarded (Apoyo)...")
@@ -294,7 +417,7 @@ func show_rewarded() -> bool:
 		print("ADMOB: show_rewarded() saltado (Plugin desactivado).")
 		return false
 	if _rewarded_ad:
-		print("ADMOB: Mostrando Rewarded...")
+		print("ADMOB: Mostrando Rewarded inmediato...")
 		_active_ad = _rewarded_ad
 		_rewarded_ad = null
 		
@@ -302,22 +425,65 @@ func show_rewarded() -> bool:
 		callback.on_ad_dismissed_full_screen_content = func():
 			print("ADMOB: Rewarded cerrado.")
 			_active_ad = null
-			_load_rewarded()
 			ad_dismissed.emit()
 		
 		var reward_listener := OnUserEarnedRewardListener.new()
 		reward_listener.on_user_earned_reward = func(rewarded_item):
 			print("ADMOB: ¡RECOMPENSA GANADA! -> ", rewarded_item.amount, " ", rewarded_item.type)
-			ad_free_time += 300.0 # 5 Minutos
+			ad_free_time += 60.0 # 1 Minuto
 		
 		_active_ad.full_screen_content_callback = callback
 		_active_ad.show(reward_listener)
 		return true
 	else:
-		print("ADMOB: Rewarded no listo.")
-		show_toast(tr("ad_not_ready"))
-		_load_rewarded()
-		return false
+		print("ADMOB: Rewarded no listo. Cargando bajo demanda...")
+		var overlay = _show_loading_overlay(tr("support"))
+		
+		if not _rewarded_loading:
+			_load_rewarded()
+			
+		var success = await rewarded_ad_loaded
+		
+		if success and _rewarded_ad:
+			if is_instance_valid(overlay):
+				overlay.queue_free()
+				
+			print("ADMOB: Mostrando Rewarded recién cargado...")
+			_active_ad = _rewarded_ad
+			_rewarded_ad = null
+			
+			var callback := FullScreenContentCallback.new()
+			callback.on_ad_dismissed_full_screen_content = func():
+				print("ADMOB: Rewarded cerrado.")
+				_active_ad = null
+				ad_dismissed.emit()
+			
+			var reward_listener := OnUserEarnedRewardListener.new()
+			reward_listener.on_user_earned_reward = func(rewarded_item):
+				print("ADMOB: ¡RECOMPENSA GANADA! -> ", rewarded_item.amount, " ", rewarded_item.type)
+				ad_free_time += 60.0 # 1 Minuto
+			
+			_active_ad.full_screen_content_callback = callback
+			_active_ad.show(reward_listener)
+			return true
+		else:
+			print("ADMOB: Falló la carga del anuncio bajo demanda.")
+			if is_instance_valid(overlay):
+				var spinner = overlay.get_meta("spinner")
+				var sublabel = overlay.get_meta("sublabel")
+				if spinner:
+					spinner.is_failed = true
+				if sublabel:
+					sublabel.text = tr("LOAD_AD_FAILED")
+					sublabel.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
+				
+				var tween = overlay.create_tween()
+				tween.tween_interval(2.1)
+				tween.tween_property(overlay, "modulate:a", 0.0, 0.4)
+				await overlay.get_tree().create_timer(2.5).timeout
+				if is_instance_valid(overlay):
+					overlay.queue_free()
+			return false
 
 # --- SISTEMA DE REWARDED (LABORATORIO) ---
 
@@ -332,6 +498,7 @@ func _load_lab_rewarded():
 	load_callback.on_ad_failed_to_load = func(error : LoadAdError):
 		print("ADMOB: Lab Rewarded falló -> ", error.message)
 		_lab_rewarded_loading = false
+		lab_rewarded_ad_loaded.emit(false)
 
 	load_callback.on_ad_loaded = func(ad : RewardedAd):
 		print("ADMOB: Lab Rewarded CARGADO.")
@@ -339,16 +506,17 @@ func _load_lab_rewarded():
 			print("ADMOB: App pausada, descartando lab rewarded cargado por seguridad.")
 			ad.destroy()
 			_lab_rewarded_loading = false
+			lab_rewarded_ad_loaded.emit(false)
 		else:
 			_lab_rewarded_ad = ad
 			_lab_rewarded_loading = false
+			lab_rewarded_ad_loaded.emit(true)
 	
 	var request = AdRequest.new()
 	print("ADMOB: Cargando Rewarded (Laboratorio)...")
 	RewardedAdLoader.new().load(unit_id, request, load_callback)
 
 func show_lab_rewarded() -> bool:
-
 
 	if not Engine.has_singleton("PoingGodotAdMob"):
 		print("ADMOB: [PLUGIN DESACTIVADO] Laboratorio Desbloqueado de forma gratuita.")
@@ -363,7 +531,7 @@ func show_lab_rewarded() -> bool:
 		return true
 		
 	if _lab_rewarded_ad:
-		print("ADMOB: Mostrando Lab Rewarded...")
+		print("ADMOB: Mostrando Lab Rewarded inmediato...")
 		_active_ad = _lab_rewarded_ad
 		_lab_rewarded_ad = null
 		
@@ -371,7 +539,6 @@ func show_lab_rewarded() -> bool:
 		callback.on_ad_dismissed_full_screen_content = func():
 			print("ADMOB: Lab Rewarded cerrado.")
 			_active_ad = null
-			_load_lab_rewarded()
 			ad_dismissed.emit()
 		
 		var reward_listener := OnUserEarnedRewardListener.new()
@@ -383,10 +550,54 @@ func show_lab_rewarded() -> bool:
 		_active_ad.show(reward_listener)
 		return true
 	else:
-		print("ADMOB: Lab Rewarded no listo.")
-		show_toast(tr("lab_ad_not_ready"))
-		_load_lab_rewarded()
-		return false
+		print("ADMOB: Lab Rewarded no listo. Cargando bajo demanda...")
+		var overlay = _show_loading_overlay(tr("lab"))
+		
+		if not _lab_rewarded_loading:
+			_load_lab_rewarded()
+			
+		var success = await lab_rewarded_ad_loaded
+		
+		if success and _lab_rewarded_ad:
+			if is_instance_valid(overlay):
+				overlay.queue_free()
+				
+			print("ADMOB: Mostrando Lab Rewarded recién cargado...")
+			_active_ad = _lab_rewarded_ad
+			_lab_rewarded_ad = null
+			
+			var callback := FullScreenContentCallback.new()
+			callback.on_ad_dismissed_full_screen_content = func():
+				print("ADMOB: Lab Rewarded cerrado.")
+				_active_ad = null
+				ad_dismissed.emit()
+			
+			var reward_listener := OnUserEarnedRewardListener.new()
+			reward_listener.on_user_earned_reward = func(_rewarded_item):
+				print("ADMOB: ¡LABORATORIO DESBLOQUEADO (12h)!")
+				lab_unlocked.emit()
+			
+			_active_ad.full_screen_content_callback = callback
+			_active_ad.show(reward_listener)
+			return true
+		else:
+			print("ADMOB: Falló la carga de Lab Rewarded.")
+			if is_instance_valid(overlay):
+				var spinner = overlay.get_meta("spinner")
+				var sublabel = overlay.get_meta("sublabel")
+				if spinner:
+					spinner.is_failed = true
+				if sublabel:
+					sublabel.text = tr("LOAD_AD_FAILED")
+					sublabel.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
+				
+				var tween = overlay.create_tween()
+				tween.tween_interval(2.1)
+				tween.tween_property(overlay, "modulate:a", 0.0, 0.4)
+				await overlay.get_tree().create_timer(2.5).timeout
+				if is_instance_valid(overlay):
+					overlay.queue_free()
+			return false
 
 # --- SISTEMA DE INTERSTITIAL (PAUSA / RESET) ---
 
@@ -401,6 +612,7 @@ func _load_interstitial():
 	load_callback.on_ad_failed_to_load = func(error : LoadAdError):
 		print("ADMOB: Intersticial falló -> ", error.message)
 		_interstitial_loading = false
+		interstitial_ad_loaded.emit(false)
 
 	load_callback.on_ad_loaded = func(ad : InterstitialAd):
 		print("ADMOB: Intersticial CARGADO.")
@@ -408,9 +620,11 @@ func _load_interstitial():
 			print("ADMOB: App pausada, descartando intersticial cargado por seguridad.")
 			ad.destroy()
 			_interstitial_loading = false
+			interstitial_ad_loaded.emit(false)
 		else:
 			_interstitial_ad = ad
 			_interstitial_loading = false
+			interstitial_ad_loaded.emit(true)
 	
 	var request = AdRequest.new()
 	InterstitialAdLoader.new().load(unit_id, request, load_callback)
@@ -428,14 +642,13 @@ func show_interstitial() -> bool:
 		callback.on_ad_dismissed_full_screen_content = func():
 			print("ADMOB: Intersticial cerrado.")
 			_active_ad = null
-			_load_interstitial()
 			ad_dismissed.emit()
 		
 		_active_ad.full_screen_content_callback = callback
 		_active_ad.show()
 		
-		# Los obligatorios también dan tiempo libre para no ser tan pesados
-		ad_free_time += 300.0 
+		# Los obligatorios también dan tiempo libre para no ser tan pesados: 2 minutos (120s)
+		ad_free_time += 120.0 
 		return true
 	else:
 		_load_interstitial()
@@ -447,12 +660,14 @@ func check_and_show_interstitial(button_type: String = "") -> bool:
 		return false
 	# PRIMERA VEZ GRACIA: Si es la primera vez que se pulsa un botón específico, NO mostrar.
 	if button_type == "pause" and not first_pause_used:
-		print("ADMOB: Primera pausa gratis.")
+		print("ADMOB: Primera pausa gratis. Iniciando carga perezosa de intersticial...")
 		first_pause_used = true
+		_load_interstitial() # Lazy load for the next time!
 		return false
 	if button_type == "reset" and not first_reset_used:
-		print("ADMOB: Primer reset gratis.")
+		print("ADMOB: Primer reset gratis. Iniciando carga perezosa de intersticial...")
 		first_reset_used = true
+		_load_interstitial() # Lazy load for the next time!
 		return false
 
 	if ad_free_time <= 0:
