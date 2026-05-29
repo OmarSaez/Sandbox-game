@@ -10655,6 +10655,10 @@ func _is_music_active() -> bool:
 # --- SAVE / LOAD SYSTEM ---
 
 func _setup_save_ui():
+	# Pre-cargar anuncio intersticial en segundo plano por si decide cargar partida
+	if Engine.has_singleton("PoingGodotAdMob"):
+		AdMobManager.preload_interstitial()
+
 	# Close other menus first (this frees any old save_panel via queue_free)
 	_close_all_popups()
 	
@@ -11152,6 +11156,10 @@ func _load_from_slot(idx):
 			_update_texture()
 			queue_redraw()
 			if is_instance_valid(save_panel): save_panel.queue_free()
+			
+			# Mostrar anuncio intersticial tras cargar el juego si no hay tiempo libre activo
+			if Engine.has_singleton("PoingGodotAdMob"):
+				AdMobManager.check_and_show_interstitial("load")
 
 func _get_cleaned_lab_data() -> Array:
 	var clean_lab = []

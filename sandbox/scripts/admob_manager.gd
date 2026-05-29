@@ -23,8 +23,6 @@ var _interstitial_loading : bool = false
 var _rewarded_loading : bool = false
 var _lab_rewarded_loading : bool = false
 signal lab_unlocked
-signal banner_finished_loading
-var _initial_banner_loaded : bool = false
 var ad_free_time : float = 0.0 # Segundos restantes sin anuncios
 var first_pause_used : bool = false
 var first_reset_used : bool = false
@@ -201,9 +199,6 @@ func _create_banner():
 		else:
 			_banner_is_showing = true
 			_banner_view.show()
-		if not _initial_banner_loaded:
-			_initial_banner_loaded = true
-			banner_finished_loading.emit()
 	
 	ad_listener.on_ad_failed_to_load = func(error : LoadAdError):
 		print("ADMOB: Fallo de carga de Banner -> ", error.message)
@@ -213,12 +208,11 @@ func _create_banner():
 			_banner_view.destroy()
 			_banner_view = null
 		
-		if not _initial_banner_loaded:
-			if _app_is_paused: return
-			print("ADMOB: Reintentando cargar el banner en 5 segundos...")
-			await get_tree().create_timer(5.0).timeout
-			if _app_is_paused: return
-			_create_banner()
+		if _app_is_paused or not is_inside_tree(): return
+		print("ADMOB: Reintentando cargar el banner en 15 segundos...")
+		await get_tree().create_timer(15.0).timeout
+		if _app_is_paused or not is_inside_tree(): return
+		_create_banner()
 		
 	_banner_view.ad_listener = ad_listener
 	_banner_view.load_ad(AdRequest.new())
@@ -599,7 +593,10 @@ func show_lab_rewarded() -> bool:
 					overlay.queue_free()
 			return false
 
-# --- SISTEMA DE INTERSTITIAL (PAUSA / RESET) ---
+func preload_interstitial():
+	if not Engine.has_singleton("PoingGodotAdMob"):
+		return
+	_load_interstitial()
 
 func _load_interstitial():
 	if _app_is_paused: return
@@ -688,11 +685,12 @@ func _notification(what: int) -> void:
 			
 	elif what == NOTIFICATION_APPLICATION_RESUMED:
 		_app_is_paused = false
-		if _banner_view and _banner_is_showing:
+		if _banner_view:
 			print("ADMOB: App reanudada, mostrando banner...")
+			_banner_is_showing = true
 			_banner_view.show()
-		elif not _initial_banner_loaded and not _banner_loading:
-			print("ADMOB: App reanudada y el banner inicial aún no está cargado. Reintentando...")
+		elif not _banner_loading:
+			print("ADMOB: App reanudada y el banner no existe (destruido en background/error). Re-creando banner...")
 			_create_banner()
 
 func _exit_tree() -> void:
