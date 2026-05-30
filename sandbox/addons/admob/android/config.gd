@@ -27,4 +27,5 @@ const APPLICATION_ID := "ca-app-pub-6982275568315854~7747631339" # App ID Oficia
 var libraries: Array[Library] = [
 	# Main Plugin
 	Library.new("ads", true), # Disable if you don't want to use AdMob.
+	Library.new("meta", true),
 ]

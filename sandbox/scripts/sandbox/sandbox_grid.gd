@@ -835,6 +835,16 @@ func _ready():
 	_register_material(1006, Color("FFD000"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Amarillo
 	_register_material(1007, Color("00E317"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Verde
 	
+	# --- NPC SYSTEM: WIZARD/MAGO (1070-1077) ---
+	_register_material(1070, Color("A83938"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Mago Master
+	_register_material(1071, Color("F2F2F2"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Mago Barba
+	_register_material(1072, Color("FFD8B3"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Mago Piel
+	_register_material(1074, Color("A83938"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Túnica Roja
+	_register_material(1075, Color("384BA8"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Túnica Azul
+	_register_material(1076, Color("C79B1E"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Túnica Amarilla
+	_register_material(1077, Color("74A838"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Túnica Verde
+
+	
 	# --- NPC SYSTEM: ARQUERO (1010-1019) ---
 	_register_material(1010, Color("#228B22"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Master
 	_register_material(1011, Color("9C5B00"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Cabeza (Tela)
@@ -4842,6 +4852,8 @@ func _update_menu_highlights():
 				if selected_material == 1020 and not is_selecting_npc_to_control: is_active = true
 			elif key == "medic_btn":
 				if selected_material == 1040 and not is_selecting_npc_to_control: is_active = true
+			elif key == "mage_btn":
+				if selected_material == 1070 and not is_selecting_npc_to_control: is_active = true
 			elif key.begins_with("team_btn_"):
 				var idx = int(key.split("_")[-1])
 				if idx == selected_team: is_active = true
@@ -7894,6 +7906,7 @@ func _setup_npc_ui():
 		create_npc_btn.call("archer", 1010)
 		create_npc_btn.call("miner", 1020)
 		create_npc_btn.call("medic", 1040)
+		create_npc_btn.call("mage", 1070)
 		
 		# Teams Row (NOW RESPONSIVE)
 		var team_lbl = Label.new()
@@ -7961,7 +7974,6 @@ func _setup_npc_ui():
 		
 		create_fut_npc.call("summoner")
 		create_fut_npc.call("bomber")
-		create_fut_npc.call("mage")
 		create_fut_npc.call("kamikaze")
 		create_fut_npc.call("builder")
 
@@ -8005,6 +8017,8 @@ func _place_npc(x, y):
 	elif selected_material == 1040 or selected_material == 1041: n_type = "medic"
 	elif selected_material == 1050 or selected_material == 1051: n_type = "zombie"
 	elif selected_material == 1060 or selected_material == 1061: n_type = "zombie_tank"
+	elif selected_material == 1070 or selected_material == 1071: n_type = "mage"
+
 	
 	# Register in entity list
 	var new_npc = {
@@ -8104,10 +8118,11 @@ func _draw_npc_pixels(npc, override_mat = -1):
 		# DUAL-ZONE CLEANUP: Wipe both current physics pos AND the last jittered render pos
 		var was_lying = npc.get("last_render_lying", false)
 		var is_tank = (npc.type == "zombie_tank")
+		var is_mage = (npc.type == "mage")
 		var zones = [npc.pos, Vector2i(int(npc.get("last_render_x", npc.pos.x)), int(npc.get("last_render_y", npc.pos.y)))]
 		for p in zones:
 			var xr = range(-7, 8) if was_lying else (range(-1, 4) if is_tank else range(-1, 3))
-			var yr_max = 7 if is_tank else 6
+			var yr_max = 7 if (is_tank or is_mage) else 6
 			for oy in range(-1, yr_max):
 				for ox in xr:
 					var tx = p.x + ox; var ty = p.y + oy
@@ -8143,6 +8158,17 @@ func _draw_npc_pixels(npc, override_mat = -1):
 		m_head = 1051; m_skin = 1051; m_torso = 1052; m_shoes = 1054; team_mat = 1053
 	elif npc.type == "zombie_tank":
 		m_head = 1061; m_skin = 1061; m_torso = 1062; m_shoes = 1064; team_mat = 1063
+	elif npc.type == "mage":
+		m_head = 1071 # Mago Barba
+		m_skin = 1072 # Mago Piel
+		m_torso = 1070 # Mago Master
+		m_shoes = 1008 # Standard shoes
+		if npc.team == 0: team_mat = 1074
+		elif npc.team == 1: team_mat = 1075
+		elif npc.team == 2: team_mat = 1076
+		elif npc.team == 3: team_mat = 1077
+		else: team_mat = 1074
+
 	
 	# 2. Aplicar Overrides (Daño/Muerte)
 	if override_mat != -1:
@@ -8172,6 +8198,16 @@ func _draw_npc_pixels(npc, override_mat = -1):
 				_set_cell(lx, ly, m_shoes); _set_cell(lx+1, ly, team_mat); _set_cell(lx+2, ly, m_torso); _set_cell(lx+3, ly, team_mat); _set_cell(lx+4, ly, m_skin); _set_cell(lx+5, ly, m_head)
 				_set_cell(lx, ly+1, m_shoes); _set_cell(lx+1, ly+1, team_mat); _set_cell(lx+2, ly+1, team_mat); _set_cell(lx+3, ly+1, m_torso); _set_cell(lx+4, ly+1, m_head); _set_cell(lx+5, ly+1, m_head)
 				_set_cell(lx, ly+2, m_shoes); _set_cell(lx+1, ly+2, team_mat); _set_cell(lx+2, ly+2, m_torso); _set_cell(lx+3, ly+2, m_torso); _set_cell(lx+4, ly+2, m_skin); _set_cell(lx+5, ly+2, m_head)
+		elif npc.type == "mage":
+			# --- LYING DOWN WIZARD/MAGO (6x2) ---
+			var lx = sx; var ly = sy + 4
+			if face_dir > 0:
+				_set_cell(lx, ly, team_mat); _set_cell(lx+1, ly, m_skin); _set_cell(lx+2, ly, team_mat); _set_cell(lx+3, ly, team_mat); _set_cell(lx+4, ly, team_mat); _set_cell(lx+5, ly, m_shoes)
+				_set_cell(lx, ly+1, team_mat); _set_cell(lx+1, ly+1, m_head); _set_cell(lx+2, ly+1, m_head); _set_cell(lx+3, ly+1, m_head); _set_cell(lx+4, ly+1, m_head); _set_cell(lx+5, ly+1, m_shoes)
+			else:
+				# Mirror (Lying down facing left)
+				_set_cell(lx, ly, m_shoes); _set_cell(lx+1, ly, team_mat); _set_cell(lx+2, ly, team_mat); _set_cell(lx+3, ly, team_mat); _set_cell(lx+4, ly, m_skin); _set_cell(lx+5, ly, team_mat)
+				_set_cell(lx, ly+1, m_shoes); _set_cell(lx+1, ly+1, m_head); _set_cell(lx+2, ly+1, m_head); _set_cell(lx+3, ly+1, m_head); _set_cell(lx+4, ly+1, m_head); _set_cell(lx+5, ly+1, team_mat)
 		else:
 			# --- LYING DOWN (Horizontal 5x2 - Face Up) ---
 			var lx = sx; var ly = sy + 3
@@ -8210,6 +8246,23 @@ func _draw_npc_pixels(npc, override_mat = -1):
 			_set_cell(px0, sy+4, team_mat); _set_cell(px1, sy+4, team_mat); _set_cell(px2, sy+4, team_mat)
 			# Fila 5 (Pies descalzos)
 			_set_cell(px0, sy+5, m_shoes); _set_cell(px1, sy+5, m_shoes); _set_cell(px2, sy+5, m_shoes)
+		elif npc.type == "mage":
+			# --- STANDING WIZARD/MAGO (2x6) ---
+			var px0 = sx if face_dir > 0 else sx + 1 # Back
+			var px1 = sx + 1 if face_dir > 0 else sx # Front
+			
+			# Row 0: Hat tip
+			_set_cell(px0, sy, team_mat); _set_cell(px1, sy, team_mat)
+			# Row 1: Head / Face
+			_set_cell(px0, sy+1, m_head); _set_cell(px1, sy+1, m_skin)
+			# Row 2: Tunic / Beard
+			_set_cell(px0, sy+2, team_mat); _set_cell(px1, sy+2, m_head)
+			# Row 3: Tunic / Beard
+			_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, m_head)
+			# Row 4: Tunic / Beard
+			_set_cell(px0, sy+4, team_mat); _set_cell(px1, sy+4, m_head)
+			# Row 5: Shoes
+			_set_cell(px0, sy+5, m_shoes); _set_cell(px1, sy+5, m_shoes)
 		else:
 			# --- STANDING (Vertical 2x5) ---
 			var px0 = sx if face_dir > 0 else sx + 1
@@ -9000,8 +9053,8 @@ func _process_npcs(delta):
 		# --- 3. MOVIMIENTO IA (SI NO HAY FISICA ACTIVA Y NO ESTÁ POSEÍDO) ---
 		if not moved_by_physics and npc != controlled_npc:
 			# 1. GRAVEDAD SOBERANA: Chequeo solo bajo los pies para evitar "colgarse" lateralmente
-			var w = 3 if npc.type == "zombie_tank" else 2
-			var h = 6 if npc.type == "zombie_tank" else 5
+			var w = 3 if (npc.type == "zombie_tank") else 2
+			var h = 6 if (npc.type == "zombie_tank" or npc.type == "mage") else 5
 			var feet_y = np.y + h
 			var can_fall = true
 			if feet_y >= dynamic_grid_height: can_fall = false
@@ -9087,8 +9140,8 @@ func _process_npcs(delta):
 						var has_z = _has_active_zombies()
 						for other in nearby:
 							if _is_ally(npc, other, has_z) and other != npc:
-								var ow = 3 if other.type == "zombie_tank" else 2
-								var oh = 6 if other.type == "zombie_tank" else 5
+								var ow = 3 if (other.type == "zombie_tank") else 2
+								var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 5
 								if tx_test < other.pos.x + ow and tx_test + w > other.pos.x and np.y < other.pos.y + oh and np.y + h > other.pos.y:
 									bumped_ally = true; break
 						
@@ -9281,8 +9334,8 @@ func _process_projectiles(delta):
 					is_enemy = (other.team != p.team)
 					
 			if is_enemy and other.hp > 0:
-				var ow = 3 if other.type == "zombie_tank" else 2
-				var oh = 6 if other.type == "zombie_tank" else 5
+				var ow = 3 if (other.type == "zombie_tank") else 2
+				var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 5
 				var overlaps = false
 				if p.type == "bomber_bomb":
 					for ox in range(-1, 1):
@@ -9489,8 +9542,8 @@ func _check_npc_environment_damage(npc) -> bool:
 		if charge_array[cell_idx] > 50:
 			npc.hp -= 2.5 * dmg_mult; took_damage = true; npc.hit_flash = 5; npc.hit_type = "electric"
 			if _get_lut_rand() < 0.4: _add_spark(float(pt.x),float(pt.y),_get_lut_rand_range(-20,20),_get_lut_rand_range(-40,-10),Color.CYAN,0.4)
-	var w = 3 if npc.type == "zombie_tank" else 2
-	var h = 6 if npc.type == "zombie_tank" else 5
+	var w = 3 if (npc.type == "zombie_tank") else 2
+	var h = 6 if (npc.type == "zombie_tank" or npc.type == "mage") else 5
 	var air_found = false
 	for oy in range(-1, h + 1):
 		var ty = npc.pos.y + oy
@@ -9517,9 +9570,13 @@ func _set_npc_emoji(npc, emoji_text: String, duration: float = 2.0):
 func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 	var w = 2
 	var h = 5
-	if moving_npc != null and moving_npc.type == "zombie_tank":
-		w = 3
-		h = 6
+	if moving_npc != null:
+		if moving_npc.type == "zombie_tank":
+			w = 3
+			h = 6
+		elif moving_npc.type == "mage":
+			w = 2
+			h = 6
 		
 	if gx < 0 or gx + w - 1 >= grid_width or gy < 0 or gy + h - 1 >= dynamic_grid_height: return false
 	
@@ -9543,8 +9600,8 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 			# Regla de oro: Aliados no se estorban
 			if _is_ally(moving_npc, other, has_z): continue 
 			
-			var ow = 3 if other.type == "zombie_tank" else 2
-			var oh = 6 if other.type == "zombie_tank" else 5
+			var ow = 3 if (other.type == "zombie_tank") else 2
+			var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 5
 			if gx < other.pos.x + ow and gx + w > other.pos.x and gy < other.pos.y + oh and gy + h > other.pos.y: return false
 	return true
 
@@ -10179,6 +10236,7 @@ func _update_arcade_dynamic_button():
 		elif selected_material == 1010 or selected_material == 1011: active_name = tr("archer")
 		elif selected_material == 1020 or selected_material == 1021: active_name = tr("miner")
 		elif selected_material == 1040 or selected_material == 1041: active_name = tr("medic")
+		elif selected_material == 1070 or selected_material == 1071: active_name = tr("mage")
 		elif selected_material == 1050 or selected_material == 1051: active_name = tr("zombie")
 		elif selected_material == 1060 or selected_material == 1061: active_name = tr("zombie_tank")
 		
