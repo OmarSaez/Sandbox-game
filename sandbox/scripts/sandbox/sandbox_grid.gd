@@ -7716,8 +7716,21 @@ func _trigger_controlled_npc_action():
 					for _s in range(5):
 						_add_spark(float(found_x), float(found_y), _get_lut_rand_range(-30, 30), _get_lut_rand_range(-50, -10), mat_colors_1[found_mat] if found_mat < mat_colors_1.size() else Color.GRAY, 0.4)
 						
+				var aim_target = _find_controlled_aim_target(controlled_npc, face_dir, 150.0)
 				var vx = face_dir * 120.0
 				var vy = -80.0
+				if aim_target:
+					var target_x = float(aim_target.pos.x)
+					var target_y = float(aim_target.pos.y)
+					var dir = 1 if (target_x - controlled_npc.pos.x) > 0 else -1
+					target_x += _get_lut_rand_range(-5.0, 5.0)
+					target_y += _get_lut_rand_range(-3.0, 3.0)
+					var dist_x = abs(target_x - controlled_npc.pos.x)
+					if dist_x < 2.0: dist_x = 2.0
+					var time_to_target = dist_x / 120.0
+					time_to_target = clamp(time_to_target, 0.4, 2.5)
+					vx = dir * dist_x / time_to_target
+					vy = (target_y - controlled_npc.pos.y) / time_to_target - (0.5 * 200.0 * time_to_target)
 				
 				active_projectiles.append({
 					"pos": Vector2(controlled_npc.pos.x + face_dir * 3, controlled_npc.pos.y + 1),
@@ -7736,9 +7749,12 @@ func _trigger_controlled_npc_action():
 		"archer":
 			# Shoot arrow in current face direction
 			var face_dir = controlled_npc.get("last_dir", 1)
-			# Create a dummy target in the direction of focus
-			var dummy_target = {"pos": Vector2i(controlled_npc.pos.x + face_dir * 100, controlled_npc.pos.y)}
-			_shoot_arrow(controlled_npc, dummy_target)
+			var target = _find_controlled_aim_target(controlled_npc, face_dir, 160.0)
+			if target:
+				_shoot_arrow(controlled_npc, target)
+			else:
+				var dummy_target = {"pos": Vector2i(controlled_npc.pos.x + face_dir * 100, controlled_npc.pos.y)}
+				_shoot_arrow(controlled_npc, dummy_target)
 			controlled_npc.attack_cooldown = 1.0
 		"medic":
 			# Simple AOE heal
@@ -7758,6 +7774,16 @@ func _trigger_controlled_npc_action():
 				_play_action_sound("medic_heal")
 				_set_npc_emoji(controlled_npc, "💚", 1.0)
 				controlled_npc.attack_cooldown = 0.8
+		"mage":
+			# Shoot fireball in current face direction
+			var face_dir = controlled_npc.get("last_dir", 1)
+			var target = _find_controlled_aim_target(controlled_npc, face_dir, 150.0)
+			if target:
+				_shoot_fireball(controlled_npc, target)
+			else:
+				var dummy_target = {"pos": Vector2i(controlled_npc.pos.x + face_dir * 90, controlled_npc.pos.y)}
+				_shoot_fireball(controlled_npc, dummy_target)
+			controlled_npc.attack_cooldown = 1.5
 		"miner":
 			# Place TNT in front
 			var face_dir = controlled_npc.get("last_dir", 1)
@@ -9271,18 +9297,37 @@ func _miner_dig(npc, dig_down=false):
 
 func _shoot_arrow(npc, target):
 	if npc.hp <= 0: return
-	_play_action_sound("archer_shoot"); var dx = float(target.pos.x - npc.pos.x); var dir = 1 if dx > 0 else -1; var aim_dy = float((target.pos.y + 2) - npc.pos.y); var speed_x = clamp(abs(dx) * 1.5, 90.0, 150.0); var vx = dir * speed_x; var t = abs(dx) / speed_x
+	_play_action_sound("archer_shoot")
+	var target_x = float(target.pos.x)
+	var target_y = float(target.pos.y)
+	if npc == controlled_npc and target.get("hp") != null:
+		target_x += _get_lut_rand_range(-5.0, 5.0)
+		target_y += _get_lut_rand_range(-3.0, 3.0)
+	var dx = target_x - npc.pos.x
+	var dir = 1 if (target.pos.x - npc.pos.x) > 0 else -1
+	var aim_dy = (target_y + 2.0) - npc.pos.y
+	var speed_x = clamp(abs(dx) * 1.5, 90.0, 150.0)
+	var vx = dir * speed_x
+	var t = abs(dx) / speed_x
 	if t < 0.1: t = 0.1
 	if !npc.get("morale_broken", false): _set_npc_emoji(npc, "🏹", clamp(t + 0.2, 0.5, 1.5))
-	var arrow_gravity = 200.0; var vy = (aim_dy / t) - (0.5 * arrow_gravity * t); vy += npc.get("precision", 0.0) * 15.0; vy = clamp(vy, -280.0, 40.0)
+	var arrow_gravity = 200.0
+	var vy = (aim_dy / t) - (0.5 * arrow_gravity * t)
+	vy += npc.get("precision", 0.0) * 15.0
+	vy = clamp(vy, -280.0, 40.0)
 	active_projectiles.append({ "pos": Vector2(npc.pos.x + dir*2, npc.pos.y + 1), "vel": Vector2(vx, vy), "team": npc.team, "type": "arrow", "life": 2.5, "atk_dmg": npc.get("atk_dmg", 1.0), "is_fire": npc.get("is_fire_variant", false) })
 
 func _shoot_fireball(npc, target):
 	if npc.hp <= 0: return
 	_play_action_sound("mage_shoot", 0.1, 0.0, 1.4)
-	var dx = float(target.pos.x - npc.pos.x)
-	var dir = 1 if dx > 0 else -1
-	var aim_dy = float((target.pos.y + 2) - npc.pos.y)
+	var target_x = float(target.pos.x)
+	var target_y = float(target.pos.y)
+	if npc == controlled_npc and target.get("hp") != null:
+		target_x += _get_lut_rand_range(-5.0, 5.0)
+		target_y += _get_lut_rand_range(-3.0, 3.0)
+	var dx = target_x - npc.pos.x
+	var dir = 1 if (target.pos.x - npc.pos.x) > 0 else -1
+	var aim_dy = (target_y + 2.0) - npc.pos.y
 	var speed_x = clamp(abs(dx) * 1.2, 70.0, 120.0)
 	var vx = dir * speed_x
 	var t = abs(dx) / speed_x
@@ -9562,6 +9607,20 @@ func _find_closest_enemy(me, radar_range):
 			if is_enemy:
 				var d_sq = me.pos.distance_squared_to(other.pos)
 				if d_sq < min_dist_sq: min_dist_sq = d_sq; closest = other
+	return closest
+
+func _find_controlled_aim_target(me, face_dir, radar_range):
+	var closest = null; var min_dist_sq = radar_range * radar_range
+	var nearby = _get_nearby_npcs(me.pos.x, me.pos.y, radar_range)
+	var has_zombies = _has_active_zombies()
+	for other in nearby:
+		if other.hp > 0 and other != me:
+			var is_enemy = not _is_ally(me, other, has_zombies)
+			if is_enemy:
+				var dx = other.pos.x - me.pos.x
+				if dx * face_dir >= -8:
+					var d_sq = me.pos.distance_squared_to(other.pos)
+					if d_sq < min_dist_sq: min_dist_sq = d_sq; closest = other
 	return closest
 
 func _is_zombie(type: String) -> bool:
