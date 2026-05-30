@@ -8084,6 +8084,8 @@ func _place_npc(x, y):
 		"stuck_timer": 0.0, 
 		"last_pos_x": start_x,
 		"invul_timer": 0.0,
+		"suffocation_timer": 0.0,
+		"checked_rescue_map": {},
 		"id": _npc_id_counter
 	}
 	_npc_id_counter += 1
@@ -8131,6 +8133,8 @@ func _spawn_explosion_npc(x, y, team = 0):
 		"is_fire_variant": false,
 		"has_spotted_enemy": false,
 		"invul_timer": 0.0,
+		"suffocation_timer": 0.0,
+		"checked_rescue_map": {},
 		"id": _npc_id_counter
 	}
 	_npc_id_counter += 1
@@ -8439,6 +8443,10 @@ func _process_npcs(delta):
 			
 			# AUTONOMOUS AI LOGIC (Skip if controlled)
 			if npc != controlled_npc:
+				if npc.type == "mage" and npc.hp > 0:
+					_process_mage_rescue(npc)
+			
+			if npc != controlled_npc and not npc.get("is_rescuing", false):
 				var is_socializing = false
 				
 				# --- DOWNED / SLEEPING STATE HANDLER ---
@@ -9338,6 +9346,116 @@ func _shoot_fireball(npc, target):
 	vy = clamp(vy, -220.0, 40.0)
 	active_projectiles.append({ "pos": Vector2(npc.pos.x + dir*2, npc.pos.y + 1), "vel": Vector2(vx, vy), "team": npc.team, "type": "fireball", "life": 3.0, "atk_dmg": npc.get("atk_dmg", 1.0), "gravity": gravity, "attacker_id": npc.id })
 
+func _is_npc_suffocating(npc) -> bool:
+	return npc.hp > 0 and npc.suffocation_timer > 0.0
+
+func _process_mage_rescue(npc):
+	if npc.hp <= 0: return
+	
+	# 1. Abort rescue if damaged
+	if npc.hit_flash > 0 and npc.get("rescue_target", null) != null:
+		npc["rescue_target"] = null
+		npc["is_rescuing"] = false
+		_set_npc_emoji(npc, "😡", 1.5)
+	
+	# 2. Check rescue target validity
+	var res_target = npc.get("rescue_target", null)
+	if res_target:
+		var is_active = false
+		for a in active_npcs:
+			if a == res_target:
+				is_active = true
+				break
+		if not is_active or res_target.hp <= 0 or not _is_npc_suffocating(res_target):
+			npc["rescue_target"] = null
+			npc["is_rescuing"] = false
+			res_target = null
+			
+	# 3. If actively rescuing, execute rescue
+	if res_target:
+		npc["is_rescuing"] = true
+		npc.dir = 0
+		npc.attack_cooldown = 0.5
+		
+		# Alternate emojis
+		var alt_emoji = "✨" if (_ai_tick_count / 10) % 2 == 0 else "⬆️"
+		_set_npc_emoji(npc, alt_emoji, 0.6)
+		
+		# Magic lifting
+		var th = 6 if (res_target.type == "zombie_tank" or res_target.type == "mage") else 5
+		for dx in range(-2, 3):
+			var tx = res_target.pos.x + dx
+			if tx < 0 or tx >= grid_width: continue
+			# Scan from feet up to surface
+			for ty in range(res_target.pos.y + th - 1, -1, -1):
+				if ty < 0 or ty >= dynamic_grid_height: continue
+				var tid = cells[ty * grid_width + tx] & 0xFFFF
+				if tid > 0:
+					var tags = material_tags_raw[tid]
+					if (tags & SandboxMaterial.Tags.SOLID) != 0 or (tags & SandboxMaterial.Tags.POWDER) != 0:
+						# Erase cell
+						_set_cell(tx, ty, 0)
+						# Launch projectile upward
+						active_projectiles.append({
+							"pos": Vector2(tx, ty),
+							"vel": Vector2(_get_lut_rand_range(-15.0, 15.0), _get_lut_rand_range(-120.0, -80.0)),
+							"team": npc.team,
+							"type": "thrown_rock",
+							"life": 3.0,
+							"block_material": tid,
+							"atk_dmg": 0.2
+						})
+						# Spawn magic sparks
+						var spark_colors = [Color.MEDIUM_PURPLE, Color.AQUA, Color.GOLD]
+						var col = spark_colors[int(_get_lut_rand() * spark_colors.size())]
+						_add_spark(float(tx), float(ty), _get_lut_rand_range(-20.0, 20.0), _get_lut_rand_range(-50.0, -20.0), col, 0.5)
+						break
+		return
+		
+	# 4. If not rescuing, scan for nearby suffocating allies
+	var checked_map = npc.get("checked_rescue_map", {})
+	var to_clean = []
+	for cid in checked_map:
+		var found = false
+		for a in active_npcs:
+			if a.id == cid and a.hp > 0 and _is_npc_suffocating(a):
+				found = true
+				break
+		if not found:
+			to_clean.append(cid)
+	for cid in to_clean:
+		checked_map.erase(cid)
+	npc["checked_rescue_map"] = checked_map
+	
+	# Scan allies within 160 cells
+	var allies = _get_nearby_npcs(npc.pos.x, npc.pos.y, 160.0)
+	var has_z = _has_active_zombies()
+	var suffocating_allies = []
+	for other in allies:
+		if other != npc and other.hp > 0 and _is_ally(npc, other, has_z):
+			if _is_npc_suffocating(other):
+				suffocating_allies.append(other)
+				
+	if suffocating_allies.size() > 0:
+		var closest_ally = suffocating_allies[0]
+		var min_d = npc.pos.distance_to(closest_ally.pos)
+		for a in suffocating_allies:
+			var d = npc.pos.distance_to(a.pos)
+			if d < min_d:
+				min_d = d
+				closest_ally = a
+				
+		# Evaluate 100% probability roll once per target (set to 100% for user guarantee)
+		if not checked_map.has(closest_ally.id):
+			var decide_rescue = true
+			checked_map[closest_ally.id] = decide_rescue
+			
+		if checked_map[closest_ally.id]:
+			npc["rescue_target"] = closest_ally
+			npc["is_rescuing"] = true
+			npc.dir = 0
+			npc.attack_cooldown = 0.5
+
 func _convert_to_ally(npc, new_team):
 	_draw_npc_pixels(npc, 0)
 	npc.team = new_team
@@ -9715,6 +9833,10 @@ func _check_npc_environment_damage(npc) -> bool:
 	if !air_found: 
 		var suff_dmg = 3.0; if npc == controlled_npc: suff_dmg = 1.0
 		npc.hp -= suff_dmg; npc.hit_flash = 4; took_damage = true
+		npc.suffocation_timer = 2.0
+	else:
+		if npc.suffocation_timer > 0:
+			npc.suffocation_timer = max(0.0, npc.suffocation_timer - 0.05)
 	if took_damage: _play_action_sound("damage_npc", 0.4)
 	return took_damage
 
