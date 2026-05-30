@@ -18,9 +18,12 @@ config/name="Sandbox"
 run/main_scene="res://scenes/main/main_scene.tscn"
 config/features=PackedStringArray("4.6", "Mobile")
 config/icon="res://icon.svg"
+config/version="1.2.0"
+
 
 [autoload]
 
+VersionManager="*res://scripts/version_manager.gd"
 AdMobManager="*res://scripts/admob_manager.gd"
 AnalyticsManager="*res://scripts/analytics_manager.gd"
 NotificationScheduler="*res://addons/NotificationSchedulerPlugin/NotificationScheduler.gd"
