@@ -5420,6 +5420,14 @@ func _draw():
 			var rad = g_scale * size_factor
 			draw_circle(world_pos, rad, Color("202020"))
 			draw_circle(world_pos + Vector2(0, -rad * 0.8), rad * 0.35, Color("FF3333"))
+		elif p.type == "magic_lifted":
+			var world_pos = p.pos * g_scale
+			var mat = p.get("block_material", 1)
+			var col = mat_colors_1[mat] if mat < mat_colors_1.size() else Color("#717E80")
+			# Draw 2x2 block
+			draw_rect(Rect2(world_pos, Vector2(g_scale * 2, g_scale * 2)), col)
+			# Draw a faint magical glow border
+			draw_rect(Rect2(world_pos - Vector2(g_scale * 0.5, g_scale * 0.5), Vector2(g_scale * 3, g_scale * 3)), Color(0.6, 0.4, 0.9, 0.45), false, 1.0)
 
 func _process_tsunami(delta):
 	if tsunami_timer <= 0:
@@ -9349,6 +9357,23 @@ func _shoot_fireball(npc, target):
 func _is_npc_suffocating(npc) -> bool:
 	return npc.hp > 0 and npc.suffocation_timer > 0.0
 
+func _launch_flying_block(tx: int, ty: int, vx: float, vy: float, team: int = 0, lifetime: float = 2.5) -> bool:
+	if tx < 0 or tx >= grid_width or ty < 0 or ty >= dynamic_grid_height:
+		return false
+	var tid = cells[ty * grid_width + tx] & 0xFFFF
+	if tid > 0:
+		_set_cell(tx, ty, 0)
+		active_projectiles.append({
+			"pos": Vector2(tx, ty),
+			"vel": Vector2(vx, vy),
+			"team": team,
+			"type": "magic_lifted",
+			"life": lifetime,
+			"block_material": tid
+		})
+		return true
+	return false
+
 func _process_mage_rescue(npc):
 	if npc.hp <= 0: return
 	
@@ -9374,6 +9399,20 @@ func _process_mage_rescue(npc):
 	# 3. If actively rescuing, execute rescue
 	if res_target:
 		npc["is_rescuing"] = true
+		
+		# Set face direction towards target
+		var look_dir = sign(res_target.pos.x - npc.pos.x)
+		if look_dir != 0:
+			npc["last_dir"] = look_dir
+
+		# Check horizontal distance
+		var h_dist = abs(npc.pos.x - res_target.pos.x)
+		if h_dist > 10:
+			npc.dir = look_dir
+			_set_npc_emoji(npc, "🏃", 0.6)
+			return
+			
+		# Within 10 pixels: stop and channel
 		npc.dir = 0
 		npc.attack_cooldown = 0.5
 		
@@ -9386,25 +9425,25 @@ func _process_mage_rescue(npc):
 		for dx in range(-2, 3):
 			var tx = res_target.pos.x + dx
 			if tx < 0 or tx >= grid_width: continue
-			# Scan from feet up to surface
-			for ty in range(res_target.pos.y + th - 1, -1, -1):
+			# Scan from surface down to feet
+			for ty in range(0, res_target.pos.y + th):
 				if ty < 0 or ty >= dynamic_grid_height: continue
 				var tid = cells[ty * grid_width + tx] & 0xFFFF
 				if tid > 0:
 					var tags = material_tags_raw[tid]
 					if (tags & SandboxMaterial.Tags.SOLID) != 0 or (tags & SandboxMaterial.Tags.POWDER) != 0:
-						# Erase cell
-						_set_cell(tx, ty, 0)
-						# Launch projectile upward
-						active_projectiles.append({
-							"pos": Vector2(tx, ty),
-							"vel": Vector2(_get_lut_rand_range(-15.0, 15.0), _get_lut_rand_range(-120.0, -80.0)),
-							"team": npc.team,
-							"type": "thrown_rock",
-							"life": 3.0,
-							"block_material": tid,
-							"atk_dmg": 0.2
-						})
+						# Launch projectile upward and push to the sides via the isolated helper function
+						var vx = 0.0
+						var dx_sign = sign(tx - res_target.pos.x)
+						if dx_sign < 0:
+							vx = _get_lut_rand_range(-55.0, -25.0)
+						elif dx_sign > 0:
+							vx = _get_lut_rand_range(25.0, 55.0)
+						else:
+							vx = _get_lut_rand_range(-40.0, -15.0) if _get_lut_rand() < 0.5 else _get_lut_rand_range(15.0, 40.0)
+							
+						var vy = _get_lut_rand_range(-150.0, -100.0)
+						_launch_flying_block(tx, ty, vx, vy, npc.team, 2.5)
 						# Spawn magic sparks
 						var spark_colors = [Color.MEDIUM_PURPLE, Color.AQUA, Color.GOLD]
 						var col = spark_colors[int(_get_lut_rand() * spark_colors.size())]
@@ -9516,7 +9555,7 @@ func _process_projectiles(delta):
 						if tid == mat: _set_cell(tx, ty, 0)
 		else:
 			if last_gx >= 0 and last_gx < grid_width and last_gy >= 0 and last_gy < dynamic_grid_height:
-				if p.type != "bomber_bomb":
+				if p.type != "bomber_bomb" and p.type != "magic_lifted":
 					_set_cell(last_gx, last_gy, 0)
 				
 		# 2. Advance projectile physics
@@ -9526,6 +9565,20 @@ func _process_projectiles(delta):
 		p.life -= delta
 		
 		var gx = int(p.pos.x); var gy = int(p.pos.y)
+		if p.type == "magic_lifted" and p.life <= 0:
+			if gx >= 0 and gx < grid_width and gy >= 0 and gy < dynamic_grid_height:
+				var mat = p.get("block_material", 1)
+				var placed = false
+				for oy in range(0, -6, -1):
+					var ty = gy + oy
+					if ty >= 0 and ty < dynamic_grid_height and _get_cell(gx, ty) == 0:
+						_set_cell(gx, ty, mat)
+						placed = true
+						break
+				if not placed:
+					_set_cell(gx, gy, mat)
+			to_remove.append(i); continue
+
 		if gx < 0 or gx >= grid_width or gy < 0 or gy >= dynamic_grid_height or p.life <= 0:
 			to_remove.append(i); continue
 			
@@ -9631,6 +9684,17 @@ func _process_projectiles(delta):
 				_trigger_rock_impact(gx, gy, p)
 			elif p.type == "bomber_bomb":
 				_explode(gx, gy, p.get("explosion_radius", 6))
+			elif p.type == "magic_lifted":
+				var mat = p.get("block_material", 1)
+				var placed = false
+				for oy in range(0, -6, -1):
+					var ty = gy + oy
+					if ty >= 0 and ty < dynamic_grid_height and _get_cell(gx, ty) == 0:
+						_set_cell(gx, ty, mat)
+						placed = true
+						break
+				if not placed:
+					_set_cell(gx, gy, mat)
 			elif p.type == "fireball":
 				var hit_mat = _get_cell(gx, gy)
 				var hit_flammable = false
@@ -9670,6 +9734,8 @@ func _process_projectiles(delta):
 		elif p.type == "fireball":
 			if _get_cell(gx, gy) == 0:
 				_set_cell(gx, gy, 3)
+		elif p.type == "magic_lifted":
+			pass
 		else:
 			_set_cell(gx, gy, 1012)
 			
