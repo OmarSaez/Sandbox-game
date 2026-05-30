@@ -299,6 +299,7 @@ var action_sfx = {
 	"zombie_attack": "zombie_attack", # Ataque y gruñido de Zombie
 	"zombie_tank_throw": "zombie_tank_attack", # Lanzar bloque (audio actual)
 	"zombie_tank_melee": "zombie_tank_melee", # Ataque melee de cerca (audio nuevo)
+	"mage_shoot": "rocket_launch", # Disparo de Mago
 	
 	# Sonidos Continuos de Clima / Desastres (LOOP EN TIEMPO REAL) MP3
 	"weather_1": "rain_light",
@@ -8056,6 +8057,7 @@ func _place_npc(x, y):
 		"has_spotted_enemy": false,
 		"stuck_timer": 0.0, 
 		"last_pos_x": start_x,
+		"invul_timer": 0.0,
 		"id": _npc_id_counter
 	}
 	_npc_id_counter += 1
@@ -8102,6 +8104,7 @@ func _spawn_explosion_npc(x, y, team = 0):
 		"miss_counter": 0,
 		"is_fire_variant": false,
 		"has_spotted_enemy": false,
+		"invul_timer": 0.0,
 		"id": _npc_id_counter
 	}
 	_npc_id_counter += 1
@@ -8336,6 +8339,10 @@ func _process_npcs(delta):
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
 		var profile = NPC_PROFILES.get(npc.type, {})
+		
+		# Decrement invulnerability protection timer
+		if npc.invul_timer > 0:
+			npc.invul_timer = max(0.0, npc.invul_timer - 0.05)
 		
 		# Procesar timers de emojis y visibilidad (Lógica de Ciclo Emocional Optimizado)
 		var emotes = []
@@ -8788,6 +8795,17 @@ func _process_npcs(delta):
 									_shoot_arrow(npc, target); npc.miss_counter += 1
 									if npc.miss_counter >= 3: npc.miss_counter = -40
 									npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
+							elif npc.type == "mage":
+								var target_below = target.pos.y > np.y + 12
+								if dx_abs > 110: npc.dir = 1 if dist_x > 0 else -1
+								elif dx_abs < 35: npc.dir = -1 if dist_x > 0 else 1
+								else:
+									if target_below:
+										if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
+									else: npc.dir = 0
+								if npc.attack_cooldown <= 0:
+									_shoot_fireball(npc, target)
+									npc.attack_cooldown = 1.8
 					elif npc.type == "zombie_tank":
 						if target:
 							npc["recently_celebrated"] = false
@@ -9259,6 +9277,34 @@ func _shoot_arrow(npc, target):
 	var arrow_gravity = 200.0; var vy = (aim_dy / t) - (0.5 * arrow_gravity * t); vy += npc.get("precision", 0.0) * 15.0; vy = clamp(vy, -280.0, 40.0)
 	active_projectiles.append({ "pos": Vector2(npc.pos.x + dir*2, npc.pos.y + 1), "vel": Vector2(vx, vy), "team": npc.team, "type": "arrow", "life": 2.5, "atk_dmg": npc.get("atk_dmg", 1.0), "is_fire": npc.get("is_fire_variant", false) })
 
+func _shoot_fireball(npc, target):
+	if npc.hp <= 0: return
+	_play_action_sound("mage_shoot", 0.1, 0.0, 1.4)
+	var dx = float(target.pos.x - npc.pos.x)
+	var dir = 1 if dx > 0 else -1
+	var aim_dy = float((target.pos.y + 2) - npc.pos.y)
+	var speed_x = clamp(abs(dx) * 1.2, 70.0, 120.0)
+	var vx = dir * speed_x
+	var t = abs(dx) / speed_x
+	if t < 0.1: t = 0.1
+	if !npc.get("morale_broken", false): _set_npc_emoji(npc, "🔥", clamp(t + 0.2, 0.5, 1.5))
+	var gravity = 120.0
+	var vy = (aim_dy / t) - (0.5 * gravity * t)
+	vy = clamp(vy, -220.0, 40.0)
+	active_projectiles.append({ "pos": Vector2(npc.pos.x + dir*2, npc.pos.y + 1), "vel": Vector2(vx, vy), "team": npc.team, "type": "fireball", "life": 3.0, "atk_dmg": npc.get("atk_dmg", 1.0), "gravity": gravity, "attacker_id": npc.id })
+
+func _convert_to_ally(npc, new_team):
+	_draw_npc_pixels(npc, 0)
+	npc.team = new_team
+	npc.invul_timer = 1.0 # 1s protection to prevent instant friendly-fire death
+	_set_npc_emoji(npc, "↪️", 2.0)
+	_play_action_sound("medic_heal", 0.08, 0.0, 0.9)
+	var team_colors = [Color("#A83938"), Color("#384BA8"), Color("#C79B1E"), Color("#74A838")]
+	var spark_color = team_colors[new_team] if (new_team >= 0 and new_team < team_colors.size()) else Color.WHITE
+	for _i in range(10):
+		_add_spark(float(npc.pos.x) + _get_lut_rand_range(0.0, 2.0), float(npc.pos.y) + _get_lut_rand_range(0.0, 5.0), _get_lut_rand_range(-50.0, 50.0), _get_lut_rand_range(-80.0, -20.0), spark_color, _get_lut_rand_range(0.4, 0.8))
+	_draw_npc_pixels(npc)
+
 func _convert_to_zombie(npc):
 	_draw_npc_pixels(npc, 0)
 	var is_tank = _get_lut_rand() < 0.2
@@ -9312,12 +9358,17 @@ func _process_projectiles(delta):
 				
 		# 2. Advance projectile physics
 		p.pos += p.vel * delta
-		p.vel.y += 200.0 * delta
+		var proj_grav = p.get("gravity", 200.0)
+		p.vel.y += proj_grav * delta
 		p.life -= delta
 		
 		var gx = int(p.pos.x); var gy = int(p.pos.y)
 		if gx < 0 or gx >= grid_width or gy < 0 or gy >= dynamic_grid_height or p.life <= 0:
 			to_remove.append(i); continue
+			
+		if p.type == "fireball":
+			if _get_lut_rand() < 0.3:
+				_add_spark(float(gx), float(gy), -p.vel.x * 0.2 + _get_lut_rand_range(-10, 10), -p.vel.y * 0.2 + _get_lut_rand_range(-10, 10), Color("#FF8200"), 0.3)
 			
 		# 3. Check NPC collisions
 		var hit_npc = null
@@ -9333,7 +9384,7 @@ func _process_projectiles(delta):
 				else:
 					is_enemy = (other.team != p.team)
 					
-			if is_enemy and other.hp > 0:
+			if is_enemy and other.hp > 0 and other.invul_timer <= 0:
 				var ow = 3 if (other.type == "zombie_tank") else 2
 				var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 5
 				var overlaps = false
@@ -9355,6 +9406,28 @@ func _process_projectiles(delta):
 				_trigger_rock_impact(gx, gy, p)
 			elif p.type == "bomber_bomb":
 				_explode(gx, gy, p.get("explosion_radius", 6))
+			elif p.type == "fireball":
+				var converted = false
+				if hit_npc.team != -1 and hit_npc.team != p.team:
+					if _get_lut_rand() < 0.05:
+						converted = true
+						_convert_to_ally(hit_npc, p.team)
+						var a_id = p.get("attacker_id", -1)
+						if a_id != -1:
+							for a_npc in active_npcs:
+								if a_npc.id == a_id and a_npc.hp > 0:
+									_set_npc_emoji(a_npc, "✨", 2.0)
+									break
+				if converted:
+					_play_action_sound("explosion", 0.08, -12.0, 1.5)
+				else:
+					hit_npc.hp -= 35.0 * p.get("atk_dmg", 1.0)
+					hit_npc.hit_flash = 4
+					hit_npc.hit_type = "fire"
+					for _j in range(8):
+						_add_spark(float(gx), float(gy), _get_lut_rand_range(-50, 50), _get_lut_rand_range(-60, 10), Color("#FF4500"), 0.4)
+					if _get_cell(gx, gy) == 0: _set_cell(gx, gy, 3)
+					_play_action_sound("explosion", 0.08, -12.0, 1.5)
 			else:
 				hit_npc.hp -= 40.0 * p.get("atk_dmg", 1.0); hit_npc.hit_flash = 4; hit_npc.hit_type = "normal"
 				if p.get("is_fire", false):
@@ -9395,6 +9468,26 @@ func _process_projectiles(delta):
 				_trigger_rock_impact(gx, gy, p)
 			elif p.type == "bomber_bomb":
 				_explode(gx, gy, p.get("explosion_radius", 6))
+			elif p.type == "fireball":
+				var hit_mat = _get_cell(gx, gy)
+				var hit_flammable = false
+				if hit_mat > 0:
+					var n_tags = material_tags_raw[hit_mat]
+					if (n_tags & SandboxMaterial.Tags.FLAMMABLE) != 0:
+						hit_flammable = true
+				
+				if hit_flammable:
+					for dy in range(-1, 2):
+						for dx in range(-1, 2):
+							var tx = gx + dx; var ty = gy + dy
+							if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+								if _get_cell(tx, ty) == 0:
+									_set_cell(tx, ty, 3)
+				else:
+					var px = gx - int(sign(p.vel.x))
+					if px >= 0 and px < grid_width and _get_cell(px, gy) == 0:
+						_set_cell(px, gy, 3)
+				_play_action_sound("explosion", 0.08, -12.0, 1.5)
 			else:
 				if p.get("is_fire", false):
 					var px = gx - int(sign(p.vel.x))
@@ -9411,6 +9504,9 @@ func _process_projectiles(delta):
 						if _get_cell(tx, ty) == 0: _set_cell(tx, ty, mat)
 		elif p.type == "bomber_bomb":
 			pass
+		elif p.type == "fireball":
+			if _get_cell(gx, gy) == 0:
+				_set_cell(gx, gy, 3)
 		else:
 			_set_cell(gx, gy, 1012)
 			
@@ -9444,7 +9540,7 @@ func _trigger_rock_impact(gx, gy, p):
 			else:
 				is_enemy = (other.team != p.team)
 				
-		if is_enemy and other.hp > 0:
+		if is_enemy and other.hp > 0 and other.invul_timer <= 0:
 			var dist = other.pos.distance_to(Vector2(gx, gy))
 			if dist < 18.0:
 				var dmg_ratio = 1.0 - (dist / 18.0)
@@ -9485,6 +9581,7 @@ func _is_ally(me, other, has_zombies) -> bool:
 
 func _attack_npc(attacker, victim):
 	if attacker.hp <= 0 or victim.hp <= 0: return
+	if victim.invul_timer > 0: return # Converted protection
 	
 	var a_profile = NPC_PROFILES.get(attacker.type, {})
 	var hit_emoji = a_profile.get("hit_emoji", "⚔️")
@@ -9522,7 +9619,7 @@ func _attack_npc(attacker, victim):
 		if _get_lut_rand() < 0.35: victim.vx = push_dir * _get_lut_rand_range(3.0, 5.0) * attacker.get("knockback_mult", 1.0); victim.vy = _get_lut_rand_range(-4.0, -8.0)
 
 func _check_npc_environment_damage(npc) -> bool:
-	if npc.hp <= 0: return false
+	if npc.hp <= 0 or npc.invul_timer > 0: return false
 	var took_damage = false; var p = npc.pos
 	var check_points = [p, p + Vector2i(1, 2), p + Vector2i(0, 4), p + Vector2i(0, 5), p + Vector2i(1, 5), p + Vector2i(-1, 2), p + Vector2i(2, 2)]
 	for pt in check_points:
