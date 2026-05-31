@@ -481,6 +481,7 @@ func _get_lut_rand_range(from: float, to: float) -> float:
 var active_charge_indices := PackedInt32Array()
 var next_charge_indices := PackedInt32Array()
 var charge_queued_frame := PackedInt32Array()
+var powered_frame := PackedInt32Array()
 
 # Display
 @onready var texture_rect: TextureRect = $Display
@@ -689,6 +690,8 @@ func _ready():
 	
 	charge_queued_frame.resize(grid_width * grid_height)
 	charge_queued_frame.fill(-1)
+	powered_frame.resize(grid_width * grid_height)
+	powered_frame.fill(-1)
 	
 	# Update Display node size to match the grid exactly
 	$Display.custom_minimum_size = Vector2(grid_width * grid_scale, grid_height * grid_scale)
@@ -813,7 +816,8 @@ func _ready():
 	_register_material(87, Color("#264F2C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # XNOR
 	_register_material(88, Color("#FF9800"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Battery
 	_register_material(89, Color("#551111"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # LED
-	
+	_register_material(90, Color("#C254FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # NPC Activator
+	_register_material(91, Color("#B25A38"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # NPC Door
 	
 	# --- BIOLOGICALS (21-24) ---
 	# 21: Pasto
@@ -1628,8 +1632,6 @@ func _setup_materials_within_grid():
 	_add_button("toxic_gas", 0, true)
 	_add_button("void", 0, true)
 	_add_button("battery", 0, true)
-	_add_button("npc_act", 0, true)
-	_add_button("door", 0, true)
 	_add_button("flam_gas", 0, true)
 	_add_button("coal_item", 0, true)
 	_add_button("bacteria", 0, true)
@@ -5305,7 +5307,7 @@ func _process(delta):
 						_play_action_sound("ui_click")
 						_check_logic_gate_tutorial(gate_pos)
 				_manage_brush_sound(-1)
-			elif is_mechanism_mode_active and (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89):
+			elif is_mechanism_mode_active and (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91):
 				# snap exactly to grid cells boundaries
 				var snap = 4
 				gx = int(floor(float(gx) / snap) * snap)
@@ -6147,6 +6149,14 @@ func _set_cell(x, y, mat_id):
 	if ix >= 0 and ix < grid_width and iy >= 0 and iy < dynamic_grid_height:
 		var idx = iy * grid_width + ix
 		
+		# NPC Activator (90) and NPC Door (91) PROTECTION from NPC Overwriting
+		var current_tid = cells[idx] & 0xFFFF
+		if (current_tid == 90 or current_tid == 91) and mat_id != 0:
+			var look_pure = mat_id & 0xFFFF
+			if look_pure >= 0 and look_pure < material_tags_raw.size():
+				if (material_tags_raw[look_pure] & SandboxMaterial.Tags.NPC):
+					return
+		
 		# CRITICAL PERFORMANCE OPTIMIZATION: Early Exit for Air
 		if mat_id == 0:
 			if cells[idx] == 0: return # Already air, no work needed
@@ -6418,6 +6428,8 @@ func _thread_pass3(i: int, process_evens: bool):
 											if ni < cells.size() and (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
 
 func _process_electricity():
+	var frame = Engine.get_frames_drawn()
+	
 	# 1. Store previous frame active charges in a set for edge-triggering music blocks
 	var prev_active_charges = {}
 	for idx in active_charge_indices:
@@ -6434,12 +6446,32 @@ func _process_electricity():
 	for idx in active_electricity_source_indices:
 		sources.append(idx)
 		
+	# NPC Activators (ID 90) detection
+	for npc in active_npcs:
+		if npc.hp <= 0: continue
+		var w = 3 if (npc.type == "zombie_tank") else 2
+		var h = 6 if (npc.type == "zombie_tank" or npc.type == "mage") else 5
+		
+		var start_x = int(npc.pos.x)
+		var start_y = int(npc.pos.y)
+		for oy in range(h + 1):
+			var ny = start_y + oy
+			if ny < 0 or ny >= grid_height: continue
+			var row_offset = ny * grid_width
+			for ox in range(w):
+				var nx = start_x + ox
+				if nx < 0 or nx >= grid_width: continue
+				
+				var n_idx = row_offset + nx
+				if (cells[n_idx] & 0xFFFF) == 90:
+					sources.append(n_idx)
+		
 	# Metronomes (ID 600) on pulsing frames
-	var is_metronome_pulsing = (Engine.get_frames_drawn() % music_tempo_frames == 0)
+	var is_metronome_pulsing = (frame % music_tempo_frames == 0)
 	if is_metronome_pulsing:
 		for idx in active_metronome_indices:
 			var gx = idx % grid_width
-			var gy = int(idx / float(grid_width))
+			var gy = idx / grid_width
 			for dy in range(2):
 				var ny = gy + dy
 				if ny >= grid_height: continue
@@ -6464,11 +6496,10 @@ func _process_electricity():
 		_register_charge(idx)
 		
 	# 3. BFS from constant sources to find all actively "powered" cells
-	var powered = {}
 	var queue = []
 	for idx in sources:
 		queue.append(idx)
-		powered[idx] = true
+		powered_frame[idx] = frame
 		
 	var head = 0
 	while head < queue.size():
@@ -6476,16 +6507,18 @@ func _process_electricity():
 		head += 1
 		
 		var x = idx % grid_width
-		var y = int(idx / float(grid_width))
-		for ny in range(y - 1, y + 2):
+		var y = idx / grid_width
+		for dy in range(-1, 2):
+			var ny = y + dy
 			if ny < 0 or ny >= grid_height: continue
 			var row_offset = ny * grid_width
-			for nx in range(x - 1, x + 2):
+			for dx in range(-1, 2):
+				if dx == 0 and dy == 0: continue
+				var nx = x + dx
 				if nx < 0 or nx >= grid_width: continue
-				if nx == x and ny == y: continue
 				
 				var n_idx = row_offset + nx
-				if powered.has(n_idx): continue
+				if powered_frame[n_idx] == frame: continue
 				
 				var n_pid = cells[n_idx] & 0xFFFF
 				if n_pid <= 0: continue
@@ -6498,14 +6531,13 @@ func _process_electricity():
 						
 				# If neighbor cell has charge > 0, it is actively powered by this source chain
 				if charge_array[n_idx] > 0:
-					powered[n_idx] = true
+					powered_frame[n_idx] = frame
 					queue.append(n_idx)
 					
 	# 4. Perform propagation wave: cells at 100 charge charge their 0-charge neighbors for next frame
-	var next_charge = charge_array.duplicate()
 	var new_active_charges = []
 	
-	# Find cells that were at 100 in the current frame
+	# Find cells that were at 100 in the current frame (collect before modifying)
 	var wave_fronts = []
 	for idx in active_charge_indices:
 		if charge_array[idx] == 100:
@@ -6513,16 +6545,18 @@ func _process_electricity():
 			
 	for idx in wave_fronts:
 		var x = idx % grid_width
-		var y = int(idx / float(grid_width))
-		for ny in range(y - 1, y + 2):
+		var y = idx / grid_width
+		for dy in range(-1, 2):
+			var ny = y + dy
 			if ny < 0 or ny >= grid_height: continue
 			var row_offset = ny * grid_width
-			for nx in range(x - 1, x + 2):
+			for dx in range(-1, 2):
+				if dx == 0 and dy == 0: continue
+				var nx = x + dx
 				if nx < 0 or nx >= grid_width: continue
-				if nx == x and ny == y: continue
 				
 				var n_idx = row_offset + nx
-				if charge_array[n_idx] == 0 and next_charge[n_idx] == 0:
+				if charge_array[n_idx] == 0:
 					var n_pid = cells[n_idx] & 0xFFFF
 					if n_pid <= 0: continue
 					
@@ -6534,7 +6568,7 @@ func _process_electricity():
 							
 					var n_tags = tags_array[n_idx]
 					if n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
-						next_charge[n_idx] = 100
+						charge_array[n_idx] = 100
 						new_active_charges.append(n_idx)
 						_activate_chunk(nx, ny)
 						
@@ -6542,7 +6576,7 @@ func _process_electricity():
 						if _get_lut_rand() < 0.01:
 							_add_spark(float(nx), float(ny), _get_lut_rand_range(-10, 10), _get_lut_rand_range(-10, 10), Color("#FFC107"), 0.3)
 							
-	# 5. Apply decay and write to next_charge
+	# 5. Apply decay directly in charge_array
 	var decay_rate = 20
 	for idx in active_charge_indices:
 		# Primed explosives and fuses decay on cell updates, so we preserve their countdowns
@@ -6551,18 +6585,19 @@ func _process_electricity():
 			new_active_charges.append(idx)
 			continue
 			
-		if powered.has(idx):
-			next_charge[idx] = 100
+		if powered_frame[idx] == frame:
+			charge_array[idx] = 100
 			new_active_charges.append(idx)
 		else:
 			# Cell is decaying
-			next_charge[idx] = max(0, charge_array[idx] - decay_rate)
-			if next_charge[idx] > 0:
+			var old_val = charge_array[idx]
+			var next_val = max(0, old_val - decay_rate)
+			charge_array[idx] = next_val
+			if next_val > 0:
 				new_active_charges.append(idx)
-				_activate_chunk(idx % grid_width, int(idx / float(grid_width)))
+				_activate_chunk(idx % grid_width, idx / grid_width)
 				
-	# Update charge arrays
-	charge_array = next_charge
+	# Update charge visual buffers
 	for idx in new_active_charges:
 		charge_visual_buffer[idx] = clampi(charge_array[idx], 0, 255)
 	
@@ -6582,7 +6617,7 @@ func _process_electricity():
 		var mid = cells[idx] & 0xFFFF
 		if material_tags_raw[mid] & SandboxMaterial.Tags.MUSIC:
 			var gx = idx % grid_width
-			var gy = int(idx / float(grid_width))
+			var gy = idx / grid_width
 			if gx % 2 == 0 and gy % 2 == 0:
 				if not prev_active_charges.has(idx):
 					if mid == 600:
@@ -10225,6 +10260,8 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 		for ox in range(w):
 			var tid = cells[row_offset + gx + ox] & 0xFFFF
 			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
+				if tid == 90 or tid == 91:
+					continue
 				# Si es sólido, pero es una PLANTA, permitimos el paso (los soldados las pisan/atraviesan)
 				var tags = material_tags_raw[tid]
 				if (tags & SandboxMaterial.Tags.PLANT): continue
@@ -10790,6 +10827,7 @@ func _clear_all():
 	active_charge_indices.clear()
 	next_charge_indices.clear()
 	charge_queued_frame.fill(-1)
+	powered_frame.fill(-1)
 	
 	# CLEAR PAINTING
 	cell_paint_colors.fill(0)
@@ -11647,14 +11685,21 @@ func _setup_music_ui(force_refresh: bool = false):
 					selected_circuit_tool = ""
 					is_mechanism_mode_active = true
 					_close_music_menu()
+				elif item_key == "npc_act":
+					selected_material = 90
+					selected_circuit_tool = ""
+					is_mechanism_mode_active = true
+					_close_music_menu()
+				elif item_key == "door":
+					selected_material = 91
+					selected_circuit_tool = ""
+					is_mechanism_mode_active = true
+					_close_music_menu()
 				elif item_key == "not" or item_key == "and" or item_key == "or" or item_key == "nand" or item_key == "nor" or item_key == "xor" or item_key == "xnor":
 					selected_material = -2
 					selected_circuit_tool = item_key
 					is_mechanism_mode_active = true
 					_close_music_menu()
-				else:
-					# Select corresponding placeholder logic
-					print("Circuit material selected: ", item_key)
 			)
 			circ_grid.add_child(btn)
 		return # Return early so the music UI setup below does not run!

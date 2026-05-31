@@ -77,9 +77,49 @@ void fragment() {
         }
         
 
+        // NPC ACTIVATOR (ID 90) CUSTOM FEEDBACK
+        if (id == 90) {
+            ivec2 tex_size = textureSize(TEXTURE, 0);
+            ivec2 coord = ivec2(UV * vec2(tex_size));
+            int px = coord.x % 4;
+            int py = coord.y % 4;
+            if (charge > 0.05) {
+                // Glow bright pink/violet (#E0A8FF)
+                color.rgb = vec3(0.88, 0.66, 1.0);
+            } else {
+                // Dark purple (#6A20A0)
+                color.rgb = vec3(0.42, 0.13, 0.63);
+            }
+            // Draw a subtle border around the pressure plate
+            if (px == 0 || px == 3 || py == 0 || py == 3) {
+                color.rgb *= 0.5;
+            }
+        }
         
+        // NPC DOOR (ID 91) CUSTOM FEEDBACK
+        if (id == 91) {
+            ivec2 tex_size = textureSize(TEXTURE, 0);
+            ivec2 coord = ivec2(UV * vec2(tex_size));
+            int px = coord.x % 4;
+            int py = coord.y % 4;
+            if (charge > 0.05) {
+                // Blend with background to look open / passable
+                vec4 bg_color = texture(background_tex, UV);
+                color.rgb = mix(vec3(0.7, 1.0, 0.7), bg_color.rgb, 0.85); // 85% background, 15% green glow
+                // Draw a nice dashed green frame to show it is active/open
+                if (px == 0 || px == 3 || py == 0 || py == 3) {
+                    color.rgb = mix(color.rgb, vec3(0.2, 1.0, 0.2), 0.5);
+                }
+            } else {
+                // Closed state: solid wood color from palette, with a dark wooden panel frame
+                if (px == 0 || px == 3 || py == 0 || py == 3) {
+                    color.rgb *= 0.55; // Wooden outline
+                }
+            }
+        }
+
         // 5. ELECTRIC GLOW (High Intensity Sparks with Amber Contrast)
-        if (charge > 0.05 && id > 0 && id != 13 && id != 25 && id != 5 && id != 7 && id != 20 && id != 71 && id != 72 && id != 77) {
+        if (charge > 0.05 && id > 0 && id != 13 && id != 25 && id != 5 && id != 7 && id != 20 && id != 71 && id != 72 && id != 77 && id != 90 && id != 91) {
             float spark_intensity = smoothstep(0.12, 1.0, charge);
             vec4 electric_color = vec4(1.0, 0.7, 0.0, 1.0); // Amber/Orange-Yellow default
             
