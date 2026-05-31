@@ -173,6 +173,10 @@ var active_electricity_source_indices = {} # Set of cell indices containing elec
 var door_registry = {} # Set of cell indices where NPC Door (91) is placed
 var door_close_timers = {} # cell_idx -> float close delay timer
 var is_npc_door_updating: bool = false
+var phase_block_registry = {} # Set of cell indices where Phase Block (92) is placed
+var is_phase_block_updating: bool = false
+var is_phase_block_tutorial_done: bool = false
+var phase_block_tutorial_bubble: PanelContainer = null
 var is_logic_gate_tutorial_done: bool = false
 var logic_gate_tutorial_bubble: PanelContainer = null
 var draw_start_gx: int = 0
@@ -517,7 +521,8 @@ func _save_tool_settings():
 		"game_volume": game_volume,
 		"is_muted": is_muted,
 		"current_language": current_language,
-		"is_logic_gate_tutorial_done": is_logic_gate_tutorial_done
+		"is_logic_gate_tutorial_done": is_logic_gate_tutorial_done,
+		"is_phase_block_tutorial_done": is_phase_block_tutorial_done
 	}
 	var f = FileAccess.open("user://tools_settings.json", FileAccess.WRITE)
 	if f:
@@ -540,6 +545,8 @@ func _load_tool_settings():
 					TranslationServer.set_locale(current_language)
 				if dict.has("is_logic_gate_tutorial_done"):
 					is_logic_gate_tutorial_done = dict["is_logic_gate_tutorial_done"]
+				if dict.has("is_phase_block_tutorial_done"):
+					is_phase_block_tutorial_done = dict["is_phase_block_tutorial_done"]
 
 func _ready():
 	_load_global_achievements() # Load global state once at startup
@@ -821,6 +828,7 @@ func _ready():
 	_register_material(89, Color("#551111"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # LED
 	_register_material(90, Color("#C254FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # NPC Activator
 	_register_material(91, Color("#B25A38"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # NPC Door
+	_register_material(92, Color("#00F0FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Phase Block
 	
 	# --- BIOLOGICALS (21-24) ---
 	# 21: Pasto
@@ -5310,7 +5318,7 @@ func _process(delta):
 						_play_action_sound("ui_click")
 						_check_logic_gate_tutorial(gate_pos)
 				_manage_brush_sound(-1)
-			elif is_mechanism_mode_active and (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91):
+			elif is_mechanism_mode_active and (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92):
 				# snap exactly to grid cells boundaries
 				var snap = 4
 				gx = int(floor(float(gx) / snap) * snap)
@@ -5386,6 +5394,7 @@ func _process(delta):
 			
 		# Open/Close NPC Doors based on NPC proximity before cellular physics updates
 		_update_npc_doors(delta)
+		_update_phase_blocks()
 		
 		_step_simulation()
 		
@@ -6172,6 +6181,8 @@ func _set_cell(x, y, mat_id):
 			elif old_id == 9: active_electricity_source_indices.erase(idx)
 			if old_id == 91 and not is_npc_door_updating:
 				door_registry.erase(idx)
+			if old_id == 92 and not is_phase_block_updating:
+				phase_block_registry.erase(idx)
 			
 			cells[idx] = 0
 			if cell_paint_colors[idx] != 0:
@@ -6213,12 +6224,17 @@ func _set_cell(x, y, mat_id):
 		elif old_id == 9: active_electricity_source_indices.erase(idx)
 		if old_id == 91 and not is_npc_door_updating:
 			door_registry.erase(idx)
+		if old_id == 92 and not is_phase_block_updating:
+			phase_block_registry.erase(idx)
 		
 		if pure_id == 600: active_metronome_indices[idx] = true
 		elif pure_id == 88: active_battery_indices[idx] = true
 		elif pure_id == 9: active_electricity_source_indices[idx] = true
 		if pure_id == 91:
 			door_registry[idx] = true
+		if pure_id == 92:
+			phase_block_registry[idx] = true
+			_check_phase_block_tutorial(Vector2i(x / 4, y / 4))
 
 		# For specific IDs (Metronome/Music), clear paint
 		if pure_id >= 500: cell_paint_colors[idx] = 0
@@ -10953,6 +10969,7 @@ func _clear_all():
 	active_metronome_indices.clear()
 	door_registry.clear()
 	door_close_timers.clear()
+	phase_block_registry.clear()
 	vs_life.fill(0.0)
 	active_charge_indices.clear()
 	next_charge_indices.clear()
@@ -11379,6 +11396,7 @@ func _reconstruct_sources_from_cells():
 	active_electricity_source_indices.clear()
 	door_registry.clear()
 	door_close_timers.clear()
+	phase_block_registry.clear()
 	if cells.size() == 0: return
 	for idx in range(cells.size()):
 		var mid = cells[idx] & 0xFFFF
@@ -11388,6 +11406,8 @@ func _reconstruct_sources_from_cells():
 			active_electricity_source_indices[idx] = true
 		elif mid == 91:
 			door_registry[idx] = true
+		elif mid == 92:
+			phase_block_registry[idx] = true
 
 func _get_gate_pin_cell_indices(gate, pin_type: String) -> Array:
 	var cx = gate["grid_pos"].x
@@ -11595,6 +11615,148 @@ func _show_logic_gate_tutorial_bubble(grid_pos: Vector2i):
 	bubble.position.x = clamp(bubble.position.x, 10 * s, get_viewport_rect().size.x - 330 * s)
 	bubble.position.y = clamp(bubble.position.y, 10 * s, get_viewport_rect().size.y - 150 * s)
 
+func _check_phase_block_tutorial(grid_pos: Vector2i):
+	if not is_phase_block_tutorial_done:
+		_show_phase_block_tutorial_bubble(grid_pos)
+
+func _show_phase_block_tutorial_bubble(grid_pos: Vector2i):
+	if is_instance_valid(phase_block_tutorial_bubble):
+		phase_block_tutorial_bubble.queue_free()
+	
+	if not is_instance_valid(ui_root):
+		ui_root = get_parent().get_node_or_null("UI")
+		if not ui_root: return
+	
+	var s = _get_ui_scale()
+	
+	# Create panel container
+	var bubble = PanelContainer.new()
+	phase_block_tutorial_bubble = bubble
+	bubble.mouse_filter = Control.MOUSE_FILTER_STOP
+	
+	# Styling: Glassmorphism look matching the other tutorials
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.08, 0.08, 0.12, 0.96) # Dark slate semi-transparent
+	p_style.set_corner_radius_all(18 * s)
+	p_style.border_width_left = 3; p_style.border_width_top = 3
+	p_style.border_width_right = 3; p_style.border_width_bottom = 3
+	p_style.border_color = Color(0.0, 0.94, 1.0, 0.95) # Vibrant electric cyan to match phase blocks!
+	p_style.shadow_color = Color(0, 0, 0, 0.45)
+	p_style.shadow_size = 10
+	bubble.add_theme_stylebox_override("panel", p_style)
+	
+	var margin = MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_STOP
+	margin.add_theme_constant_override("margin_left", 20 * s)
+	margin.add_theme_constant_override("margin_top", 16 * s)
+	margin.add_theme_constant_override("margin_right", 20 * s)
+	margin.add_theme_constant_override("margin_bottom", 16 * s)
+	bubble.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.mouse_filter = Control.MOUSE_FILTER_STOP
+	vbox.add_theme_constant_override("separation", 10 * s)
+	margin.add_child(vbox)
+	
+	var lbl = Label.new()
+	lbl.mouse_filter = Control.MOUSE_FILTER_STOP
+	lbl.text = "💡 Bloque de fase: ¡Si le das electricidad se vuelve invisible y los materiales o NPCs pueden pasar!" if OS.get_locale_language() == "es" else "💡 Phase Block: If you power it with electricity, it becomes invisible and materials or NPCs can pass through!"
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.custom_minimum_size = Vector2(280 * s, 0)
+	lbl.add_theme_font_override("font", _get_safe_font())
+	lbl.add_theme_font_size_override("font_size", 18 * s)
+	lbl.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(lbl)
+	
+	var btn = Button.new()
+	btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	btn.text = "Entiendo" if OS.get_locale_language() == "es" else "Got it"
+	btn.custom_minimum_size = Vector2(130 * s, 46 * s)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	btn.add_theme_font_override("font", _get_safe_font())
+	btn.add_theme_font_size_override("font_size", 17 * s)
+	
+	var btn_style_norm = StyleBoxFlat.new()
+	btn_style_norm.bg_color = Color(0.0, 0.7, 0.8, 1.0)
+	btn_style_norm.set_corner_radius_all(10 * s)
+	
+	var btn_style_hover = btn_style_norm.duplicate()
+	btn_style_hover.bg_color = Color(0.0, 0.85, 0.95, 1.0)
+	
+	btn.add_theme_stylebox_override("normal", btn_style_norm)
+	btn.add_theme_stylebox_override("hover", btn_style_hover)
+	btn.add_theme_stylebox_override("pressed", btn_style_norm)
+	btn.add_theme_color_override("font_color", Color.WHITE)
+	
+	btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		is_phase_block_tutorial_done = true
+		_save_tool_settings()
+		bubble.queue_free()
+	)
+	vbox.add_child(btn)
+	
+	ui_root.add_child(bubble)
+	
+	# Position bubble above the Phase Block
+	var local_pos = Vector2((grid_pos.x * 4 + 2) * grid_scale, (grid_pos.y * 4) * grid_scale)
+	var screen_pos = get_global_transform_with_canvas() * local_pos
+	
+	bubble.position = screen_pos - Vector2(160 * s, 130 * s)
+	bubble.position.x = clamp(bubble.position.x, 10 * s, get_viewport_rect().size.x - 330 * s)
+	bubble.position.y = clamp(bubble.position.y, 10 * s, get_viewport_rect().size.y - 150 * s)
+
+func _update_phase_blocks():
+	if phase_block_registry.size() == 0: return
+	
+	is_phase_block_updating = true
+	var w = grid_width
+	var h = dynamic_grid_height
+	
+	for idx in phase_block_registry:
+		var cx = idx % w
+		var cy = idx / w
+		
+		# Check neighbors for electricity charge
+		var is_powered = false
+		
+		# Left
+		if cx > 0:
+			var n = idx - 1
+			if charge_array[n] > 0 or active_battery_indices.has(n):
+				is_powered = true
+		# Right
+		if not is_powered and cx < w - 1:
+			var n = idx + 1
+			if charge_array[n] > 0 or active_battery_indices.has(n):
+				is_powered = true
+		# Up
+		if not is_powered and cy > 0:
+			var n = idx - w
+			if charge_array[n] > 0 or active_battery_indices.has(n):
+				is_powered = true
+		# Down
+		if not is_powered and cy < h - 1:
+			var n = idx + w
+			if charge_array[n] > 0 or active_battery_indices.has(n):
+				is_powered = true
+				
+		var curr_mat = cells[idx] & 0xFFFF
+		if is_powered:
+			if curr_mat == 92:
+				cells[idx] = 0
+				tags_array[idx] = 0
+				_activate_chunk(cx / 4, cy / 4)
+		else:
+			if curr_mat != 92:
+				# Re-solidify: overwrite whatever material is inside
+				cells[idx] = 92
+				tags_array[idx] = SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED
+				_activate_chunk(cx / 4, cy / 4)
+				
+	is_phase_block_updating = false
+
 func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false):
 	sim_mutex.lock()
 	
@@ -11779,9 +11941,9 @@ func _setup_music_ui(force_refresh: bool = false):
 		circ_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		circ_vbox.add_child(circ_grid)
 		
-		# Circuits elements: Metal, TNT, NPC Trigger, Door, Battery, LED, Logic Gates (NOT, AND, OR, NAND, NOR, XOR, XNOR), Piston, Cannon
-		var circuit_items = ["metal", "tnt", "npc_act", "door", "battery", "led", "not", "and", "or", "nand", "nor", "xor", "xnor", "piston", "cannon"]
-		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🔋", "💡", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "⚙️", "💣"]
+		# Circuits elements: Metal, TNT, NPC Trigger, Door, Phase Block, Battery, LED, Logic Gates (NOT, AND, OR, NAND, NOR, XOR, XNOR), Piston, Cannon
+		var circuit_items = ["metal", "tnt", "npc_act", "door", "phase_block", "battery", "led", "not", "and", "or", "nand", "nor", "xor", "xnor", "piston", "cannon"]
+		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🌀", "🔋", "💡", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "⚙️", "💣"]
 		for i in range(circuit_items.size()):
 			var btn = Button.new()
 			btn.text = circuit_emojis[i] + " " + tr(circuit_items[i])
@@ -11826,6 +11988,11 @@ func _setup_music_ui(force_refresh: bool = false):
 					_close_music_menu()
 				elif item_key == "door":
 					selected_material = 91
+					selected_circuit_tool = ""
+					is_mechanism_mode_active = true
+					_close_music_menu()
+				elif item_key == "phase_block":
+					selected_material = 92
 					selected_circuit_tool = ""
 					is_mechanism_mode_active = true
 					_close_music_menu()
