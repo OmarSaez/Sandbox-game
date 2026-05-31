@@ -300,6 +300,7 @@ var action_sfx = {
 	"zombie_tank_throw": "zombie_tank_attack", # Lanzar bloque (audio actual)
 	"zombie_tank_melee": "zombie_tank_melee", # Ataque melee de cerca (audio nuevo)
 	"mage_shoot": "rocket_launch", # Disparo de Mago
+	"mage_rescue": "mage_rescue", # Sonido de Mago rescatando aliado
 	
 	# Sonidos Continuos de Clima / Desastres (LOOP EN TIEMPO REAL) MP3
 	"weather_1": "rain_light",
@@ -8376,6 +8377,17 @@ func _process_npcs(delta):
 	var dead_indices = []
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
+		
+		# Sanitize NaN or Inf states to prevent stuck/immortal ghost NPCs
+		if is_nan(npc.hp) or is_nan(npc.pos.x) or is_nan(npc.pos.y):
+			npc.hp = 0.0
+			npc.pos.x = clamp(npc.pos.x, 0.0, float(grid_width - 2))
+			npc.pos.y = clamp(npc.pos.y, 0.0, float(dynamic_grid_height - 6))
+		if is_nan(npc.get("invul_timer", 0.0)):
+			npc["invul_timer"] = 0.0
+		if npc.hp > 99999.0:
+			npc.hp = npc.get("max_hp", 100.0)
+			
 		var profile = NPC_PROFILES.get(npc.type, {})
 		
 		# Decrement invulnerability protection timer
@@ -8425,7 +8437,10 @@ func _process_npcs(delta):
 			npc.hit_flash -= 1
 			if npc.hit_flash == 0: npc.hit_type = "none"
 		_draw_npc_pixels(npc, 0)
-		_check_npc_environment_damage(npc)
+		
+		# Stagger environmental & suffocation checks once every 10 ticks (0.5s) to eliminate CPU spikes
+		if (_ai_tick_count + npc.id) % 10 == 0:
+			_check_npc_environment_damage(npc)
 		
 		# Infección Zombie: si la vida baja del 20% y no ha sido verificado aún (solo por ataque zombie o daño por ácido)
 		if not _is_zombie(npc.type) and npc.hp > 0 and npc.hp < npc.max_hp * 0.2 and not npc.get("zombie_checked", false):
@@ -9191,8 +9206,9 @@ func _process_npcs(delta):
 
 					# 3. COLISIONES CON ALIADOS Y OBSTRUCCIONES
 					if not moved and not hazard_stop:
-						var tx_1 = np.x + npc.dir
-						var tx_2 = np.x + (npc.dir * 2)
+						var step_size = 2 if (npc.type == "mage" and npc.get("is_rescuing", false)) else 1
+						var tx_1 = np.x + npc.dir * step_size
+						var tx_2 = np.x + (npc.dir * (step_size + 1))
 						var tx_test = tx_1 if (target != null or _get_lut_rand() < 0.5) else tx_2
 						
 						var nearby = _get_nearby_npcs(tx_test, np.y, 10.0)
@@ -9377,8 +9393,13 @@ func _launch_flying_block(tx: int, ty: int, vx: float, vy: float, team: int = 0,
 func _process_mage_rescue(npc):
 	if npc.hp <= 0: return
 	
-	# 1. Abort rescue if damaged
-	if npc.hit_flash > 0 and npc.get("rescue_target", null) != null:
+	# If suffocating, self-rescue takes highest priority!
+	if _is_npc_suffocating(npc):
+		npc["rescue_target"] = npc
+		npc["is_rescuing"] = true
+	
+	# 1. Abort rescue if damaged (except if self-rescuing)
+	if npc.hit_flash > 0 and npc.get("rescue_target", null) != null and npc.get("rescue_target") != npc:
 		npc["rescue_target"] = null
 		npc["is_rescuing"] = false
 		_set_npc_emoji(npc, "😡", 1.5)
@@ -9387,10 +9408,13 @@ func _process_mage_rescue(npc):
 	var res_target = npc.get("rescue_target", null)
 	if res_target:
 		var is_active = false
-		for a in active_npcs:
-			if a == res_target:
-				is_active = true
-				break
+		if res_target == npc:
+			is_active = true
+		else:
+			for a in active_npcs:
+				if a == res_target:
+					is_active = true
+					break
 		if not is_active or res_target.hp <= 0 or not _is_npc_suffocating(res_target):
 			npc["rescue_target"] = null
 			npc["is_rescuing"] = false
@@ -9407,14 +9431,15 @@ func _process_mage_rescue(npc):
 
 		# Check horizontal distance
 		var h_dist = abs(npc.pos.x - res_target.pos.x)
-		if h_dist > 10:
+		if h_dist > 15:
 			npc.dir = look_dir
 			_set_npc_emoji(npc, "🏃", 0.6)
 			return
 			
-		# Within 10 pixels: stop and channel
+		# Within 15 pixels: stop and channel
 		npc.dir = 0
 		npc.attack_cooldown = 0.5
+		_play_action_sound("mage_rescue", 0.5)
 		
 		# Alternate emojis
 		var alt_emoji = "✨" if (_ai_tick_count / 10) % 2 == 0 else "⬆️"
@@ -9425,13 +9450,14 @@ func _process_mage_rescue(npc):
 		for dx in range(-2, 3):
 			var tx = res_target.pos.x + dx
 			if tx < 0 or tx >= grid_width: continue
-			# Scan from surface down to feet
-			for ty in range(0, res_target.pos.y + th):
-				if ty < 0 or ty >= dynamic_grid_height: continue
+			
+			# Scan from 50 blocks above target's head down to their feet to find the topmost block of the dune
+			var start_y = max(0, res_target.pos.y - 50)
+			for ty in range(start_y, res_target.pos.y + th):
 				var tid = cells[ty * grid_width + tx] & 0xFFFF
 				if tid > 0:
 					var tags = material_tags_raw[tid]
-					if (tags & SandboxMaterial.Tags.SOLID) != 0 or (tags & SandboxMaterial.Tags.POWDER) != 0:
+					if (tags & SandboxMaterial.Tags.SOLID) != 0 or (tags & SandboxMaterial.Tags.POWDER) != 0 or (tags & SandboxMaterial.Tags.LIQUID) != 0:
 						# Launch projectile upward and push to the sides via the isolated helper function
 						var vx = 0.0
 						var dx_sign = sign(tx - res_target.pos.x)
@@ -9484,9 +9510,9 @@ func _process_mage_rescue(npc):
 				min_d = d
 				closest_ally = a
 				
-		# Evaluate 100% probability roll once per target (set to 100% for user guarantee)
+		# Evaluate 40% probability roll once per target (decided once per ally lifetime)
 		if not checked_map.has(closest_ally.id):
-			var decide_rescue = true
+			var decide_rescue = _get_lut_rand() < 0.4
 			checked_map[closest_ally.id] = decide_rescue
 			
 		if checked_map[closest_ally.id]:
@@ -9882,27 +9908,72 @@ func _check_npc_environment_damage(npc) -> bool:
 		if charge_array[cell_idx] > 50:
 			npc.hp -= 2.5 * dmg_mult; took_damage = true; npc.hit_flash = 5; npc.hit_type = "electric"
 			if _get_lut_rand() < 0.4: _add_spark(float(pt.x),float(pt.y),_get_lut_rand_range(-20,20),_get_lut_rand_range(-40,-10),Color.CYAN,0.4)
-	var w = 3 if (npc.type == "zombie_tank") else 2
-	var h = 6 if (npc.type == "zombie_tank" or npc.type == "mage") else 5
+	var is_lying = npc.get("is_lying", false)
+	var w = 2
+	var h = 5
+	if npc.type == "zombie_tank":
+		w = 3
+		h = 6
+	elif npc.type == "mage":
+		w = 2
+		h = 6
+		
+	var px = npc.pos.x
+	var py = npc.pos.y
+	
+	if is_lying:
+		w = 6 if npc.type == "mage" else (6 if npc.type == "zombie_tank" else 5)
+		h = 2 if npc.type == "mage" else (3 if npc.type == "zombie_tank" else 2)
+		py += 4 if npc.type == "mage" else 3
+		
 	var air_found = false
-	for oy in range(-1, h + 1):
-		var ty = npc.pos.y + oy
-		if ty < 0 or ty >= dynamic_grid_height: continue
-		var row_offset = ty * grid_width
-		for ox in range(-1, w + 1):
-			if oy >= 0 and oy < h and ox >= 0 and ox < w: continue
-			var tx = npc.pos.x + ox
-			if tx < 0 or tx >= grid_width: continue
-			var nid = cells[row_offset + tx] & 0xFFFF
-			if nid == 0 or nid == 15 or nid == 17: air_found = true; break
-		if air_found: break
+	
+	# 1. Check top row (above head/lying body)
+	var ty_top = py - 1
+	if ty_top >= 0:
+		var row_offset = ty_top * grid_width
+		for ox in range(w):
+			var tx = px + ox
+			if tx >= 0 and tx < grid_width:
+				var nid = cells[row_offset + tx] & 0xFFFF
+				if nid == 0 or nid == 15 or nid == 17:
+					air_found = true; break
+				var tags = material_tags_raw[nid]
+				if (tags & SandboxMaterial.Tags.SOLID) == 0 and (tags & SandboxMaterial.Tags.POWDER) == 0 and (tags & SandboxMaterial.Tags.LIQUID) == 0:
+					air_found = true; break
+					
+	if not air_found:
+		# 2. Check left and right side columns of head/lying body (only upper part for standing)
+		var check_h = h if is_lying else min(3, h)
+		for oy in range(check_h):
+			var ty = py + oy
+			if ty >= 0 and ty < dynamic_grid_height:
+				var row_offset = ty * grid_width
+				# Left
+				var tx_l = px - 1
+				if tx_l >= 0:
+					var nid = cells[row_offset + tx_l] & 0xFFFF
+					if nid == 0 or nid == 15 or nid == 17:
+						air_found = true; break
+					var tags = material_tags_raw[nid]
+					if (tags & SandboxMaterial.Tags.SOLID) == 0 and (tags & SandboxMaterial.Tags.POWDER) == 0 and (tags & SandboxMaterial.Tags.LIQUID) == 0:
+						air_found = true; break
+				# Right
+				var tx_r = px + w
+				if tx_r < grid_width:
+					var nid = cells[row_offset + tx_r] & 0xFFFF
+					if nid == 0 or nid == 15 or nid == 17:
+						air_found = true; break
+					var tags = material_tags_raw[nid]
+					if (tags & SandboxMaterial.Tags.SOLID) == 0 and (tags & SandboxMaterial.Tags.POWDER) == 0 and (tags & SandboxMaterial.Tags.LIQUID) == 0:
+						air_found = true; break
 	if !air_found: 
 		var suff_dmg = 3.0; if npc == controlled_npc: suff_dmg = 1.0
 		npc.hp -= suff_dmg; npc.hit_flash = 4; took_damage = true
 		npc.suffocation_timer = 2.0
 	else:
 		if npc.suffocation_timer > 0:
-			npc.suffocation_timer = max(0.0, npc.suffocation_timer - 0.05)
+			npc.suffocation_timer = max(0.0, npc.suffocation_timer - 0.5)
 	if took_damage: _play_action_sound("damage_npc", 0.4)
 	return took_damage
 
