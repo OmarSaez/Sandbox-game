@@ -166,6 +166,10 @@ var music_panel: PanelContainer
 var selected_mechanism_tab: int = 0 # 0: Circuits, 1: Music
 var circuit_panel: PanelContainer
 var is_mechanism_mode_active: bool = false
+var selected_circuit_tool: String = ""
+var active_logic_gates: Array = []
+var is_logic_gate_tutorial_done: bool = false
+var logic_gate_tutorial_bubble: PanelContainer = null
 var draw_start_gx: int = 0
 var draw_start_gy: int = 0
 var prev_snapped_gx: int = 0
@@ -506,7 +510,8 @@ func _save_tool_settings():
 		"paint_brush_radius_idx": paint_brush_radius_idx,
 		"game_volume": game_volume,
 		"is_muted": is_muted,
-		"current_language": current_language
+		"current_language": current_language,
+		"is_logic_gate_tutorial_done": is_logic_gate_tutorial_done
 	}
 	var f = FileAccess.open("user://tools_settings.json", FileAccess.WRITE)
 	if f:
@@ -527,6 +532,8 @@ func _load_tool_settings():
 				if dict.has("current_language"): 
 					current_language = dict["current_language"]
 					TranslationServer.set_locale(current_language)
+				if dict.has("is_logic_gate_tutorial_done"):
+					is_logic_gate_tutorial_done = dict["is_logic_gate_tutorial_done"]
 
 func _ready():
 	_load_global_achievements() # Load global state once at startup
@@ -4742,7 +4749,9 @@ func _add_ui_header(container, key: String):
 # --- OPTIMIZED HIGHLIGHT SYSTEM ---
 
 func _update_material_highlights():
-	if selected_material != 8 and selected_material != 5:
+	if selected_material != -2:
+		selected_circuit_tool = ""
+	if selected_material != 8 and selected_material != 5 and selected_circuit_tool == "":
 		is_mechanism_mode_active = false
 	_set_panning_mode(false)
 	# PRE-CACHE SELECTION STYLE
@@ -4947,6 +4956,9 @@ func _is_any_ui_blocking() -> bool:
 		return true
 		
 	if is_instance_valid(achievement_panel) and achievement_panel.visible and achievement_panel.get_global_rect().has_point(m_pos):
+		return true
+		
+	if is_instance_valid(logic_gate_tutorial_bubble) and logic_gate_tutorial_bubble.visible and logic_gate_tutorial_bubble.get_global_rect().has_point(m_pos):
 		return true
 		
 	return false
@@ -5240,11 +5252,42 @@ func _process(delta):
 					# Pintar elementos
 					var p_diameters = [1, 3, 5, 10, 15, 25]
 					_paint_elements_circle(gx, gy, p_diameters[paint_brush_radius_idx], selected_paint_color)
-			elif (material_tags_raw[selected_material] & SandboxMaterial.Tags.NPC):
+			elif selected_material >= 0 and selected_material < material_tags_raw.size() and (material_tags_raw[selected_material] & SandboxMaterial.Tags.NPC):
 				if not mouse_was_pressed:
 					_place_npc(gx, gy)
 					_play_action_sound("npc_place")
 				_manage_brush_sound(-1) # Stop brush if switching to NPC
+			elif is_mechanism_mode_active and (selected_circuit_tool == "and" or selected_circuit_tool == "or" or selected_circuit_tool == "xor" or selected_circuit_tool == "not"):
+				if not mouse_was_pressed:
+					var snap = 4
+					gx = int(floor(float(gx) / snap) * snap)
+					gy = int(floor(float(gy) / snap) * snap)
+					
+					var cx = gx / snap
+					var cy = gy / snap
+					
+					var clicked_gate = null
+					for gate in active_logic_gates:
+						var g_pos = gate["grid_pos"]
+						if cx >= g_pos.x and cx < g_pos.x + 3 and cy >= g_pos.y and cy < g_pos.y + 3:
+							clicked_gate = gate
+							break
+					
+					if clicked_gate != null:
+						_draw_logic_gate_shape(clicked_gate["grid_pos"], clicked_gate["orientation"], true)
+						clicked_gate["orientation"] = (clicked_gate["orientation"] + 1) % 4
+						clicked_gate["type"] = selected_circuit_tool
+						_draw_logic_gate_shape(clicked_gate["grid_pos"], clicked_gate["orientation"], false)
+						_play_action_sound("ui_click")
+						_check_logic_gate_tutorial(clicked_gate["grid_pos"])
+					else:
+						var gate_pos = Vector2i(cx - 1, cy - 1)
+						var new_gate = { "grid_pos": gate_pos, "orientation": 0, "type": selected_circuit_tool }
+						active_logic_gates.append(new_gate)
+						_draw_logic_gate_shape(gate_pos, 0, false)
+						_play_action_sound("ui_click")
+						_check_logic_gate_tutorial(gate_pos)
+				_manage_brush_sound(-1)
 			elif is_mechanism_mode_active and (selected_material == 8 or selected_material == 5):
 				# snap exactly to grid cells boundaries
 				var snap = 4
@@ -5275,7 +5318,7 @@ func _process(delta):
 						prev_snapped_gx = gx
 						prev_snapped_gy = gy
 				_manage_brush_sound(-1)
-			elif (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC):
+			elif selected_material >= 0 and selected_material < material_tags_raw.size() and (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC):
 				if not mouse_was_pressed:
 					# RHYTHM SNAP: Align to 4x4 grid for perfect tempo (32 real pixels at scale 8)
 					var snap = 4
@@ -10833,6 +10876,129 @@ func _place_circuit_block(gx: int, gy: int, mat_id: int):
 		for ox in range(4):
 			_set_cell(gx + ox, gy + oy, mat_id)
 
+const LOGIC_GATE_SHAPES = {
+	0: [ # UP
+		[0, 1, 0],
+		[1, 1, 1],
+		[1, 0, 1]
+	],
+	1: [ # RIGHT
+		[1, 1, 0],
+		[0, 1, 1],
+		[1, 1, 0]
+	],
+	2: [ # DOWN
+		[1, 0, 1],
+		[1, 1, 1],
+		[0, 1, 0]
+	],
+	3: [ # LEFT
+		[0, 1, 1],
+		[1, 1, 0],
+		[0, 1, 1]
+	]
+}
+
+func _draw_logic_gate_shape(grid_pos: Vector2i, orientation: int, erase: bool):
+	var shape = LOGIC_GATE_SHAPES.get(orientation, LOGIC_GATE_SHAPES[0])
+	var mat = 0 if erase else 8 # 8 = Metal (conductive wire)
+	for r in range(3):
+		for c in range(3):
+			if shape[r][c] == 1:
+				_place_circuit_block((grid_pos.x + c) * 4, (grid_pos.y + r) * 4, mat)
+
+func _check_logic_gate_tutorial(grid_pos: Vector2i):
+	if not is_logic_gate_tutorial_done:
+		_show_logic_gate_tutorial_bubble(grid_pos)
+
+func _show_logic_gate_tutorial_bubble(grid_pos: Vector2i):
+	if is_instance_valid(logic_gate_tutorial_bubble):
+		logic_gate_tutorial_bubble.queue_free()
+	
+	if not is_instance_valid(ui_root):
+		ui_root = get_parent().get_node_or_null("UI")
+		if not ui_root: return
+	
+	var s = _get_ui_scale()
+	
+	# Create panel container
+	var bubble = PanelContainer.new()
+	logic_gate_tutorial_bubble = bubble
+	bubble.mouse_filter = Control.MOUSE_FILTER_STOP
+	
+	# Styling: Glassmorphism look
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.08, 0.08, 0.12, 0.96) # Dark slate semi-transparent
+	p_style.set_corner_radius_all(18 * s)
+	p_style.border_width_left = 3; p_style.border_width_top = 3
+	p_style.border_width_right = 3; p_style.border_width_bottom = 3
+	p_style.border_color = Color(0.25, 0.45, 0.85, 0.95) # Vivid royal blue
+	p_style.shadow_color = Color(0, 0, 0, 0.45)
+	p_style.shadow_size = 10
+	bubble.add_theme_stylebox_override("panel", p_style)
+	
+	var margin = MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_STOP
+	margin.add_theme_constant_override("margin_left", 20 * s)
+	margin.add_theme_constant_override("margin_top", 16 * s)
+	margin.add_theme_constant_override("margin_right", 20 * s)
+	margin.add_theme_constant_override("margin_bottom", 16 * s)
+	bubble.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.mouse_filter = Control.MOUSE_FILTER_STOP
+	vbox.add_theme_constant_override("separation", 10 * s)
+	margin.add_child(vbox)
+	
+	var lbl = Label.new()
+	lbl.mouse_filter = Control.MOUSE_FILTER_STOP
+	lbl.text = "💡 Consejo: ¡Toca la compuerta de nuevo para rotarla!" if OS.get_locale_language() == "es" else "💡 Tip: Tap the logic gate again to rotate it!"
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.custom_minimum_size = Vector2(280 * s, 0)
+	lbl.add_theme_font_override("font", _get_safe_font())
+	lbl.add_theme_font_size_override("font_size", 18 * s)
+	lbl.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(lbl)
+	
+	var btn = Button.new()
+	btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	btn.text = "Entiendo" if OS.get_locale_language() == "es" else "Got it"
+	btn.custom_minimum_size = Vector2(130 * s, 46 * s)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	btn.add_theme_font_override("font", _get_safe_font())
+	btn.add_theme_font_size_override("font_size", 17 * s)
+	
+	var btn_style_norm = StyleBoxFlat.new()
+	btn_style_norm.bg_color = Color(0.25, 0.45, 0.85, 1.0)
+	btn_style_norm.set_corner_radius_all(10 * s)
+	
+	var btn_style_hover = btn_style_norm.duplicate()
+	btn_style_hover.bg_color = Color(0.3, 0.55, 0.95, 1.0)
+	
+	btn.add_theme_stylebox_override("normal", btn_style_norm)
+	btn.add_theme_stylebox_override("hover", btn_style_hover)
+	btn.add_theme_stylebox_override("pressed", btn_style_norm)
+	btn.add_theme_color_override("font_color", Color.WHITE)
+	
+	btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		is_logic_gate_tutorial_done = true
+		_save_tool_settings()
+		bubble.queue_free()
+	)
+	vbox.add_child(btn)
+	
+	ui_root.add_child(bubble)
+	
+	# Position bubble above the logic gate
+	var local_pos = Vector2((grid_pos.x * 4 + 6) * grid_scale, (grid_pos.y * 4) * grid_scale)
+	var screen_pos = get_global_transform_with_canvas() * local_pos
+	
+	bubble.position = screen_pos - Vector2(160 * s, 130 * s)
+	bubble.position.x = clamp(bubble.position.x, 10 * s, get_viewport_rect().size.x - 330 * s)
+	bubble.position.y = clamp(bubble.position.y, 10 * s, get_viewport_rect().size.y - 150 * s)
+
 func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false):
 	sim_mutex.lock()
 	
@@ -11017,9 +11183,9 @@ func _setup_music_ui(force_refresh: bool = false):
 		circ_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		circ_vbox.add_child(circ_grid)
 		
-		# Circuits elements: Metal, TNT, NPC Trigger, Door, Battery, LED, Logic Gates, Piston, Cannon
-		var circuit_items = ["metal", "tnt", "npc_act", "door", "battery", "led", "logic_gate", "piston", "cannon"]
-		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🔋", "💡", "🔀", "⚙️", "💣"]
+		# Circuits elements: Metal, TNT, NPC Trigger, Door, Battery, LED, Logic Gates (AND, OR, XOR, NOT), Piston, Cannon
+		var circuit_items = ["metal", "tnt", "npc_act", "door", "battery", "led", "and", "or", "xor", "not", "piston", "cannon"]
+		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🔋", "💡", "🔀", "🔀", "🔀", "🔀", "⚙️", "💣"]
 		for i in range(circuit_items.size()):
 			var btn = Button.new()
 			btn.text = circuit_emojis[i] + " " + tr(circuit_items[i])
@@ -11039,10 +11205,17 @@ func _setup_music_ui(force_refresh: bool = false):
 				_play_action_sound("ui_click")
 				if item_key == "metal":
 					selected_material = 8
+					selected_circuit_tool = ""
 					is_mechanism_mode_active = true
 					_close_music_menu()
 				elif item_key == "tnt":
 					selected_material = 5
+					selected_circuit_tool = ""
+					is_mechanism_mode_active = true
+					_close_music_menu()
+				elif item_key == "and" or item_key == "or" or item_key == "xor" or item_key == "not":
+					selected_material = -2
+					selected_circuit_tool = item_key
 					is_mechanism_mode_active = true
 					_close_music_menu()
 				else:
@@ -11303,7 +11476,11 @@ func _is_music_active() -> bool:
 	# Show grid if mechanisms/music menu is open OR if a musical material or mechanism drawing mode is selected
 	if is_instance_valid(music_panel) and music_panel.visible:
 		return true
-	return is_mechanism_mode_active or (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC) != 0
+	if is_mechanism_mode_active:
+		return true
+	if selected_material >= 0 and selected_material < material_tags_raw.size():
+		return (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC) != 0
+	return false
 
 # --- SAVE / LOAD SYSTEM ---
 

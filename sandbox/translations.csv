@@ -318,6 +318,9 @@ LOAD_AD_FAILED,No se pudo cargar el anuncio. Por favor, intenta más tarde.,Coul
 circuits_tab,Circuitos,Circuits,Circuiti,Circuits,Schaltungen,Circuitos
 music_tab,Música,Music,Musica,Musique,Musik,Música
 led,LED,LED,LED,LED,LED,LED
-logic_gate,Compuerta Lógica,Logic Gate,Porta Logica,Porte Logique,Logikgatter,Comporta Lógica
+and,AND,AND,AND,AND,AND,AND
+or,OR,OR,OR,OR,OR,OR
+xor,XOR,XOR,XOR,XOR,XOR,XOR
+not,NOT,NOT,NOT,NOT,NOT,NOT
 piston,Pistón,Piston,Pistone,Piston,Kolben,Pistão
 cannon,Cañón,Cannon,Cannone,Canon,Kanone,Canhão
