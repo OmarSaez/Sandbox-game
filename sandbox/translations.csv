@@ -318,9 +318,12 @@ LOAD_AD_FAILED,No se pudo cargar el anuncio. Por favor, intenta más tarde.,Coul
 circuits_tab,Circuitos,Circuits,Circuiti,Circuits,Schaltungen,Circuitos
 music_tab,Música,Music,Musica,Musique,Musik,Música
 led,LED,LED,LED,LED,LED,LED
+not,NOT,NOT,NOT,NOT,NOT,NOT
 and,AND,AND,AND,AND,AND,AND
 or,OR,OR,OR,OR,OR,OR
+nand,NAND,NAND,NAND,NAND,NAND,NAND
+nor,NOR,NOR,NOR,NOR,NOR,NOR
 xor,XOR,XOR,XOR,XOR,XOR,XOR
-not,NOT,NOT,NOT,NOT,NOT,NOT
+xnor,XNOR,XNOR,XNOR,XNOR,XNOR,XNOR
 piston,Pistón,Piston,Pistone,Piston,Kolben,Pistão
 cannon,Cañón,Cannon,Cannone,Canon,Kanone,Canhão

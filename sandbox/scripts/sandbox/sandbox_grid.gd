@@ -801,6 +801,15 @@ func _ready():
 	# 20: Polvora
 	_register_material(20, Color("#6B6A66"), SandboxMaterial.Tags.POWDER | SandboxMaterial.Tags.GRAV_SLOW | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Polvora
 	
+	# --- LOGIC GATES (81-87) ---
+	_register_material(81, Color("#B3AF00"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # NOT
+	_register_material(82, Color("#279CF5"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # AND
+	_register_material(83, Color("#F52727"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # OR
+	_register_material(84, Color("#204669"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # NAND
+	_register_material(85, Color("#610101"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # NOR
+	_register_material(86, Color("#0CAD19"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # XOR
+	_register_material(87, Color("#264F2C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # XNOR
+	
 	# --- BIOLOGICALS (21-24) ---
 	# 21: Pasto
 	_register_material(21, Color("#4CAF50"), SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL) # Pasto
@@ -979,6 +988,7 @@ func _ready():
 	save_history_state() # Initialize first history step
 	
 	is_grid_ready = true # Allow _process and _draw to start now!
+	_reconstruct_logic_gates_from_cells()
 	
 	# Smooth fade-in after rotation/startup to hide native scene loading
 	var curtain_layer = get_parent().get_node_or_null("LoadCurtainLayer")
@@ -5257,7 +5267,7 @@ func _process(delta):
 					_place_npc(gx, gy)
 					_play_action_sound("npc_place")
 				_manage_brush_sound(-1) # Stop brush if switching to NPC
-			elif is_mechanism_mode_active and (selected_circuit_tool == "and" or selected_circuit_tool == "or" or selected_circuit_tool == "xor" or selected_circuit_tool == "not"):
+			elif is_mechanism_mode_active and (selected_circuit_tool == "not" or selected_circuit_tool == "and" or selected_circuit_tool == "or" or selected_circuit_tool == "nand" or selected_circuit_tool == "nor" or selected_circuit_tool == "xor" or selected_circuit_tool == "xnor"):
 				if not mouse_was_pressed:
 					var snap = 4
 					gx = int(floor(float(gx) / snap) * snap)
@@ -5274,17 +5284,19 @@ func _process(delta):
 							break
 					
 					if clicked_gate != null:
-						_draw_logic_gate_shape(clicked_gate["grid_pos"], clicked_gate["orientation"], true)
+						# Erase with old type
+						_draw_logic_gate_shape(clicked_gate["grid_pos"], clicked_gate["orientation"], true, clicked_gate["type"])
 						clicked_gate["orientation"] = (clicked_gate["orientation"] + 1) % 4
 						clicked_gate["type"] = selected_circuit_tool
-						_draw_logic_gate_shape(clicked_gate["grid_pos"], clicked_gate["orientation"], false)
+						# Draw with new type
+						_draw_logic_gate_shape(clicked_gate["grid_pos"], clicked_gate["orientation"], false, clicked_gate["type"])
 						_play_action_sound("ui_click")
 						_check_logic_gate_tutorial(clicked_gate["grid_pos"])
 					else:
 						var gate_pos = Vector2i(cx - 1, cy - 1)
 						var new_gate = { "grid_pos": gate_pos, "orientation": 0, "type": selected_circuit_tool }
 						active_logic_gates.append(new_gate)
-						_draw_logic_gate_shape(gate_pos, 0, false)
+						_draw_logic_gate_shape(gate_pos, 0, false, selected_circuit_tool)
 						_play_action_sound("ui_click")
 						_check_logic_gate_tutorial(gate_pos)
 				_manage_brush_sound(-1)
@@ -6391,6 +6403,7 @@ func _thread_pass3(i: int, process_evens: bool):
 											if ni < cells.size() and (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
 
 func _process_electricity():
+	_simulate_logic_gates()
 	for idx in active_charge_indices:
 		var charge = charge_array[idx]
 		if charge == 0: continue
@@ -10648,6 +10661,7 @@ func _clear_all():
 	tags_array.fill(0)
 	surface_cache.fill(0)
 	active_npcs.clear()
+	active_logic_gates.clear()
 	active_projectiles.clear()
 	active_metronome_indices.clear()
 	vs_life.fill(0.0)
@@ -10870,6 +10884,209 @@ func _place_music_block(gx, gy, mat_id):
 		for ox in range(2):
 			_set_cell(gx + ox, gy + oy, mat_id)
 
+func _is_cell_charged(bx: int, by: int) -> bool:
+	for dy in range(4):
+		var gy = by + dy
+		if gy < 0 or gy >= grid_height: continue
+		var row_offset = gy * grid_width
+		for dx in range(4):
+			var gx = bx + dx
+			if gx < 0 or gx >= grid_width: continue
+			var idx = row_offset + gx
+			if charge_array[idx] > 0:
+				return true
+	return false
+
+func _charge_cell(bx: int, by: int):
+	for dy in range(4):
+		var gy = by + dy
+		if gy < 0 or gy >= grid_height: continue
+		var row_offset = gy * grid_width
+		for dx in range(4):
+			var gx = bx + dx
+			if gx < 0 or gx >= grid_width: continue
+			var idx = row_offset + gx
+			
+			charge_array[idx] = 100
+			charge_visual_buffer[idx] = 100
+			_register_charge(idx)
+			_activate_chunk(gx, gy)
+			
+			# Spread to adjacent conductor neighbors (like Metal wire)
+			for ny in range(gy - 1, gy + 2):
+				if ny < 0 or ny >= grid_height: continue
+				var n_row = ny * grid_width
+				for nx in range(gx - 1, gx + 2):
+					if nx < 0 or nx >= grid_width: continue
+					var n_idx = n_row + nx
+					var n_tags = tags_array[n_idx]
+					if (n_tags & SandboxMaterial.Tags.CONDUCTOR) and charge_array[n_idx] == 0:
+						charge_array[n_idx] = 101
+						_register_charge(n_idx)
+						_activate_chunk(nx, ny)
+
+func _discharge_cell(bx: int, by: int):
+	for dy in range(4):
+		var gy = by + dy
+		if gy < 0 or gy >= grid_height: continue
+		var row_offset = gy * grid_width
+		for dx in range(4):
+			var gx = bx + dx
+			if gx < 0 or gx >= grid_width: continue
+			var idx = row_offset + gx
+			if charge_array[idx] > 0:
+				charge_array[idx] = 0
+				charge_visual_buffer[idx] = 0
+
+func _simulate_logic_gates():
+	if cells.size() == 0: return
+	var i = active_logic_gates.size() - 1
+	while i >= 0:
+		var gate = active_logic_gates[i]
+		var grid_pos = gate["grid_pos"]
+		var orientation = gate["orientation"]
+		var type = gate["type"]
+		
+		# Center cell row 1, col 1
+		var cx = grid_pos.x
+		var cy = grid_pos.y
+		var center_gx = (cx + 1) * 4
+		var center_gy = (cy + 1) * 4
+		var center_idx = center_gy * grid_width + center_gx
+		
+		if center_idx >= cells.size():
+			active_logic_gates.remove_at(i)
+			i -= 1
+			continue
+			
+		var center_mid = cells[center_idx] & 0xFFFF
+		if center_mid < 81 or center_mid > 87:
+			# Gate center was overwritten, remove it!
+			active_logic_gates.remove_at(i)
+			i -= 1
+			continue
+		
+		var pin_A_r = 0
+		var pin_A_c = 0
+		var pin_B_r = 0
+		var pin_B_c = 0
+		var pin_out_r = 0
+		var pin_out_c = 0
+		
+		match orientation:
+			0: # UP
+				pin_A_r = 2; pin_A_c = 0
+				pin_B_r = 2; pin_B_c = 2
+				pin_out_r = 0; pin_out_c = 1
+			1: # RIGHT
+				pin_A_r = 0; pin_A_c = 0
+				pin_B_r = 2; pin_B_c = 0
+				pin_out_r = 1; pin_out_c = 2
+			2: # DOWN
+				pin_A_r = 0; pin_A_c = 0
+				pin_B_r = 0; pin_B_c = 2
+				pin_out_r = 2; pin_out_c = 1
+			3: # LEFT
+				pin_A_r = 0; pin_A_c = 2
+				pin_B_r = 2; pin_B_c = 2
+				pin_out_r = 1; pin_out_c = 0
+		
+		var bx_A = (cx + pin_A_c) * 4
+		var by_A = (cy + pin_A_r) * 4
+		var bx_B = (cx + pin_B_c) * 4
+		var by_B = (cy + pin_B_r) * 4
+		var bx_out = (cx + pin_out_c) * 4
+		var by_out = (cy + pin_out_r) * 4
+		
+		var val_A = _is_cell_charged(bx_A, by_A)
+		var val_B = _is_cell_charged(bx_B, by_B)
+		
+		var out_val = false
+		match type:
+			"not":
+				out_val = not val_A
+			"and":
+				out_val = val_A and val_B
+			"or":
+				out_val = val_A or val_B
+			"nand":
+				out_val = not (val_A and val_B)
+			"nor":
+				out_val = not (val_A or val_B)
+			"xor":
+				out_val = val_A != val_B
+			"xnor":
+				out_val = val_A == val_B
+				
+		if out_val:
+			_charge_cell(bx_out, by_out)
+		else:
+			_discharge_cell(bx_out, by_out)
+			
+		i -= 1
+
+func _reconstruct_logic_gates_from_cells():
+	if cells.size() == 0: return
+	active_logic_gates.clear()
+	var visited_cells = {}
+	var max_cx = grid_width / 4
+	var max_cy = grid_height / 4
+	
+	for cy in range(max_cy - 2):
+		for cx in range(max_cx - 2):
+			if visited_cells.has(str(cx) + "," + str(cy)): continue
+			
+			var gate_type = ""
+			var gate_mat = 0
+			
+			var center_gx = (cx + 1) * 4
+			var center_gy = (cy + 1) * 4
+			var idx = center_gy * grid_width + center_gx
+			if idx < cells.size():
+				var mid = cells[idx] & 0xFFFF
+				if mid >= 81 and mid <= 87:
+					gate_mat = mid
+					match mid:
+						81: gate_type = "not"
+						82: gate_type = "and"
+						83: gate_type = "or"
+						84: gate_type = "nand"
+						85: gate_type = "nor"
+						86: gate_type = "xor"
+						87: gate_type = "xnor"
+			
+			if gate_type != "":
+				var r0c0_idx = cy * 4 * grid_width + cx * 4
+				var r0c2_idx = cy * 4 * grid_width + (cx + 2) * 4
+				var r2c0_idx = (cy + 2) * 4 * grid_width + cx * 4
+				
+				var has_r0c0 = false
+				var has_r0c2 = false
+				var has_r2c0 = false
+				if r0c0_idx < cells.size(): has_r0c0 = (cells[r0c0_idx] & 0xFFFF) == gate_mat
+				if r0c2_idx < cells.size(): has_r0c2 = (cells[r0c2_idx] & 0xFFFF) == gate_mat
+				if r2c0_idx < cells.size(): has_r2c0 = (cells[r2c0_idx] & 0xFFFF) == gate_mat
+				
+				var orientation = 0
+				if not has_r0c0 and has_r0c2 and has_r2c0:
+					orientation = 0
+				elif has_r0c0 and not has_r0c2:
+					orientation = 1
+				elif has_r0c0 and has_r0c2 and not has_r2c0:
+					orientation = 2
+				else:
+					orientation = 3
+				
+				active_logic_gates.append({
+					"grid_pos": Vector2i(cx, cy),
+					"orientation": orientation,
+					"type": gate_type
+				})
+				
+				for dy in range(3):
+					for dx in range(3):
+						visited_cells[str(cx + dx) + "," + str(cy + dy)] = true
+
 func _place_circuit_block(gx: int, gy: int, mat_id: int):
 	# Places a 4x4 block (16 pixels) to fully occupy the grid cell
 	for oy in range(4):
@@ -10899,9 +11116,19 @@ const LOGIC_GATE_SHAPES = {
 	]
 }
 
-func _draw_logic_gate_shape(grid_pos: Vector2i, orientation: int, erase: bool):
+func _draw_logic_gate_shape(grid_pos: Vector2i, orientation: int, erase: bool, type: String = "and"):
 	var shape = LOGIC_GATE_SHAPES.get(orientation, LOGIC_GATE_SHAPES[0])
-	var mat = 0 if erase else 8 # 8 = Metal (conductive wire)
+	var mat = 0
+	if not erase:
+		match type:
+			"not": mat = 81
+			"and": mat = 82
+			"or": mat = 83
+			"nand": mat = 84
+			"nor": mat = 85
+			"xor": mat = 86
+			"xnor": mat = 87
+			_: mat = 82
 	for r in range(3):
 		for c in range(3):
 			if shape[r][c] == 1:
@@ -11183,9 +11410,9 @@ func _setup_music_ui(force_refresh: bool = false):
 		circ_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		circ_vbox.add_child(circ_grid)
 		
-		# Circuits elements: Metal, TNT, NPC Trigger, Door, Battery, LED, Logic Gates (AND, OR, XOR, NOT), Piston, Cannon
-		var circuit_items = ["metal", "tnt", "npc_act", "door", "battery", "led", "and", "or", "xor", "not", "piston", "cannon"]
-		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🔋", "💡", "🔀", "🔀", "🔀", "🔀", "⚙️", "💣"]
+		# Circuits elements: Metal, TNT, NPC Trigger, Door, Battery, LED, Logic Gates (NOT, AND, OR, NAND, NOR, XOR, XNOR), Piston, Cannon
+		var circuit_items = ["metal", "tnt", "npc_act", "door", "battery", "led", "not", "and", "or", "nand", "nor", "xor", "xnor", "piston", "cannon"]
+		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🔋", "💡", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "⚙️", "💣"]
 		for i in range(circuit_items.size()):
 			var btn = Button.new()
 			btn.text = circuit_emojis[i] + " " + tr(circuit_items[i])
@@ -11213,7 +11440,7 @@ func _setup_music_ui(force_refresh: bool = false):
 					selected_circuit_tool = ""
 					is_mechanism_mode_active = true
 					_close_music_menu()
-				elif item_key == "and" or item_key == "or" or item_key == "xor" or item_key == "not":
+				elif item_key == "not" or item_key == "and" or item_key == "or" or item_key == "nand" or item_key == "nor" or item_key == "xor" or item_key == "xnor":
 					selected_material = -2
 					selected_circuit_tool = item_key
 					is_mechanism_mode_active = true
@@ -11974,6 +12201,7 @@ func _load_from_slot(idx):
 			
 			# 2. UNIFIED MAPPER (Restores Grid, Charge, Tags, Paint & Wakes Chunks)
 			_map_grid_data(dict)
+			_reconstruct_logic_gates_from_cells()
 			
 			# 3. RESTORE LABORATORY EXPERIMENTS
 			if dict.has("lab_data"):
