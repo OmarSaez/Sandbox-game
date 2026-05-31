@@ -163,6 +163,8 @@ var selected_music_note: int = 0
 var music_player_pool: Array[AudioStreamPlayer] = []
 var music_next_idx: int = 0
 var music_panel: PanelContainer
+var selected_mechanism_tab: int = 0 # 0: Circuits, 1: Music
+var circuit_panel: PanelContainer
 const MUSIC_ID_START = 500
 const MUSIC_INSTRUMENTS = ["piano1", "piano2", "piano3", "piano4", "drums", "metronome"]
 const MUSIC_INST_COLORS = [
@@ -10848,6 +10850,7 @@ func _setup_music_ui(force_refresh: bool = false):
 			child.name = "TO_DELETE"
 			child.hide()
 			child.queue_free()
+	circuit_panel = null
 	
 	music_panel = PanelContainer.new()
 	music_panel.name = "MusicPanel"
@@ -10856,10 +10859,14 @@ func _setup_music_ui(force_refresh: bool = false):
 	is_blocking = false # NO MORE BLOCKING (non-modal like tools)
 	
 	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.1, 0.07, 0.1, 0.95) # Premium semi-transparent dark
+	if selected_mechanism_tab == 0:
+		panel_style.bg_color = Color(0.06, 0.08, 0.12, 0.96) # Premium semi-transparent dark blue
+		panel_style.border_color = Color("#4169E1", 0.75) # Royal Blue electrical glow
+	else:
+		panel_style.bg_color = Color(0.1, 0.07, 0.1, 0.95) # Premium semi-transparent dark purple
+		panel_style.border_color = Color(0.8, 0.1, 0.5, 0.6) # Soft musical glow
 	panel_style.border_width_left = 2; panel_style.border_width_top = 2
 	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
-	panel_style.border_color = Color(0.8, 0.1, 0.5, 0.6) # Soft musical glow
 	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
 	music_panel.add_theme_stylebox_override("panel", panel_style)
 	music_panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -10876,15 +10883,127 @@ func _setup_music_ui(force_refresh: bool = false):
 	
 	_align_panel_to_hud(music_panel, m_width, m_height)
 
-	# INTERNAL SCROLL (Crucial to prevent overlap if content is tall)
+	# Main container vbox for layout
+	var outer_vbox = VBoxContainer.new()
+	outer_vbox.name = "OuterVBox"
+	outer_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	outer_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	outer_vbox.add_theme_constant_override("separation", 10 * s)
+	music_panel.add_child(outer_vbox)
+	
+	# Sub-tabs row at the top
+	var sub_tab_hbox = HBoxContainer.new()
+	sub_tab_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sub_tab_hbox.add_theme_constant_override("separation", 8 * s)
+	outer_vbox.add_child(sub_tab_hbox)
+	
+	# Create sub-tabs (Circuits & Music)
+	for tab_idx in range(2):
+		var tab_btn = Button.new()
+		tab_btn.text = "⚡ " + tr("circuits_tab") if tab_idx == 0 else "🎵 " + tr("music_tab")
+		tab_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tab_btn.custom_minimum_size = Vector2(0, 52 * s)
+		tab_btn.add_theme_font_override("font", _get_safe_font())
+		tab_btn.add_theme_font_size_override("font_size", 18 * s)
+		
+		var t_style = StyleBoxFlat.new()
+		t_style.set_corner_radius_all(10 * s)
+		var base_col = Color("#4169E1") if tab_idx == 0 else Color("#9E1FFF")
+		if tab_idx == selected_mechanism_tab:
+			t_style.bg_color = base_col.darkened(0.2) # Active accent
+			t_style.border_width_bottom = 4
+			t_style.border_color = Color.WHITE
+		else:
+			t_style.bg_color = base_col.darkened(0.7) # Inactive accent
+		tab_btn.add_theme_stylebox_override("normal", t_style)
+		tab_btn.add_theme_stylebox_override("hover", t_style)
+		tab_btn.add_theme_stylebox_override("pressed", t_style)
+		
+		var idx = tab_idx
+		tab_btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			selected_mechanism_tab = idx
+			_setup_music_ui(true)
+		)
+		sub_tab_hbox.add_child(tab_btn)
+		
+	# Populate based on selected sub-tab
+	if selected_mechanism_tab == 0:
+		# --- CIRCUITS VIEW ---
+		circuit_panel = PanelContainer.new()
+		circuit_panel.name = "CircuitPanel"
+		circuit_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		circuit_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		circuit_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+		outer_vbox.add_child(circuit_panel)
+		
+		var circ_scroll = ScrollContainer.new()
+		circ_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		circ_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		circuit_panel.add_child(circ_scroll)
+		
+		var circ_vbox = VBoxContainer.new()
+		circ_vbox.add_theme_constant_override("separation", 15 * s)
+		circ_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		circ_scroll.add_child(circ_vbox)
+		
+		var title = Label.new()
+		title.text = tr("circuits_tab")
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		title.add_theme_font_override("font", _get_safe_font())
+		title.add_theme_font_size_override("font_size", 34 * s)
+		circ_vbox.add_child(title)
+		
+		var desc = Label.new()
+		desc.text = "Crea automatizaciones usando electricidad" if OS.get_locale_language() == "es" else "Create automation using electricity"
+		desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		desc.add_theme_font_override("font", _get_safe_font())
+		desc.add_theme_font_size_override("font_size", 18 * s)
+		desc.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8))
+		circ_vbox.add_child(desc)
+		
+		# Grid for mechanisms
+		var circ_grid = GridContainer.new()
+		circ_grid.columns = 2
+		circ_grid.add_theme_constant_override("h_separation", 12 * s)
+		circ_grid.add_theme_constant_override("v_separation", 12 * s)
+		circ_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		circ_vbox.add_child(circ_grid)
+		
+		# Circuits elements: NPC Trigger, Door, Battery, LED, Logic Gates, Piston, Cannon
+		var circuit_items = ["npc_act", "door", "battery", "led", "logic_gate", "piston", "cannon"]
+		var circuit_emojis = ["🔌", "🚪", "🔋", "💡", "🔀", "⚙️", "💣"]
+		for i in range(circuit_items.size()):
+			var btn = Button.new()
+			btn.text = circuit_emojis[i] + " " + tr(circuit_items[i])
+			btn.custom_minimum_size = Vector2(210 * s, 70 * s)
+			btn.add_theme_font_override("font", _get_safe_font())
+			btn.add_theme_font_size_override("font_size", 18 * s)
+			
+			var b_style = StyleBoxFlat.new()
+			b_style.bg_color = Color("#4169E1").darkened(0.65)
+			b_style.set_corner_radius_all(10 * s)
+			btn.add_theme_stylebox_override("normal", b_style)
+			btn.add_theme_stylebox_override("hover", b_style)
+			btn.add_theme_stylebox_override("pressed", b_style)
+			
+			btn.pressed.connect(func():
+				_play_action_sound("ui_click")
+				# Select corresponding placeholder logic
+				print("Circuit material selected: ", circuit_items[i])
+			)
+			circ_grid.add_child(btn)
+		return # Return early so the music UI setup below does not run!
+		
+	# --- MUSIC VIEW ---
 	var scroll = ScrollContainer.new()
 	scroll.name = "MusicScroll"
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	music_panel.add_child(scroll)
+	outer_vbox.add_child(scroll)
 	
 	var main_vbox = VBoxContainer.new()
-	main_vbox.add_theme_constant_override("separation", 15 * s) # Tighter spacing to pull content up
+	main_vbox.add_theme_constant_override("separation", 15 * s)
 	main_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(main_vbox)
 	
@@ -10892,10 +11011,10 @@ func _setup_music_ui(force_refresh: bool = false):
 	
 	# Title
 	var title = Label.new()
-	title.text = tr("music")
+	title.text = tr("music_tab")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_override("font", _get_safe_font())
-	title.add_theme_font_size_override("font_size", 34 * s) # Bigger title
+	title.add_theme_font_size_override("font_size", 34 * s)
 	main_vbox.add_child(title)
 	
 	# 1. Instrument Selection Tabs (GRID for 2 rows)
@@ -11085,12 +11204,13 @@ func _close_music_menu():
 		for child in ui_root.get_children():
 			if child.name.begins_with("MusicMenuBlocker") or child.name.begins_with("MusicPanel") or child.name == "TO_DELETE":
 				child.queue_free()
+	circuit_panel = null
 	_update_material_highlights()
 	_update_menu_highlights()
 	_on_arcade_selection_made(false)
 	
 func _setup_music_button():
-	var btn = _create_vertical_category_btn("🎹", "music")
+	var btn = _create_vertical_category_btn("⚙️", "music")
 	btn.name = "MusicBtn"
 	ui_elements["music_btn"] = btn
 	
