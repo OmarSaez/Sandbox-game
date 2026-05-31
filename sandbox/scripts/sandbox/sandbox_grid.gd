@@ -5425,10 +5425,13 @@ func _draw():
 			var world_pos = p.pos * g_scale
 			var mat = p.get("block_material", 1)
 			var col = mat_colors_1[mat] if mat < mat_colors_1.size() else Color("#717E80")
-			# Draw 2x2 block
-			draw_rect(Rect2(world_pos, Vector2(g_scale * 2, g_scale * 2)), col)
-			# Draw a faint magical glow border
-			draw_rect(Rect2(world_pos - Vector2(g_scale * 0.5, g_scale * 0.5), Vector2(g_scale * 3, g_scale * 3)), Color(0.6, 0.4, 0.9, 0.45), false, 1.0)
+			# Draw 1x1 block
+			draw_rect(Rect2(world_pos, Vector2(g_scale, g_scale)), col)
+			# Draw multi-layered neon blue & white glow
+			var neon_blue = Color("#00EAFF")
+			draw_rect(Rect2(world_pos - Vector2(g_scale, g_scale), Vector2(g_scale * 3, g_scale * 3)), Color(neon_blue.r, neon_blue.g, neon_blue.b, 0.15), false, 1.0)
+			draw_rect(Rect2(world_pos - Vector2(g_scale * 0.5, g_scale * 0.5), Vector2(g_scale * 2, g_scale * 2)), Color(neon_blue.r, neon_blue.g, neon_blue.b, 0.4), false, 1.0)
+			draw_rect(Rect2(world_pos - Vector2(g_scale * 0.2, g_scale * 0.2), Vector2(g_scale * 1.4, g_scale * 1.4)), Color(1.0, 1.0, 1.0, 0.85), false, 0.8)
 
 func _process_tsunami(delta):
 	if tsunami_timer <= 0:
@@ -9470,8 +9473,8 @@ func _process_mage_rescue(npc):
 							
 						var vy = _get_lut_rand_range(-150.0, -100.0)
 						_launch_flying_block(tx, ty, vx, vy, npc.team, 2.5)
-						# Spawn magic sparks
-						var spark_colors = [Color.MEDIUM_PURPLE, Color.AQUA, Color.GOLD]
+						# Spawn magic sparks (Neon Blue, White, Yellow)
+						var spark_colors = [Color("#00EAFF"), Color.WHITE, Color.YELLOW]
 						var col = spark_colors[int(_get_lut_rand() * spark_colors.size())]
 						_add_spark(float(tx), float(ty), _get_lut_rand_range(-20.0, 20.0), _get_lut_rand_range(-50.0, -20.0), col, 0.5)
 						break
