@@ -170,6 +170,9 @@ var selected_circuit_tool: String = ""
 var active_logic_gates: Array = []
 var active_battery_indices = {} # Set of cell indices containing battery blocks
 var active_electricity_source_indices = {} # Set of cell indices containing electricity
+var door_registry = {} # Set of cell indices where NPC Door (91) is placed
+var door_close_timers = {} # cell_idx -> float close delay timer
+var is_npc_door_updating: bool = false
 var is_logic_gate_tutorial_done: bool = false
 var logic_gate_tutorial_bubble: PanelContainer = null
 var draw_start_gx: int = 0
@@ -5381,6 +5384,9 @@ func _process(delta):
 		if _frame_count % 2 == 0:
 			_update_npc_spatial_hash()
 			
+		# Open/Close NPC Doors based on NPC proximity before cellular physics updates
+		_update_npc_doors(delta)
+		
 		_step_simulation()
 		
 		# NPC AI & Physics
@@ -6164,6 +6170,8 @@ func _set_cell(x, y, mat_id):
 			if old_id == 600: active_metronome_indices.erase(idx)
 			elif old_id == 88: active_battery_indices.erase(idx)
 			elif old_id == 9: active_electricity_source_indices.erase(idx)
+			if old_id == 91 and not is_npc_door_updating:
+				door_registry.erase(idx)
 			
 			cells[idx] = 0
 			if cell_paint_colors[idx] != 0:
@@ -6203,10 +6211,14 @@ func _set_cell(x, y, mat_id):
 		if old_id == 600: active_metronome_indices.erase(idx)
 		elif old_id == 88: active_battery_indices.erase(idx)
 		elif old_id == 9: active_electricity_source_indices.erase(idx)
+		if old_id == 91 and not is_npc_door_updating:
+			door_registry.erase(idx)
 		
 		if pure_id == 600: active_metronome_indices[idx] = true
 		elif pure_id == 88: active_battery_indices[idx] = true
 		elif pure_id == 9: active_electricity_source_indices[idx] = true
+		if pure_id == 91:
+			door_registry[idx] = true
 
 		# For specific IDs (Metronome/Music), clear paint
 		if pure_id >= 500: cell_paint_colors[idx] = 0
@@ -9586,6 +9598,122 @@ func _miner_dig(npc, dig_down=false):
 			if tid == 0 or tid == 9 or tid == 12: continue
 			_set_cell(cx, cy, 0)
 
+func _get_connected_door_cells(start_idx: int) -> Array:
+	var group = []
+	var queue = [start_idx]
+	var visited = {}
+	visited[start_idx] = true
+	
+	var w = grid_width
+	var h = dynamic_grid_height
+	
+	var q_idx = 0
+	while q_idx < queue.size():
+		var curr = queue[q_idx]
+		q_idx += 1
+		group.append(curr)
+		
+		var cx = curr % w
+		var cy = curr / w
+		
+		# Left
+		if cx > 0:
+			var n = curr - 1
+			if not visited.has(n) and door_registry.has(n):
+				visited[n] = true
+				queue.append(n)
+		# Right
+		if cx < w - 1:
+			var n = curr + 1
+			if not visited.has(n) and door_registry.has(n):
+				visited[n] = true
+				queue.append(n)
+		# Up
+		if cy > 0:
+			var n = curr - w
+			if not visited.has(n) and door_registry.has(n):
+				visited[n] = true
+				queue.append(n)
+		# Down
+		if cy < h - 1:
+			var n = curr + w
+			if not visited.has(n) and door_registry.has(n):
+				visited[n] = true
+				queue.append(n)
+				
+	return group
+
+func _update_npc_doors(delta: float):
+	if door_registry.size() == 0: return
+	
+	is_npc_door_updating = true
+	
+	# 1. Proximity detection: Find door indices directly near any active NPC (within 8px)
+	var triggered_door_cells = {}
+	for npc in active_npcs:
+		if npc.hp <= 0: continue
+		var npc_w = 3 if (npc.type == "zombie_tank") else 2
+		var npc_h = 6 if (npc.type == "zombie_tank" or npc.type == "mage") else 5
+		var min_x = npc.pos.x - 8
+		var max_x = npc.pos.x + npc_w - 1 + 8
+		var min_y = npc.pos.y - 8
+		var max_y = npc.pos.y + npc_h + 8
+		
+		# Hybrid Scan: loop registry if small, otherwise scan local bounding box
+		if door_registry.size() < 200:
+			for idx in door_registry:
+				if triggered_door_cells.has(idx): continue
+				var dx = idx % grid_width
+				var dy = idx / grid_width
+				if dx >= min_x and dx <= max_x and dy >= min_y and dy <= max_y:
+					triggered_door_cells[idx] = true
+		else:
+			for dy in range(min_y, max_y + 1):
+				if dy < 0 or dy >= dynamic_grid_height: continue
+				var row_offset = dy * grid_width
+				for dx in range(min_x, max_x + 1):
+					if dx < 0 or dx >= grid_width: continue
+					var idx = row_offset + dx
+					if door_registry.has(idx):
+						triggered_door_cells[idx] = true
+				
+	# 2. Connected Component Opening: Open entire connected door groups if any part is triggered
+	var final_open_cells = {}
+	for idx in triggered_door_cells:
+		if final_open_cells.has(idx): continue
+		var group = _get_connected_door_cells(idx)
+		for g_idx in group:
+			final_open_cells[g_idx] = true
+			
+	# 3. Update timers and apply cell changes
+	for idx in door_registry:
+		var x = idx % grid_width
+		var y = idx / grid_width
+		
+		if idx in final_open_cells:
+			# NPC is near -> Open door and set/reset timer to 1.0 second
+			door_close_timers[idx] = 1.0
+			var tid = cells[idx] & 0xFFFF
+			if tid == 91:
+				_set_cell(x, y, 0)
+		else:
+			# NPC not near -> Tick timer down
+			var timer = door_close_timers.get(idx, 0.0)
+			if timer > 0.0:
+				timer -= delta
+				door_close_timers[idx] = timer
+				# Keep open (clear to Air if it closed early)
+				var tid = cells[idx] & 0xFFFF
+				if tid == 91:
+					_set_cell(x, y, 0)
+			else:
+				# Timer expired -> Close door (restore to 91)
+				var tid = cells[idx] & 0xFFFF
+				if tid != 91:
+					_set_cell(x, y, 91)
+					
+	is_npc_door_updating = false
+
 func _shoot_arrow(npc, target):
 	if npc.hp <= 0: return
 	_play_action_sound("archer_shoot")
@@ -10823,6 +10951,8 @@ func _clear_all():
 	active_logic_gates.clear()
 	active_projectiles.clear()
 	active_metronome_indices.clear()
+	door_registry.clear()
+	door_close_timers.clear()
 	vs_life.fill(0.0)
 	active_charge_indices.clear()
 	next_charge_indices.clear()
@@ -11247,6 +11377,8 @@ func _reconstruct_logic_gates_from_cells():
 func _reconstruct_sources_from_cells():
 	active_battery_indices.clear()
 	active_electricity_source_indices.clear()
+	door_registry.clear()
+	door_close_timers.clear()
 	if cells.size() == 0: return
 	for idx in range(cells.size()):
 		var mid = cells[idx] & 0xFFFF
@@ -11254,6 +11386,8 @@ func _reconstruct_sources_from_cells():
 			active_battery_indices[idx] = true
 		elif mid == 9:
 			active_electricity_source_indices[idx] = true
+		elif mid == 91:
+			door_registry[idx] = true
 
 func _get_gate_pin_cell_indices(gate, pin_type: String) -> Array:
 	var cx = gate["grid_pos"].x
