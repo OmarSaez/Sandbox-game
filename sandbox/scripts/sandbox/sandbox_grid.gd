@@ -1581,8 +1581,10 @@ func _setup_materials_within_grid():
 	_add_button("sand", 1)
 	_add_button("water", 2)
 	_add_button("fire", 3)
+	_add_button("tnt", 5)
 	_add_button("earth", 6)
 	_add_button("stone", 30)
+	_add_button("metal", 8)
 	_add_button("elec", 9)
 	_add_button("gravel", 10)
 	_add_button("lava", 11)
@@ -4159,6 +4161,7 @@ func _update_custom_mats_in_material_grid():
 				_play_action_sound("ui_click")
 				selected_material = mat_id
 				is_paint_tool_active = false
+				is_mechanism_mode_active = false
 				_update_material_highlights()
 				_update_menu_highlights()
 				
@@ -4679,6 +4682,7 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 				_play_action_sound("ui_click")
 				selected_material = mat_id
 				is_paint_tool_active = false
+				is_mechanism_mode_active = false
 				
 				# TUTORIAL END: If we selected a custom material (900+)
 				if mat_id >= 900 and not is_lab_tutorial_done:
@@ -5248,38 +5252,26 @@ func _process(delta):
 				gy = int(floor(float(gy) / snap) * snap)
 				
 				if not mouse_was_pressed:
-					draw_start_gx = gx
-					draw_start_gy = gy
 					prev_snapped_gx = gx
 					prev_snapped_gy = gy
 					_place_circuit_block(gx, gy, selected_material)
 				else:
-					# Lock to straight horizontal/vertical line from starting point
-					var dx = abs(gx - draw_start_gx)
-					var dy = abs(gy - draw_start_gy)
-					if dx > dy:
-						gy = draw_start_gy
-					else:
-						gx = draw_start_gx
-					
-					# Fill the path from the last snapped position to prevent gaps when dragging fast
+					# Draw continuous cell staircase from prev_snapped to current gx, gy
 					if gx != prev_snapped_gx or gy != prev_snapped_gy:
-						if gx != prev_snapped_gx:
-							var step_dir = 4 if gx > prev_snapped_gx else -4
-							var cur_x = prev_snapped_gx + step_dir
-							while true:
-								_place_circuit_block(cur_x, gy, selected_material)
-								if cur_x == gx:
-									break
-								cur_x += step_dir
-						elif gy != prev_snapped_gy:
-							var step_dir = 4 if gy > prev_snapped_gy else -4
-							var cur_y = prev_snapped_gy + step_dir
-							while true:
-								_place_circuit_block(gx, cur_y, selected_material)
-								if cur_y == gy:
-									break
-								cur_y += step_dir
+						var cx = prev_snapped_gx / snap
+						var cy = prev_snapped_gy / snap
+						var target_cx = gx / snap
+						var target_cy = gy / snap
+						
+						while cx != target_cx or cy != target_cy:
+							var dcx = target_cx - cx
+							var dcy = target_cy - cy
+							if abs(dcx) >= abs(dcy):
+								cx += 1 if dcx > 0 else -1
+							else:
+								cy += 1 if dcy > 0 else -1
+							_place_circuit_block(cx * snap, cy * snap, selected_material)
+						
 						prev_snapped_gx = gx
 						prev_snapped_gy = gy
 				_manage_brush_sound(-1)
@@ -7982,6 +7974,7 @@ func _setup_npc_ui():
 				_play_action_sound("ui_click")
 				selected_material = id # Master Warrior Material
 				is_paint_tool_active = false
+				is_mechanism_mode_active = false
 				if not is_instance_valid(controlled_npc):
 					is_selecting_npc_to_control = false
 				_update_material_highlights()
