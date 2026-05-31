@@ -45,19 +45,58 @@ void fragment() {
             }
         }
         
+        // LOGIC GATE CUSTOM PIN FEEDBACK (Outer 2 pixels border for Inputs/Outputs)
+        if (id >= 81 && id <= 87 && variant >= 10 && variant <= 17) {
+            ivec2 tex_size = textureSize(TEXTURE, 0);
+            ivec2 coord = ivec2(UV * vec2(tex_size));
+            int px = coord.x % 4;
+            int py = coord.y % 4;
+            
+            bool is_edge = false;
+            if (variant == 10 || variant == 14) is_edge = (py < 2);
+            else if (variant == 11 || variant == 15) is_edge = (px >= 2);
+            else if (variant == 12 || variant == 16) is_edge = (py >= 2);
+            else if (variant == 13 || variant == 17) is_edge = (px < 2);
+            
+            if (is_edge) {
+                bool is_output = (variant >= 14);
+                if (is_output) {
+                    if (charge > 0.05) {
+                        color = vec4(0.25, 1.0, 1.0, 1.0); // #40FFFF (Active Output)
+                    } else {
+                        color = vec4(0.61, 0.73, 0.73, 1.0); // #9CBABA (Inactive Output)
+                    }
+                } else {
+                    if (charge > 0.05) {
+                        color = vec4(0.77, 0.67, 0.67, 1.0); // #C4ABAB (Active Input)
+                    } else {
+                        color = vec4(0.49, 0.49, 0.49, 1.0); // #7D7D7D (Inactive Input)
+                    }
+                }
+            }
+        }
+        
 
         
         // 5. ELECTRIC GLOW (High Intensity Sparks with Amber Contrast)
         if (charge > 0.05 && id > 0 && id != 13 && id != 25 && id != 5 && id != 7 && id != 20 && id != 71 && id != 72 && id != 77) {
             float spark_intensity = smoothstep(0.12, 1.0, charge);
-            vec4 electric_amber = vec4(1.0, 0.7, 0.0, 1.0); // Amber/Orange-Yellow for better contrast on white
+            vec4 electric_color = vec4(1.0, 0.7, 0.0, 1.0); // Amber/Orange-Yellow default
             
-            // Darken the background slightly under the spark to make it pop on white metal
-            color.rgb = mix(color.rgb, color.rgb * 0.5, spark_intensity * 0.7);
-            
-            // Brighter Amber Core
-            color = mix(color, electric_amber, spark_intensity * 0.9);
-            color.rgb += vec3(0.6, 0.3, 0.0) * (charge * 2.0); // Hot core glow
+            if (id == 89) {
+                // LED glows bright crimson red with high bloom core
+                electric_color = vec4(1.0, 0.1, 0.1, 1.0);
+                color.rgb = mix(color.rgb, color.rgb * 0.3, spark_intensity * 0.5);
+                color = mix(color, electric_color, spark_intensity * 0.95);
+                color.rgb += vec3(0.8, 0.0, 0.0) * (charge * 2.5); // Rich red core glow
+            } else {
+                // Darken the background slightly under the spark to make it pop on white metal
+                color.rgb = mix(color.rgb, color.rgb * 0.5, spark_intensity * 0.7);
+                
+                // Brighter Amber Core
+                color = mix(color, electric_color, spark_intensity * 0.9);
+                color.rgb += vec3(0.6, 0.3, 0.0) * (charge * 2.0); // Hot core glow
+            }
         }
         
         COLOR = color;

@@ -168,6 +168,8 @@ var circuit_panel: PanelContainer
 var is_mechanism_mode_active: bool = false
 var selected_circuit_tool: String = ""
 var active_logic_gates: Array = []
+var active_battery_indices = {} # Set of cell indices containing battery blocks
+var active_electricity_source_indices = {} # Set of cell indices containing electricity
 var is_logic_gate_tutorial_done: bool = false
 var logic_gate_tutorial_bubble: PanelContainer = null
 var draw_start_gx: int = 0
@@ -809,6 +811,9 @@ func _ready():
 	_register_material(85, Color("#610101"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # NOR
 	_register_material(86, Color("#0CAD19"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # XOR
 	_register_material(87, Color("#264F2C"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # XNOR
+	_register_material(88, Color("#FF9800"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Battery
+	_register_material(89, Color("#551111"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # LED
+	
 	
 	# --- BIOLOGICALS (21-24) ---
 	# 21: Pasto
@@ -5300,7 +5305,7 @@ func _process(delta):
 						_play_action_sound("ui_click")
 						_check_logic_gate_tutorial(gate_pos)
 				_manage_brush_sound(-1)
-			elif is_mechanism_mode_active and (selected_material == 8 or selected_material == 5):
+			elif is_mechanism_mode_active and (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89):
 				# snap exactly to grid cells boundaries
 				var snap = 4
 				gx = int(floor(float(gx) / snap) * snap)
@@ -6145,6 +6150,11 @@ func _set_cell(x, y, mat_id):
 		# CRITICAL PERFORMANCE OPTIMIZATION: Early Exit for Air
 		if mat_id == 0:
 			if cells[idx] == 0: return # Already air, no work needed
+			var old_id = cells[idx] & 0xFFFF
+			if old_id == 600: active_metronome_indices.erase(idx)
+			elif old_id == 88: active_battery_indices.erase(idx)
+			elif old_id == 9: active_electricity_source_indices.erase(idx)
+			
 			cells[idx] = 0
 			if cell_paint_colors[idx] != 0:
 				cell_paint_colors[idx] = 0
@@ -6167,8 +6177,8 @@ func _set_cell(x, y, mat_id):
 		var tags = material_tags_raw[pure_id]
 		
 		# Scalable Texturing Variant calculation
-		var variant = 0
-		if (tags & (SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.TEXTURE_TRIPLE)):
+		var variant = (mat_id >> 24) & 0xFF
+		if variant == 0 and (tags & (SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.TEXTURE_TRIPLE)):
 			var mix_prob = 0.35 # Medium default
 			if (tags & SandboxMaterial.Tags.MIX_LOW): mix_prob = 0.15
 			elif (tags & SandboxMaterial.Tags.MIX_HIGH): mix_prob = 0.55
@@ -6178,10 +6188,15 @@ func _set_cell(x, y, mat_id):
 				if (tags & SandboxMaterial.Tags.TEXTURE_TRIPLE) and _get_lut_rand() < 0.35:
 					variant = 2
 		
-		# TRACK METRONOME REGISTRY
+		# TRACK METRONOME, BATTERY, AND ELECTRICITY REGISTRIES
 		var old_id = cells[idx] & 0xFFFF
 		if old_id == 600: active_metronome_indices.erase(idx)
+		elif old_id == 88: active_battery_indices.erase(idx)
+		elif old_id == 9: active_electricity_source_indices.erase(idx)
+		
 		if pure_id == 600: active_metronome_indices[idx] = true
+		elif pure_id == 88: active_battery_indices[idx] = true
+		elif pure_id == 9: active_electricity_source_indices[idx] = true
 
 		# For specific IDs (Metronome/Music), clear paint
 		if pure_id >= 500: cell_paint_colors[idx] = 0
@@ -6403,77 +6418,141 @@ func _thread_pass3(i: int, process_evens: bool):
 											if ni < cells.size() and (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
 
 func _process_electricity():
-	_simulate_logic_gates()
+	# 1. Store previous frame active charges in a set for edge-triggering music blocks
+	var prev_active_charges = {}
 	for idx in active_charge_indices:
-		var charge = charge_array[idx]
-		if charge == 0: continue
+		prev_active_charges[idx] = true
+		
+	# 2. Clear old charges from active_charge_indices, preserving timer-based ones (TNT, visual fuse)
+	var next_active_charges = []
+	for idx in active_charge_indices:
 		var mid = cells[idx] & 0xFFFF
-		
-		if mid == 7 or mid == 77 or mid == 71 or mid == 72:
-			_register_charge(idx) 
-			continue
-		
-		if (mid == 5 or mid == 20) and charge < 101: 
-			_register_charge(idx)
-			continue
-		
-		if charge == 101:
-			charge_array[idx] = 100
-			_register_charge(idx)
+		if mid == 7 or mid == 77 or mid == 71 or mid == 72 or mid == 19:
+			next_active_charges.append(idx)
+		else:
+			charge_array[idx] = 0
+			charge_visual_buffer[idx] = 0
+	active_charge_indices = next_active_charges
+	
+	# 3. Gather active sources
+	var queue = []
+	var visited = {} # int -> bool
+	
+	# Add Battery indices
+	for idx in active_battery_indices:
+		if not visited.has(idx):
+			queue.append(idx)
+			visited[idx] = true
 			
-			# MUSIC TRIGGER: Automatic activation for music blocks
-			if (material_tags_raw[mid] & SandboxMaterial.Tags.MUSIC):
-				var gx = idx % grid_width
-				var gy = int(idx / float(grid_width))
+	# Add permanent Electricity elements
+	for idx in active_electricity_source_indices:
+		if not visited.has(idx):
+			queue.append(idx)
+			visited[idx] = true
+			
+	# Add Metronome indices if pulsing this frame
+	var is_metronome_pulsing = (Engine.get_frames_drawn() % music_tempo_frames == 0)
+	if is_metronome_pulsing:
+		for idx in active_metronome_indices:
+			var gx = idx % grid_width
+			var gy = int(idx / float(grid_width))
+			for dy in range(2):
+				var ny = gy + dy
+				if ny >= grid_height: continue
+				var row_offset = ny * grid_width
+				for dx in range(2):
+					var nx = gx + dx
+					if nx >= grid_width: continue
+					var n_idx = row_offset + nx
+					if not visited.has(n_idx):
+						queue.append(n_idx)
+						visited[n_idx] = true
+						
+	# Add active logic gate output pins
+	for gate in active_logic_gates:
+		if gate.get("output_active", false):
+			var pins = _get_logic_gate_output_pins(gate)
+			for p_idx in pins:
+				if not visited.has(p_idx):
+					queue.append(p_idx)
+					visited[p_idx] = true
+					
+	# 4. BFS propagation
+	var head = 0
+	var count = queue.size()
+	while head < count:
+		var idx = queue[head]
+		head += 1
+		
+		# Set charge state
+		charge_array[idx] = 100
+		charge_visual_buffer[idx] = 100
+		active_charge_indices.append(idx)
+		
+		var x = idx % grid_width
+		var y = int(idx / float(grid_width))
+		_activate_chunk(x, y)
+		
+		# Spawn subtle micro-sparks on active wires for rich visual feedback
+		if _get_lut_rand() < 0.0005:
+			_add_spark(float(x), float(y), _get_lut_rand_range(-15, 15), _get_lut_rand_range(-15, 15), Color("#FFC107"), 0.3)
+		
+		# Propagate to neighbors
+		for ny in range(y - 1, y + 2):
+			if ny < 0 or ny >= grid_height: continue
+			var row_offset = ny * grid_width
+			for nx in range(x - 1, x + 2):
+				if nx < 0 or nx >= grid_width: continue
+				if nx == x and ny == y: continue
 				
-				# 2x2 DUPES FILTER: Only trigger for the "top-left" pixel of the 2x2 block
-				if (gx % 2 == 0 and gy % 2 == 0):
-					if mid == 600: # Metronome sound
+				var n_idx = row_offset + nx
+				if visited.has(n_idx): continue
+				
+				var n_pid = cells[n_idx] & 0xFFFF
+				if n_pid <= 0: continue
+				
+				# Never propagate charge directly to logic gate bodies (IDs 81-87) to avoid input/output feedback
+				if n_pid >= 81 and n_pid <= 87:
+					var n_var = (cells[n_idx] >> 24) & 0xFF
+					if n_var < 10:
+						continue
+				
+				var n_tags = tags_array[n_idx]
+				if n_tags & SandboxMaterial.Tags.CONDUCTOR:
+					visited[n_idx] = true
+					queue.append(n_idx)
+					count += 1
+				elif n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED:
+					# Consumers (like LEDs or TNT) receive charge but do not propagate it further (leaf nodes)
+					visited[n_idx] = true
+					charge_array[n_idx] = 100
+					charge_visual_buffer[n_idx] = 100
+					active_charge_indices.append(n_idx)
+					
+	charge_dirty = true
+	
+	# 5. Simulate logic gates to prepare output_active states for next frame
+	_simulate_logic_gates()
+	
+	# 6. Trigger music blocks on rising edge
+	for idx in active_charge_indices:
+		var mid = cells[idx] & 0xFFFF
+		if material_tags_raw[mid] & SandboxMaterial.Tags.MUSIC:
+			var gx = idx % grid_width
+			var gy = int(idx / float(grid_width))
+			if gx % 2 == 0 and gy % 2 == 0:
+				if not prev_active_charges.has(idx):
+					if mid == 600:
 						_play_music_note(5, 0)
 					else:
 						var inst = int((mid - MUSIC_ID_START) / 16.0)
 						var note = (mid - MUSIC_ID_START) % 16
 						_play_music_note(inst, note)
-			
-			continue
-		
-		if charge == 100:
-			var x = idx % grid_width
-			var y = int(idx / float(grid_width))
-			var my_tags = material_tags_raw[mid]
-			# Only CONDUCTOR and pure ELECTRICITY can SPREAD energy to neighbors
-			if (my_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY)):
-				for ny in range(y - 1, y + 2):
-					if ny < 0 or ny >= grid_height: continue
-					var row_offset = ny * grid_width
-					for nx in range(x - 1, x + 2):
-						if nx < 0 or nx >= grid_width: continue
-						if nx == x and ny == y: continue
-						var n_idx = row_offset + nx
-						var n_pid = cells[n_idx] & 0xFFFF
-						if n_pid <= 0: continue
-						var n_tags = tags_array[n_idx]
-						# CONDUCTOR and ELECTRIC_ACTIVATED can RECEIVE energy
-						if (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)) and charge_array[n_idx] == 0:
-							charge_array[n_idx] = 101
-							_register_charge(n_idx)
-							_activate_chunk(nx, ny)
-		# Decay logic for energy carrying/reacting materials
-		if (material_tags_raw[mid] & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
-			charge_array[idx] -= 10
-			if charge_array[idx] > 100: charge_array[idx] = 100
-			if charge_array[idx] < 0: charge_array[idx] = 0
-			
-			charge_visual_buffer[idx] = clampi(charge_array[idx], 0, 255)
-			charge_dirty = true
-			if charge_array[idx] > 0:
-				_register_charge(idx)
-				_activate_chunk(idx % grid_width, int(idx / float(grid_width)))
-		elif mid == 7 or mid == 71 or mid == 77 or mid == 72: # TNT/Primed logic
-			charge_array[idx] -= 1 
-			if charge_array[idx] > 0:
-				_register_charge(idx)
-				_activate_chunk(idx % grid_width, int(idx / float(grid_width)))
+						
+	# 7. Register all currently active charges to next_charge_indices so they persist/decay in the next frame
+	for idx in active_charge_indices:
+		_register_charge(idx)
+
 
 
 
@@ -11004,7 +11083,7 @@ func _simulate_logic_gates():
 		var out_val = false
 		match type:
 			"not":
-				out_val = not val_A
+				out_val = not (val_A or val_B)
 			"and":
 				out_val = val_A and val_B
 			"or":
@@ -11018,11 +11097,7 @@ func _simulate_logic_gates():
 			"xnor":
 				out_val = val_A == val_B
 				
-		if out_val:
-			_charge_cell(bx_out, by_out)
-		else:
-			_discharge_cell(bx_out, by_out)
-			
+		gate["output_active"] = out_val
 		i -= 1
 
 func _reconstruct_logic_gates_from_cells():
@@ -11086,6 +11161,61 @@ func _reconstruct_logic_gates_from_cells():
 				for dy in range(3):
 					for dx in range(3):
 						visited_cells[str(cx + dx) + "," + str(cy + dy)] = true
+	_reconstruct_sources_from_cells()
+
+func _reconstruct_sources_from_cells():
+	active_battery_indices.clear()
+	active_electricity_source_indices.clear()
+	if cells.size() == 0: return
+	for idx in range(cells.size()):
+		var mid = cells[idx] & 0xFFFF
+		if mid == 88:
+			active_battery_indices[idx] = true
+		elif mid == 9:
+			active_electricity_source_indices[idx] = true
+
+func _get_gate_pin_cell_indices(gate, pin_type: String) -> Array:
+	var cx = gate["grid_pos"].x
+	var cy = gate["grid_pos"].y
+	var orientation = gate["orientation"]
+	
+	var r = 0
+	var c = 0
+	
+	if pin_type == "out":
+		match orientation:
+			0: r = 0; c = 1 # UP
+			1: r = 1; c = 2 # RIGHT
+			2: r = 2; c = 1 # DOWN
+			3: r = 1; c = 0 # LEFT
+	elif pin_type == "in_a":
+		match orientation:
+			0: r = 2; c = 0 # UP
+			1: r = 0; c = 0 # RIGHT
+			2: r = 0; c = 2 # DOWN
+			3: r = 2; c = 2 # LEFT
+	elif pin_type == "in_b":
+		match orientation:
+			0: r = 2; c = 2 # UP
+			1: r = 2; c = 0 # RIGHT
+			2: r = 0; c = 0 # DOWN
+			3: r = 0; c = 2 # LEFT
+			
+	var pins = []
+	var bx = (cx + c) * 4
+	var by = (cy + r) * 4
+	for dy in range(4):
+		var gy = by + dy
+		if gy < 0 or gy >= grid_height: continue
+		var row_offset = gy * grid_width
+		for dx in range(4):
+			var gx = bx + dx
+			if gx < 0 or gx >= grid_width: continue
+			pins.append(row_offset + gx)
+	return pins
+
+func _get_logic_gate_output_pins(gate) -> Array:
+	return _get_gate_pin_cell_indices(gate, "out")
 
 func _place_circuit_block(gx: int, gy: int, mat_id: int):
 	# Places a 4x4 block (16 pixels) to fully occupy the grid cell
@@ -11116,6 +11246,26 @@ const LOGIC_GATE_SHAPES = {
 	]
 }
 
+func _get_logic_gate_cell_variant(r: int, c: int, orientation: int) -> int:
+	match orientation:
+		0: # UP
+			if r == 0 and c == 1: return 14 # Output (Top)
+			elif r == 2 and c == 0: return 12 # Input A (Bottom)
+			elif r == 2 and c == 2: return 12 # Input B (Bottom)
+		1: # RIGHT
+			if r == 1 and c == 2: return 15 # Output (Right)
+			elif r == 0 and c == 0: return 13 # Input A (Left)
+			elif r == 2 and c == 0: return 13 # Input B (Left)
+		2: # DOWN
+			if r == 2 and c == 1: return 16 # Output (Bottom)
+			elif r == 0 and c == 2: return 10 # Input A (Top)
+			elif r == 0 and c == 0: return 10 # Input B (Top)
+		3: # LEFT
+			if r == 1 and c == 0: return 17 # Output (Left)
+			elif r == 2 and c == 2: return 11 # Input A (Right)
+			elif r == 0 and c == 2: return 11 # Input B (Right)
+	return 0
+
 func _draw_logic_gate_shape(grid_pos: Vector2i, orientation: int, erase: bool, type: String = "and"):
 	var shape = LOGIC_GATE_SHAPES.get(orientation, LOGIC_GATE_SHAPES[0])
 	var mat = 0
@@ -11132,7 +11282,11 @@ func _draw_logic_gate_shape(grid_pos: Vector2i, orientation: int, erase: bool, t
 	for r in range(3):
 		for c in range(3):
 			if shape[r][c] == 1:
-				_place_circuit_block((grid_pos.x + c) * 4, (grid_pos.y + r) * 4, mat)
+				var cell_mat = mat
+				if not erase and mat > 0:
+					var variant = _get_logic_gate_cell_variant(r, c, orientation)
+					cell_mat = mat | (variant << 24)
+				_place_circuit_block((grid_pos.x + c) * 4, (grid_pos.y + r) * 4, cell_mat)
 
 func _check_logic_gate_tutorial(grid_pos: Vector2i):
 	if not is_logic_gate_tutorial_done:
@@ -11437,6 +11591,16 @@ func _setup_music_ui(force_refresh: bool = false):
 					_close_music_menu()
 				elif item_key == "tnt":
 					selected_material = 5
+					selected_circuit_tool = ""
+					is_mechanism_mode_active = true
+					_close_music_menu()
+				elif item_key == "battery":
+					selected_material = 88
+					selected_circuit_tool = ""
+					is_mechanism_mode_active = true
+					_close_music_menu()
+				elif item_key == "led":
+					selected_material = 89
 					selected_circuit_tool = ""
 					is_mechanism_mode_active = true
 					_close_music_menu()
