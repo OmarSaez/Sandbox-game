@@ -165,6 +165,11 @@ var music_next_idx: int = 0
 var music_panel: PanelContainer
 var selected_mechanism_tab: int = 0 # 0: Circuits, 1: Music
 var circuit_panel: PanelContainer
+var is_mechanism_mode_active: bool = false
+var draw_start_gx: int = 0
+var draw_start_gy: int = 0
+var prev_snapped_gx: int = 0
+var prev_snapped_gy: int = 0
 const MUSIC_ID_START = 500
 const MUSIC_INSTRUMENTS = ["piano1", "piano2", "piano3", "piano4", "drums", "metronome"]
 const MUSIC_INST_COLORS = [
@@ -1576,10 +1581,8 @@ func _setup_materials_within_grid():
 	_add_button("sand", 1)
 	_add_button("water", 2)
 	_add_button("fire", 3)
-	_add_button("tnt", 5)
 	_add_button("earth", 6)
 	_add_button("stone", 30)
-	_add_button("metal", 8)
 	_add_button("elec", 9)
 	_add_button("gravel", 10)
 	_add_button("lava", 11)
@@ -3709,6 +3712,7 @@ func _toggle_category_panel(target_panel: Control):
 	_play_action_sound("ui_click")
 	var was_visible = is_instance_valid(target_panel) and target_panel.visible
 	
+	is_mechanism_mode_active = false
 	_close_all_popups()
 	
 	if target_panel != paint_panel:
@@ -4734,6 +4738,8 @@ func _add_ui_header(container, key: String):
 # --- OPTIMIZED HIGHLIGHT SYSTEM ---
 
 func _update_material_highlights():
+	if selected_material != 8 and selected_material != 5:
+		is_mechanism_mode_active = false
 	_set_panning_mode(false)
 	# PRE-CACHE SELECTION STYLE
 	var sel_style = StyleBoxFlat.new()
@@ -5235,6 +5241,48 @@ func _process(delta):
 					_place_npc(gx, gy)
 					_play_action_sound("npc_place")
 				_manage_brush_sound(-1) # Stop brush if switching to NPC
+			elif is_mechanism_mode_active and (selected_material == 8 or selected_material == 5):
+				# snap exactly to grid cells boundaries
+				var snap = 4
+				gx = int(floor(float(gx) / snap) * snap)
+				gy = int(floor(float(gy) / snap) * snap)
+				
+				if not mouse_was_pressed:
+					draw_start_gx = gx
+					draw_start_gy = gy
+					prev_snapped_gx = gx
+					prev_snapped_gy = gy
+					_place_circuit_block(gx, gy, selected_material)
+				else:
+					# Lock to straight horizontal/vertical line from starting point
+					var dx = abs(gx - draw_start_gx)
+					var dy = abs(gy - draw_start_gy)
+					if dx > dy:
+						gy = draw_start_gy
+					else:
+						gx = draw_start_gx
+					
+					# Fill the path from the last snapped position to prevent gaps when dragging fast
+					if gx != prev_snapped_gx or gy != prev_snapped_gy:
+						if gx != prev_snapped_gx:
+							var step_dir = 4 if gx > prev_snapped_gx else -4
+							var cur_x = prev_snapped_gx + step_dir
+							while true:
+								_place_circuit_block(cur_x, gy, selected_material)
+								if cur_x == gx:
+									break
+								cur_x += step_dir
+						elif gy != prev_snapped_gy:
+							var step_dir = 4 if gy > prev_snapped_gy else -4
+							var cur_y = prev_snapped_gy + step_dir
+							while true:
+								_place_circuit_block(gx, cur_y, selected_material)
+								if cur_y == gy:
+									break
+								cur_y += step_dir
+						prev_snapped_gx = gx
+						prev_snapped_gy = gy
+				_manage_brush_sound(-1)
 			elif (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC):
 				if not mouse_was_pressed:
 					# RHYTHM SNAP: Align to 4x4 grid for perfect tempo (32 real pixels at scale 8)
@@ -10786,6 +10834,12 @@ func _place_music_block(gx, gy, mat_id):
 		for ox in range(2):
 			_set_cell(gx + ox, gy + oy, mat_id)
 
+func _place_circuit_block(gx: int, gy: int, mat_id: int):
+	# Places a 4x4 block (16 pixels) to fully occupy the grid cell
+	for oy in range(4):
+		for ox in range(4):
+			_set_cell(gx + ox, gy + oy, mat_id)
+
 func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false):
 	sim_mutex.lock()
 	
@@ -10970,9 +11024,9 @@ func _setup_music_ui(force_refresh: bool = false):
 		circ_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		circ_vbox.add_child(circ_grid)
 		
-		# Circuits elements: NPC Trigger, Door, Battery, LED, Logic Gates, Piston, Cannon
-		var circuit_items = ["npc_act", "door", "battery", "led", "logic_gate", "piston", "cannon"]
-		var circuit_emojis = ["🔌", "🚪", "🔋", "💡", "🔀", "⚙️", "💣"]
+		# Circuits elements: Metal, TNT, NPC Trigger, Door, Battery, LED, Logic Gates, Piston, Cannon
+		var circuit_items = ["metal", "tnt", "npc_act", "door", "battery", "led", "logic_gate", "piston", "cannon"]
+		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🔋", "💡", "🔀", "⚙️", "💣"]
 		for i in range(circuit_items.size()):
 			var btn = Button.new()
 			btn.text = circuit_emojis[i] + " " + tr(circuit_items[i])
@@ -10987,10 +11041,20 @@ func _setup_music_ui(force_refresh: bool = false):
 			btn.add_theme_stylebox_override("hover", b_style)
 			btn.add_theme_stylebox_override("pressed", b_style)
 			
+			var item_key = circuit_items[i]
 			btn.pressed.connect(func():
 				_play_action_sound("ui_click")
-				# Select corresponding placeholder logic
-				print("Circuit material selected: ", circuit_items[i])
+				if item_key == "metal":
+					selected_material = 8
+					is_mechanism_mode_active = true
+					_close_music_menu()
+				elif item_key == "tnt":
+					selected_material = 5
+					is_mechanism_mode_active = true
+					_close_music_menu()
+				else:
+					# Select corresponding placeholder logic
+					print("Circuit material selected: ", item_key)
 			)
 			circ_grid.add_child(btn)
 		return # Return early so the music UI setup below does not run!
@@ -11243,10 +11307,10 @@ func _setup_music_button():
 	ui_elements["music_btn"] = btn
 
 func _is_music_active() -> bool:
-	# Show grid if music menu is open OR if a musical material is selected
+	# Show grid if mechanisms/music menu is open OR if a musical material or mechanism drawing mode is selected
 	if is_instance_valid(music_panel) and music_panel.visible:
 		return true
-	return (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC) != 0
+	return is_mechanism_mode_active or (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC) != 0
 
 # --- SAVE / LOAD SYSTEM ---
 
