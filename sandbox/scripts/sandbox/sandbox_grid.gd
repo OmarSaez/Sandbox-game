@@ -1008,7 +1008,6 @@ func _ready():
 	save_history_state() # Initialize first history step
 	
 	is_grid_ready = true # Allow _process and _draw to start now!
-	_reconstruct_logic_gates_from_cells()
 	
 	# Smooth fade-in after rotation/startup to hide native scene loading
 	var curtain_layer = get_parent().get_node_or_null("LoadCurtainLayer")
@@ -3955,7 +3954,8 @@ func _save_rotation_cache():
 		"cell_paint": cell_paint_colors,
 		"bg_paint": background_img.get_data().to_int32_array(),
 		"npcs": clean_npcs,
-		"npc_id_counter": _npc_id_counter
+		"npc_id_counter": _npc_id_counter,
+		"active_logic_gates": active_logic_gates
 	}
 	var file = FileAccess.open_compressed(path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
 	if file:
@@ -4049,6 +4049,8 @@ func _map_grid_data(dict: Dictionary):
 					new_npc["cached_closest_ally"] = null
 					
 					new_npc["stuck_timer"] = 0.0 # Force re-think
+					if not new_npc.has("invul_timer"):
+						new_npc["invul_timer"] = 0.0
 					active_npcs.append(new_npc)
 	
 	background_dirty = true
@@ -4066,6 +4068,11 @@ func _load_rotation_cache():
 		
 		if dict:
 			_map_grid_data(dict)
+			if dict.has("active_logic_gates"):
+				active_logic_gates.clear()
+				for gate_data in dict["active_logic_gates"]:
+					active_logic_gates.append(gate_data.duplicate(true))
+			_reconstruct_sources_from_cells(dict)
 
 func _load_lab_state():
 	# PC/EDITOR SKIP: Always unlock and skip logs for smoother testing
@@ -5500,7 +5507,7 @@ func _draw():
 			draw_line(Vector2(0, y * g_scale), Vector2((grid_width + 8) * g_scale, y * g_scale), grid_col, thickness)
 			
 	# METRONOME VISUAL RHYTHM PULSE
-	if Engine.get_frames_drawn() % music_tempo_frames < 5:
+	if _frame_count % music_tempo_frames < 5:
 		for y in range(0, dynamic_grid_height, 4):
 			for x in range(0, grid_width, 4):
 				if _get_cell(x, y) == 600:
@@ -6361,7 +6368,7 @@ func _thread_pass2(i: int, process_evens: bool):
 	var cx = (i * 2) if process_evens else (i * 2 + 1)
 	if cx >= chunks_x: return
 	
-	var sweep_reverse_base = (Engine.get_frames_drawn()) % 2 == 0
+	var sweep_reverse_base = _frame_count % 2 == 0
 	var x_start = cx * CHUNK_SIZE
 	var x_end = min(x_start + CHUNK_SIZE, grid_width)
 	var x_range = x_end - x_start
@@ -6400,7 +6407,7 @@ func _thread_pass3(i: int, process_evens: bool):
 	var cx = (i * 2) if process_evens else (i * 2 + 1)
 	if cx >= chunks_x: return
 	
-	var sweep_reverse_base = (Engine.get_frames_drawn()) % 2 == 0
+	var sweep_reverse_base = _frame_count % 2 == 0
 	var x_start = cx * CHUNK_SIZE
 	var x_end = min(x_start + CHUNK_SIZE, grid_width)
 	var x_range = x_end - x_start
@@ -6456,7 +6463,7 @@ func _thread_pass3(i: int, process_evens: bool):
 											if ni < cells.size() and (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
 
 func _process_electricity():
-	var frame = Engine.get_frames_drawn()
+	var frame = _frame_count
 	
 	# 1. Store previous frame active charges in a set for edge-triggering music blocks
 	var prev_active_charges = {}
@@ -6743,7 +6750,7 @@ func _swap_cells(x1, y1, x2, y2):
 	_activate_chunk(x2, y2)
 
 func _register_charge(idx):
-	var frame = Engine.get_frames_drawn()
+	var frame = _frame_count
 	if charge_queued_frame[idx] != frame:
 		sim_mutex.lock()
 		if charge_queued_frame[idx] != frame:
@@ -6760,7 +6767,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			
 	# METRONOME: Self-pulsing electrical source
 	if pure_id == 600:
-		if Engine.get_frames_drawn() % music_tempo_frames == 0:
+		if _frame_count % music_tempo_frames == 0:
 			var gx = idx % grid_width
 			var gy = int(float(idx) / grid_width)
 			# Only pulse from the master pixel of the 2x2 block
@@ -6966,8 +6973,8 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		charge_array[idx] -= 1
 		if charge_array[idx] > 0: _register_charge(idx)
 		charge_visual_buffer[idx] = clampi(charge_array[idx], 0, 255) # For shader
-		if Engine.get_frames_drawn() % 4 == 0: _set_cell(x, y, 18)
-		elif Engine.get_frames_drawn() % 4 == 2: _set_cell(x, y, 19)
+		if _frame_count % 4 == 0: _set_cell(x, y, 18)
+		elif _frame_count % 4 == 2: _set_cell(x, y, 19)
 		if charge_array[idx] <= 0: _launch_firework(x, y)
 
 	elif pure_id == 7 or pure_id == 77 or pure_id == 71 or pure_id == 72: 
@@ -6994,7 +7001,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		charge_array[idx] = flags | timer
 		charge_visual_buffer[idx] = clampi(timer * 4, 0, 255) # Prime glow
 		_register_charge(idx)
-		if Engine.get_frames_drawn() % 10 < 5: cells[idx] = (cells[idx] & 0xFFFF0000) | prime_id
+		if _frame_count % 10 < 5: cells[idx] = (cells[idx] & 0xFFFF0000) | prime_id
 		else: cells[idx] = (cells[idx] & 0xFFFF0000) | base_id
 		_activate_chunk(x, y)
 
@@ -7065,7 +7072,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		if _get_cell(nx, ny) == 0:
 			# Advance with inertia
 			var new_energy = energy
-			if Engine.get_frames_drawn() % 2 == 0: new_energy -= 1
+			if _frame_count % 2 == 0: new_energy -= 1
 			charge_array[idx] = (new_energy << 3) | dir_idx
 			_register_charge(idx)
 			_swap_cells(x, y, nx, ny)
@@ -11328,75 +11335,29 @@ func _simulate_logic_gates():
 		gate["output_active"] = out_val
 		i -= 1
 
-func _reconstruct_logic_gates_from_cells():
-	if cells.size() == 0: return
-	active_logic_gates.clear()
-	var visited_cells = {}
-	var max_cx = grid_width / 4
-	var max_cy = grid_height / 4
-	
-	for cy in range(max_cy - 2):
-		for cx in range(max_cx - 2):
-			if visited_cells.has(str(cx) + "," + str(cy)): continue
-			
-			var gate_type = ""
-			var gate_mat = 0
-			
-			var center_gx = (cx + 1) * 4
-			var center_gy = (cy + 1) * 4
-			var idx = center_gy * grid_width + center_gx
-			if idx < cells.size():
-				var mid = cells[idx] & 0xFFFF
-				if mid >= 81 and mid <= 87:
-					gate_mat = mid
-					match mid:
-						81: gate_type = "not"
-						82: gate_type = "and"
-						83: gate_type = "or"
-						84: gate_type = "nand"
-						85: gate_type = "nor"
-						86: gate_type = "xor"
-						87: gate_type = "xnor"
-			
-			if gate_type != "":
-				var r0c0_idx = cy * 4 * grid_width + cx * 4
-				var r0c2_idx = cy * 4 * grid_width + (cx + 2) * 4
-				var r2c0_idx = (cy + 2) * 4 * grid_width + cx * 4
-				
-				var has_r0c0 = false
-				var has_r0c2 = false
-				var has_r2c0 = false
-				if r0c0_idx < cells.size(): has_r0c0 = (cells[r0c0_idx] & 0xFFFF) == gate_mat
-				if r0c2_idx < cells.size(): has_r0c2 = (cells[r0c2_idx] & 0xFFFF) == gate_mat
-				if r2c0_idx < cells.size(): has_r2c0 = (cells[r2c0_idx] & 0xFFFF) == gate_mat
-				
-				var orientation = 0
-				if not has_r0c0 and has_r0c2 and has_r2c0:
-					orientation = 0
-				elif has_r0c0 and not has_r0c2:
-					orientation = 1
-				elif has_r0c0 and has_r0c2 and not has_r2c0:
-					orientation = 2
-				else:
-					orientation = 3
-				
-				active_logic_gates.append({
-					"grid_pos": Vector2i(cx, cy),
-					"orientation": orientation,
-					"type": gate_type
-				})
-				
-				for dy in range(3):
-					for dx in range(3):
-						visited_cells[str(cx + dx) + "," + str(cy + dy)] = true
-	_reconstruct_sources_from_cells()
 
-func _reconstruct_sources_from_cells():
+
+func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 	active_battery_indices.clear()
 	active_electricity_source_indices.clear()
 	door_registry.clear()
 	door_close_timers.clear()
 	phase_block_registry.clear()
+	active_metronome_indices.clear()
+	
+	# 1. Restore open doors, powered phase blocks, and timers from save dict if present
+	if dict.has("door_registry"):
+		for idx in dict["door_registry"]:
+			door_registry[int(idx)] = true
+	if dict.has("door_close_timers"):
+		var timers = dict["door_close_timers"]
+		for idx_str in timers:
+			door_close_timers[int(idx_str)] = float(timers[idx_str])
+	if dict.has("phase_block_registry"):
+		for idx in dict["phase_block_registry"]:
+			phase_block_registry[int(idx)] = true
+			
+	# 2. Loop over cells to reconstruct batteries, electricity source blocks, metronomes, and solid doors/phase blocks
 	if cells.size() == 0: return
 	for idx in range(cells.size()):
 		var mid = cells[idx] & 0xFFFF
@@ -11404,6 +11365,8 @@ func _reconstruct_sources_from_cells():
 			active_battery_indices[idx] = true
 		elif mid == 9:
 			active_electricity_source_indices[idx] = true
+		elif mid == 600:
+			active_metronome_indices[idx] = true
 		elif mid == 91:
 			door_registry[idx] = true
 		elif mid == 92:
@@ -12686,7 +12649,13 @@ func _save_to_slot(idx, custom_name: String = ""):
 		"bg_paint": background_img.get_data().to_int32_array(),
 		"lab_data": _get_cleaned_lab_data(),
 		"npcs": active_npcs,
-		"ach_unlocked": is_achievement_menu_unlocked
+		"ach_unlocked": is_achievement_menu_unlocked,
+		"door_registry": door_registry.keys(),
+		"door_close_timers": door_close_timers,
+		"phase_block_registry": phase_block_registry.keys(),
+		"frame_count": _frame_count,
+		"music_tempo_frames": music_tempo_frames,
+		"active_logic_gates": active_logic_gates
 	}
 	
 	var file = FileAccess.open_compressed(path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
@@ -12754,7 +12723,24 @@ func _load_from_slot(idx):
 			
 			# 2. UNIFIED MAPPER (Restores Grid, Charge, Tags, Paint & Wakes Chunks)
 			_map_grid_data(dict)
-			_reconstruct_logic_gates_from_cells()
+			
+			# Map next_charge_indices to active_charge_indices immediately for first frame
+			active_charge_indices = next_charge_indices
+			next_charge_indices = PackedInt32Array()
+			
+			if dict.has("frame_count"):
+				_frame_count = int(dict["frame_count"])
+			else:
+				_frame_count = 0
+			if dict.has("music_tempo_frames"):
+				music_tempo_frames = int(dict["music_tempo_frames"])
+
+			active_logic_gates.clear()
+			if dict.has("active_logic_gates"):
+				for gate_data in dict["active_logic_gates"]:
+					active_logic_gates.append(gate_data.duplicate(true))
+			_reconstruct_sources_from_cells(dict)
+			_simulate_logic_gates()
 			
 			# 3. RESTORE LABORATORY EXPERIMENTS
 			if dict.has("lab_data"):
