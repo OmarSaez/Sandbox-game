@@ -12392,7 +12392,7 @@ func _add_save_slot_ui(container, slot_idx):
 	vbox.add_child(share_hbox)
 	
 	var share_btn = Button.new()
-	share_btn.text = _get_custom_translation("share_btn")
+	share_btn.text = tr("share_btn_ui")
 	share_btn.custom_minimum_size = Vector2(0, 45 * s)
 	share_btn.add_theme_font_size_override("font_size", 20 * s)
 	share_btn.add_theme_font_override("font", _get_safe_font())
@@ -12402,7 +12402,7 @@ func _add_save_slot_ui(container, slot_idx):
 	share_hbox.add_child(share_btn)
 	
 	var import_btn = Button.new()
-	import_btn.text = _get_custom_translation("import_btn")
+	import_btn.text = tr("import_btn_ui")
 	import_btn.custom_minimum_size = Vector2(0, 45 * s)
 	import_btn.add_theme_font_size_override("font_size", 20 * s)
 	import_btn.add_theme_font_override("font", _get_safe_font())
@@ -12675,100 +12675,7 @@ func _confirm_load(idx, current_name):
 		img_panel.add_child(rect)
 		vbox.add_child(img_panel)
 
-func _get_custom_translation(key: String) -> String:
-	var locale = TranslationServer.get_locale().to_lower()
-	var is_es = locale.begins_with("es")
-	var is_pt = locale.begins_with("pt")
-	var is_it = locale.begins_with("it")
-	var is_fr = locale.begins_with("fr")
-	var is_de = locale.begins_with("de")
-	
-	match key:
-		"share_btn":
-			if is_es: return "Compartir"
-			if is_pt: return "Compartilhar"
-			if is_it: return "Condividi"
-			if is_fr: return "Partager"
-			if is_de: return "Teilen"
-			return "Share"
-		"import_btn":
-			if is_es: return "Importar"
-			if is_pt: return "Importar"
-			if is_it: return "Importa"
-			if is_fr: return "Importer"
-			if is_de: return "Importieren"
-			return "Import"
-		"permission_title":
-			if is_es: return "Permiso de Almacenamiento"
-			if is_pt: return "Permissão de Armazenamento"
-			if is_it: return "Permesso di Archiviazione"
-			if is_fr: return "Autorisation de Stockage"
-			if is_de: return "Speicherberechtigung"
-			return "Storage Permission"
-		"permission_desc":
-			if is_es: return "Para poder importar y exportar creaciones (.sbu) en tu carpeta de Descargas, necesitamos acceso al almacenamiento de tu dispositivo."
-			if is_pt: return "Para poder importar e exportar criações (.sbu) na sua pasta de Downloads, precisamos de acesso ao armazenamento do seu dispositivo."
-			if is_it: return "Per poter importare ed esportare creazioni (.sbu) nella tua cartella Download, abbiamo bisogno dell'accesso all'archiviazione del tuo dispositivo."
-			if is_fr: return "Pour pouvoir importer et exporter des créations (.sbu) dans votre dossier Téléchargements, nous avons besoin d'accéder au stockage de votre appareil."
-			if is_de: return "Um Kreationen (.sbu) in Ihrem Downloads-Ordner importieren und exportieren zu können, benötigen wir Zugriff auf den Speicher Ihres Geräts."
-			return "To import and export creations (.sbu) in your Downloads folder, we need access to your device's storage."
-		"permission_grant":
-			if is_es: return "Conceder"
-			if is_pt: return "Conceder"
-			if is_it: return "Concedi"
-			if is_fr: return "Accorder"
-			if is_de: return "Erlauben"
-			return "Grant"
-		"permission_retry_msg":
-			if is_es: return "Se han solicitado los permisos del sistema. Concede el acceso y vuelve a pulsar el botón para completar la acción."
-			if is_pt: return "As permissões do sistema foram solicitadas. Conceda o acesso e pressione o botão novamente para concluir a ação."
-			if is_it: return "Le autorizzazioni di sistema sono state richieste. Concedi l'accesso e premi di nuovo il pulsante per completare l'azione."
-			if is_fr: return "Les autorisations système ont été demandées. Veuillez accorder l'accès et appuyer à nouveau sur le bouton pour terminer l'action."
-			if is_de: return "Systemberechtigungen wurden angefordert. Bitte gewähren Sie Zugriff und drücken Sie die Taste erneut, um die Aktion abzuschließen."
-			return "System permissions have been requested. Please grant access and press the button again to complete the action."
-		"export_success":
-			if is_es: return "¡Creación exportada correctamente a Descargas como '{0}'!"
-			if is_pt: return "Criação exportada com sucesso para Downloads como '{0}'!"
-			if is_it: return "Creazione esportata correttamente in Download come '{0}'!"
-			if is_fr: return "Création exportée avec succès vers les Téléchargements sous '{0}'!"
-			if is_de: return "Kreation erfolgreich in Downloads als '{0}' exportiert!"
-			return "Creation successfully exported to Downloads as '{0}'!"
-		"export_fail":
-			if is_es: return "Error al exportar la creación."
-			if is_pt: return "Erro ao exportar a criação."
-			if is_it: return "Errore durante l'esportazione della creazione."
-			if is_fr: return "Échec de l'exportation de la création."
-			if is_de: return "Fehler beim Exportieren der Kreation."
-			return "Failed to export creation."
-		"import_select_title":
-			if is_es: return "Importar Creación (.sbu)"
-			if is_pt: return "Importar Criação (.sbu)"
-			if is_it: return "Importa Creazione (.sbu)"
-			if is_fr: return "Importer une Création (.sbu)"
-			if is_de: return "Kreation importieren (.sbu)"
-			return "Import Creation (.sbu)"
-		"import_no_files":
-			if is_es: return "No se encontraron archivos '.sbu' en tu carpeta de Descargas."
-			if is_pt: return "Nenhum arquivo '.sbu' foi encontrado na sua pasta de Downloads."
-			if is_it: return "Nessun file '.sbu' trovato nella tua cartella Download."
-			if is_fr: return "Aucun fichier '.sbu' trouvé dans votre dossier Téléchargements."
-			if is_de: return "Keine '.sbu'-Dateien in Ihrem Downloads-Ordner gefunden."
-			return "No '.sbu' files were found in your Downloads folder."
-		"import_success":
-			if is_es: return "¡Creación '{0}' importada con éxito!"
-			if is_pt: return "Criação '{0}' importada com sucesso!"
-			if is_it: return "Creazione '{0}' importata con successo!"
-			if is_fr: return "Création '{0}' importée avec succès !"
-			if is_de: return "Kreation '{0}' erfolgreich importiert!"
-			return "Creation '{0}' successfully imported!"
-		"import_fail":
-			if is_es: return "Error al importar el archivo."
-			if is_pt: return "Erro ao importar o arquivo."
-			if is_it: return "Errore durante l'importazione del file."
-			if is_fr: return "Échec de l'importation du fichier."
-			if is_de: return "Fehler beim Importieren der Datei."
-			return "Failed to import file."
-	return key
+
 
 func _sanitize_filename(filename: String) -> String:
 	var invalid_chars = ["/", "\\", "?", "*", ":", "|", "\"", "<", ">"]
@@ -12883,14 +12790,14 @@ func _check_and_request_storage_permission(on_granted: Callable):
 	margin.add_child(vbox)
 	
 	var lbl_title = Label.new()
-	lbl_title.text = _get_custom_translation("permission_title")
+	lbl_title.text = tr("permission_title")
 	lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl_title.add_theme_font_size_override("font_size", 28 * s)
 	lbl_title.add_theme_font_override("font", _get_safe_font())
 	vbox.add_child(lbl_title)
 	
 	var lbl_msg = Label.new()
-	lbl_msg.text = _get_custom_translation("permission_desc")
+	lbl_msg.text = tr("permission_desc")
 	lbl_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl_msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lbl_msg.add_theme_font_size_override("font_size", 22 * s)
@@ -12902,7 +12809,7 @@ func _check_and_request_storage_permission(on_granted: Callable):
 	vbox.add_child(hbox)
 	
 	var yes_btn = Button.new()
-	yes_btn.text = _get_custom_translation("permission_grant")
+	yes_btn.text = tr("permission_grant")
 	yes_btn.custom_minimum_size = Vector2(150 * s, 50 * s)
 	yes_btn.add_theme_font_size_override("font_size", 20 * s)
 	var yes_style = StyleBoxFlat.new()
@@ -12913,8 +12820,8 @@ func _check_and_request_storage_permission(on_granted: Callable):
 		dialog_container.queue_free()
 		OS.request_permissions()
 		_show_modal_message(
-			_get_custom_translation("permission_title"),
-			_get_custom_translation("permission_retry_msg")
+			tr("permission_title"),
+			tr("permission_retry_msg")
 		)
 	)
 	hbox.add_child(yes_btn)
@@ -12946,8 +12853,8 @@ func _on_share_pressed(slot_idx: int, slot_name: String):
 			
 		if not data_dict:
 			_show_modal_message(
-				_get_custom_translation("share_btn"),
-				_get_custom_translation("export_fail")
+				tr("share_btn_ui"),
+				tr("export_fail")
 			)
 			return
 			
@@ -12975,13 +12882,13 @@ func _on_share_pressed(slot_idx: int, slot_name: String):
 			sbu_file.store_var(sbu_dict, true)
 			sbu_file.close()
 			_show_modal_message(
-				_get_custom_translation("share_btn"),
-				_get_custom_translation("export_success").format([export_filename])
+				tr("share_btn_ui"),
+				tr("export_success").format([export_filename])
 			)
 		else:
 			_show_modal_message(
-				_get_custom_translation("share_btn"),
-				_get_custom_translation("export_fail")
+				tr("share_btn_ui"),
+				tr("export_fail")
 			)
 	)
 
@@ -13002,8 +12909,8 @@ func _on_import_pressed(slot_idx: int):
 				
 		if sbu_files.size() == 0:
 			_show_modal_message(
-				_get_custom_translation("import_btn"),
-				_get_custom_translation("import_no_files")
+				tr("import_btn_ui"),
+				tr("import_no_files")
 			)
 			return
 			
@@ -13040,7 +12947,7 @@ func _on_import_pressed(slot_idx: int):
 		margin.add_child(vbox)
 		
 		var lbl_title = Label.new()
-		lbl_title.text = _get_custom_translation("import_select_title")
+		lbl_title.text = tr("import_select_title")
 		lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl_title.add_theme_font_size_override("font_size", 28 * s)
 		lbl_title.add_theme_font_override("font", _get_safe_font())
@@ -13090,8 +12997,8 @@ func _import_sbu_file(file_path: String, slot_idx: int):
 	var sbu_file = FileAccess.open_compressed(file_path, FileAccess.READ, FileAccess.COMPRESSION_ZSTD)
 	if not sbu_file:
 		_show_modal_message(
-			_get_custom_translation("import_btn"),
-			_get_custom_translation("import_fail")
+			tr("import_btn_ui"),
+			tr("import_fail")
 		)
 		return
 		
@@ -13100,8 +13007,8 @@ func _import_sbu_file(file_path: String, slot_idx: int):
 	
 	if not sbu_dict or not sbu_dict.has("grid_data"):
 		_show_modal_message(
-			_get_custom_translation("import_btn"),
-			_get_custom_translation("import_fail")
+			tr("import_btn_ui"),
+			tr("import_fail")
 		)
 		return
 		
@@ -13116,8 +13023,8 @@ func _import_sbu_file(file_path: String, slot_idx: int):
 		dat_file.close()
 	else:
 		_show_modal_message(
-			_get_custom_translation("import_btn"),
-			_get_custom_translation("import_fail")
+			tr("import_btn_ui"),
+			tr("import_fail")
 		)
 		return
 		
@@ -13133,8 +13040,8 @@ func _import_sbu_file(file_path: String, slot_idx: int):
 			DirAccess.remove_absolute(target_png_path)
 			
 	_show_modal_message(
-		_get_custom_translation("import_btn"),
-		_get_custom_translation("import_success").format([file_path.get_file().left(file_path.get_file().length() - 4)])
+		tr("import_btn_ui"),
+		tr("import_success").format([file_path.get_file().left(file_path.get_file().length() - 4)])
 	)
 	_setup_save_ui()
 
