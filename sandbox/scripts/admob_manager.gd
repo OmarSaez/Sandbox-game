@@ -26,6 +26,7 @@ signal lab_unlocked
 var ad_free_time : float = 0.0 # Segundos restantes sin anuncios
 var first_pause_used : bool = false
 var first_reset_used : bool = false
+var first_share_used : bool = false
 
 var _app_is_paused : bool = false
 var _banner_needs_to_show_on_resume : bool = false
@@ -670,6 +671,10 @@ func check_and_show_interstitial(button_type: String = "") -> bool:
 		first_reset_used = true
 		_load_interstitial() # Lazy load for the next time!
 		return false
+	if button_type == "share" and not first_share_used:
+		print("ADMOB: Primer share gratis.")
+		first_share_used = true
+		return false
 
 	if ad_free_time <= 0:
 		print("ADMOB: Tiempo agotado. Solicitando anuncio obligatorio.")
@@ -677,6 +682,19 @@ func check_and_show_interstitial(button_type: String = "") -> bool:
 	else:
 		print("ADMOB: Saltando anuncio. Tiempo libre: %.1f s" % ad_free_time)
 		return false
+
+func is_interstitial_loaded() -> bool:
+	return _interstitial_ad != null
+
+func check_and_consume_free_use(button_type: String) -> bool:
+	if not Engine.has_singleton("PoingGodotAdMob"):
+		return true
+	if button_type == "share" and not first_share_used:
+		first_share_used = true
+		return true
+	if ad_free_time > 0:
+		return true
+	return false
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_WM_GO_BACK_REQUEST:

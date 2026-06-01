@@ -12255,10 +12255,6 @@ func _is_music_active() -> bool:
 # --- SAVE / LOAD SYSTEM ---
 
 func _setup_save_ui():
-	# Pre-cargar anuncio intersticial en segundo plano por si decide cargar partida
-	if Engine.has_singleton("PoingGodotAdMob"):
-		AdMobManager.preload_interstitial()
-
 	# Close other menus first (this frees any old save_panel via queue_free)
 	_close_all_popups()
 	
@@ -12635,9 +12631,10 @@ func _confirm_load(idx, current_name):
 	yes_style.set_corner_radius_all(10 * s)
 	yes_btn.add_theme_stylebox_override("normal", yes_style)
 	yes_btn.pressed.connect(func(): 
-		_load_from_slot(idx)
 		dialog_container.queue_free()
-		save_panel.queue_free()
+		_execute_monetized_action("load", func():
+			_load_from_slot(idx)
+		)
 	)
 	hbox.add_child(yes_btn)
 	
@@ -12837,59 +12834,154 @@ func _check_and_request_storage_permission(on_granted: Callable):
 	no_btn.pressed.connect(func(): dialog_container.queue_free())
 	hbox.add_child(no_btn)
 
+func _show_processing_overlay(text: String) -> Control:
+	var s = _get_ui_scale()
+	var canvas = get_tree().root.find_child("UI", true, false)
+	if not canvas:
+		canvas = save_panel
+		if not canvas:
+			return null
+			
+	var overlay = PanelContainer.new()
+	overlay.name = "ProcessingOverlay"
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	
+	var bg_style = StyleBoxFlat.new()
+	bg_style.bg_color = Color(0, 0, 0, 0.65)
+	overlay.add_theme_stylebox_override("panel", bg_style)
+	
+	var center = CenterContainer.new()
+	overlay.add_child(center)
+	
+	var panel = PanelContainer.new()
+	panel.custom_minimum_size = Vector2(500 * s, 250 * s)
+	
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.12, 0.16, 0.98)
+	style.corner_radius_top_left = 24 * s
+	style.corner_radius_top_right = 24 * s
+	style.corner_radius_bottom_left = 24 * s
+	style.corner_radius_bottom_right = 24 * s
+	style.shadow_color = Color(0, 0, 0, 0.5)
+	style.shadow_size = 20 * s
+	style.shadow_offset = Vector2(0, 10 * s)
+	style.border_width_left = 3 * s
+	style.border_width_top = 3 * s
+	style.border_width_right = 3 * s
+	style.border_width_bottom = 3 * s
+	style.border_color = Color(0.6, 0.5, 0.2)
+	panel.add_theme_stylebox_override("panel", style)
+	center.add_child(panel)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 30 * s)
+	margin.add_theme_constant_override("margin_top", 30 * s)
+	margin.add_theme_constant_override("margin_right", 30 * s)
+	margin.add_theme_constant_override("margin_bottom", 30 * s)
+	panel.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 20 * s)
+	margin.add_child(vbox)
+	
+	var spinner = Control.new()
+	spinner.custom_minimum_size = Vector2(160 * s, 80 * s)
+	spinner.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	spinner.set_script(load("res://scripts/loading_spinner.gd"))
+	vbox.add_child(spinner)
+	
+	var label = Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", 24 * s)
+	label.add_theme_font_override("font", _get_safe_font())
+	label.add_theme_color_override("font_color", Color(0.95, 0.95, 0.95))
+	vbox.add_child(label)
+	
+	canvas.add_child(overlay)
+	return overlay
+
+func _execute_monetized_action(button_type: String, action_callable: Callable):
+	var overlay = _show_processing_overlay(tr("processing_creation"))
+	
+	var is_free = AdMobManager.check_and_consume_free_use(button_type)
+	if is_free:
+		await get_tree().create_timer(2.0).timeout
+	else:
+		if AdMobManager.is_interstitial_loaded():
+			AdMobManager.show_interstitial()
+			await AdMobManager.ad_dismissed
+		else:
+			AdMobManager.preload_interstitial()
+			var success = await AdMobManager.interstitial_ad_loaded
+			if success:
+				AdMobManager.show_interstitial()
+				await AdMobManager.ad_dismissed
+				
+	if is_instance_valid(overlay):
+		overlay.queue_free()
+		
+	action_callable.call()
+
 func _on_share_pressed(slot_idx: int, slot_name: String):
 	_check_and_request_storage_permission(func():
-		var path = "user://save_slot_" + str(slot_idx) + ".dat"
-		var thumb_path = "user://save_slot_" + str(slot_idx) + ".png"
-		
-		if not FileAccess.file_exists(path):
-			return
+		_execute_monetized_action("share", func():
+			var path = "user://save_slot_" + str(slot_idx) + ".dat"
+			var thumb_path = "user://save_slot_" + str(slot_idx) + ".png"
 			
-		var data_dict = {}
-		var file = FileAccess.open_compressed(path, FileAccess.READ, FileAccess.COMPRESSION_ZSTD)
-		if file:
-			data_dict = file.get_var(true)
-			file.close()
-			
-		if not data_dict:
-			_show_modal_message(
-				tr("share_btn_ui"),
-				tr("export_fail")
-			)
-			return
-			
-		var sbu_dict = {
-			"version": 1,
-			"name": slot_name,
-			"grid_data": data_dict
-		}
-		
-		if FileAccess.file_exists(thumb_path):
-			var thumb_bytes = FileAccess.get_file_as_bytes(thumb_path)
-			if thumb_bytes and thumb_bytes.size() > 0:
-				sbu_dict["thumbnail_bytes"] = thumb_bytes
+			if not FileAccess.file_exists(path):
+				return
 				
-		var downloads_dir = OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS)
-		if not DirAccess.dir_exists_absolute(downloads_dir):
-			downloads_dir = "user://"
+			var data_dict = {}
+			var file = FileAccess.open_compressed(path, FileAccess.READ, FileAccess.COMPRESSION_ZSTD)
+			if file:
+				data_dict = file.get_var(true)
+				file.close()
+				
+			if not data_dict:
+				_show_modal_message(
+					tr("share_btn_ui"),
+					tr("export_fail")
+				)
+				return
+				
+			var sbu_dict = {
+				"version": 1,
+				"name": slot_name,
+				"grid_data": data_dict
+			}
 			
-		var clean_name = _sanitize_filename(slot_name)
-		var export_filename = clean_name + ".sbu"
-		var export_path = downloads_dir.path_join(export_filename)
-		
-		var sbu_file = FileAccess.open_compressed(export_path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
-		if sbu_file:
-			sbu_file.store_var(sbu_dict, true)
-			sbu_file.close()
-			_show_modal_message(
-				tr("share_btn_ui"),
-				tr("export_success").format([export_filename])
-			)
-		else:
-			_show_modal_message(
-				tr("share_btn_ui"),
-				tr("export_fail")
-			)
+			if FileAccess.file_exists(thumb_path):
+				var thumb_bytes = FileAccess.get_file_as_bytes(thumb_path)
+				if thumb_bytes and thumb_bytes.size() > 0:
+					sbu_dict["thumbnail_bytes"] = thumb_bytes
+					
+			var downloads_dir = OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS)
+			if not DirAccess.dir_exists_absolute(downloads_dir):
+				downloads_dir = "user://"
+				
+			var clean_name = _sanitize_filename(slot_name)
+			var export_filename = clean_name + ".sbu"
+			var export_path = downloads_dir.path_join(export_filename)
+			
+			var sbu_file = FileAccess.open_compressed(export_path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
+			if sbu_file:
+				sbu_file.store_var(sbu_dict, true)
+				sbu_file.close()
+				_show_modal_message(
+					tr("share_btn_ui"),
+					tr("export_success").format([export_filename])
+				)
+			else:
+				_show_modal_message(
+					tr("share_btn_ui"),
+					tr("export_fail")
+				)
+		)
 	)
 
 func _on_import_pressed(slot_idx: int):
@@ -12976,7 +13068,9 @@ func _on_import_pressed(slot_idx: int):
 			
 			btn.pressed.connect(func():
 				dialog_container.queue_free()
-				_import_sbu_file(downloads_dir.path_join(file_name), slot_idx)
+				_execute_monetized_action("import", func():
+					_import_sbu_file(downloads_dir.path_join(file_name), slot_idx)
+				)
 			)
 			list_vbox.add_child(btn)
 			
@@ -13169,10 +13263,6 @@ func _load_from_slot(idx):
 			_update_texture()
 			queue_redraw()
 			if is_instance_valid(save_panel): save_panel.queue_free()
-			
-			# Mostrar anuncio intersticial tras cargar el juego si no hay tiempo libre activo
-			if Engine.has_singleton("PoingGodotAdMob"):
-				AdMobManager.check_and_show_interstitial("load")
 
 func _get_cleaned_lab_data() -> Array:
 	var clean_lab = []
