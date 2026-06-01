@@ -61,20 +61,85 @@ var ui_scale_level: int = 4 # Fixed at 1.7x (index 4 of the old scales array)
 var sim_camera: Camera2D
 var view_zoom: float = 1.0
 var is_panning_mode: bool = false
-var pan_last_mouse_pos: Vector2
+var active_touches = {}
+var pinch_last_dist: float = 0.0
 var cam_min_x: int = 0
 var cam_max_x: int = 9999
 var cam_min_y: int = 0
 var cam_max_y: int = 9999
 
+func _update_zoom_ui():
+	if not ui_elements.has("btn_pan") or not is_instance_valid(ui_elements["btn_pan"]):
+		return
+	var btn = ui_elements["btn_pan"]
+	var s = _get_ui_scale()
+	
+	var vbox = btn.get_node_or_null("ZoomVBox")
+	if not vbox:
+		vbox = VBoxContainer.new()
+		vbox.name = "ZoomVBox"
+		vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		btn.add_child(vbox)
+		
+		# Set comfortable spacing between the magnifier icon and the percentage text
+		vbox.add_theme_constant_override("separation", int(2 * s))
+		
+		var lbl_icon = Label.new()
+		lbl_icon.name = "IconLabel"
+		lbl_icon.text = "🔍"
+		lbl_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl_icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lbl_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lbl_icon.add_theme_font_override("font", _get_safe_font())
+		vbox.add_child(lbl_icon)
+		
+		var lbl_pct = Label.new()
+		lbl_pct.name = "PctLabel"
+		lbl_pct.text = ""
+		lbl_pct.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl_pct.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lbl_pct.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lbl_pct.add_theme_font_override("font", _get_safe_font())
+		vbox.add_child(lbl_pct)
+		
+	var lbl_icon = vbox.get_node("IconLabel")
+	var lbl_pct = vbox.get_node("PctLabel")
+	
+	btn.text = "" # Keep main button text empty to prevent double drawing
+	
+	if view_zoom <= 1.01:
+		lbl_pct.visible = false
+		lbl_icon.add_theme_font_size_override("font_size", 26 * s)
+	else:
+		var pct = int(round(view_zoom * 100.0))
+		lbl_pct.text = "%d%%" % pct
+		lbl_pct.visible = true
+		
+		# High-contrast bold styling with white text on dark background
+		lbl_pct.add_theme_font_size_override("font_size", 18 * s)
+		lbl_pct.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 1.0)) # Pure white text
+		
+		var outline_color = Color(0.04, 0.12, 0.28, 1.0) if is_panning_mode else Color(0.05, 0.05, 0.08, 1.0)
+		lbl_pct.add_theme_color_override("font_outline_color", outline_color)
+		lbl_pct.add_theme_constant_override("outline_size", int(4 * s)) # Thick outline for simulated bolding
+		
+		lbl_icon.add_theme_font_size_override("font_size", 22 * s)
+
 func _zoom_camera(delta_zoom: float):
-	view_zoom = clamp(view_zoom + delta_zoom, 1.0, 3.0)
+	view_zoom = clamp(view_zoom + delta_zoom, 1.0, 4.0)
 	if is_instance_valid(sim_camera):
 		sim_camera.zoom = Vector2(view_zoom, view_zoom)
 		_clamp_camera_position()
+	_update_zoom_ui()
 
 func _set_panning_mode(active: bool):
 	is_panning_mode = active
+	if not active:
+		active_touches.clear()
+		pinch_last_dist = 0.0
+		
 	if ui_elements.has("btn_pan") and is_instance_valid(ui_elements["btn_pan"]):
 		var qa_style = StyleBoxFlat.new()
 		qa_style.bg_color = Color(0.15, 0.15, 0.2, 1.0)
@@ -83,13 +148,14 @@ func _set_panning_mode(active: bool):
 		qa_style.border_color = Color(0.4, 0.4, 0.5)
 
 		var qa_style_active = qa_style.duplicate()
-		qa_style_active.bg_color = Color(0.3, 0.5, 0.8, 1.0)
+		qa_style_active.bg_color = Color(0.12, 0.32, 0.62, 1.0) # Premium dark royal blue
 		
 		var style = qa_style_active if is_panning_mode else qa_style
 		var btn = ui_elements["btn_pan"]
 		btn.add_theme_stylebox_override("normal", style)
 		btn.add_theme_stylebox_override("hover", style)
 		btn.add_theme_stylebox_override("pressed", style)
+		_update_zoom_ui()
 
 func _clamp_camera_position():
 	if not is_instance_valid(sim_camera): return
@@ -107,6 +173,76 @@ func _clamp_camera_position():
 	new_pos.x = clamp(new_pos.x, half_cam_w, max(half_cam_w, map_w - half_cam_w))
 	new_pos.y = clamp(new_pos.y, half_cam_h, max(half_cam_h, map_h - half_cam_h))
 	sim_camera.position = new_pos
+
+func _unhandled_input(event: InputEvent):
+	if event is InputEventMouseButton:
+		# Mouse Wheel Zoom (PC)
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
+			_zoom_camera(0.15)
+			get_viewport().set_input_as_handled()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
+			_zoom_camera(-0.15)
+			get_viewport().set_input_as_handled()
+			
+	elif event is InputEventScreenTouch:
+		if is_panning_mode:
+			var is_over_ui = _is_any_ui_blocking()
+			if event.pressed:
+				if not is_over_ui:
+					active_touches[event.index] = event.position
+			else:
+				active_touches.erase(event.index)
+				
+			if active_touches.size() == 2:
+				# Start pinch
+				var keys = active_touches.keys()
+				pinch_last_dist = active_touches[keys[0]].distance_to(active_touches[keys[1]])
+			else:
+				pinch_last_dist = 0.0
+				
+			if not is_over_ui:
+				get_viewport().set_input_as_handled()
+				
+	elif event is InputEventScreenDrag:
+		if is_panning_mode:
+			var is_over_ui = _is_any_ui_blocking()
+			if active_touches.has(event.index):
+				active_touches[event.index] = event.position
+				
+			if active_touches.size() == 2:
+				# 2-finger pinch zoom
+				var keys = active_touches.keys()
+				var pos1 = active_touches[keys[0]]
+				var pos2 = active_touches[keys[1]]
+				var current_dist = pos1.distance_to(pos2)
+				
+				if pinch_last_dist > 0.0:
+					var ratio = current_dist / pinch_last_dist
+					var target_zoom = clamp(view_zoom * ratio, 1.0, 4.0)
+					if target_zoom != view_zoom:
+						view_zoom = target_zoom
+						if is_instance_valid(sim_camera):
+							sim_camera.zoom = Vector2(view_zoom, view_zoom)
+							_clamp_camera_position()
+						_update_zoom_ui()
+				pinch_last_dist = current_dist
+				if not is_over_ui:
+					get_viewport().set_input_as_handled()
+			elif active_touches.size() == 1 and not is_over_ui:
+				# 1-finger pan
+				if is_instance_valid(sim_camera):
+					sim_camera.position -= event.relative / view_zoom
+					_clamp_camera_position()
+				get_viewport().set_input_as_handled()
+				
+	elif event is InputEventMouseMotion:
+		if is_panning_mode and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			var is_over_ui = _is_any_ui_blocking()
+			if not is_over_ui and not touch_started_on_ui:
+				if is_instance_valid(sim_camera):
+					sim_camera.position -= event.relative / view_zoom
+					_clamp_camera_position()
+				get_viewport().set_input_as_handled()
 
 func _get_ui_scale() -> float:
 	var base_scale = 1.7
@@ -2571,16 +2707,17 @@ func _setup_tools_ui():
 		qa_grid.add_child(btn)
 		return btn
 		
-	var btn_pan = create_qa_btn.call("✋")
+	var btn_pan = create_qa_btn.call("🔍")
 	var btn_save = create_qa_btn.call("💾")
-	var btn_zoom_out = create_qa_btn.call("🔍-")
-	var btn_zoom_in = create_qa_btn.call("🔍+")
+	var btn_undo = create_qa_btn.call("↩️")
+	var btn_redo = create_qa_btn.call("↪️")
 	
 	ui_elements["btn_pan"] = btn_pan
+	ui_elements["btn_undo"] = btn_undo
+	ui_elements["btn_redo"] = btn_redo
 	_set_panning_mode(is_panning_mode)
+	_update_zoom_ui()
 	
-	btn_zoom_out.pressed.connect(func(): _play_action_sound("ui_click"); _zoom_camera(-0.5))
-	btn_zoom_in.pressed.connect(func(): _play_action_sound("ui_click"); _zoom_camera(0.5))
 	btn_pan.pressed.connect(func(): 
 		_play_action_sound("ui_click")
 		_set_panning_mode(!is_panning_mode)
@@ -2589,6 +2726,14 @@ func _setup_tools_ui():
 		_play_action_sound("ui_click")
 		if is_instance_valid(save_panel): save_panel.queue_free()
 		else: _setup_save_ui()
+	)
+	btn_undo.pressed.connect(func():
+		_play_action_sound("ui_click")
+		undo_history()
+	)
+	btn_redo.pressed.connect(func():
+		_play_action_sound("ui_click")
+		redo_history()
 	)
 	
 	action_vbox.add_child(qa_grid)
@@ -5193,15 +5338,6 @@ func _process(delta):
 		
 		# --- PANNING MODE LOGIC ---
 		if is_panning_mode and not touch_started_on_ui and not is_over_ui:
-			var current_mouse_pos = get_viewport().get_mouse_position()
-			if not mouse_was_pressed:
-				pan_last_mouse_pos = current_mouse_pos
-				touch_started_on_ui = false
-			else:
-				var delta_pos = (pan_last_mouse_pos - current_mouse_pos) / view_zoom
-				sim_camera.position += delta_pos
-				_clamp_camera_position()
-				pan_last_mouse_pos = current_mouse_pos
 			mouse_was_pressed = true
 		
 		# 1. INITIAL TOUCH PROTECTION
