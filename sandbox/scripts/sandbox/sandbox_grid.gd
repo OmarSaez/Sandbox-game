@@ -12388,6 +12388,28 @@ func _add_save_slot_ui(container, slot_idx):
 	lbl_date.modulate = Color(0.6, 0.6, 0.6)
 	vbox.add_child(lbl_date)
 	
+	var share_hbox = HBoxContainer.new()
+	vbox.add_child(share_hbox)
+	
+	var share_btn = Button.new()
+	share_btn.text = _get_custom_translation("share_btn")
+	share_btn.custom_minimum_size = Vector2(0, 45 * s)
+	share_btn.add_theme_font_size_override("font_size", 20 * s)
+	share_btn.add_theme_font_override("font", _get_safe_font())
+	share_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	share_btn.disabled = not slot_data.has("name")
+	share_btn.pressed.connect(func(): _on_share_pressed(slot_idx, lbl_name.text))
+	share_hbox.add_child(share_btn)
+	
+	var import_btn = Button.new()
+	import_btn.text = _get_custom_translation("import_btn")
+	import_btn.custom_minimum_size = Vector2(0, 45 * s)
+	import_btn.add_theme_font_size_override("font_size", 20 * s)
+	import_btn.add_theme_font_override("font", _get_safe_font())
+	import_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	import_btn.pressed.connect(func(): _on_import_pressed(slot_idx))
+	share_hbox.add_child(import_btn)
+
 	var btn_hbox = HBoxContainer.new()
 	vbox.add_child(btn_hbox)
 	
@@ -12652,6 +12674,469 @@ func _confirm_load(idx, current_name):
 		img_panel.add_theme_stylebox_override("panel", img_style)
 		img_panel.add_child(rect)
 		vbox.add_child(img_panel)
+
+func _get_custom_translation(key: String) -> String:
+	var locale = TranslationServer.get_locale().to_lower()
+	var is_es = locale.begins_with("es")
+	var is_pt = locale.begins_with("pt")
+	var is_it = locale.begins_with("it")
+	var is_fr = locale.begins_with("fr")
+	var is_de = locale.begins_with("de")
+	
+	match key:
+		"share_btn":
+			if is_es: return "Compartir"
+			if is_pt: return "Compartilhar"
+			if is_it: return "Condividi"
+			if is_fr: return "Partager"
+			if is_de: return "Teilen"
+			return "Share"
+		"import_btn":
+			if is_es: return "Importar"
+			if is_pt: return "Importar"
+			if is_it: return "Importa"
+			if is_fr: return "Importer"
+			if is_de: return "Importieren"
+			return "Import"
+		"permission_title":
+			if is_es: return "Permiso de Almacenamiento"
+			if is_pt: return "Permissão de Armazenamento"
+			if is_it: return "Permesso di Archiviazione"
+			if is_fr: return "Autorisation de Stockage"
+			if is_de: return "Speicherberechtigung"
+			return "Storage Permission"
+		"permission_desc":
+			if is_es: return "Para poder importar y exportar creaciones (.sbu) en tu carpeta de Descargas, necesitamos acceso al almacenamiento de tu dispositivo."
+			if is_pt: return "Para poder importar e exportar criações (.sbu) na sua pasta de Downloads, precisamos de acesso ao armazenamento do seu dispositivo."
+			if is_it: return "Per poter importare ed esportare creazioni (.sbu) nella tua cartella Download, abbiamo bisogno dell'accesso all'archiviazione del tuo dispositivo."
+			if is_fr: return "Pour pouvoir importer et exporter des créations (.sbu) dans votre dossier Téléchargements, nous avons besoin d'accéder au stockage de votre appareil."
+			if is_de: return "Um Kreationen (.sbu) in Ihrem Downloads-Ordner importieren und exportieren zu können, benötigen wir Zugriff auf den Speicher Ihres Geräts."
+			return "To import and export creations (.sbu) in your Downloads folder, we need access to your device's storage."
+		"permission_grant":
+			if is_es: return "Conceder"
+			if is_pt: return "Conceder"
+			if is_it: return "Concedi"
+			if is_fr: return "Accorder"
+			if is_de: return "Erlauben"
+			return "Grant"
+		"permission_retry_msg":
+			if is_es: return "Se han solicitado los permisos del sistema. Concede el acceso y vuelve a pulsar el botón para completar la acción."
+			if is_pt: return "As permissões do sistema foram solicitadas. Conceda o acesso e pressione o botão novamente para concluir a ação."
+			if is_it: return "Le autorizzazioni di sistema sono state richieste. Concedi l'accesso e premi di nuovo il pulsante per completare l'azione."
+			if is_fr: return "Les autorisations système ont été demandées. Veuillez accorder l'accès et appuyer à nouveau sur le bouton pour terminer l'action."
+			if is_de: return "Systemberechtigungen wurden angefordert. Bitte gewähren Sie Zugriff und drücken Sie die Taste erneut, um die Aktion abzuschließen."
+			return "System permissions have been requested. Please grant access and press the button again to complete the action."
+		"export_success":
+			if is_es: return "¡Creación exportada correctamente a Descargas como '{0}'!"
+			if is_pt: return "Criação exportada com sucesso para Downloads como '{0}'!"
+			if is_it: return "Creazione esportata correttamente in Download come '{0}'!"
+			if is_fr: return "Création exportée avec succès vers les Téléchargements sous '{0}'!"
+			if is_de: return "Kreation erfolgreich in Downloads als '{0}' exportiert!"
+			return "Creation successfully exported to Downloads as '{0}'!"
+		"export_fail":
+			if is_es: return "Error al exportar la creación."
+			if is_pt: return "Erro ao exportar a criação."
+			if is_it: return "Errore durante l'esportazione della creazione."
+			if is_fr: return "Échec de l'exportation de la création."
+			if is_de: return "Fehler beim Exportieren der Kreation."
+			return "Failed to export creation."
+		"import_select_title":
+			if is_es: return "Importar Creación (.sbu)"
+			if is_pt: return "Importar Criação (.sbu)"
+			if is_it: return "Importa Creazione (.sbu)"
+			if is_fr: return "Importer une Création (.sbu)"
+			if is_de: return "Kreation importieren (.sbu)"
+			return "Import Creation (.sbu)"
+		"import_no_files":
+			if is_es: return "No se encontraron archivos '.sbu' en tu carpeta de Descargas."
+			if is_pt: return "Nenhum arquivo '.sbu' foi encontrado na sua pasta de Downloads."
+			if is_it: return "Nessun file '.sbu' trovato nella tua cartella Download."
+			if is_fr: return "Aucun fichier '.sbu' trouvé dans votre dossier Téléchargements."
+			if is_de: return "Keine '.sbu'-Dateien in Ihrem Downloads-Ordner gefunden."
+			return "No '.sbu' files were found in your Downloads folder."
+		"import_success":
+			if is_es: return "¡Creación '{0}' importada con éxito!"
+			if is_pt: return "Criação '{0}' importada com sucesso!"
+			if is_it: return "Creazione '{0}' importata con successo!"
+			if is_fr: return "Création '{0}' importée avec succès !"
+			if is_de: return "Kreation '{0}' erfolgreich importiert!"
+			return "Creation '{0}' successfully imported!"
+		"import_fail":
+			if is_es: return "Error al importar el archivo."
+			if is_pt: return "Erro ao importar o arquivo."
+			if is_it: return "Errore durante l'importazione del file."
+			if is_fr: return "Échec de l'importation du fichier."
+			if is_de: return "Fehler beim Importieren der Datei."
+			return "Failed to import file."
+	return key
+
+func _sanitize_filename(filename: String) -> String:
+	var invalid_chars = ["/", "\\", "?", "*", ":", "|", "\"", "<", ">"]
+	var result = filename
+	for c in invalid_chars:
+		result = result.replace(c, "_")
+	return result.strip_edges()
+
+func _show_modal_message(title_text: String, message_text: String):
+	var s = _get_ui_scale()
+	var dialog_container = Control.new()
+	dialog_container.name = "MessageDialogContainer"
+	dialog_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	dialog_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dialog_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	save_panel.add_child(dialog_container)
+	
+	var dialog = PanelContainer.new()
+	dialog_container.add_child(dialog)
+	
+	var d_style = StyleBoxFlat.new()
+	d_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
+	d_style.border_width_left = 3; d_style.border_width_top = 3
+	d_style.border_width_right = 3; d_style.border_width_bottom = 3
+	d_style.border_color = Color(0.6, 0.5, 0.2)
+	d_style.corner_radius_top_left = 30
+	d_style.corner_radius_top_right = 30
+	dialog.add_theme_stylebox_override("panel", d_style)
+	dialog.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_top", 40 * s)
+	margin.add_theme_constant_override("margin_bottom", 40 * s)
+	margin.add_theme_constant_override("margin_left", 30 * s)
+	margin.add_theme_constant_override("margin_right", 30 * s)
+	dialog.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 25 * s)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	margin.add_child(vbox)
+	
+	var lbl_title = Label.new()
+	lbl_title.text = title_text
+	lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_title.add_theme_font_size_override("font_size", 28 * s)
+	lbl_title.add_theme_font_override("font", _get_safe_font())
+	vbox.add_child(lbl_title)
+	
+	var lbl_msg = Label.new()
+	lbl_msg.text = message_text
+	lbl_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl_msg.add_theme_font_size_override("font_size", 22 * s)
+	vbox.add_child(lbl_msg)
+	
+	var ok_btn = Button.new()
+	ok_btn.text = tr("welcome_close") if tr("welcome_close") != "welcome_close" else "OK"
+	ok_btn.custom_minimum_size = Vector2(150 * s, 50 * s)
+	ok_btn.add_theme_font_size_override("font_size", 20 * s)
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.2, 0.6, 0.2)
+	btn_style.set_corner_radius_all(10 * s)
+	ok_btn.add_theme_stylebox_override("normal", btn_style)
+	ok_btn.pressed.connect(func(): dialog_container.queue_free())
+	vbox.add_child(ok_btn)
+
+func _check_and_request_storage_permission(on_granted: Callable):
+	if OS.get_name() != "Android":
+		on_granted.call()
+		return
+		
+	var permissions = OS.get_granted_permissions()
+	var has_read = "android.permission.READ_EXTERNAL_STORAGE" in permissions
+	var has_write = "android.permission.WRITE_EXTERNAL_STORAGE" in permissions
+	
+	if has_read and has_write:
+		on_granted.call()
+		return
+		
+	var s = _get_ui_scale()
+	var dialog_container = Control.new()
+	dialog_container.name = "PermissionExplanationContainer"
+	dialog_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	dialog_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dialog_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	save_panel.add_child(dialog_container)
+	
+	var dialog = PanelContainer.new()
+	dialog_container.add_child(dialog)
+	
+	var d_style = StyleBoxFlat.new()
+	d_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
+	d_style.border_width_left = 3; d_style.border_width_top = 3
+	d_style.border_width_right = 3; d_style.border_width_bottom = 3
+	d_style.border_color = Color(0.6, 0.5, 0.2)
+	d_style.corner_radius_top_left = 30
+	d_style.corner_radius_top_right = 30
+	dialog.add_theme_stylebox_override("panel", d_style)
+	dialog.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_top", 40 * s)
+	margin.add_theme_constant_override("margin_bottom", 40 * s)
+	margin.add_theme_constant_override("margin_left", 30 * s)
+	margin.add_theme_constant_override("margin_right", 30 * s)
+	dialog.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 25 * s)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	margin.add_child(vbox)
+	
+	var lbl_title = Label.new()
+	lbl_title.text = _get_custom_translation("permission_title")
+	lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_title.add_theme_font_size_override("font_size", 28 * s)
+	lbl_title.add_theme_font_override("font", _get_safe_font())
+	vbox.add_child(lbl_title)
+	
+	var lbl_msg = Label.new()
+	lbl_msg.text = _get_custom_translation("permission_desc")
+	lbl_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl_msg.add_theme_font_size_override("font_size", 22 * s)
+	vbox.add_child(lbl_msg)
+	
+	var hbox = HBoxContainer.new()
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	hbox.add_theme_constant_override("separation", 20 * s)
+	vbox.add_child(hbox)
+	
+	var yes_btn = Button.new()
+	yes_btn.text = _get_custom_translation("permission_grant")
+	yes_btn.custom_minimum_size = Vector2(150 * s, 50 * s)
+	yes_btn.add_theme_font_size_override("font_size", 20 * s)
+	var yes_style = StyleBoxFlat.new()
+	yes_style.bg_color = Color(0.2, 0.6, 0.2)
+	yes_style.set_corner_radius_all(10 * s)
+	yes_btn.add_theme_stylebox_override("normal", yes_style)
+	yes_btn.pressed.connect(func():
+		dialog_container.queue_free()
+		OS.request_permissions()
+		_show_modal_message(
+			_get_custom_translation("permission_title"),
+			_get_custom_translation("permission_retry_msg")
+		)
+	)
+	hbox.add_child(yes_btn)
+	
+	var no_btn = Button.new()
+	no_btn.text = tr("no")
+	no_btn.custom_minimum_size = Vector2(150 * s, 50 * s)
+	no_btn.add_theme_font_size_override("font_size", 20 * s)
+	var no_style = StyleBoxFlat.new()
+	no_style.bg_color = Color(0.6, 0.2, 0.2)
+	no_style.set_corner_radius_all(10 * s)
+	no_btn.add_theme_stylebox_override("normal", no_style)
+	no_btn.pressed.connect(func(): dialog_container.queue_free())
+	hbox.add_child(no_btn)
+
+func _on_share_pressed(slot_idx: int, slot_name: String):
+	_check_and_request_storage_permission(func():
+		var path = "user://save_slot_" + str(slot_idx) + ".dat"
+		var thumb_path = "user://save_slot_" + str(slot_idx) + ".png"
+		
+		if not FileAccess.file_exists(path):
+			return
+			
+		var data_dict = {}
+		var file = FileAccess.open_compressed(path, FileAccess.READ, FileAccess.COMPRESSION_ZSTD)
+		if file:
+			data_dict = file.get_var(true)
+			file.close()
+			
+		if not data_dict:
+			_show_modal_message(
+				_get_custom_translation("share_btn"),
+				_get_custom_translation("export_fail")
+			)
+			return
+			
+		var sbu_dict = {
+			"version": 1,
+			"name": slot_name,
+			"grid_data": data_dict
+		}
+		
+		if FileAccess.file_exists(thumb_path):
+			var thumb_bytes = FileAccess.get_file_as_bytes(thumb_path)
+			if thumb_bytes and thumb_bytes.size() > 0:
+				sbu_dict["thumbnail_bytes"] = thumb_bytes
+				
+		var downloads_dir = OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS)
+		if not DirAccess.dir_exists_absolute(downloads_dir):
+			downloads_dir = "user://"
+			
+		var clean_name = _sanitize_filename(slot_name)
+		var export_filename = clean_name + ".sbu"
+		var export_path = downloads_dir.path_join(export_filename)
+		
+		var sbu_file = FileAccess.open_compressed(export_path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
+		if sbu_file:
+			sbu_file.store_var(sbu_dict, true)
+			sbu_file.close()
+			_show_modal_message(
+				_get_custom_translation("share_btn"),
+				_get_custom_translation("export_success").format([export_filename])
+			)
+		else:
+			_show_modal_message(
+				_get_custom_translation("share_btn"),
+				_get_custom_translation("export_fail")
+			)
+	)
+
+func _on_import_pressed(slot_idx: int):
+	_check_and_request_storage_permission(func():
+		var downloads_dir = OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS)
+		var sbu_files = []
+		if DirAccess.dir_exists_absolute(downloads_dir):
+			var dir = DirAccess.open(downloads_dir)
+			if dir:
+				dir.list_dir_begin()
+				var file_name = dir.get_next()
+				while file_name != "":
+					if not dir.current_is_dir() and file_name.ends_with(".sbu"):
+						sbu_files.append(file_name)
+					file_name = dir.get_next()
+				dir.list_dir_end()
+				
+		if sbu_files.size() == 0:
+			_show_modal_message(
+				_get_custom_translation("import_btn"),
+				_get_custom_translation("import_no_files")
+			)
+			return
+			
+		var s = _get_ui_scale()
+		var dialog_container = Control.new()
+		dialog_container.name = "ImportDialogContainer"
+		dialog_container.mouse_filter = Control.MOUSE_FILTER_PASS
+		dialog_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		dialog_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		save_panel.add_child(dialog_container)
+		
+		var dialog = PanelContainer.new()
+		dialog_container.add_child(dialog)
+		
+		var d_style = StyleBoxFlat.new()
+		d_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
+		d_style.border_width_left = 3; d_style.border_width_top = 3
+		d_style.border_width_right = 3; d_style.border_width_bottom = 3
+		d_style.border_color = Color(0.6, 0.5, 0.2)
+		d_style.corner_radius_top_left = 30
+		d_style.corner_radius_top_right = 30
+		dialog.add_theme_stylebox_override("panel", d_style)
+		dialog.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		
+		var margin = MarginContainer.new()
+		margin.add_theme_constant_override("margin_top", 30 * s)
+		margin.add_theme_constant_override("margin_bottom", 30 * s)
+		margin.add_theme_constant_override("margin_left", 20 * s)
+		margin.add_theme_constant_override("margin_right", 20 * s)
+		dialog.add_child(margin)
+		
+		var vbox = VBoxContainer.new()
+		vbox.add_theme_constant_override("separation", 20 * s)
+		margin.add_child(vbox)
+		
+		var lbl_title = Label.new()
+		lbl_title.text = _get_custom_translation("import_select_title")
+		lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl_title.add_theme_font_size_override("font_size", 28 * s)
+		lbl_title.add_theme_font_override("font", _get_safe_font())
+		vbox.add_child(lbl_title)
+		
+		var scroll = ScrollContainer.new()
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		vbox.add_child(scroll)
+		
+		var list_vbox = VBoxContainer.new()
+		list_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		list_vbox.add_theme_constant_override("separation", 10 * s)
+		scroll.add_child(list_vbox)
+		
+		for file_name in sbu_files:
+			var btn = Button.new()
+			btn.text = file_name.left(file_name.length() - 4)
+			btn.custom_minimum_size = Vector2(0, 50 * s)
+			btn.add_theme_font_size_override("font_size", 22 * s)
+			btn.add_theme_font_override("font", _get_safe_font())
+			
+			var btn_style = StyleBoxFlat.new()
+			btn_style.bg_color = Color(0.18, 0.18, 0.22)
+			btn_style.set_corner_radius_all(10 * s)
+			btn.add_theme_stylebox_override("normal", btn_style)
+			
+			btn.pressed.connect(func():
+				dialog_container.queue_free()
+				_import_sbu_file(downloads_dir.path_join(file_name), slot_idx)
+			)
+			list_vbox.add_child(btn)
+			
+		var cancel_btn = Button.new()
+		cancel_btn.text = tr("no")
+		cancel_btn.custom_minimum_size = Vector2(0, 50 * s)
+		cancel_btn.add_theme_font_size_override("font_size", 22 * s)
+		cancel_btn.add_theme_font_override("font", _get_safe_font())
+		var cancel_style = StyleBoxFlat.new()
+		cancel_style.bg_color = Color(0.6, 0.2, 0.2)
+		cancel_style.set_corner_radius_all(10 * s)
+		cancel_btn.add_theme_stylebox_override("normal", cancel_style)
+		cancel_btn.pressed.connect(func(): dialog_container.queue_free())
+		vbox.add_child(cancel_btn)
+	)
+
+func _import_sbu_file(file_path: String, slot_idx: int):
+	var sbu_file = FileAccess.open_compressed(file_path, FileAccess.READ, FileAccess.COMPRESSION_ZSTD)
+	if not sbu_file:
+		_show_modal_message(
+			_get_custom_translation("import_btn"),
+			_get_custom_translation("import_fail")
+		)
+		return
+		
+	var sbu_dict = sbu_file.get_var(true)
+	sbu_file.close()
+	
+	if not sbu_dict or not sbu_dict.has("grid_data"):
+		_show_modal_message(
+			_get_custom_translation("import_btn"),
+			_get_custom_translation("import_fail")
+		)
+		return
+		
+	var target_dat_path = "user://save_slot_" + str(slot_idx) + ".dat"
+	var target_png_path = "user://save_slot_" + str(slot_idx) + ".png"
+	
+	var data_dict = sbu_dict["grid_data"]
+	
+	var dat_file = FileAccess.open_compressed(target_dat_path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
+	if dat_file:
+		dat_file.store_var(data_dict, true)
+		dat_file.close()
+	else:
+		_show_modal_message(
+			_get_custom_translation("import_btn"),
+			_get_custom_translation("import_fail")
+		)
+		return
+		
+	if sbu_dict.has("thumbnail_bytes"):
+		var thumb_bytes = sbu_dict["thumbnail_bytes"]
+		if thumb_bytes and thumb_bytes.size() > 0:
+			var png_file = FileAccess.open(target_png_path, FileAccess.WRITE)
+			if png_file:
+				png_file.store_buffer(thumb_bytes)
+				png_file.close()
+	else:
+		if FileAccess.file_exists(target_png_path):
+			DirAccess.remove_absolute(target_png_path)
+			
+	_show_modal_message(
+		_get_custom_translation("import_btn"),
+		_get_custom_translation("import_success").format([file_path.get_file().left(file_path.get_file().length() - 4)])
+	)
+	_setup_save_ui()
 
 func _save_to_slot(idx, custom_name: String = ""):
 	var path = "user://save_slot_" + str(idx) + ".dat"
