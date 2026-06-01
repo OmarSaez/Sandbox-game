@@ -4068,10 +4068,7 @@ func _load_rotation_cache():
 		
 		if dict:
 			_map_grid_data(dict)
-			if dict.has("active_logic_gates"):
-				active_logic_gates.clear()
-				for gate_data in dict["active_logic_gates"]:
-					active_logic_gates.append(gate_data.duplicate(true))
+			_load_active_logic_gates(dict)
 			_reconstruct_sources_from_cells(dict)
 
 func _load_lab_state():
@@ -11337,6 +11334,36 @@ func _simulate_logic_gates():
 
 
 
+func _load_active_logic_gates(dict: Dictionary):
+	active_logic_gates.clear()
+	if dict.has("active_logic_gates"):
+		var old_w = int(dict.get("width", grid_width))
+		var old_h = int(dict.get("height", grid_height))
+		var y_offset = old_h - grid_height
+		var x_offset = int((old_w - grid_width) / 2.0)
+		var offset_logic_x = int(x_offset / 4.0)
+		var offset_logic_y = int(y_offset / 4.0)
+		var max_tx = grid_width / 4
+		var max_ty = grid_height / 4
+
+		for gate_data in dict["active_logic_gates"]:
+			var gate = gate_data.duplicate(true)
+			if gate.has("grid_pos"):
+				var pos = gate["grid_pos"]
+				var px = 0
+				var py = 0
+				if pos is Vector2 or pos is Vector2i:
+					px = int(pos.x)
+					py = int(pos.y)
+				elif typeof(pos) == TYPE_DICTIONARY:
+					px = int(pos.get("x", 0))
+					py = int(pos.get("y", 0))
+				gate["grid_pos"] = Vector2i(px - offset_logic_x, py - offset_logic_y)
+				
+				# Bounds check: logic gate spans 3x3 tiles
+				if gate["grid_pos"].x >= 0 and gate["grid_pos"].x + 2 < max_tx and gate["grid_pos"].y >= 0 and gate["grid_pos"].y + 2 < max_ty:
+					active_logic_gates.append(gate)
+
 func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 	active_battery_indices.clear()
 	active_electricity_source_indices.clear()
@@ -12735,10 +12762,7 @@ func _load_from_slot(idx):
 			if dict.has("music_tempo_frames"):
 				music_tempo_frames = int(dict["music_tempo_frames"])
 
-			active_logic_gates.clear()
-			if dict.has("active_logic_gates"):
-				for gate_data in dict["active_logic_gates"]:
-					active_logic_gates.append(gate_data.duplicate(true))
+			_load_active_logic_gates(dict)
 			_reconstruct_sources_from_cells(dict)
 			_simulate_logic_gates()
 			
