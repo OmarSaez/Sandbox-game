@@ -380,12 +380,13 @@ func _show_button_tooltip(btn: Button, translation_key: String):
 func _input(event: InputEvent):
 	if event is InputEventMouseButton:
 		# Mouse Wheel Zoom (PC)
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
-			_zoom_camera(0.15)
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
-			_zoom_camera(-0.15)
-			get_viewport().set_input_as_handled()
+		if is_panning_mode:
+			if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
+				_zoom_camera(0.15)
+				get_viewport().set_input_as_handled()
+			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
+				_zoom_camera(-0.15)
+				get_viewport().set_input_as_handled()
 			
 	elif event is InputEventScreenTouch:
 		if is_panning_mode:
@@ -12272,16 +12273,19 @@ func _setup_music_ui(force_refresh: bool = false):
 		circuit_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		circuit_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		circuit_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+		circuit_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 		outer_vbox.add_child(circuit_panel)
 		
 		var circ_scroll = ScrollContainer.new()
 		circ_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		circ_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		circ_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 		circuit_panel.add_child(circ_scroll)
 		
 		var circ_vbox = VBoxContainer.new()
 		circ_vbox.add_theme_constant_override("separation", 15 * s)
 		circ_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		circ_vbox.mouse_filter = Control.MOUSE_FILTER_PASS
 		circ_scroll.add_child(circ_vbox)
 		
 		var title = Label.new()
@@ -12305,6 +12309,7 @@ func _setup_music_ui(force_refresh: bool = false):
 		circ_grid.add_theme_constant_override("h_separation", 12 * s)
 		circ_grid.add_theme_constant_override("v_separation", 12 * s)
 		circ_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		circ_grid.mouse_filter = Control.MOUSE_FILTER_PASS
 		circ_vbox.add_child(circ_grid)
 		
 		# Circuits elements: Metal, TNT, NPC Trigger, Door, Phase Block, Battery, LED, Logic Gates (NOT, AND, OR, NAND, NOR, XOR, XNOR), Piston, Cannon
@@ -12316,6 +12321,7 @@ func _setup_music_ui(force_refresh: bool = false):
 			btn.custom_minimum_size = Vector2(210 * s, 70 * s)
 			btn.add_theme_font_override("font", _get_safe_font())
 			btn.add_theme_font_size_override("font_size", 18 * s)
+			btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
 			
 			var b_style = StyleBoxFlat.new()
 			b_style.bg_color = Color("#4169E1").darkened(0.65)
