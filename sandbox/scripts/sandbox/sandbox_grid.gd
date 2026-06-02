@@ -296,6 +296,87 @@ func _show_zoom_tutorial_bubble():
 	bubble.position.x = clamp(bubble.position.x, 10 * s, get_viewport_rect().size.x - 420 * s)
 	bubble.position.y = clamp(bubble.position.y, 10 * s, get_viewport_rect().size.y - 320 * s)
 
+func _setup_long_press_tooltip(btn: Button, translation_key: String):
+	var timer = Timer.new()
+	timer.one_shot = true
+	timer.wait_time = 0.5
+	btn.add_child(timer)
+	
+	btn.button_down.connect(func():
+		btn.set_meta("long_pressed", false)
+		timer.start()
+	)
+	
+	var cleanup = func():
+		timer.stop()
+		if is_instance_valid(active_tooltip_panel):
+			active_tooltip_panel.queue_free()
+			active_tooltip_panel = null
+		btn.call_deferred("set_meta", "long_pressed", false)
+			
+	btn.button_up.connect(cleanup)
+	btn.mouse_exited.connect(cleanup)
+	
+	timer.timeout.connect(func():
+		if not btn.is_pressed(): return
+		btn.set_meta("long_pressed", true)
+		_show_button_tooltip(btn, translation_key)
+	)
+
+func _show_button_tooltip(btn: Button, translation_key: String):
+	if is_instance_valid(active_tooltip_panel):
+		active_tooltip_panel.queue_free()
+		
+	if not is_instance_valid(ui_root):
+		ui_root = get_parent().get_node_or_null("UI")
+		if not ui_root: return
+		
+	var s = _get_ui_scale()
+	
+	var bubble = PanelContainer.new()
+	active_tooltip_panel = bubble
+	bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.08, 0.08, 0.12, 0.96)
+	p_style.set_corner_radius_all(10 * s)
+	p_style.border_width_left = 2; p_style.border_width_top = 2
+	p_style.border_width_right = 2; p_style.border_width_bottom = 2
+	p_style.border_color = Color(0.35, 0.65, 1.0, 0.95)
+	p_style.shadow_color = Color(0, 0, 0, 0.35)
+	p_style.shadow_size = 6
+	bubble.add_theme_stylebox_override("panel", p_style)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 14 * s)
+	margin.add_theme_constant_override("margin_top", 8 * s)
+	margin.add_theme_constant_override("margin_right", 14 * s)
+	margin.add_theme_constant_override("margin_bottom", 8 * s)
+	bubble.add_child(margin)
+	
+	var lbl = Label.new()
+	lbl.text = tr(translation_key)
+	lbl.add_theme_font_override("font", _get_safe_font())
+	lbl.add_theme_font_size_override("font_size", 20 * s)
+	lbl.add_theme_color_override("font_color", Color.WHITE)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	margin.add_child(lbl)
+	
+	ui_root.add_child(bubble)
+	
+	# Wait 1 frame for size calculation
+	await get_tree().process_frame
+	if not is_instance_valid(bubble) or not is_instance_valid(btn): return
+	
+	var btn_rect = btn.get_global_rect()
+	bubble.position = Vector2(
+		btn_rect.position.x + btn_rect.size.x / 2.0 - bubble.size.x / 2.0,
+		btn_rect.position.y - bubble.size.y - 12 * s
+	)
+	
+	bubble.position.x = clamp(bubble.position.x, 10 * s, get_viewport_rect().size.x - bubble.size.x - 10 * s)
+	bubble.position.y = clamp(bubble.position.y, 10 * s, get_viewport_rect().size.y - bubble.size.y - 10 * s)
+
 func _input(event: InputEvent):
 	if event is InputEventMouseButton:
 		# Mouse Wheel Zoom (PC)
@@ -439,6 +520,7 @@ var is_logic_gate_tutorial_done: bool = false
 var logic_gate_tutorial_bubble: PanelContainer = null
 var is_zoom_tutorial_done: bool = false
 var zoom_tutorial_bubble: PanelContainer = null
+var active_tooltip_panel: PanelContainer = null
 var draw_start_gx: int = 0
 var draw_start_gy: int = 0
 var prev_snapped_gx: int = 0
@@ -2846,22 +2928,31 @@ func _setup_tools_ui():
 	_update_zoom_ui()
 	
 	btn_pan.pressed.connect(func(): 
+		if btn_pan.get_meta("long_pressed", false): return
 		_play_action_sound("ui_click")
 		_set_panning_mode(!is_panning_mode)
 	)
 	btn_save.pressed.connect(func(): 
+		if btn_save.get_meta("long_pressed", false): return
 		_play_action_sound("ui_click")
 		if is_instance_valid(save_panel): save_panel.queue_free()
 		else: _setup_save_ui()
 	)
 	btn_undo.pressed.connect(func():
+		if btn_undo.get_meta("long_pressed", false): return
 		_play_action_sound("ui_click")
 		undo_history()
 	)
 	btn_redo.pressed.connect(func():
+		if btn_redo.get_meta("long_pressed", false): return
 		_play_action_sound("ui_click")
 		redo_history()
 	)
+	
+	_setup_long_press_tooltip(btn_pan, "tooltip_zoom")
+	_setup_long_press_tooltip(btn_save, "tooltip_save")
+	_setup_long_press_tooltip(btn_undo, "tooltip_undo")
+	_setup_long_press_tooltip(btn_redo, "tooltip_redo")
 	
 	action_vbox.add_child(qa_grid)
 	# -------------------------
@@ -5235,7 +5326,7 @@ func _is_position_over_ui(pos: Vector2) -> bool:
 	if is_instance_valid(action_vbox) and action_vbox.get_global_rect().has_point(pos):
 		return true
 
-	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble, zoom_tutorial_bubble]:
+	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble, zoom_tutorial_bubble, active_tooltip_panel]:
 		if is_instance_valid(panel) and panel.visible and panel.get_global_rect().has_point(pos):
 			return true
 	return false
@@ -5282,6 +5373,9 @@ func _is_any_ui_blocking() -> bool:
 		return true
 		
 	if is_instance_valid(zoom_tutorial_bubble) and zoom_tutorial_bubble.visible and zoom_tutorial_bubble.get_global_rect().has_point(m_pos):
+		return true
+		
+	if is_instance_valid(active_tooltip_panel) and active_tooltip_panel.visible and active_tooltip_panel.get_global_rect().has_point(m_pos):
 		return true
 		
 	return false

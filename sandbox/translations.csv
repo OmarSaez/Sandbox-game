@@ -344,3 +344,7 @@ processing_creation,"Procesando creación...","Processing creation...","Elaboraz
 tut_zoom_title,"🔍 Modo Paneo y Zoom","🔍 Pan & Zoom Mode","🔍 Modalità Pan & Zoom","🔍 Mode Pan & Zoom","🔍 Schwenk- & Zoom-Modus","🔍 Modo Pan & Zoom"
 tut_zoom_step1,"• Pellizca con 2 dedos para hacer Zoom.","• Pinch with 2 fingers to Zoom.","• Pizzica con 2 dita per fare Zoom.","• Pincez avec 2 doigts pour zoomer.","• Mit 2 Fingern zusammenkneifen, um zu zoomen.","• Use 2 dedos para dar Zoom."
 tut_zoom_step2,"• Arrastra con 1 dedo para moverte.","• Drag with 1 finger to move.","• Trascina con 1 dito per spostarti.","• Glissez avec 1 doigt pour vous déplacer.","• Mit 1 Finger ziehen, um sich zu bewegen.","• Arraste com 1 dedo para se mover."
+tooltip_zoom,ZOOM,ZOOM,ZOOM,ZOOM,ZOOM,ZOOM
+tooltip_save,Guardar,Save,Salva,Sauvegarder,Speichern,Salvar
+tooltip_undo,Deshacer,Undo,Annulla,Annuler,Rückgängig,Desfazer
+tooltip_redo,Rehacer,Redo,Ripristina,Rétablir,Wiederherstellen,Refazer
