@@ -508,6 +508,8 @@ var circuit_panel: PanelContainer
 var is_mechanism_mode_active: bool = false
 var selected_circuit_tool: String = ""
 var active_logic_gates: Array = []
+var active_pistons: Array = []
+var selected_piston_length: int = 10
 var active_battery_indices = {} # Set of cell indices containing battery blocks
 var active_electricity_source_indices = {} # Set of cell indices containing electricity
 var door_registry = {} # Set of cell indices where NPC Door (91) is placed
@@ -1175,6 +1177,8 @@ func _ready():
 	_register_material(90, Color("#C254FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # NPC Activator
 	_register_material(91, Color("#B25A38"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # NPC Door
 	_register_material(92, Color("#00F0FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Phase Block
+	_register_material(93, Color("#466282"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR) # Piston Base
+	_register_material(94, Color("#8CAEC4"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR) # Piston Head/Shaft
 	
 	# --- BIOLOGICALS (21-24) ---
 	# 21: Pasto
@@ -5145,7 +5149,7 @@ func _add_ui_header(container, key: String):
 # --- OPTIMIZED HIGHLIGHT SYSTEM ---
 
 func _update_material_highlights():
-	if selected_material != -2:
+	if selected_material != -2 and selected_circuit_tool != "piston" and selected_circuit_tool != "cannon":
 		selected_circuit_tool = ""
 	if selected_material != 8 and selected_material != 5 and selected_circuit_tool == "":
 		is_mechanism_mode_active = false
@@ -5699,7 +5703,7 @@ func _process(delta):
 						_play_action_sound("ui_click")
 						_check_logic_gate_tutorial(gate_pos)
 				_manage_brush_sound(-1)
-			elif is_mechanism_mode_active and (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92):
+			elif is_mechanism_mode_active and (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92 or selected_material == 93):
 				# snap exactly to grid cells boundaries
 				var snap = 4
 				gx = int(floor(float(gx) / snap) * snap)
@@ -5708,7 +5712,10 @@ func _process(delta):
 				if not mouse_was_pressed:
 					prev_snapped_gx = gx
 					prev_snapped_gy = gy
-					_place_circuit_block(gx, gy, selected_material)
+					if selected_material == 93:
+						_place_piston(gx, gy)
+					else:
+						_place_circuit_block(gx, gy, selected_material)
 				else:
 					# Draw continuous cell staircase from prev_snapped to current gx, gy
 					if gx != prev_snapped_gx or gy != prev_snapped_gy:
@@ -5724,7 +5731,10 @@ func _process(delta):
 								cx += 1 if dcx > 0 else -1
 							else:
 								cy += 1 if dcy > 0 else -1
-							_place_circuit_block(cx * snap, cy * snap, selected_material)
+							if selected_material == 93:
+								_place_piston(cx * snap, cy * snap)
+							else:
+								_place_circuit_block(cx * snap, cy * snap, selected_material)
 						
 						prev_snapped_gx = gx
 						prev_snapped_gy = gy
@@ -5776,6 +5786,7 @@ func _process(delta):
 		# Open/Close NPC Doors based on NPC proximity before cellular physics updates
 		_update_npc_doors(delta)
 		_update_phase_blocks()
+		_simulate_pistons()
 		
 		_step_simulation()
 		
@@ -11346,6 +11357,7 @@ func _clear_all():
 	surface_cache.fill(0)
 	active_npcs.clear()
 	active_logic_gates.clear()
+	active_pistons.clear()
 	active_projectiles.clear()
 	active_metronome_indices.clear()
 	door_registry.clear()
@@ -11748,6 +11760,7 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 	door_close_timers.clear()
 	phase_block_registry.clear()
 	active_metronome_indices.clear()
+	active_pistons.clear()
 	
 	# 1. Restore open doors, powered phase blocks, and timers from save dict if present
 	if dict.has("door_registry"):
@@ -11775,6 +11788,36 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 			door_registry[idx] = true
 		elif mid == 92:
 			phase_block_registry[idx] = true
+		elif mid == 93:
+			var px = idx % grid_width
+			var py = idx / grid_width
+			var already_registered = false
+			for p in active_pistons:
+				if px >= p.pos.x and px < p.pos.x + 4 and py >= p.pos.y + 1 and py < p.pos.y + 4:
+					already_registered = true
+					break
+			if not already_registered:
+				var gx = px
+				var gy = py - 1
+				var ext = 0
+				for ey in range(0, 61):
+					var ty = gy - ey
+					if ty >= 0:
+						var head_found = true
+						for tx in range(gx, gx + 4):
+							if _get_cell(tx, ty) != 94:
+								head_found = false
+								break
+						if head_found:
+							ext = ey
+							break
+				var new_p = {
+					"pos": Vector2i(gx, gy),
+					"current_ext": float(ext),
+					"target_ext": selected_piston_length,
+					"is_active": false
+				}
+				active_pistons.append(new_p)
 
 func _get_gate_pin_cell_indices(gate, pin_type: String) -> Array:
 	var cx = gate["grid_pos"].x
@@ -11824,6 +11867,169 @@ func _place_circuit_block(gx: int, gy: int, mat_id: int):
 	for oy in range(4):
 		for ox in range(4):
 			_set_cell(gx + ox, gy + oy, mat_id)
+
+func _place_piston(gx: int, gy: int):
+	if gx < 0 or gx + 3 >= grid_width or gy < 0 or gy + 3 >= grid_height:
+		return
+		
+	# Remove overlapping pistons
+	var i = active_pistons.size() - 1
+	while i >= 0:
+		var p = active_pistons[i]
+		if abs(p.pos.x - gx) < 4 and abs(p.pos.y - gy) < 4:
+			active_pistons.remove_at(i)
+		i -= 1
+
+	for oy in range(1, 4):
+		for ox in range(4):
+			_set_cell(gx + ox, gy + oy, 93)
+			
+	for ox in range(4):
+		_set_cell(gx + ox, gy, 94)
+			
+	var new_p = {
+		"pos": Vector2i(gx, gy),
+		"current_ext": 0.0,
+		"target_ext": selected_piston_length,
+		"is_active": false
+	}
+	active_pistons.append(new_p)
+
+func _is_piston_base_powered(p) -> bool:
+	var px = p.pos.x
+	var py = p.pos.y + 1
+	for oy in range(3):
+		var row_offset = (py + oy) * grid_width
+		for ox in range(4):
+			var idx = row_offset + (px + ox)
+			if idx >= 0 and idx < cells.size():
+				if charge_array[idx] > 0 or active_battery_indices.has(idx):
+					return true
+	return false
+
+func _can_piston_expand(p) -> bool:
+	var px = p.pos.x
+	var gy = p.pos.y
+	var current_ext_pixels = int(p.current_ext)
+	var head_y = gy - current_ext_pixels
+	
+	var push_height = 0
+	var scan_y = head_y - 1
+	
+	while scan_y >= 0:
+		var row_has_blocks = false
+		for x in range(px, px + 4):
+			var mid = _get_cell(x, scan_y)
+			if mid != 0:
+				if mid == 1 or mid == 93 or mid == 94 or (mid >= 81 and mid <= 87) or mid == 600:
+					return false
+				row_has_blocks = true
+		
+		if not row_has_blocks:
+			break
+			
+		push_height += 1
+		if push_height > 15:
+			return false
+			
+		scan_y -= 1
+		
+	if scan_y < 0 and push_height > 0:
+		return false
+		
+	return true
+
+func _activate_piston_chunks(px: int, gy: int):
+	var start_cx = px / 4
+	var end_cx = (px + 4) / 4
+	var start_cy = clamp((gy - 64) / 4, 0, grid_height / 4)
+	var end_cy = clamp((gy + 16) / 4, 0, grid_height / 4)
+	for cy in range(start_cy, end_cy + 1):
+		for cx in range(start_cx, end_cx + 1):
+			_activate_chunk(cx, cy)
+
+func _simulate_pistons():
+	if cells.size() == 0: return
+	var idx = active_pistons.size() - 1
+	while idx >= 0:
+		if idx >= active_pistons.size():
+			idx -= 1
+			continue
+		var p = active_pistons[idx]
+		
+		var base_cx = p.pos.x + 2
+		var base_cy = p.pos.y + 2
+		if base_cx < 0 or base_cx >= grid_width or base_cy < 0 or base_cy >= grid_height:
+			active_pistons.remove_at(idx)
+			idx -= 1
+			continue
+		if _get_cell(base_cx, base_cy) != 93:
+			active_pistons.remove_at(idx)
+			idx -= 1
+			continue
+			
+		var powered = _is_piston_base_powered(p)
+		
+		if powered:
+			var target_px = p.target_ext * 4
+			if p.current_ext < target_px:
+				if _can_piston_expand(p):
+					var px = p.pos.x
+					var gy = p.pos.y
+					var current_ext_pixels = int(p.current_ext)
+					var head_y = gy - current_ext_pixels
+					
+					var push_height = 0
+					var scan_y = head_y - 1
+					while scan_y >= 0:
+						var row_has_blocks = false
+						for x in range(px, px + 4):
+							if _get_cell(x, scan_y) != 0:
+								row_has_blocks = true
+								break
+						if not row_has_blocks:
+							break
+						push_height += 1
+						scan_y -= 1
+						
+					var push_start_y = head_y - 1 - push_height + 1
+					var push_end_y = head_y - 1
+					for y in range(push_start_y, push_end_y + 1):
+						for x in range(px, px + 4):
+							var mid = _get_cell(x, y)
+							_set_cell(x, y - 1, mid)
+							
+					for x in range(px, px + 4):
+						_set_cell(x, push_end_y, 0)
+							
+					for x in range(px, px + 4):
+						_set_cell(x, head_y - 1, 94)
+							
+					var col_left = px
+					var col_right = px + 4
+					var col_bottom = head_y + 1
+					var col_top = head_y - push_height
+					for npc in active_npcs:
+						if npc.position.x >= col_left - 10 and npc.position.x <= col_right + 10:
+							if npc.position.y >= col_top - 4 and npc.position.y <= col_bottom + 2:
+								npc.position.y -= 1.0
+								
+					p.current_ext += 1.0
+					_activate_piston_chunks(px, gy)
+		else:
+			if p.current_ext > 0:
+				var px = p.pos.x
+				var gy = p.pos.y
+				var current_ext_pixels = int(p.current_ext)
+				var head_y = gy - current_ext_pixels
+				
+				for x in range(px, px + 4):
+					_set_cell(x, head_y, 0)
+						
+				p.current_ext -= 1.0
+				_activate_piston_chunks(px, gy)
+				
+		idx -= 1
 
 const LOGIC_GATE_SHAPES = {
 	0: [ # UP
@@ -12316,9 +12522,9 @@ func _setup_music_ui(force_refresh: bool = false):
 		var circuit_items = ["metal", "tnt", "npc_act", "door", "phase_block", "battery", "led", "not", "and", "or", "nand", "nor", "xor", "xnor", "piston", "cannon"]
 		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🌀", "🔋", "💡", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "⚙️", "💣"]
 		for i in range(circuit_items.size()):
+			var item_key = circuit_items[i]
 			var btn = Button.new()
-			btn.text = circuit_emojis[i] + " " + tr(circuit_items[i])
-			btn.custom_minimum_size = Vector2(210 * s, 70 * s)
+			btn.text = circuit_emojis[i] + " " + tr(item_key)
 			btn.add_theme_font_override("font", _get_safe_font())
 			btn.add_theme_font_size_override("font_size", 18 * s)
 			btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
@@ -12330,7 +12536,46 @@ func _setup_music_ui(force_refresh: bool = false):
 			btn.add_theme_stylebox_override("hover", b_style)
 			btn.add_theme_stylebox_override("pressed", b_style)
 			
-			var item_key = circuit_items[i]
+			var container: Control = btn
+			if item_key == "piston":
+				var hbox = HBoxContainer.new()
+				hbox.add_theme_constant_override("separation", 4 * s)
+				hbox.mouse_filter = Control.MOUSE_FILTER_PASS
+				hbox.custom_minimum_size = Vector2(210 * s, 70 * s)
+				
+				btn.custom_minimum_size = Vector2(146 * s, 70 * s)
+				btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				hbox.add_child(btn)
+				
+				var val_btn = Button.new()
+				val_btn.name = "PistonLengthBtn"
+				val_btn.text = str(selected_piston_length)
+				val_btn.custom_minimum_size = Vector2(60 * s, 70 * s)
+				val_btn.add_theme_font_override("font", _get_safe_font())
+				val_btn.add_theme_font_size_override("font_size", 18 * s)
+				val_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+				
+				var v_style = StyleBoxFlat.new()
+				v_style.bg_color = Color("#4169E1").darkened(0.5)
+				v_style.set_corner_radius_all(10 * s)
+				val_btn.add_theme_stylebox_override("normal", v_style)
+				val_btn.add_theme_stylebox_override("hover", v_style)
+				val_btn.add_theme_stylebox_override("pressed", v_style)
+				
+				val_btn.pressed.connect(func():
+					_play_action_sound("ui_click")
+					var vals = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
+					var cur_idx = vals.find(selected_piston_length)
+					var next_idx = (cur_idx + 1) % vals.size()
+					selected_piston_length = vals[next_idx]
+					val_btn.text = str(selected_piston_length)
+				)
+				
+				hbox.add_child(val_btn)
+				container = hbox
+			else:
+				btn.custom_minimum_size = Vector2(210 * s, 70 * s)
+			
 			btn.pressed.connect(func():
 				_play_action_sound("ui_click")
 				if item_key == "metal":
@@ -12368,13 +12613,23 @@ func _setup_music_ui(force_refresh: bool = false):
 					selected_circuit_tool = ""
 					is_mechanism_mode_active = true
 					_close_music_menu()
+				elif item_key == "piston":
+					selected_material = 93
+					selected_circuit_tool = "piston"
+					is_mechanism_mode_active = true
+					_close_music_menu()
+				elif item_key == "cannon":
+					selected_material = -1
+					selected_circuit_tool = "cannon"
+					is_mechanism_mode_active = true
+					_close_music_menu()
 				elif item_key == "not" or item_key == "and" or item_key == "or" or item_key == "nand" or item_key == "nor" or item_key == "xor" or item_key == "xnor":
 					selected_material = -2
 					selected_circuit_tool = item_key
 					is_mechanism_mode_active = true
 					_close_music_menu()
 			)
-			circ_grid.add_child(btn)
+			circ_grid.add_child(container)
 		return # Return early so the music UI setup below does not run!
 		
 	# --- MUSIC VIEW ---
