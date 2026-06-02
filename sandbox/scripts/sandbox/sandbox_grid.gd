@@ -12790,6 +12790,8 @@ func _setup_music_ui(force_refresh: bool = false):
 		circ_vbox.mouse_filter = Control.MOUSE_FILTER_PASS
 		circ_scroll.add_child(circ_vbox)
 		
+		_show_menu_reminder("circuits", circ_vbox, "REMINDER_CIRCUITS")
+		
 		var title = Label.new()
 		title.text = tr("circuits_tab")
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -12941,7 +12943,7 @@ func _setup_music_ui(force_refresh: bool = false):
 	main_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(main_vbox)
 	
-	_show_menu_reminder("music", main_vbox, "TUTORIAL_STEP_7")
+	_show_menu_reminder("music", main_vbox, "REMINDER_MUSIC")
 	
 	# Title
 	var title = Label.new()
