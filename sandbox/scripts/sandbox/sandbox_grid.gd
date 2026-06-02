@@ -174,7 +174,7 @@ func _clamp_camera_position():
 	new_pos.y = clamp(new_pos.y, half_cam_h, max(half_cam_h, map_h - half_cam_h))
 	sim_camera.position = new_pos
 
-func _unhandled_input(event: InputEvent):
+func _input(event: InputEvent):
 	if event is InputEventMouseButton:
 		# Mouse Wheel Zoom (PC)
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
@@ -186,7 +186,7 @@ func _unhandled_input(event: InputEvent):
 			
 	elif event is InputEventScreenTouch:
 		if is_panning_mode:
-			var is_over_ui = _is_any_ui_blocking()
+			var is_over_ui = _is_position_over_ui(event.position)
 			if event.pressed:
 				if not is_over_ui:
 					active_touches[event.index] = event.position
@@ -205,7 +205,7 @@ func _unhandled_input(event: InputEvent):
 				
 	elif event is InputEventScreenDrag:
 		if is_panning_mode:
-			var is_over_ui = _is_any_ui_blocking()
+			var is_over_ui = _is_position_over_ui(event.position)
 			if active_touches.has(event.index):
 				active_touches[event.index] = event.position
 				
@@ -5096,6 +5096,22 @@ func _update_menu_highlights():
 		ui_elements["team_lbl"].visible = not is_neutral_npc
 	if ui_elements.has("team_flow") and is_instance_valid(ui_elements["team_flow"]):
 		ui_elements["team_flow"].visible = not is_neutral_npc
+
+func _is_position_over_ui(pos: Vector2) -> bool:
+	if is_blocking: return true
+	if is_npc_mode_menu_open: return true
+	
+	if is_instance_valid(material_scroll) and material_scroll.get_global_rect().has_point(pos):
+		return true
+	if is_instance_valid(action_hbox) and action_hbox.get_global_rect().has_point(pos):
+		return true
+	if is_instance_valid(action_vbox) and action_vbox.get_global_rect().has_point(pos):
+		return true
+
+	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble]:
+		if is_instance_valid(panel) and panel.visible and panel.get_global_rect().has_point(pos):
+			return true
+	return false
 
 func _is_any_ui_blocking() -> bool:
 	if is_blocking: return true # GLOBAL MODAL BLOCKER
