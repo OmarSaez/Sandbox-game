@@ -139,6 +139,8 @@ func _set_panning_mode(active: bool):
 	if not active:
 		active_touches.clear()
 		pinch_last_dist = 0.0
+		if is_instance_valid(zoom_tutorial_bubble):
+			zoom_tutorial_bubble.queue_free()
 		
 	if ui_elements.has("btn_pan") and is_instance_valid(ui_elements["btn_pan"]):
 		var qa_style = StyleBoxFlat.new()
@@ -156,6 +158,9 @@ func _set_panning_mode(active: bool):
 		btn.add_theme_stylebox_override("hover", style)
 		btn.add_theme_stylebox_override("pressed", style)
 		_update_zoom_ui()
+		
+	if active and not is_zoom_tutorial_done:
+		call_deferred("_show_zoom_tutorial_bubble")
 
 func _clamp_camera_position():
 	if not is_instance_valid(sim_camera): return
@@ -173,6 +178,123 @@ func _clamp_camera_position():
 	new_pos.x = clamp(new_pos.x, half_cam_w, max(half_cam_w, map_w - half_cam_w))
 	new_pos.y = clamp(new_pos.y, half_cam_h, max(half_cam_h, map_h - half_cam_h))
 	sim_camera.position = new_pos
+
+func _show_zoom_tutorial_bubble():
+	if is_instance_valid(zoom_tutorial_bubble):
+		zoom_tutorial_bubble.queue_free()
+		
+	if not is_instance_valid(ui_root):
+		ui_root = get_parent().get_node_or_null("UI")
+		if not ui_root: return
+		
+	var s = _get_ui_scale()
+	var btn = ui_elements.get("btn_pan")
+	if not is_instance_valid(btn): return
+	
+	# Create panel container
+	var bubble = PanelContainer.new()
+	zoom_tutorial_bubble = bubble
+	bubble.mouse_filter = Control.MOUSE_FILTER_STOP
+	
+	# Styling: Glassmorphism look matching the other tutorials
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.08, 0.08, 0.12, 0.96) # Dark slate semi-transparent
+	p_style.set_corner_radius_all(18 * s)
+	p_style.border_width_left = 3; p_style.border_width_top = 3
+	p_style.border_width_right = 3; p_style.border_width_bottom = 3
+	p_style.border_color = Color(0.12, 0.32, 0.62, 0.95) # Royal blue matching active panning mode
+	p_style.shadow_color = Color(0, 0, 0, 0.45)
+	p_style.shadow_size = 10
+	bubble.add_theme_stylebox_override("panel", p_style)
+	
+	var margin = MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_STOP
+	margin.add_theme_constant_override("margin_left", 24 * s)
+	margin.add_theme_constant_override("margin_top", 20 * s)
+	margin.add_theme_constant_override("margin_right", 24 * s)
+	margin.add_theme_constant_override("margin_bottom", 20 * s)
+	bubble.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.mouse_filter = Control.MOUSE_FILTER_STOP
+	vbox.add_theme_constant_override("separation", 14 * s)
+	margin.add_child(vbox)
+	
+	# Title
+	var title_lbl = Label.new()
+	title_lbl.mouse_filter = Control.MOUSE_FILTER_STOP
+	title_lbl.text = tr("tut_zoom_title")
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_lbl.custom_minimum_size = Vector2(360 * s, 0)
+	title_lbl.add_theme_font_override("font", _get_safe_font())
+	title_lbl.add_theme_font_size_override("font_size", 24 * s)
+	title_lbl.add_theme_color_override("font_color", Color(0.35, 0.65, 1.0, 1.0)) # Sky blue accent
+	vbox.add_child(title_lbl)
+	
+	# Step 1: Zoom
+	var step1_lbl = Label.new()
+	step1_lbl.mouse_filter = Control.MOUSE_FILTER_STOP
+	step1_lbl.text = tr("tut_zoom_step1")
+	step1_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	step1_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	step1_lbl.custom_minimum_size = Vector2(360 * s, 0)
+	step1_lbl.add_theme_font_override("font", _get_safe_font())
+	step1_lbl.add_theme_font_size_override("font_size", 20 * s)
+	step1_lbl.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(step1_lbl)
+	
+	# Step 2: Move
+	var step2_lbl = Label.new()
+	step2_lbl.mouse_filter = Control.MOUSE_FILTER_STOP
+	step2_lbl.text = tr("tut_zoom_step2")
+	step2_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	step2_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	step2_lbl.custom_minimum_size = Vector2(360 * s, 0)
+	step2_lbl.add_theme_font_override("font", _get_safe_font())
+	step2_lbl.add_theme_font_size_override("font_size", 20 * s)
+	step2_lbl.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(step2_lbl)
+	
+	# Button Ok
+	var btn_ok = Button.new()
+	btn_ok.mouse_filter = Control.MOUSE_FILTER_STOP
+	btn_ok.text = tr("GOT_IT")
+	btn_ok.custom_minimum_size = Vector2(170 * s, 54 * s)
+	btn_ok.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	btn_ok.add_theme_font_override("font", _get_safe_font())
+	btn_ok.add_theme_font_size_override("font_size", 21 * s)
+	
+	var btn_style_norm = StyleBoxFlat.new()
+	btn_style_norm.bg_color = Color(0.12, 0.32, 0.62, 1.0)
+	btn_style_norm.set_corner_radius_all(12 * s)
+	
+	var btn_style_hover = btn_style_norm.duplicate()
+	btn_style_hover.bg_color = Color(0.18, 0.42, 0.78, 1.0)
+	
+	btn_ok.add_theme_stylebox_override("normal", btn_style_norm)
+	btn_ok.add_theme_stylebox_override("hover", btn_style_hover)
+	btn_ok.add_theme_stylebox_override("pressed", btn_style_norm)
+	btn_ok.add_theme_color_override("font_color", Color.WHITE)
+	
+	btn_ok.pressed.connect(func():
+		_play_action_sound("ui_click")
+		is_zoom_tutorial_done = true
+		_save_tool_settings()
+		bubble.queue_free()
+	)
+	vbox.add_child(btn_ok)
+	
+	ui_root.add_child(bubble)
+	
+	# Position bubble above/left of the pan button
+	var btn_global_rect = btn.get_global_rect()
+	var screen_pos = btn_global_rect.position
+	
+	# Position above the button, centered horizontally relative to the button
+	bubble.position = Vector2(screen_pos.x + btn_global_rect.size.x/2 - 200 * s, screen_pos.y - 300 * s)
+	bubble.position.x = clamp(bubble.position.x, 10 * s, get_viewport_rect().size.x - 420 * s)
+	bubble.position.y = clamp(bubble.position.y, 10 * s, get_viewport_rect().size.y - 320 * s)
 
 func _input(event: InputEvent):
 	if event is InputEventMouseButton:
@@ -315,6 +437,8 @@ var is_phase_block_tutorial_done: bool = false
 var phase_block_tutorial_bubble: PanelContainer = null
 var is_logic_gate_tutorial_done: bool = false
 var logic_gate_tutorial_bubble: PanelContainer = null
+var is_zoom_tutorial_done: bool = false
+var zoom_tutorial_bubble: PanelContainer = null
 var draw_start_gx: int = 0
 var draw_start_gy: int = 0
 var prev_snapped_gx: int = 0
@@ -658,7 +782,8 @@ func _save_tool_settings():
 		"is_muted": is_muted,
 		"current_language": current_language,
 		"is_logic_gate_tutorial_done": is_logic_gate_tutorial_done,
-		"is_phase_block_tutorial_done": is_phase_block_tutorial_done
+		"is_phase_block_tutorial_done": is_phase_block_tutorial_done,
+		"is_zoom_tutorial_done": is_zoom_tutorial_done
 	}
 	var f = FileAccess.open("user://tools_settings.json", FileAccess.WRITE)
 	if f:
@@ -683,6 +808,8 @@ func _load_tool_settings():
 					is_logic_gate_tutorial_done = dict["is_logic_gate_tutorial_done"]
 				if dict.has("is_phase_block_tutorial_done"):
 					is_phase_block_tutorial_done = dict["is_phase_block_tutorial_done"]
+				if dict.has("is_zoom_tutorial_done"):
+					is_zoom_tutorial_done = dict["is_zoom_tutorial_done"]
 
 func _ready():
 	_load_global_achievements() # Load global state once at startup
@@ -5108,7 +5235,7 @@ func _is_position_over_ui(pos: Vector2) -> bool:
 	if is_instance_valid(action_vbox) and action_vbox.get_global_rect().has_point(pos):
 		return true
 
-	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble]:
+	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble, zoom_tutorial_bubble]:
 		if is_instance_valid(panel) and panel.visible and panel.get_global_rect().has_point(pos):
 			return true
 	return false
@@ -5152,6 +5279,9 @@ func _is_any_ui_blocking() -> bool:
 		return true
 		
 	if is_instance_valid(logic_gate_tutorial_bubble) and logic_gate_tutorial_bubble.visible and logic_gate_tutorial_bubble.get_global_rect().has_point(m_pos):
+		return true
+		
+	if is_instance_valid(zoom_tutorial_bubble) and zoom_tutorial_bubble.visible and zoom_tutorial_bubble.get_global_rect().has_point(m_pos):
 		return true
 		
 	return false
