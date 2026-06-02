@@ -1690,14 +1690,14 @@ func _start_interactive_tutorial():
 
 func _show_main_tutorial_step():
 	var steps = [
+		{"target": "quick_actions_grid", "text": tr("TUTORIAL_STEP_8")},
 		{"target": "material_scroll", "text": tr("TUTORIAL_STEP_1")},
 		{"target": "tools_btn", "text": tr("TUTORIAL_STEP_2")},
 		{"target": "lab_btn", "text": tr("TUTORIAL_STEP_3")},
 		{"target": "disaster_btn", "text": tr("TUTORIAL_STEP_4")},
 		{"target": "npc_btn", "text": tr("TUTORIAL_STEP_5")},
 		{"target": "paint_btn", "text": tr("TUTORIAL_STEP_6")},
-		{"target": "music_btn", "text": tr("TUTORIAL_STEP_7")},
-		{"target": "quick_actions_grid", "text": tr("TUTORIAL_STEP_8")}
+		{"target": "music_btn", "text": tr("TUTORIAL_STEP_7")}
 	]
 	
 	if main_tutorial_step >= steps.size():
