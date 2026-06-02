@@ -11793,29 +11793,71 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 			var py = idx / grid_width
 			var already_registered = false
 			for p in active_pistons:
-				if px >= p.pos.x and px < p.pos.x + 4 and py >= p.pos.y + 1 and py < p.pos.y + 4:
+				var orient = p.get("orientation", 0)
+				var in_base = false
+				if orient == 0:
+					in_base = (px >= p.pos.x and px < p.pos.x + 4 and py >= p.pos.y + 1 and py < p.pos.y + 4)
+				elif orient == 1:
+					in_base = (px >= p.pos.x and px < p.pos.x + 3 and py >= p.pos.y and py < p.pos.y + 4)
+				elif orient == 2:
+					in_base = (px >= p.pos.x and px < p.pos.x + 4 and py >= p.pos.y and py < p.pos.y + 3)
+				elif orient == 3:
+					in_base = (px >= p.pos.x + 1 and px < p.pos.x + 4 and py >= p.pos.y and py < p.pos.y + 4)
+				if in_base:
 					already_registered = true
 					break
 			if not already_registered:
+				# Base layout boundary hits starting pixel.
+				# Scan the 4x4 bounding box to identify base pixels and head location to find orientation:
 				var gx = px
-				var gy = py - 1
+				var gy = py
+				# Find top-left of the 4x4 grid cell:
+				gx = int(floor(float(px) / 4.0) * 4.0)
+				gy = int(floor(float(py) / 4.0) * 4.0)
+				
+				var detected_orient = 0
+				if _get_cell(gx + 3, gy) == 94 and _get_cell(gx + 3, gy + 3) == 94:
+					detected_orient = 1 # RIGHT
+				elif _get_cell(gx, gy + 3) == 94 and _get_cell(gx + 3, gy + 3) == 94:
+					detected_orient = 2 # DOWN
+				elif _get_cell(gx, gy) == 94 and _get_cell(gx, gy + 3) == 94:
+					detected_orient = 3 # LEFT
+				
+				# Scan along the detected orientation direction to find the current extension
 				var ext = 0
 				for ey in range(0, 61):
-					var ty = gy - ey
-					if ty >= 0:
-						var head_found = true
-						for tx in range(gx, gx + 4):
-							if _get_cell(tx, ty) != 94:
-								head_found = false
-								break
-						if head_found:
-							ext = ey
+					var head_found = true
+					var head_pixels = []
+					if detected_orient == 0: # UP
+						var ty = gy - ey
+						for ox in range(4):
+							head_pixels.append(Vector2i(gx + ox, ty))
+					elif detected_orient == 1: # RIGHT
+						var tx = gx + 3 + ey
+						for oy in range(4):
+							head_pixels.append(Vector2i(tx, gy + oy))
+					elif detected_orient == 2: # DOWN
+						var ty = gy + 3 + ey
+						for ox in range(4):
+							head_pixels.append(Vector2i(gx + ox, ty))
+					elif detected_orient == 3: # LEFT
+						var tx = gx - ey
+						for oy in range(4):
+							head_pixels.append(Vector2i(tx, gy + oy))
+							
+					for pix in head_pixels:
+						if pix.x < 0 or pix.x >= grid_width or pix.y < 0 or pix.y >= grid_height or _get_cell(pix.x, pix.y) != 94:
+							head_found = false
 							break
+					if head_found:
+						ext = ey
+						break
 				var new_p = {
 					"pos": Vector2i(gx, gy),
 					"current_ext": float(ext),
 					"target_ext": selected_piston_length,
-					"is_active": false
+					"is_active": false,
+					"orientation": detected_orient
 				}
 				active_pistons.append(new_p)
 
@@ -11868,8 +11910,99 @@ func _place_circuit_block(gx: int, gy: int, mat_id: int):
 		for ox in range(4):
 			_set_cell(gx + ox, gy + oy, mat_id)
 
+func _get_piston_direction(orientation: int) -> Vector2i:
+	match orientation:
+		0: return Vector2i(0, -1) # UP
+		1: return Vector2i(1, 0)  # RIGHT
+		2: return Vector2i(0, 1)  # DOWN
+		3: return Vector2i(-1, 0) # LEFT
+	return Vector2i(0, -1)
+
+func _get_piston_head_pixels(p, ext: int) -> Array:
+	var px = p.pos.x
+	var gy = p.pos.y
+	var pixels = []
+	var orient = p.get("orientation", 0)
+	if orient == 0: # UP
+		var ty = gy - ext
+		for ox in range(4):
+			pixels.append(Vector2i(px + ox, ty))
+	elif orient == 1: # RIGHT
+		var tx = px + 3 + ext
+		for oy in range(4):
+			pixels.append(Vector2i(tx, gy + oy))
+	elif orient == 2: # DOWN
+		var ty = gy + 3 + ext
+		for ox in range(4):
+			pixels.append(Vector2i(px + ox, ty))
+	elif orient == 3: # LEFT
+		var tx = px - ext
+		for oy in range(4):
+			pixels.append(Vector2i(tx, gy + oy))
+	return pixels
+
+func _get_piston_base_pixels(p) -> Array:
+	var px = p.pos.x
+	var gy = p.pos.y
+	var pixels = []
+	var orient = p.get("orientation", 0)
+	if orient == 0: # UP
+		for oy in range(1, 4):
+			for ox in range(4):
+				pixels.append(Vector2i(px + ox, gy + oy))
+	elif orient == 1: # RIGHT
+		for oy in range(4):
+			for ox in range(3):
+				pixels.append(Vector2i(px + ox, gy + oy))
+	elif orient == 2: # DOWN
+		for oy in range(3):
+			for ox in range(4):
+				pixels.append(Vector2i(px + ox, gy + oy))
+	elif orient == 3: # LEFT
+		for oy in range(4):
+			for ox in range(1, 4):
+				pixels.append(Vector2i(px + ox, gy + oy))
+	return pixels
+
 func _place_piston(gx: int, gy: int):
 	if gx < 0 or gx + 3 >= grid_width or gy < 0 or gy + 3 >= grid_height:
+		return
+		
+	# Check if there is an existing piston at this exact snapping coordinate gx, gy
+	var existing_idx = -1
+	for idx in range(active_pistons.size()):
+		if active_pistons[idx].pos.x == gx and active_pistons[idx].pos.y == gy:
+			existing_idx = idx
+			break
+			
+	if existing_idx != -1:
+		# Rotate existing piston!
+		var p = active_pistons[existing_idx]
+		
+		# 1. Erase old piston shape (base + head + any extension)
+		for oy in range(4):
+			for ox in range(4):
+				_set_cell(gx + ox, gy + oy, 0)
+		var ext_limit = int(p.current_ext)
+		for ext_val in range(ext_limit + 1):
+			var head_pix = _get_piston_head_pixels(p, ext_val)
+			for pix in head_pix:
+				_set_cell(pix.x, pix.y, 0)
+				
+		# 2. Update orientation
+		p.orientation = (p.get("orientation", 0) + 1) % 4
+		p.current_ext = 0.0
+		p.target_ext = selected_piston_length
+		
+		# 3. Draw new piston shape
+		var base_pix = _get_piston_base_pixels(p)
+		for pix in base_pix:
+			_set_cell(pix.x, pix.y, 93)
+		var head_pix = _get_piston_head_pixels(p, 0)
+		for pix in head_pix:
+			_set_cell(pix.x, pix.y, 94)
+			
+		_play_action_sound("ui_click")
 		return
 		
 	# Remove overlapping pistons
@@ -11877,6 +12010,15 @@ func _place_piston(gx: int, gy: int):
 	while i >= 0:
 		var p = active_pistons[i]
 		if abs(p.pos.x - gx) < 4 and abs(p.pos.y - gy) < 4:
+			# Erase cells of overlapping piston to prevent orphans
+			for oy in range(4):
+				for ox in range(4):
+					_set_cell(p.pos.x + ox, p.pos.y + oy, 0)
+			var ext_limit = int(p.current_ext)
+			for ext_val in range(ext_limit + 1):
+				var head_pix = _get_piston_head_pixels(p, ext_val)
+				for pix in head_pix:
+					_set_cell(pix.x, pix.y, 0)
 			active_pistons.remove_at(i)
 		i -= 1
 
@@ -11891,37 +12033,37 @@ func _place_piston(gx: int, gy: int):
 		"pos": Vector2i(gx, gy),
 		"current_ext": 0.0,
 		"target_ext": selected_piston_length,
-		"is_active": false
+		"is_active": false,
+		"orientation": 0
 	}
 	active_pistons.append(new_p)
 
 func _is_piston_base_powered(p) -> bool:
-	var px = p.pos.x
-	var py = p.pos.y + 1
-	for oy in range(3):
-		var row_offset = (py + oy) * grid_width
-		for ox in range(4):
-			var idx = row_offset + (px + ox)
-			if idx >= 0 and idx < cells.size():
-				if charge_array[idx] > 0 or active_battery_indices.has(idx):
-					return true
+	for pix in _get_piston_base_pixels(p):
+		var idx = pix.y * grid_width + pix.x
+		if idx >= 0 and idx < cells.size():
+			if charge_array[idx] > 0 or active_battery_indices.has(idx):
+				return true
 	return false
 
 func _can_piston_expand(p) -> bool:
-	var px = p.pos.x
-	var gy = p.pos.y
-	var current_ext_pixels = int(p.current_ext)
-	var head_y = gy - current_ext_pixels
+	var orient = p.get("orientation", 0)
+	var ext = int(p.current_ext)
 	
 	var push_height = 0
-	var scan_y = head_y - 1
+	var step_idx = 1
 	
-	while scan_y >= 0:
+	while true:
+		var scan_pixels = _get_piston_head_pixels(p, ext + step_idx)
 		var row_has_blocks = false
-		for x in range(px, px + 4):
-			var mid = _get_cell(x, scan_y)
+		
+		for pix in scan_pixels:
+			if pix.x < 0 or pix.x >= grid_width or pix.y < 0 or pix.y >= grid_height:
+				return false
+					
+			var mid = _get_cell(pix.x, pix.y)
 			if mid != 0:
-				if mid == 1 or mid == 93 or mid == 94 or (mid >= 81 and mid <= 87) or mid == 600:
+				if mid == 93 or mid == 94 or (mid >= 81 and mid <= 87) or mid == 600:
 					return false
 				row_has_blocks = true
 		
@@ -11929,13 +12071,10 @@ func _can_piston_expand(p) -> bool:
 			break
 			
 		push_height += 1
-		if push_height > 15:
+		if push_height > 120: # Push limit increased to 120 pixels!
 			return false
 			
-		scan_y -= 1
-		
-	if scan_y < 0 and push_height > 0:
-		return false
+		step_idx += 1
 		
 	return true
 
@@ -11972,62 +12111,98 @@ func _simulate_pistons():
 		
 		if powered:
 			var target_px = p.target_ext * 4
+			if target_px > 160: target_px = 160
 			if p.current_ext < target_px:
-				if _can_piston_expand(p):
+				var can_exp = _can_piston_expand(p)
+				# print("Piston at ", p.pos, " powered, current_ext=", p.current_ext, " target=", target_px, " can_exp=", can_exp)
+				if can_exp:
 					var px = p.pos.x
 					var gy = p.pos.y
-					var current_ext_pixels = int(p.current_ext)
-					var head_y = gy - current_ext_pixels
+					var ext = int(p.current_ext)
 					
 					var push_height = 0
-					var scan_y = head_y - 1
-					while scan_y >= 0:
+					var step_idx = 1
+					while true:
+						var scan_pixels = _get_piston_head_pixels(p, ext + step_idx)
 						var row_has_blocks = false
-						for x in range(px, px + 4):
-							if _get_cell(x, scan_y) != 0:
+						for pix in scan_pixels:
+							if _get_cell(pix.x, pix.y) != 0:
 								row_has_blocks = true
 								break
 						if not row_has_blocks:
 							break
 						push_height += 1
-						scan_y -= 1
+						step_idx += 1
 						
-					var push_start_y = head_y - 1 - push_height + 1
-					var push_end_y = head_y - 1
-					for y in range(push_start_y, push_end_y + 1):
-						for x in range(px, px + 4):
-							var mid = _get_cell(x, y)
-							_set_cell(x, y - 1, mid)
-							
-					for x in range(px, px + 4):
-						_set_cell(x, push_end_y, 0)
-							
-					for x in range(px, px + 4):
-						_set_cell(x, head_y - 1, 94)
-							
+					var dir = _get_piston_direction(p.get("orientation", 0))
+					
+					# Shift blocks in direction of expansion (from furthest to nearest)
+					for s in range(push_height, 0, -1):
+						var src_pixels = _get_piston_head_pixels(p, ext + s)
+						for pix in src_pixels:
+							var dest_x = pix.x + dir.x
+							var dest_y = pix.y + dir.y
+							if dest_x >= 0 and dest_x < grid_width and dest_y >= 0 and dest_y < grid_height:
+								var mid = _get_cell(pix.x, pix.y)
+								_set_cell(dest_x, dest_y, mid)
+								
+					# Clear the row immediately in front of the head
+					var first_row_pixels = _get_piston_head_pixels(p, ext + 1)
+					for pix in first_row_pixels:
+						_set_cell(pix.x, pix.y, 0)
+						
+					# Draw new head position
+					var new_head_pixels = _get_piston_head_pixels(p, ext + 1)
+					for pix in new_head_pixels:
+						_set_cell(pix.x, pix.y, 94)
+						
+					# Push NPCs in direction of expansion
+					var orient = p.get("orientation", 0)
 					var col_left = px
 					var col_right = px + 4
-					var col_bottom = head_y + 1
-					var col_top = head_y - push_height
-					for npc in active_npcs:
-						if npc.position.x >= col_left - 10 and npc.position.x <= col_right + 10:
-							if npc.position.y >= col_top - 4 and npc.position.y <= col_bottom + 2:
-								npc.position.y -= 1.0
-								
+					if orient == 0: # UP
+						var col_bottom = gy - ext + 1
+						var col_top = gy - ext - push_height
+						for npc in active_npcs:
+							if npc.pos.x >= col_left - 10 and npc.pos.x <= col_right + 10:
+								if npc.pos.y >= col_top - 4 and npc.pos.y <= col_bottom + 2:
+									npc.pos.y -= 1.0
+					elif orient == 1: # RIGHT
+						var col_start = gy
+						var col_end = gy + 4
+						var ext_start = px + 3 + ext
+						var ext_end = px + 3 + ext + push_height
+						for npc in active_npcs:
+							if npc.pos.y >= col_start - 10 and npc.pos.y <= col_end + 10:
+								if npc.pos.x >= ext_start - 2 and npc.pos.x <= ext_end + 4:
+									npc.pos.x += 1.0
+					elif orient == 2: # DOWN
+						var col_top = gy + 3 + ext
+						var col_bottom = gy + 3 + ext + push_height
+						for npc in active_npcs:
+							if npc.pos.x >= col_left - 10 and npc.pos.x <= col_right + 10:
+								if npc.pos.y >= col_top - 2 and npc.pos.y <= col_bottom + 4:
+									npc.pos.y += 1.0
+					elif orient == 3: # LEFT
+						var col_start = gy
+						var col_end = gy + 4
+						var ext_start = px - ext - push_height
+						var ext_end = px - ext
+						for npc in active_npcs:
+							if npc.pos.y >= col_start - 10 and npc.pos.y <= col_end + 10:
+								if npc.pos.x >= ext_start - 4 and npc.pos.x <= ext_end + 2:
+									npc.pos.x -= 1.0
+									
 					p.current_ext += 1.0
 					_activate_piston_chunks(px, gy)
 		else:
 			if p.current_ext > 0:
-				var px = p.pos.x
-				var gy = p.pos.y
-				var current_ext_pixels = int(p.current_ext)
-				var head_y = gy - current_ext_pixels
-				
-				for x in range(px, px + 4):
-					_set_cell(x, head_y, 0)
-						
+				var ext = int(p.current_ext)
+				var head_pixels = _get_piston_head_pixels(p, ext)
+				for pix in head_pixels:
+					_set_cell(pix.x, pix.y, 0)
 				p.current_ext -= 1.0
-				_activate_piston_chunks(px, gy)
+				_activate_piston_chunks(p.pos.x, p.pos.y)
 				
 		idx -= 1
 
@@ -12564,8 +12739,9 @@ func _setup_music_ui(force_refresh: bool = false):
 				
 				val_btn.pressed.connect(func():
 					_play_action_sound("ui_click")
-					var vals = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
+					var vals = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40]
 					var cur_idx = vals.find(selected_piston_length)
+					if cur_idx == -1: cur_idx = 5 # Default to index of 10 if not found
 					var next_idx = (cur_idx + 1) % vals.size()
 					selected_piston_length = vals[next_idx]
 					val_btn.text = str(selected_piston_length)
