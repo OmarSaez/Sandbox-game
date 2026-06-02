@@ -6652,20 +6652,20 @@ func _set_cell(x, y, mat_id):
 			charge_dirty = true
 
 func _activate_chunk(gx, gy):
-	var ix = int(gx)
-	var iy = int(gy)
-	var cx = int(float(ix) / CHUNK_SIZE)
-	var cy = int(float(iy) / CHUNK_SIZE)
+	var cx = int(gx) >> 4
+	var cy = int(gy) >> 4
 	if cx >= 0 and cx < chunks_x and cy >= 0 and cy < chunks_y:
 		var c_idx = cy * chunks_x + cx
 		if next_chunks_active[c_idx] >= 60: return
 		next_chunks_active[c_idx] = 60
 		for oy in range(-1, 2):
-			for ox in range(-1, 2):
-				var ncx = cx + ox
-				var ncy = cy + oy
-				if ncx >= 0 and ncx < chunks_x and ncy >= 0 and ncy < chunks_y:
-					next_chunks_active[ncy * chunks_x + ncx] = 60
+			var ncy = cy + oy
+			if ncy >= 0 and ncy < chunks_y:
+				var row_offset = ncy * chunks_x
+				for ox in range(-1, 2):
+					var ncx = cx + ox
+					if ncx >= 0 and ncx < chunks_x:
+						next_chunks_active[row_offset + ncx] = 60
 
 func _get_cell(x, y):
 	var ix = int(x)
@@ -6850,10 +6850,12 @@ func _thread_pass3(i: int, process_evens: bool):
 func _process_electricity():
 	var frame = _frame_count
 	
-	# 1. Store previous frame active charges in a set for edge-triggering music blocks
-	var prev_active_charges = {}
+	# 1. Store previous frame active music charges in a set for edge-triggering music blocks
+	var prev_active_music_charges = {}
 	for idx in active_charge_indices:
-		prev_active_charges[idx] = true
+		var mid = cells[idx] & 0xFFFF
+		if material_tags_raw[mid] & SandboxMaterial.Tags.MUSIC:
+			prev_active_music_charges[idx] = true
 		
 	# 2. Collect constant sources this frame
 	var sources = []
@@ -6916,25 +6918,27 @@ func _process_electricity():
 		_register_charge(idx)
 		
 	# 3. BFS from constant sources to find all actively "powered" cells
-	var queue = []
+	var queue_x = []
+	var queue_y = []
 	for idx in sources:
-		queue.append(idx)
+		var gy = idx / grid_width
+		queue_x.append(idx - gy * grid_width)
+		queue_y.append(gy)
 		powered_frame[idx] = frame
 		
 	var head = 0
-	while head < queue.size():
-		var idx = queue[head]
+	while head < queue_x.size():
+		var cx = queue_x[head]
+		var cy = queue_y[head]
 		head += 1
 		
-		var x = idx % grid_width
-		var y = idx / grid_width
 		for dy in range(-1, 2):
-			var ny = y + dy
+			var ny = cy + dy
 			if ny < 0 or ny >= grid_height: continue
 			var row_offset = ny * grid_width
 			for dx in range(-1, 2):
 				if dx == 0 and dy == 0: continue
-				var nx = x + dx
+				var nx = cx + dx
 				if nx < 0 or nx >= grid_width: continue
 				
 				var n_idx = row_offset + nx
@@ -6949,23 +6953,21 @@ func _process_electricity():
 					if n_var < 10:
 						continue
 						
-				# If neighbor cell has charge > 0, it is actively powered by this source chain
 				if charge_array[n_idx] > 0:
 					powered_frame[n_idx] = frame
-					queue.append(n_idx)
+					queue_x.append(nx)
+					queue_y.append(ny)
 					
 	# 4. Perform propagation wave: cells at 100 charge charge their 0-charge neighbors for next frame
 	var new_active_charges = []
-	
-	# Find cells that were at 100 in the current frame (collect before modifying)
 	var wave_fronts = []
 	for idx in active_charge_indices:
 		if charge_array[idx] == 100:
 			wave_fronts.append(idx)
 			
 	for idx in wave_fronts:
-		var x = idx % grid_width
 		var y = idx / grid_width
+		var x = idx - y * grid_width
 		for dy in range(-1, 2):
 			var ny = y + dy
 			if ny < 0 or ny >= grid_height: continue
@@ -6990,7 +6992,13 @@ func _process_electricity():
 					if n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
 						charge_array[n_idx] = 100
 						new_active_charges.append(n_idx)
-						_activate_chunk(nx, ny)
+						
+						# Fast inline chunk activation
+						var ncx = nx >> 4
+						var ncy = ny >> 4
+						var c_idx = ncy * chunks_x + ncx
+						if c_idx >= 0 and c_idx < next_chunks_active.size() and next_chunks_active[c_idx] < 60:
+							_activate_chunk(nx, ny)
 						
 						# Spawn subtle visual micro-sparks on active wavefront propagation
 						if _get_lut_rand() < 0.01:
@@ -7015,7 +7023,13 @@ func _process_electricity():
 			charge_array[idx] = next_val
 			if next_val > 0:
 				new_active_charges.append(idx)
-				_activate_chunk(idx % grid_width, idx / grid_width)
+				var gy = idx / grid_width
+				var gx = idx - gy * grid_width
+				var cx = gx >> 4
+				var cy = gy >> 4
+				var c_idx = cy * chunks_x + cx
+				if c_idx >= 0 and c_idx < next_chunks_active.size() and next_chunks_active[c_idx] < 60:
+					_activate_chunk(gx, gy)
 				
 	# Update charge visual buffers
 	for idx in new_active_charges:
@@ -7036,10 +7050,10 @@ func _process_electricity():
 	for idx in active_charge_indices:
 		var mid = cells[idx] & 0xFFFF
 		if material_tags_raw[mid] & SandboxMaterial.Tags.MUSIC:
-			var gx = idx % grid_width
 			var gy = idx / grid_width
+			var gx = idx - gy * grid_width
 			if gx % 2 == 0 and gy % 2 == 0:
-				if not prev_active_charges.has(idx):
+				if not prev_active_music_charges.has(idx):
 					if mid == 600:
 						_play_music_note(5, 0)
 					else:
@@ -12039,44 +12053,50 @@ func _place_piston(gx: int, gy: int):
 	active_pistons.append(new_p)
 
 func _is_piston_base_powered(p) -> bool:
-	for pix in _get_piston_base_pixels(p):
-		var idx = pix.y * grid_width + pix.x
-		if idx >= 0 and idx < cells.size():
-			if charge_array[idx] > 0 or active_battery_indices.has(idx):
-				return true
-	return false
-
-func _can_piston_expand(p) -> bool:
+	var px = p.pos.x
+	var gy = p.pos.y
 	var orient = p.get("orientation", 0)
-	var ext = int(p.current_ext)
 	
-	var push_height = 0
-	var step_idx = 1
-	
-	while true:
-		var scan_pixels = _get_piston_head_pixels(p, ext + step_idx)
-		var row_has_blocks = false
-		
-		for pix in scan_pixels:
-			if pix.x < 0 or pix.x >= grid_width or pix.y < 0 or pix.y >= grid_height:
-				return false
-					
-			var mid = _get_cell(pix.x, pix.y)
-			if mid != 0:
-				if mid == 93 or mid == 94 or (mid >= 81 and mid <= 87) or mid == 600:
-					return false
-				row_has_blocks = true
-		
-		if not row_has_blocks:
-			break
+	if orient == 0: # UP
+		var r1 = (gy + 1) * grid_width
+		var r2 = (gy + 2) * grid_width
+		var r3 = (gy + 3) * grid_width
+		var i = r1 + px
+		if charge_array[i] > 0 or active_battery_indices.has(i): return true
+		if charge_array[i+1] > 0 or active_battery_indices.has(i+1): return true
+		if charge_array[i+2] > 0 or active_battery_indices.has(i+2): return true
+		if charge_array[i+3] > 0 or active_battery_indices.has(i+3): return true
+		i = r2 + px
+		if charge_array[i] > 0 or active_battery_indices.has(i): return true
+		if charge_array[i+1] > 0 or active_battery_indices.has(i+1): return true
+		if charge_array[i+2] > 0 or active_battery_indices.has(i+2): return true
+		if charge_array[i+3] > 0 or active_battery_indices.has(i+3): return true
+		i = r3 + px
+		if charge_array[i] > 0 or active_battery_indices.has(i): return true
+		if charge_array[i+1] > 0 or active_battery_indices.has(i+1): return true
+		if charge_array[i+2] > 0 or active_battery_indices.has(i+2): return true
+		if charge_array[i+3] > 0 or active_battery_indices.has(i+3): return true
+	elif orient == 1: # RIGHT
+		for oy in range(4):
+			var r = (gy + oy) * grid_width + px
+			if charge_array[r] > 0 or active_battery_indices.has(r): return true
+			if charge_array[r+1] > 0 or active_battery_indices.has(r+1): return true
+			if charge_array[r+2] > 0 or active_battery_indices.has(r+2): return true
+	elif orient == 2: # DOWN
+		for oy in range(3):
+			var r = (gy + oy) * grid_width + px
+			if charge_array[r] > 0 or active_battery_indices.has(r): return true
+			if charge_array[r+1] > 0 or active_battery_indices.has(r+1): return true
+			if charge_array[r+2] > 0 or active_battery_indices.has(r+2): return true
+			if charge_array[r+3] > 0 or active_battery_indices.has(r+3): return true
+	elif orient == 3: # LEFT
+		for oy in range(4):
+			var r = (gy + oy) * grid_width + px + 1
+			if charge_array[r] > 0 or active_battery_indices.has(r): return true
+			if charge_array[r+1] > 0 or active_battery_indices.has(r+1): return true
+			if charge_array[r+2] > 0 or active_battery_indices.has(r+2): return true
 			
-		push_height += 1
-		if push_height > 120: # Push limit increased to 120 pixels!
-			return false
-			
-		step_idx += 1
-		
-	return true
+	return false
 
 func _activate_piston_chunks(px: int, gy: int):
 	var start_cx = px / 4
@@ -12102,7 +12122,7 @@ func _simulate_pistons():
 			active_pistons.remove_at(idx)
 			idx -= 1
 			continue
-		if _get_cell(base_cx, base_cy) != 93:
+		if cells[base_cy * grid_width + base_cx] & 0xFFFF != 93:
 			active_pistons.remove_at(idx)
 			idx -= 1
 			continue
@@ -12112,52 +12132,136 @@ func _simulate_pistons():
 		if powered:
 			var target_px = p.target_ext * 4
 			if target_px > 160: target_px = 160
+			
 			if p.current_ext < target_px:
-				var can_exp = _can_piston_expand(p)
-				# print("Piston at ", p.pos, " powered, current_ext=", p.current_ext, " target=", target_px, " can_exp=", can_exp)
-				if can_exp:
-					var px = p.pos.x
-					var gy = p.pos.y
-					var ext = int(p.current_ext)
+				var px = p.pos.x
+				var gy = p.pos.y
+				var ext = int(p.current_ext)
+				var orient = p.get("orientation", 0)
+				
+				var push_height = 0
+				var step_idx = 1
+				var blocked = false
+				
+				while true:
+					var p0: Vector2i
+					var p1: Vector2i
+					var p2: Vector2i
+					var p3: Vector2i
 					
-					var push_height = 0
-					var step_idx = 1
-					while true:
-						var scan_pixels = _get_piston_head_pixels(p, ext + step_idx)
-						var row_has_blocks = false
-						for pix in scan_pixels:
-							if _get_cell(pix.x, pix.y) != 0:
-								row_has_blocks = true
-								break
-						if not row_has_blocks:
-							break
-						push_height += 1
-						step_idx += 1
+					if orient == 0: # UP
+						var ty = gy - ext - step_idx
+						p0 = Vector2i(px, ty)
+						p1 = Vector2i(px + 1, ty)
+						p2 = Vector2i(px + 2, ty)
+						p3 = Vector2i(px + 3, ty)
+					elif orient == 1: # RIGHT
+						var tx = px + 3 + ext + step_idx
+						p0 = Vector2i(tx, gy)
+						p1 = Vector2i(tx, gy + 1)
+						p2 = Vector2i(tx, gy + 2)
+						p3 = Vector2i(tx, gy + 3)
+					elif orient == 2: # DOWN
+						var ty = gy + 3 + ext + step_idx
+						p0 = Vector2i(px, ty)
+						p1 = Vector2i(px + 1, ty)
+						p2 = Vector2i(px + 2, ty)
+						p3 = Vector2i(px + 3, ty)
+					elif orient == 3: # LEFT
+						var tx = px - ext - step_idx
+						p0 = Vector2i(tx, gy)
+						p1 = Vector2i(tx, gy + 1)
+						p2 = Vector2i(tx, gy + 2)
+						p3 = Vector2i(tx, gy + 3)
 						
-					var dir = _get_piston_direction(p.get("orientation", 0))
+					if p0.x < 0 or p0.x >= grid_width or p0.y < 0 or p0.y >= grid_height or \
+					   p3.x < 0 or p3.x >= grid_width or p3.y < 0 or p3.y >= grid_height:
+						blocked = true
+						break
+						
+					var row_has_blocks = false
+					var m0: int
+					var m1: int
+					var m2: int
+					var m3: int
 					
-					# Shift blocks in direction of expansion (from furthest to nearest)
-					for s in range(push_height, 0, -1):
-						var src_pixels = _get_piston_head_pixels(p, ext + s)
-						for pix in src_pixels:
-							var dest_x = pix.x + dir.x
-							var dest_y = pix.y + dir.y
-							if dest_x >= 0 and dest_x < grid_width and dest_y >= 0 and dest_y < grid_height:
-								var mid = _get_cell(pix.x, pix.y)
-								_set_cell(dest_x, dest_y, mid)
-								
-					# Clear the row immediately in front of the head
-					var first_row_pixels = _get_piston_head_pixels(p, ext + 1)
-					for pix in first_row_pixels:
-						_set_cell(pix.x, pix.y, 0)
+					if orient == 0 or orient == 2:
+						var row_offset = p0.y * grid_width
+						m0 = cells[row_offset + p0.x] & 0xFFFF
+						m1 = cells[row_offset + p1.x] & 0xFFFF
+						m2 = cells[row_offset + p2.x] & 0xFFFF
+						m3 = cells[row_offset + p3.x] & 0xFFFF
+					else:
+						m0 = cells[p0.y * grid_width + p0.x] & 0xFFFF
+						m1 = cells[p1.y * grid_width + p1.x] & 0xFFFF
+						m2 = cells[p2.y * grid_width + p2.x] & 0xFFFF
+						m3 = cells[p3.y * grid_width + p3.x] & 0xFFFF
+					
+					if (m0 == 93 or m0 == 94 or (m0 >= 81 and m0 <= 87) or m0 == 600) or \
+					   (m1 == 93 or m1 == 94 or (m1 >= 81 and m1 <= 87) or m1 == 600) or \
+					   (m2 == 93 or m2 == 94 or (m2 >= 81 and m2 <= 87) or m2 == 600) or \
+					   (m3 == 93 or m3 == 94 or (m3 >= 81 and m3 <= 87) or m3 == 600):
+						blocked = true
+						break
 						
-					# Draw new head position
-					var new_head_pixels = _get_piston_head_pixels(p, ext + 1)
-					for pix in new_head_pixels:
-						_set_cell(pix.x, pix.y, 94)
+					if m0 != 0 or m1 != 0 or m2 != 0 or m3 != 0:
+						row_has_blocks = true
 						
-					# Push NPCs in direction of expansion
-					var orient = p.get("orientation", 0)
+					if not row_has_blocks:
+						break
+						
+					push_height += 1
+					if push_height > 120:
+						blocked = true
+						break
+						
+					step_idx += 1
+					
+				if not blocked:
+					if orient == 0: # UP
+						for s in range(push_height, 0, -1):
+							var ty = gy - ext - s
+							var dest_y = ty - 1
+							for ox in range(4):
+								var tx = px + ox
+								var mid = cells[ty * grid_width + tx] & 0xFFFF
+								_set_cell(tx, dest_y, mid)
+						for ox in range(4):
+							_set_cell(px + ox, gy - ext - 1, 94)
+							
+					elif orient == 1: # RIGHT
+						for s in range(push_height, 0, -1):
+							var tx = px + 3 + ext + s
+							var dest_x = tx + 1
+							for oy in range(4):
+								var ty = gy + oy
+								var mid = cells[ty * grid_width + tx] & 0xFFFF
+								_set_cell(dest_x, ty, mid)
+						for oy in range(4):
+							_set_cell(px + 3 + ext + 1, gy + oy, 94)
+							
+					elif orient == 2: # DOWN
+						for s in range(push_height, 0, -1):
+							var ty = gy + 3 + ext + s
+							var dest_y = ty + 1
+							for ox in range(4):
+								var tx = px + ox
+								var mid = cells[ty * grid_width + tx] & 0xFFFF
+								_set_cell(tx, dest_y, mid)
+						for ox in range(4):
+							_set_cell(px + ox, gy + 3 + ext + 1, 94)
+							
+					elif orient == 3: # LEFT
+						for s in range(push_height, 0, -1):
+							var tx = px - ext - s
+							var dest_x = tx - 1
+							for oy in range(4):
+								var ty = gy + oy
+								var mid = cells[ty * grid_width + tx] & 0xFFFF
+								_set_cell(dest_x, ty, mid)
+						for oy in range(4):
+							_set_cell(px - ext - 1, gy + oy, 94)
+							
 					var col_left = px
 					var col_right = px + 4
 					if orient == 0: # UP
@@ -12198,9 +12302,26 @@ func _simulate_pistons():
 		else:
 			if p.current_ext > 0:
 				var ext = int(p.current_ext)
-				var head_pixels = _get_piston_head_pixels(p, ext)
-				for pix in head_pixels:
-					_set_cell(pix.x, pix.y, 0)
+				var px = p.pos.x
+				var gy = p.pos.y
+				var orient = p.get("orientation", 0)
+				if orient == 0: # UP
+					var ty = gy - ext
+					for ox in range(4):
+						_set_cell(px + ox, ty, 0)
+				elif orient == 1: # RIGHT
+					var tx = px + 3 + ext
+					for oy in range(4):
+						_set_cell(tx, gy + oy, 0)
+				elif orient == 2: # DOWN
+					var ty = gy + 3 + ext
+					for ox in range(4):
+						_set_cell(px + ox, ty, 0)
+				elif orient == 3: # LEFT
+					var tx = px - ext
+					for oy in range(4):
+						_set_cell(tx, gy + oy, 0)
+						
 				p.current_ext -= 1.0
 				_activate_piston_chunks(p.pos.x, p.pos.y)
 				
