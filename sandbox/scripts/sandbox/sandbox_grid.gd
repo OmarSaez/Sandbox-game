@@ -511,6 +511,7 @@ var active_logic_gates: Array = []
 var active_pistons: Array = []
 var selected_piston_length: int = 10
 var active_pipes: Array = []
+var active_pipes_x2: Array = []
 var prev_pipe_gx: int = -1
 var prev_pipe_gy: int = -1
 var active_cannons: Array = []
@@ -1186,6 +1187,7 @@ func _ready():
 	_register_material(94, Color("#8CAEC4"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR) # Piston Head/Shaft
 	_register_material(95, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base
 	_register_material(96, Color("#0265A6"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Pipe
+	_register_material(97, Color("#014D80"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Pipe X2
 	
 	
 	# --- BIOLOGICALS (21-24) ---
@@ -5669,11 +5671,11 @@ func _process(delta):
 			var gx = int(m_pos.x / grid_scale)
 			var gy = int(m_pos.y / grid_scale)
 			
-			var is_mechanism = (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92 or selected_material == 93 or selected_material == 95 or selected_material == 96)
+			var is_mechanism = (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92 or selected_material == 93 or selected_material == 95 or selected_material == 96 or selected_material == 97)
 			
 			if is_mechanism:
 				# snap exactly to grid cells boundaries
-				var snap = 4
+				var snap = 8 if selected_material == 97 else 4
 				gx = int(floor(float(gx) / snap) * snap)
 				gy = int(floor(float(gy) / snap) * snap)
 				
@@ -5686,6 +5688,8 @@ func _process(delta):
 						_place_cannon(gx, gy)
 					elif selected_material == 96:
 						_place_pipe(gx, gy)
+					elif selected_material == 97:
+						_place_pipe_x2(gx, gy)
 					else:
 						_place_circuit_block(gx, gy, selected_material)
 				else:
@@ -5709,6 +5713,8 @@ func _process(delta):
 								_place_cannon(cx * snap, cy * snap)
 							elif selected_material == 96:
 								_place_pipe(cx * snap, cy * snap)
+							elif selected_material == 97:
+								_place_pipe_x2(cx * snap, cy * snap)
 							else:
 								_place_circuit_block(cx * snap, cy * snap, selected_material)
 						
@@ -5910,7 +5916,7 @@ func _draw():
 	
 	# MUSICAL RHYTHM GRID / MECHANISM GRID
 	var music_menu_node = get_parent().get_node_or_null("UI/MusicPanel")
-	var is_mechanism = selected_material == 96 or selected_material == 95 or selected_material == 93 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92
+	var is_mechanism = selected_material == 96 or selected_material == 97 or selected_material == 95 or selected_material == 93 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92
 	if (music_menu_node and music_menu_node.visible) or _is_music_active() or is_mechanism_mode_active or is_mechanism:
 		var grid_col = Color("#4D4D4D") # Muy visible
 		var thickness = 2.0
@@ -11459,6 +11465,7 @@ func _clear_all():
 	active_pistons.clear()
 	active_cannons.clear()
 	active_pipes.clear()
+	active_pipes_x2.clear()
 	active_projectiles.clear()
 	active_metronome_indices.clear()
 	door_registry.clear()
@@ -11863,6 +11870,14 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 				if i < p.elements.size():
 					old_pipe_elements[coord] = p.elements[i]
 					
+	var old_pipe_x2_elements = {}
+	for p in active_pipes_x2:
+		if p.has("path") and p.has("elements"):
+			for i in range(p.path.size()):
+				var coord = p.path[i]
+				if i < p.elements.size():
+					old_pipe_x2_elements[coord] = p.elements[i]
+					
 	active_battery_indices.clear()
 	active_electricity_source_indices.clear()
 	door_registry.clear()
@@ -11872,6 +11887,7 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 	active_pistons.clear()
 	active_cannons.clear()
 	active_pipes.clear()
+	active_pipes_x2.clear()
 	
 	# 1. Restore open doors, powered phase blocks, and timers from save dict if present
 	var translate_idx = func(old_idx: int) -> int:
@@ -12067,11 +12083,77 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 				elem_list.append([])
 		active_pipes.append({
 			"path": path,
-			"elements": elem_list
+			"elements": elem_list,
+			"flow_dir": 0
 		})
 		
 	for p in active_pipes:
 		_update_pipe_visuals(p)
+
+	# Reconstruct pipe_x2 paths from cells
+	var pipe_x2_blocks = {}
+	for idx_pt in range(cells.size()):
+		if (cells[idx_pt] & 0xFFFF) == 97:
+			var px = idx_pt % grid_width
+			var py = idx_pt / grid_width
+			var gx = int(floor(float(px) / 8.0) * 8.0)
+			var gy = int(floor(float(py) / 8.0) * 8.0)
+			pipe_x2_blocks[Vector2i(gx, gy)] = true
+			
+	var unvisited_x2 = pipe_x2_blocks.keys()
+	
+	var get_neighbors_x2 = func(pt: Vector2i) -> Array:
+		var npts = []
+		var dirs = [Vector2i(8, 0), Vector2i(-8, 0), Vector2i(0, 8), Vector2i(0, -8)]
+		for d in dirs:
+			var target = pt + d
+			if pipe_x2_blocks.has(target):
+				npts.append(target)
+		return npts
+		
+	while unvisited_x2.size() > 0:
+		var start = unvisited_x2[0]
+		for pt in unvisited_x2:
+			if get_neighbors_x2.call(pt).size() == 1:
+				start = pt
+				break
+				
+		var path = [start]
+		unvisited_x2.erase(start)
+		
+		var current = start
+		while true:
+			var neighbors = get_neighbors_x2.call(current)
+			var next_block = null
+			for n in neighbors:
+				if n in unvisited_x2:
+					next_block = n
+					break
+			if next_block != null:
+				path.append(next_block)
+				unvisited_x2.erase(next_block)
+				current = next_block
+			else:
+				break
+				
+		var elem_list = []
+		for pt in path:
+			var item = old_pipe_x2_elements.get(pt, null)
+			if item is Dictionary and item.has("a") and item.has("b"):
+				elem_list.append(item)
+			elif item is Array:
+				elem_list.append({ "a": item, "b": [] })
+			else:
+				elem_list.append({ "a": [], "b": [] })
+		active_pipes_x2.append({
+			"path": path,
+			"elements": elem_list,
+			"flow_dir_a": 0,
+			"flow_dir_b": 0
+		})
+		
+	for p in active_pipes_x2:
+		_update_pipe_x2_visuals(p)
 
 func _get_gate_pin_cell_indices(gate, pin_type: String) -> Array:
 	var cx = gate["grid_pos"].x
@@ -12316,6 +12398,25 @@ func _place_pipe(gx: int, gy: int):
 		for oy in range(4):
 			for ox in range(4):
 				_set_cell(gx + ox, gy + oy, 96)
+		_reconstruct_sources_from_cells()
+		_play_action_sound("ui_click")
+
+func _place_pipe_x2(gx: int, gy: int):
+	if gx < 0 or gx + 7 >= grid_width or gy < 0 or gy + 7 >= grid_height:
+		return
+		
+	# Check if we already have a pipe x2 at this snapping coordinate
+	var existing = false
+	for p in active_pipes_x2:
+		if p.has("path") and Vector2i(gx, gy) in p.path:
+			existing = true
+			break
+			
+	if not existing:
+		# Draw the 8x8 block of material ID 97
+		for oy in range(8):
+			for ox in range(8):
+				_set_cell(gx + ox, gy + oy, 97)
 		_reconstruct_sources_from_cells()
 		_play_action_sound("ui_click")
 
@@ -13084,8 +13185,8 @@ func _setup_music_ui(force_refresh: bool = false):
 		circ_vbox.add_child(circ_grid)
 		
 		# Circuits elements: Metal, TNT, NPC Trigger, Door, Phase Block, Battery, LED, Logic Gates (NOT, AND, OR, NAND, NOR, XOR, XNOR), Piston, Cannon
-		var circuit_items = ["metal", "tnt", "npc_act", "door", "phase_block", "battery", "led", "not", "and", "or", "nand", "nor", "xor", "xnor", "piston", "cannon", "pipe"]
-		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🌀", "🔋", "💡", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "⚙️", "💣", "🔵"]
+		var circuit_items = ["metal", "tnt", "npc_act", "door", "phase_block", "battery", "led", "not", "and", "or", "nand", "nor", "xor", "xnor", "piston", "cannon", "pipe", "pipe_x2"]
+		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🌀", "🔋", "💡", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "⚙️", "💣", "🔵", "🔵"]
 		for i in range(circuit_items.size()):
 			var item_key = circuit_items[i]
 			var btn = Button.new()
@@ -13192,6 +13293,11 @@ func _setup_music_ui(force_refresh: bool = false):
 				elif item_key == "pipe":
 					selected_material = 96
 					selected_circuit_tool = "pipe"
+					is_mechanism_mode_active = true
+					_close_music_menu()
+				elif item_key == "pipe_x2":
+					selected_material = 97
+					selected_circuit_tool = "pipe_x2"
 					is_mechanism_mode_active = true
 					_close_music_menu()
 				elif item_key == "not" or item_key == "and" or item_key == "or" or item_key == "nand" or item_key == "nor" or item_key == "xor" or item_key == "xnor":
@@ -15826,6 +15932,128 @@ func _update_pipe_visuals(p):
 		_set_cell(gx + 1, gy + 2, c2)
 		_set_cell(gx + 2, gy + 2, c3)
 
+func _update_pipe_x2_visuals(p):
+	var path = p.path
+	var L = path.size()
+	for i in range(L):
+		var pt = path[i]
+		var gx = pt.x
+		var gy = pt.y
+		
+		# Find connections to adjacent blocks in path
+		var has_left_conn = false
+		var has_right_conn = false
+		var has_top_conn = false
+		var has_bottom_conn = false
+		
+		if i > 0:
+			var prev = path[i - 1]
+			if prev.x == pt.x - 8 and prev.y == pt.y: has_left_conn = true
+			elif prev.x == pt.x + 8 and prev.y == pt.y: has_right_conn = true
+			elif prev.x == pt.x and prev.y == pt.y - 8: has_top_conn = true
+			elif prev.x == pt.x and prev.y == pt.y + 8: has_bottom_conn = true
+		if i < L - 1:
+			var next = path[i + 1]
+			if next.x == pt.x - 8 and next.y == pt.y: has_left_conn = true
+			elif next.x == pt.x + 8 and next.y == pt.y: has_right_conn = true
+			elif next.x == pt.x and next.y == pt.y - 8: has_top_conn = true
+			elif next.x == pt.x and next.y == pt.y + 8: has_bottom_conn = true
+			
+		# Open visual endpoints opposite to connections
+		var is_left_open = has_left_conn
+		var is_right_open = has_right_conn
+		var is_top_open = has_top_conn
+		var is_bottom_open = has_bottom_conn
+		
+		if L == 1:
+			is_left_open = true
+			is_right_open = true
+		else:
+			if i == 0 or i == L - 1:
+				var conn_count = int(has_left_conn) + int(has_right_conn) + int(has_top_conn) + int(has_bottom_conn)
+				if conn_count == 1:
+					if has_left_conn: is_right_open = true
+					elif has_right_conn: is_left_open = true
+					elif has_top_conn: is_bottom_open = true
+					elif has_bottom_conn: is_top_open = true
+					
+		# Element rendering
+		var block_elems = p.elements[i] if (p.has("elements") and i < p.elements.size()) else null
+		var elems_a = block_elems.get("a", []) if block_elems is Dictionary else []
+		var ca0 = elems_a[0].mat if elems_a.size() > 0 else 0
+		var ca1 = elems_a[1].mat if elems_a.size() > 1 else 0
+		var ca2 = elems_a[2].mat if elems_a.size() > 2 else 0
+		var ca3 = elems_a[3].mat if elems_a.size() > 3 else 0
+		
+		var elems_b = block_elems.get("b", []) if block_elems is Dictionary else []
+		var cb0 = elems_b[0].mat if elems_b.size() > 0 else 0
+		var cb1 = elems_b[1].mat if elems_b.size() > 1 else 0
+		var cb2 = elems_b[2].mat if elems_b.size() > 2 else 0
+		var cb3 = elems_b[3].mat if elems_b.size() > 3 else 0
+		
+		# Draw the 8x8 block
+		for dy in range(8):
+			for dx in range(8):
+				var cell_val = 97
+				
+				# Check Channel A
+				var is_in_a = (
+					(is_top_open and (dx == 1 or dx == 2) and dy <= 4) or
+					(is_bottom_open and (dx == 1 or dx == 2) and dy >= 3) or
+					(is_left_open and (dy == 1 or dy == 2) and dx <= 4) or
+					(is_right_open and (dy == 1 or dy == 2) and dx >= 3)
+				)
+				if is_in_a:
+					cell_val = 0
+					# Core
+					if dx == 1 and dy == 1: cell_val = ca0
+					elif dx == 2 and dy == 1: cell_val = ca1
+					elif dx == 1 and dy == 2: cell_val = ca2
+					elif dx == 2 and dy == 2: cell_val = ca3
+					# Borders
+					elif dy == 0: cell_val = ca0 if dx == 1 else ca1
+					elif dy == 7: cell_val = ca2 if dx == 1 else ca3
+					elif dx == 0: cell_val = ca0 if dy == 1 else ca2
+					elif dx == 7: cell_val = ca1 if dy == 1 else ca3
+					
+				# Check Channel B
+				var is_in_b = (
+					(is_top_open and (dx == 5 or dx == 6) and dy <= 4) or
+					(is_bottom_open and (dx == 5 or dx == 6) and dy >= 3) or
+					(is_left_open and (dy == 5 or dy == 6) and dx <= 4) or
+					(is_right_open and (dy == 5 or dy == 6) and dx >= 3)
+				)
+				if is_in_b:
+					cell_val = 0
+					# Core
+					if dx == 5 and dy == 5: cell_val = cb0
+					elif dx == 6 and dy == 5: cell_val = cb1
+					elif dx == 5 and dy == 6: cell_val = cb2
+					elif dx == 6 and dy == 6: cell_val = cb3
+					# Borders
+					elif dy == 0: cell_val = cb0 if dx == 5 else cb1
+					elif dy == 7: cell_val = cb2 if dx == 5 else cb3
+					elif dx == 0: cell_val = cb0 if dy == 5 else cb2
+					elif dx == 7: cell_val = cb1 if dy == 5 else cb3
+					
+				_set_cell(gx + dx, gy + dy, cell_val)
+
+func _find_pipe_x2_endpoint_opening_side(p, endpoint_idx: int) -> String:
+	var path = p.path
+	var L = path.size()
+	if L == 0: return ""
+	var pt = path[endpoint_idx]
+	
+	if L == 1:
+		return "horizontal"
+		
+	var nb = path[1] if endpoint_idx == 0 else path[L - 2]
+	if nb.x > pt.x: return "left"
+	if nb.x < pt.x: return "right"
+	if nb.y > pt.y: return "top"
+	if nb.y < pt.y: return "bottom"
+	return "horizontal"
+
 func _find_pipe_endpoint_opening_side(p, endpoint_idx: int) -> String:
 	var path = p.path
 	var L = path.size()
@@ -15928,8 +16156,98 @@ func _find_pipe_ejection_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 					return Vector2i(tx, ty)
 	return Vector2i(-1, -1)
 
+func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int, channel: String) -> Vector2i:
+	var path = p.path
+	var pt = path[endpoint_idx]
+	var gx = pt.x
+	var gy = pt.y
+	var side = _find_pipe_x2_endpoint_opening_side(p, endpoint_idx)
+	
+	var offsets = [1, 2] if channel == "A" else [5, 6]
+	
+	if side == "left":
+		for oy in offsets:
+			var tx = gx - 1
+			var ty = gy + oy
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				var mat = _get_cell(tx, ty)
+				if mat > 0 and mat != 95 and mat != 96 and mat != 97:
+					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+						return Vector2i(tx, ty)
+	elif side == "right":
+		for oy in offsets:
+			var tx = gx + 8
+			var ty = gy + oy
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				var mat = _get_cell(tx, ty)
+				if mat > 0 and mat != 95 and mat != 96 and mat != 97:
+					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+						return Vector2i(tx, ty)
+	elif side == "top" or side == "horizontal":
+		for ox in offsets:
+			var tx = gx + ox
+			var ty = gy - 1
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				var mat = _get_cell(tx, ty)
+				if mat > 0 and mat != 95 and mat != 96 and mat != 97:
+					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+						return Vector2i(tx, ty)
+	elif side == "bottom":
+		for ox in offsets:
+			var tx = gx + ox
+			var ty = gy + 8
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				var mat = _get_cell(tx, ty)
+				if mat > 0 and mat != 95 and mat != 96 and mat != 97:
+					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+						return Vector2i(tx, ty)
+	return Vector2i(-1, -1)
+
+func _find_pipe_x2_ejection_cell_at_endpoint(p, endpoint_idx: int, channel: String) -> Vector2i:
+	var path = p.path
+	var pt = path[endpoint_idx]
+	var gx = pt.x
+	var gy = pt.y
+	var side = _find_pipe_x2_endpoint_opening_side(p, endpoint_idx)
+	
+	var offsets = [1, 2] if channel == "A" else [5, 6]
+	
+	if side == "bottom" or side == "horizontal":
+		for ox in offsets:
+			var tx = gx + ox
+			var ty = gy + 8
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				if _get_cell(tx, ty) == 0:
+					return Vector2i(tx, ty)
+	if side == "top":
+		for ox in offsets:
+			var tx = gx + ox
+			var ty = gy - 1
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				if _get_cell(tx, ty) == 0:
+					return Vector2i(tx, ty)
+	if side == "left" or side == "horizontal":
+		for oy in offsets:
+			var tx = gx - 1
+			var ty = gy + oy
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				if _get_cell(tx, ty) == 0:
+					return Vector2i(tx, ty)
+	if side == "right" or side == "horizontal":
+		for oy in offsets:
+			var tx = gx + 8
+			var ty = gy + oy
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				if _get_cell(tx, ty) == 0:
+					return Vector2i(tx, ty)
+	return Vector2i(-1, -1)
+
 func _simulate_pipes(delta: float):
-	if active_pipes.size() == 0: return
+	if active_pipes.size() == 0 and active_pipes_x2.size() == 0: return
 	if _frame_count % 4 != 0:
 		return
 		
@@ -15937,16 +16255,33 @@ func _simulate_pipes(delta: float):
 		var path = p.get("path", [])
 		var L = path.size()
 		if L == 0: continue
-		
-		# 1. Eject elements at the ends (or load connected cannons)
 		var end_idx = L - 1
-		var end_pt = path[end_idx]
-		var end_elems = p.elements[end_idx]
-		var next_end_elems = []
-		var end_conn = _find_connected_cannon(end_pt)
 		
-		for elem in end_elems:
-			if elem.dir == 1:
+		# 1. Check/update flow direction based on contents and input presence
+		var total_elems = 0
+		for list in p.elements:
+			total_elems += list.size()
+		if total_elems == 0:
+			p["flow_dir"] = 0
+			
+		if p.get("flow_dir", 0) == 0:
+			var absorb_pos_0 = _find_pipe_absorbable_cell_at_endpoint(p, 0)
+			if absorb_pos_0.x != -1:
+				p["flow_dir"] = 1
+			else:
+				var absorb_pos_end = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
+				if absorb_pos_end.x != -1:
+					p["flow_dir"] = -1
+					
+		var flow_dir = p.get("flow_dir", 0)
+		if flow_dir == 1:
+			# --- FORWARD SIMULATION (0 -> end_idx) ---
+			# Eject at end
+			var end_pt = path[end_idx]
+			var end_elems = p.elements[end_idx]
+			var next_end_elems = []
+			var end_conn = _find_connected_cannon(end_pt)
+			for elem in end_elems:
 				if not end_conn.is_empty():
 					var c = end_conn["cannon"]
 					if c.get("loaded_material", 0) == 0:
@@ -15959,17 +16294,35 @@ func _simulate_pipes(delta: float):
 						_set_cell(empty_pos.x, empty_pos.y, elem.mat)
 					else:
 						next_end_elems.append(elem)
-			else:
-				next_end_elems.append(elem)
-		p.elements[end_idx] = next_end_elems
-		
-		var start_pt = path[0]
-		var start_elems = p.elements[0]
-		var next_start_elems = []
-		var start_conn = _find_connected_cannon(start_pt)
-		
-		for elem in start_elems:
-			if elem.dir == -1:
+			p.elements[end_idx] = next_end_elems
+			
+			# Propagate forward
+			for i in range(L - 2, -1, -1):
+				var cur_elems = p.elements[i]
+				var next_cur = []
+				for elem in cur_elems:
+					if p.elements[i+1].size() < 4:
+						p.elements[i+1].append(elem)
+					else:
+						next_cur.append(elem)
+				p.elements[i] = next_cur
+				
+			# Absorb at start (0)
+			if p.elements[0].size() < 4:
+				var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, 0)
+				if absorb_pos.x != -1:
+					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+					_set_cell(absorb_pos.x, absorb_pos.y, 0)
+					p.elements[0].append({ "mat": mat, "dir": 1 })
+					
+		elif flow_dir == -1:
+			# --- BACKWARD SIMULATION (end_idx -> 0) ---
+			# Eject at start (0)
+			var start_pt = path[0]
+			var start_elems = p.elements[0]
+			var next_start_elems = []
+			var start_conn = _find_connected_cannon(start_pt)
+			for elem in start_elems:
 				if not start_conn.is_empty():
 					var c = start_conn["cannon"]
 					if c.get("loaded_material", 0) == 0:
@@ -15982,45 +16335,187 @@ func _simulate_pipes(delta: float):
 						_set_cell(empty_pos.x, empty_pos.y, elem.mat)
 					else:
 						next_start_elems.append(elem)
-			else:
-				next_start_elems.append(elem)
-		p.elements[0] = next_start_elems
-		
-		# 2. Flow propagation
-		for i in range(L - 2, -1, -1):
-			var cur_elems = p.elements[i]
-			var next_cur = []
-			for elem in cur_elems:
-				if elem.dir == 1 and p.elements[i+1].size() < 4:
-					p.elements[i+1].append(elem)
-				else:
-					next_cur.append(elem)
-			p.elements[i] = next_cur
+			p.elements[0] = next_start_elems
 			
-		for i in range(1, L):
-			var cur_elems = p.elements[i]
-			var next_cur = []
-			for elem in cur_elems:
-				if elem.dir == -1 and p.elements[i-1].size() < 4:
-					p.elements[i-1].append(elem)
-				else:
-					next_cur.append(elem)
-			p.elements[i] = next_cur
-			
-		# 3. Suck in absorbable elements (liquids, powders, sand, etc.) through openings
-		if p.elements[0].size() < 4:
-			var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, 0)
-			if absorb_pos.x != -1:
-				var mat = _get_cell(absorb_pos.x, absorb_pos.y)
-				_set_cell(absorb_pos.x, absorb_pos.y, 0)
-				p.elements[0].append({ "mat": mat, "dir": 1 })
+			# Propagate backward
+			for i in range(1, L):
+				var cur_elems = p.elements[i]
+				var next_cur = []
+				for elem in cur_elems:
+					if p.elements[i-1].size() < 4:
+						p.elements[i-1].append(elem)
+					else:
+						next_cur.append(elem)
+				p.elements[i] = next_cur
 				
-		if p.elements[end_idx].size() < 4:
-			var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
-			if absorb_pos.x != -1:
-				var mat = _get_cell(absorb_pos.x, absorb_pos.y)
-				_set_cell(absorb_pos.x, absorb_pos.y, 0)
-				p.elements[end_idx].append({ "mat": mat, "dir": -1 })
-				
-		# 4. Draw visual representation
+			# Absorb at end
+			if p.elements[end_idx].size() < 4:
+				var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
+				if absorb_pos.x != -1:
+					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+					_set_cell(absorb_pos.x, absorb_pos.y, 0)
+					p.elements[end_idx].append({ "mat": mat, "dir": -1 })
+					
 		_update_pipe_visuals(p)
+
+	for p in active_pipes_x2:
+		var path = p.get("path", [])
+		var L = path.size()
+		if L == 0: continue
+		var end_idx = L - 1
+		
+		# --- Channel A Flow ---
+		var total_elems_a = 0
+		for block in p.elements:
+			total_elems_a += block["a"].size()
+		if total_elems_a == 0:
+			p["flow_dir_a"] = 0
+			
+		if p.get("flow_dir_a", 0) == 0:
+			var absorb_pos_0 = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0, "A")
+			if absorb_pos_0.x != -1:
+				p["flow_dir_a"] = 1
+			else:
+				var absorb_pos_end = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx, "A")
+				if absorb_pos_end.x != -1:
+					p["flow_dir_a"] = -1
+					
+		var flow_dir_a = p.get("flow_dir_a", 0)
+		if flow_dir_a == 1:
+			# Channel A Forward
+			var end_block = p.elements[end_idx]
+			var end_elems_a = end_block["a"]
+			var next_end_elems_a = []
+			for elem in end_elems_a:
+				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, end_idx, "A")
+				if empty_pos.x != -1:
+					_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+				else:
+					next_end_elems_a.append(elem)
+			end_block["a"] = next_end_elems_a
+			
+			for i in range(L - 2, -1, -1):
+				var cur_elems = p.elements[i]["a"]
+				var next_cur = []
+				for elem in cur_elems:
+					if p.elements[i+1]["a"].size() < 4:
+						p.elements[i+1]["a"].append(elem)
+					else:
+						next_cur.append(elem)
+				p.elements[i]["a"] = next_cur
+				
+			if p.elements[0]["a"].size() < 4:
+				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0, "A")
+				if absorb_pos.x != -1:
+					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+					_set_cell(absorb_pos.x, absorb_pos.y, 0)
+					p.elements[0]["a"].append({ "mat": mat, "dir": 1 })
+					
+		elif flow_dir_a == -1:
+			# Channel A Backward
+			var start_block = p.elements[0]
+			var start_elems_a = start_block["a"]
+			var next_start_elems_a = []
+			for elem in start_elems_a:
+				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, 0, "A")
+				if empty_pos.x != -1:
+					_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+				else:
+					next_start_elems_a.append(elem)
+			start_block["a"] = next_start_elems_a
+			
+			for i in range(1, L):
+				var cur_elems = p.elements[i]["a"]
+				var next_cur = []
+				for elem in cur_elems:
+					if p.elements[i-1]["a"].size() < 4:
+						p.elements[i-1]["a"].append(elem)
+					else:
+						next_cur.append(elem)
+				p.elements[i]["a"] = next_cur
+				
+			if p.elements[end_idx]["a"].size() < 4:
+				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx, "A")
+				if absorb_pos.x != -1:
+					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+					_set_cell(absorb_pos.x, absorb_pos.y, 0)
+					p.elements[end_idx]["a"].append({ "mat": mat, "dir": -1 })
+					
+		# --- Channel B Flow ---
+		var total_elems_b = 0
+		for block in p.elements:
+			total_elems_b += block["b"].size()
+		if total_elems_b == 0:
+			p["flow_dir_b"] = 0
+			
+		if p.get("flow_dir_b", 0) == 0:
+			var absorb_pos_0 = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0, "B")
+			if absorb_pos_0.x != -1:
+				p["flow_dir_b"] = 1
+			else:
+				var absorb_pos_end = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx, "B")
+				if absorb_pos_end.x != -1:
+					p["flow_dir_b"] = -1
+					
+		var flow_dir_b = p.get("flow_dir_b", 0)
+		if flow_dir_b == 1:
+			# Channel B Forward
+			var end_block = p.elements[end_idx]
+			var end_elems_b = end_block["b"]
+			var next_end_elems_b = []
+			for elem in end_elems_b:
+				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, end_idx, "B")
+				if empty_pos.x != -1:
+					_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+				else:
+					next_end_elems_b.append(elem)
+			end_block["b"] = next_end_elems_b
+			
+			for i in range(L - 2, -1, -1):
+				var cur_elems = p.elements[i]["b"]
+				var next_cur = []
+				for elem in cur_elems:
+					if p.elements[i+1]["b"].size() < 4:
+						p.elements[i+1]["b"].append(elem)
+					else:
+						next_cur.append(elem)
+				p.elements[i]["b"] = next_cur
+				
+			if p.elements[0]["b"].size() < 4:
+				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0, "B")
+				if absorb_pos.x != -1:
+					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+					_set_cell(absorb_pos.x, absorb_pos.y, 0)
+					p.elements[0]["b"].append({ "mat": mat, "dir": 1 })
+					
+		elif flow_dir_b == -1:
+			# Channel B Backward
+			var start_block = p.elements[0]
+			var start_elems_b = start_block["b"]
+			var next_start_elems_b = []
+			for elem in start_elems_b:
+				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, 0, "B")
+				if empty_pos.x != -1:
+					_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+				else:
+					next_start_elems_b.append(elem)
+			start_block["b"] = next_start_elems_b
+			
+			for i in range(1, L):
+				var cur_elems = p.elements[i]["b"]
+				var next_cur = []
+				for elem in cur_elems:
+					if p.elements[i-1]["b"].size() < 4:
+						p.elements[i-1]["b"].append(elem)
+					else:
+						next_cur.append(elem)
+				p.elements[i]["b"] = next_cur
+				
+			if p.elements[end_idx]["b"].size() < 4:
+				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx, "B")
+				if absorb_pos.x != -1:
+					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+					_set_cell(absorb_pos.x, absorb_pos.y, 0)
+					p.elements[end_idx]["b"].append({ "mat": mat, "dir": -1 })
+					
+		_update_pipe_x2_visuals(p)
