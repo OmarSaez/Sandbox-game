@@ -53,6 +53,8 @@ func _on_request_completed(result: int, response_code: int, headers: PackedStrin
 	var latest_version = str(data.get("latest_version", "1.2.0"))
 	var min_version = str(data.get("min_version", "1.2.0"))
 	var update_url = str(data.get("update_url", DEFAULT_PLAY_STORE_URL))
+	if update_url.contains("dbox.elexstudio"):
+		update_url = update_url.replace("dbox.elexstudio", "com.sandbox.elexstudio")
 	
 	# Detectar idioma para el registro de cambios (changelog)
 	var current_lang = TranslationServer.get_locale().split("_")[0]
@@ -102,7 +104,17 @@ func _is_version_older(current: String, target: String) -> bool:
 	return false
 
 # Crea e instancia la UI del aviso de actualización programáticamente
+func _get_ui_scale() -> float:
+	var base_scale = 1.7
+	if is_inside_tree():
+		var vp_size = get_viewport().get_visible_rect().size
+		if vp_size.x > vp_size.y:
+			return base_scale * 1.30
+	return base_scale
+
+# Crea e instancia la UI del aviso de actualización programáticamente
 func _show_update_modal(changelog_text: String, update_url: String, is_critical: bool, current_version: String, latest_version: String, min_version: String) -> void:
+	var s = _get_ui_scale()
 	var canvas_layer = CanvasLayer.new()
 	canvas_layer.layer = 120 # Capa alta por encima de la UI del juego
 	add_child(canvas_layer)
@@ -121,22 +133,21 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	
 	# 3. Panel de Contenido Principal
 	var panel = PanelContainer.new()
-	# Adaptar tamaño según plataforma
-	var panel_width = 800 if not OS.has_feature("mobile") else 950
-	var panel_height = 450 if not OS.has_feature("mobile") else 520
+	var panel_width = 460 * s
+	var panel_height = 280 * s
 	panel.custom_minimum_size = Vector2(panel_width, panel_height)
 	
 	# Estilo visual moderno y "premium" (Dark Mode con bordes redondeados y sombra)
 	var stylebox = StyleBoxFlat.new()
 	stylebox.bg_color = Color(0.09, 0.1, 0.13, 1.0) # Slate Grey profundo
-	stylebox.corner_radius_top_left = 24
-	stylebox.corner_radius_top_right = 24
-	stylebox.corner_radius_bottom_left = 24
-	stylebox.corner_radius_bottom_right = 24
-	stylebox.border_width_left = 3
-	stylebox.border_width_top = 3
-	stylebox.border_width_right = 3
-	stylebox.border_width_bottom = 3
+	stylebox.corner_radius_top_left = 24 * s
+	stylebox.corner_radius_top_right = 24 * s
+	stylebox.corner_radius_bottom_left = 24 * s
+	stylebox.corner_radius_bottom_right = 24 * s
+	stylebox.border_width_left = int(3 * s)
+	stylebox.border_width_top = int(3 * s)
+	stylebox.border_width_right = int(3 * s)
+	stylebox.border_width_bottom = int(3 * s)
 	
 	# Borde sutil azul/morado en obligatorias, gris en opcionales
 	if is_critical:
@@ -145,22 +156,22 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 		stylebox.border_color = Color(0.22, 0.25, 0.32, 0.8)
 		
 	stylebox.shadow_color = Color(0, 0, 0, 0.5)
-	stylebox.shadow_size = 20
-	stylebox.shadow_offset = Vector2(0, 10)
+	stylebox.shadow_size = int(20 * s)
+	stylebox.shadow_offset = Vector2(0, int(10 * s))
 	panel.add_theme_stylebox_override("panel", stylebox)
 	center.add_child(panel)
 	
 	# 4. Márgenes Internos
 	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 32)
-	margin.add_theme_constant_override("margin_top", 32)
-	margin.add_theme_constant_override("margin_right", 32)
-	margin.add_theme_constant_override("margin_bottom", 32)
+	margin.add_theme_constant_override("margin_left", int(30 * s))
+	margin.add_theme_constant_override("margin_top", int(30 * s))
+	margin.add_theme_constant_override("margin_right", int(30 * s))
+	margin.add_theme_constant_override("margin_bottom", int(30 * s))
 	panel.add_child(margin)
 	
 	# 5. Caja Vertical de Elementos
 	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 24)
+	vbox.add_theme_constant_override("separation", int(18 * s))
 	margin.add_child(vbox)
 	
 	# 6. Título del Aviso
@@ -170,7 +181,7 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	else:
 		title_label.text = "Actualización Disponible" if TranslationServer.get_locale().split("_")[0] == "es" else "Update Available"
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_label.add_theme_font_size_override("font_size", 36)
+	title_label.add_theme_font_size_override("font_size", int(26 * s))
 	title_label.add_theme_color_override("font_color", Color(0.95, 0.96, 1.0))
 	vbox.add_child(title_label)
 	
@@ -179,7 +190,7 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	desc_label.text = changelog_text
 	desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	desc_label.add_theme_font_size_override("font_size", 24)
+	desc_label.add_theme_font_size_override("font_size", int(18 * s))
 	desc_label.add_theme_color_override("font_color", Color(0.72, 0.75, 0.82))
 	vbox.add_child(desc_label)
 	
@@ -198,23 +209,23 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	var ver_label = Label.new()
 	ver_label.text = ver_text
 	ver_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ver_label.add_theme_font_size_override("font_size", 20)
+	ver_label.add_theme_font_size_override("font_size", int(15 * s))
 	ver_label.add_theme_color_override("font_color", Color(0.45, 0.65, 0.95))
 	vbox.add_child(ver_label)
 	
 	# 8. Contenedor de Botones
 	var buttons_box = HBoxContainer.new()
 	buttons_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	buttons_box.add_theme_constant_override("separation", 24)
+	buttons_box.add_theme_constant_override("separation", int(20 * s))
 	vbox.add_child(buttons_box)
 	
 	# Estilos para botón "Luego" (Gris neutro)
 	var style_later_normal = StyleBoxFlat.new()
 	style_later_normal.bg_color = Color(0.18, 0.2, 0.24, 1.0)
-	style_later_normal.corner_radius_top_left = 12
-	style_later_normal.corner_radius_top_right = 12
-	style_later_normal.corner_radius_bottom_left = 12
-	style_later_normal.corner_radius_bottom_right = 12
+	style_later_normal.corner_radius_top_left = int(12 * s)
+	style_later_normal.corner_radius_top_right = int(12 * s)
+	style_later_normal.corner_radius_bottom_left = int(12 * s)
+	style_later_normal.corner_radius_bottom_right = int(12 * s)
 	
 	var style_later_hover = style_later_normal.duplicate()
 	style_later_hover.bg_color = Color(0.24, 0.27, 0.32, 1.0)
@@ -225,10 +236,10 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	# Estilos para botón "Actualizar" (Azul Premium)
 	var style_update_normal = StyleBoxFlat.new()
 	style_update_normal.bg_color = Color(0.2, 0.45, 0.85, 1.0)
-	style_update_normal.corner_radius_top_left = 12
-	style_update_normal.corner_radius_top_right = 12
-	style_update_normal.corner_radius_bottom_left = 12
-	style_update_normal.corner_radius_bottom_right = 12
+	style_update_normal.corner_radius_top_left = int(12 * s)
+	style_update_normal.corner_radius_top_right = int(12 * s)
+	style_update_normal.corner_radius_bottom_left = int(12 * s)
+	style_update_normal.corner_radius_bottom_right = int(12 * s)
 	
 	var style_update_hover = style_update_normal.duplicate()
 	style_update_hover.bg_color = Color(0.25, 0.55, 0.95, 1.0)
@@ -240,8 +251,8 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	if not is_critical:
 		var later_btn = Button.new()
 		later_btn.text = "Luego" if TranslationServer.get_locale().split("_")[0] == "es" else "Later"
-		later_btn.custom_minimum_size = Vector2(200, 64)
-		later_btn.add_theme_font_size_override("font_size", 22)
+		later_btn.custom_minimum_size = Vector2(140 * s, 50 * s)
+		later_btn.add_theme_font_size_override("font_size", int(18 * s))
 		later_btn.add_theme_stylebox_override("normal", style_later_normal)
 		later_btn.add_theme_stylebox_override("hover", style_later_hover)
 		later_btn.add_theme_stylebox_override("pressed", style_later_pressed)
@@ -253,8 +264,8 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	# Botón "Actualizar" (Siempre visible)
 	var update_btn = Button.new()
 	update_btn.text = "Actualizar" if TranslationServer.get_locale().split("_")[0] == "es" else "Update"
-	update_btn.custom_minimum_size = Vector2(220, 64)
-	update_btn.add_theme_font_size_override("font_size", 22)
+	update_btn.custom_minimum_size = Vector2(150 * s, 50 * s)
+	update_btn.add_theme_font_size_override("font_size", int(18 * s))
 	update_btn.add_theme_stylebox_override("normal", style_update_normal)
 	update_btn.add_theme_stylebox_override("hover", style_update_hover)
 	update_btn.add_theme_stylebox_override("pressed", style_update_pressed)
