@@ -8883,6 +8883,9 @@ func _spawn_explosion_npc(x, y, team = 0):
 
 
 func _draw_npc_pixels(npc, override_mat = -1):
+	if override_mat != 0 and (npc.get("pipe_inside_id", -1) != -1 or npc.get("is_in_pipe", false)):
+		return
+		
 	var is_dead = npc.hp <= 0; var is_flashing = npc.hit_flash > 0
 	var is_lying = npc.get("is_lying", false)
 	
@@ -9056,6 +9059,7 @@ func _update_npc_spatial_hash():
 	for cell in npc_spatial_grid:
 		cell.clear()
 	for npc in active_npcs:
+		if npc.get("pipe_inside_id", -1) != -1 or npc.get("is_in_pipe", false): continue
 		var cx = clampi(int(npc.pos.x / SPATIAL_CELL_SIZE), 0, spatial_grid_w - 1)
 		var cy = clampi(int(npc.pos.y / SPATIAL_CELL_SIZE), 0, spatial_grid_h - 1)
 		npc_spatial_grid[cy * spatial_grid_w + cx].append(npc)
@@ -9108,6 +9112,11 @@ func _process_npcs(delta):
 	for i in range(active_npcs.size()):
 		var npc = active_npcs[i]
 		
+		if npc.get("pipe_inside_id", -1) != -1 or npc.get("is_in_pipe", false):
+			if npc.invul_timer > 0:
+				npc.invul_timer = max(0.0, npc.invul_timer - 0.05)
+			continue
+			
 		# Sanitize NaN or Inf states to prevent stuck/immortal ghost NPCs
 		if is_nan(npc.hp) or is_nan(npc.pos.x) or is_nan(npc.pos.y):
 			npc.hp = 0.0
@@ -11158,6 +11167,7 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 	var center = Vector2i(x, y)
 	var nearby = _get_nearby_npcs(x, y, radius + 5)
 	for npc in nearby:
+		if npc.invul_timer > 0: continue
 		var dist = Vector2(npc.pos).distance_to(Vector2(center))
 		if dist < radius:
 			var ratio = 1.0 - (dist / radius)
@@ -16162,6 +16172,181 @@ func _find_pipe_x2_endpoint_opening_side(p, endpoint_idx: int) -> String:
 	if nb.y < pt.y: return "bottom"
 	return "horizontal"
 
+# Helper: Find NPC by ID
+func _find_npc_by_id(npc_id: int) -> Variant:
+	for npc in active_npcs:
+		if npc.id == npc_id:
+			return npc
+	return null
+
+# Helper: Find NPC at pipe endpoint opening
+func _find_npc_at_pipe_endpoint(p, endpoint_idx: int, is_x2: bool) -> Variant:
+	var path = p.path
+	var pt = path[endpoint_idx]
+	var gx = pt.x
+	var gy = pt.y
+	var side = _find_pipe_endpoint_opening_side(p, endpoint_idx)
+	
+	var min_x = 0
+	var max_x = 0
+	var min_y = 0
+	var max_y = 0
+	
+	var block_size = 8 if is_x2 else 4
+	
+	if side == "left":
+		min_x = gx - 2
+		max_x = gx
+		min_y = gy
+		max_y = gy + block_size - 1
+	elif side == "right":
+		min_x = gx + block_size
+		max_x = gx + block_size + 2
+		min_y = gy
+		max_y = gy + block_size - 1
+	elif side == "top" or side == "horizontal":
+		min_x = gx
+		max_x = gx + block_size - 1
+		min_y = gy - 2
+		max_y = gy
+	elif side == "bottom":
+		min_x = gx
+		max_x = gx + block_size - 1
+		min_y = gy + block_size
+		max_y = gy + block_size + 2
+	else:
+		return null
+		
+	for npc in active_npcs:
+		if npc.hp <= 0: continue
+		if npc.get("is_in_pipe", false): continue
+		
+		var w = npc.get("width", 2)
+		var h = npc.get("height", 6)
+		if npc.get("is_lying", false):
+			w = npc.get("height", 6)
+			h = npc.get("width", 2)
+			
+		var overlap_x = not (npc.pos.x + w - 1 < min_x or npc.pos.x > max_x)
+		var overlap_y = not (npc.pos.y + h - 1 < min_y or npc.pos.y > max_y)
+		if overlap_x and overlap_y:
+			return npc
+	return null
+
+# Helper: Try to absorb NPC at pipe endpoint
+func _try_absorb_npc_at_endpoint(p, endpoint_idx: int, dir: int, is_x2: bool) -> bool:
+	var npc: Variant = _find_npc_at_pipe_endpoint(p, endpoint_idx, is_x2)
+	if npc != null:
+		var block_size = 8 if is_x2 else 4
+		if _get_lut_rand() < 0.2:
+			# SHREDDER! (20% chance)
+			_draw_npc_pixels(npc, 0)
+			_play_action_sound("volcan_burst")
+			
+			var debris = [11, 14, 13] # Lava (Red), Carbon (Dark), Acid (Green)
+			for mat in debris:
+				if is_x2:
+					if p.elements[endpoint_idx].size() < 8:
+						p.elements[endpoint_idx].append({ "mat": mat, "dir": dir, "lane": 2 })
+				else:
+					if p.elements[endpoint_idx].size() < 4:
+						p.elements[endpoint_idx].append({ "mat": mat, "dir": dir })
+			npc.hp = 0.0
+			_set_npc_emoji(npc, "💀", 1.5)
+			# Drop some blood/debris on the grid around the entrance
+			var pt = p.path[endpoint_idx]
+			for ox in range(block_size):
+				for oy in range(block_size):
+					if _get_lut_rand() < 0.3:
+						var tx = pt.x + ox
+						var ty = pt.y + oy
+						if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+							var cell_mat = _get_cell(tx, ty)
+							if cell_mat == 0 or cell_mat == 96 or cell_mat == 97:
+								_set_cell(tx, ty, 11 if _get_lut_rand() < 0.5 else 13)
+		else:
+			# TRAVEL! (80% chance)
+			_draw_npc_pixels(npc, 0)
+			npc["is_in_pipe"] = true
+			npc["pipe_ref"] = p
+			_set_npc_emoji(npc, "😮", 1.0)
+			_play_action_sound("medic_heal")
+			if is_x2:
+				p.elements[endpoint_idx].append({ "mat": 0, "dir": dir, "npc_id": npc.id, "lane": 2 })
+			else:
+				p.elements[endpoint_idx].append({ "mat": 0, "dir": dir, "npc_id": npc.id })
+		return true
+	return false
+
+# Helper: Try to eject NPC from pipe
+func _eject_npc_from_pipe(p, endpoint_idx: int, npc_id: int) -> bool:
+	var npc: Variant = _find_npc_by_id(npc_id)
+	if npc == null: return true
+	
+	var path = p.path
+	var pt = path[endpoint_idx]
+	var side = _find_pipe_endpoint_opening_side(p, endpoint_idx)
+	
+	var ej_x = pt.x
+	var ej_y = pt.y
+	
+	var is_x2 = p.elements[0].size() >= 8 if p.elements.size() > 0 else false
+	var block_size = 8 if is_x2 else 4
+	
+	if side == "left":
+		ej_x = pt.x - 2
+		ej_y = pt.y + int(block_size / 2)
+	elif side == "right":
+		ej_x = pt.x + block_size
+		ej_y = pt.y + int(block_size / 2)
+	elif side == "top" or side == "horizontal":
+		ej_x = pt.x + int(block_size / 2)
+		ej_y = pt.y - 6
+	elif side == "bottom":
+		ej_x = pt.x + int(block_size / 2)
+		ej_y = pt.y + block_size
+		
+	var found_spot = false
+	var fit_x = ej_x
+	var fit_y = ej_y
+	
+	for dx in [0, -1, 1, -2, 2]:
+		for dy in [0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5]:
+			var tx = ej_x + dx
+			var ty = ej_y + dy
+			if _can_npc_fit(tx, ty, npc):
+				fit_x = tx
+				fit_y = ty
+				found_spot = true
+				break
+		if found_spot: break
+		
+	if found_spot:
+		npc["is_in_pipe"] = false
+		npc.pos = Vector2i(fit_x, fit_y)
+		
+		npc.vx = 0.0
+		npc.vy = 0.0
+		if side == "left":
+			npc.vx = -12.0
+			npc.vy = -4.0
+		elif side == "right":
+			npc.vx = 12.0
+			npc.vy = -4.0
+		elif side == "top" or side == "horizontal":
+			npc.vx = 0.0
+			npc.vy = -12.0
+		elif side == "bottom":
+			npc.vx = 0.0
+			npc.vy = 12.0
+			
+		_draw_npc_pixels(npc)
+		_set_npc_emoji(npc, "🤪", 1.5)
+		_play_action_sound("mage_shoot")
+		return true
+		
+	return false
+
 func _find_pipe_endpoint_opening_side(p, endpoint_idx: int) -> String:
 	var path = p.path
 	var L = path.size()
@@ -16381,13 +16566,21 @@ func _simulate_pipes(delta: float):
 				p["empty_ticks"] = 0
 				
 			if p.get("flow_dir", 0) == 0:
-				var absorb_pos_0 = _find_pipe_absorbable_cell_at_endpoint(p, 0)
-				if absorb_pos_0.x != -1:
+				var npc_0 = _find_npc_at_pipe_endpoint(p, 0, false)
+				if npc_0 != null:
 					p["flow_dir"] = 1
 				else:
-					var absorb_pos_end = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
-					if absorb_pos_end.x != -1:
+					var npc_end = _find_npc_at_pipe_endpoint(p, end_idx, false)
+					if npc_end != null:
 						p["flow_dir"] = -1
+					else:
+						var absorb_pos_0 = _find_pipe_absorbable_cell_at_endpoint(p, 0)
+						if absorb_pos_0.x != -1:
+							p["flow_dir"] = 1
+						else:
+							var absorb_pos_end = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
+							if absorb_pos_end.x != -1:
+								p["flow_dir"] = -1
 						
 			var flow_dir = p.get("flow_dir", 0)
 			if flow_dir == 1:
@@ -16398,7 +16591,10 @@ func _simulate_pipes(delta: float):
 				var next_end_elems = []
 				var end_conn = _find_connected_cannon(end_pt)
 				for elem in end_elems:
-					if not end_conn.is_empty():
+					if elem.has("npc_id"):
+						if not _eject_npc_from_pipe(p, end_idx, elem.npc_id):
+							next_end_elems.append(elem)
+					elif not end_conn.is_empty():
 						var c = end_conn["cannon"]
 						if c.get("loaded_material", 0) == 0:
 							c["loaded_material"] = elem.mat
@@ -16425,11 +16621,12 @@ func _simulate_pipes(delta: float):
 					
 				# Absorb at start (0)
 				if p.elements[0].size() < 4:
-					var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, 0)
-					if absorb_pos.x != -1:
-						var mat = _get_cell(absorb_pos.x, absorb_pos.y)
-						_set_cell(absorb_pos.x, absorb_pos.y, 0)
-						p.elements[0].append({ "mat": mat, "dir": 1 })
+					if not _try_absorb_npc_at_endpoint(p, 0, 1, false):
+						var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, 0)
+						if absorb_pos.x != -1:
+							var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+							_set_cell(absorb_pos.x, absorb_pos.y, 0)
+							p.elements[0].append({ "mat": mat, "dir": 1 })
 						
 			elif flow_dir == -1:
 				# --- BACKWARD SIMULATION (end_idx -> 0) ---
@@ -16439,7 +16636,10 @@ func _simulate_pipes(delta: float):
 				var next_start_elems = []
 				var start_conn = _find_connected_cannon(start_pt)
 				for elem in start_elems:
-					if not start_conn.is_empty():
+					if elem.has("npc_id"):
+						if not _eject_npc_from_pipe(p, 0, elem.npc_id):
+							next_start_elems.append(elem)
+					elif not start_conn.is_empty():
 						var c = start_conn["cannon"]
 						if c.get("loaded_material", 0) == 0:
 							c["loaded_material"] = elem.mat
@@ -16466,11 +16666,12 @@ func _simulate_pipes(delta: float):
 					
 				# Absorb at end
 				if p.elements[end_idx].size() < 4:
-					var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
-					if absorb_pos.x != -1:
-						var mat = _get_cell(absorb_pos.x, absorb_pos.y)
-						_set_cell(absorb_pos.x, absorb_pos.y, 0)
-						p.elements[end_idx].append({ "mat": mat, "dir": -1 })
+					if not _try_absorb_npc_at_endpoint(p, end_idx, -1, false):
+						var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
+						if absorb_pos.x != -1:
+							var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+							_set_cell(absorb_pos.x, absorb_pos.y, 0)
+							p.elements[end_idx].append({ "mat": mat, "dir": -1 })
 
 		for p in active_pipes_x2:
 			var path = p.get("path", [])
@@ -16490,13 +16691,21 @@ func _simulate_pipes(delta: float):
 				p["empty_ticks"] = 0
 				
 			if p.get("flow_dir", 0) == 0:
-				var absorb_pos_0 = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0)
-				if absorb_pos_0.x != -1:
+				var npc_0 = _find_npc_at_pipe_endpoint(p, 0, true)
+				if npc_0 != null:
 					p["flow_dir"] = 1
 				else:
-					var absorb_pos_end = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx)
-					if absorb_pos_end.x != -1:
+					var npc_end = _find_npc_at_pipe_endpoint(p, end_idx, true)
+					if npc_end != null:
 						p["flow_dir"] = -1
+					else:
+						var absorb_pos_0 = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0)
+						if absorb_pos_0.x != -1:
+							p["flow_dir"] = 1
+						else:
+							var absorb_pos_end = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx)
+							if absorb_pos_end.x != -1:
+								p["flow_dir"] = -1
 						
 			var flow_dir = p.get("flow_dir", 0)
 			if flow_dir == 1:
@@ -16505,12 +16714,16 @@ func _simulate_pipes(delta: float):
 				var end_elems = p.elements[end_idx]
 				var next_end_elems = []
 				for elem in end_elems:
-					var preferred_lane = elem.get("lane", 2)
-					var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, end_idx, preferred_lane)
-					if empty_pos.x != -1:
-						_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+					if elem.has("npc_id"):
+						if not _eject_npc_from_pipe(p, end_idx, elem.npc_id):
+							next_end_elems.append(elem)
 					else:
-						next_end_elems.append(elem)
+						var preferred_lane = elem.get("lane", 2)
+						var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, end_idx, preferred_lane)
+						if empty_pos.x != -1:
+							_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+						else:
+							next_end_elems.append(elem)
 				p.elements[end_idx] = next_end_elems
 				
 				# Propagate forward
@@ -16526,6 +16739,8 @@ func _simulate_pipes(delta: float):
 					
 				# Absorb at start (0)
 				while p.elements[0].size() < 8:
+					if _try_absorb_npc_at_endpoint(p, 0, 1, true):
+						continue
 					var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0)
 					if absorb_pos.x != -1:
 						var mat = _get_cell(absorb_pos.x, absorb_pos.y)
@@ -16543,12 +16758,16 @@ func _simulate_pipes(delta: float):
 				var start_elems = p.elements[0]
 				var next_start_elems = []
 				for elem in start_elems:
-					var preferred_lane = elem.get("lane", 2)
-					var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, 0, preferred_lane)
-					if empty_pos.x != -1:
-						_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+					if elem.has("npc_id"):
+						if not _eject_npc_from_pipe(p, 0, elem.npc_id):
+							next_start_elems.append(elem)
 					else:
-						next_start_elems.append(elem)
+						var preferred_lane = elem.get("lane", 2)
+						var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, 0, preferred_lane)
+						if empty_pos.x != -1:
+							_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+						else:
+							next_start_elems.append(elem)
 				p.elements[0] = next_start_elems
 				
 				# Propagate backward
@@ -16564,6 +16783,8 @@ func _simulate_pipes(delta: float):
 					
 				# Absorb at end
 				while p.elements[end_idx].size() < 8:
+					if _try_absorb_npc_at_endpoint(p, end_idx, -1, true):
+						continue
 					var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx)
 					if absorb_pos.x != -1:
 						var mat = _get_cell(absorb_pos.x, absorb_pos.y)
