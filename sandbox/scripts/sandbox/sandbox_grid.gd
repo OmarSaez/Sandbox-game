@@ -510,6 +510,11 @@ var selected_circuit_tool: String = ""
 var active_logic_gates: Array = []
 var active_pistons: Array = []
 var selected_piston_length: int = 10
+var active_pipes: Array = []
+var prev_pipe_gx: int = -1
+var prev_pipe_gy: int = -1
+var active_cannons: Array = []
+var current_drawing_pipe_path: Array = []
 var active_battery_indices = {} # Set of cell indices containing battery blocks
 var active_electricity_source_indices = {} # Set of cell indices containing electricity
 var door_registry = {} # Set of cell indices where NPC Door (91) is placed
@@ -1179,6 +1184,9 @@ func _ready():
 	_register_material(92, Color("#00F0FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Phase Block
 	_register_material(93, Color("#466282"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR) # Piston Base
 	_register_material(94, Color("#8CAEC4"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR) # Piston Head/Shaft
+	_register_material(95, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base
+	_register_material(96, Color("#0265A6"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Pipe
+	
 	
 	# --- BIOLOGICALS (21-24) ---
 	# 21: Pasto
@@ -5661,7 +5669,53 @@ func _process(delta):
 			var gx = int(m_pos.x / grid_scale)
 			var gy = int(m_pos.y / grid_scale)
 			
-			if is_paint_tool_active:
+			var is_mechanism = (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92 or selected_material == 93 or selected_material == 95 or selected_material == 96)
+			
+			if is_mechanism:
+				# snap exactly to grid cells boundaries
+				var snap = 4
+				gx = int(floor(float(gx) / snap) * snap)
+				gy = int(floor(float(gy) / snap) * snap)
+				
+				if not mouse_was_pressed:
+					prev_snapped_gx = gx
+					prev_snapped_gy = gy
+					if selected_material == 93:
+						_place_piston(gx, gy)
+					elif selected_material == 95:
+						_place_cannon(gx, gy)
+					elif selected_material == 96:
+						_place_pipe(gx, gy)
+					else:
+						_place_circuit_block(gx, gy, selected_material)
+				else:
+					# Draw continuous cell staircase from prev_snapped to current gx, gy
+					if gx != prev_snapped_gx or gy != prev_snapped_gy:
+						var cx = prev_snapped_gx / snap
+						var cy = prev_snapped_gy / snap
+						var target_cx = gx / snap
+						var target_cy = gy / snap
+						
+						while cx != target_cx or cy != target_cy:
+							var dcx = target_cx - cx
+							var dcy = target_cy - cy
+							if abs(dcx) >= abs(dcy):
+								cx += 1 if dcx > 0 else -1
+							else:
+								cy += 1 if dcy > 0 else -1
+							if selected_material == 93:
+								_place_piston(cx * snap, cy * snap)
+							elif selected_material == 95:
+								_place_cannon(cx * snap, cy * snap)
+							elif selected_material == 96:
+								_place_pipe(cx * snap, cy * snap)
+							else:
+								_place_circuit_block(cx * snap, cy * snap, selected_material)
+						
+						prev_snapped_gx = gx
+						prev_snapped_gy = gy
+				_manage_brush_sound(-1)
+			elif is_paint_tool_active:
 				if not mouse_was_pressed and is_instance_valid(paint_panel) and paint_panel.visible:
 					paint_panel.visible = false
 				
@@ -5709,42 +5763,6 @@ func _process(delta):
 						_draw_logic_gate_shape(gate_pos, 0, false, selected_circuit_tool)
 						_play_action_sound("ui_click")
 						_check_logic_gate_tutorial(gate_pos)
-				_manage_brush_sound(-1)
-			elif is_mechanism_mode_active and (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92 or selected_material == 93):
-				# snap exactly to grid cells boundaries
-				var snap = 4
-				gx = int(floor(float(gx) / snap) * snap)
-				gy = int(floor(float(gy) / snap) * snap)
-				
-				if not mouse_was_pressed:
-					prev_snapped_gx = gx
-					prev_snapped_gy = gy
-					if selected_material == 93:
-						_place_piston(gx, gy)
-					else:
-						_place_circuit_block(gx, gy, selected_material)
-				else:
-					# Draw continuous cell staircase from prev_snapped to current gx, gy
-					if gx != prev_snapped_gx or gy != prev_snapped_gy:
-						var cx = prev_snapped_gx / snap
-						var cy = prev_snapped_gy / snap
-						var target_cx = gx / snap
-						var target_cy = gy / snap
-						
-						while cx != target_cx or cy != target_cy:
-							var dcx = target_cx - cx
-							var dcy = target_cy - cy
-							if abs(dcx) >= abs(dcy):
-								cx += 1 if dcx > 0 else -1
-							else:
-								cy += 1 if dcy > 0 else -1
-							if selected_material == 93:
-								_place_piston(cx * snap, cy * snap)
-							else:
-								_place_circuit_block(cx * snap, cy * snap, selected_material)
-						
-						prev_snapped_gx = gx
-						prev_snapped_gy = gy
 				_manage_brush_sound(-1)
 			elif selected_material >= 0 and selected_material < material_tags_raw.size() and (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC):
 				if not mouse_was_pressed:
@@ -5794,6 +5812,8 @@ func _process(delta):
 		_update_npc_doors(delta)
 		_update_phase_blocks()
 		_simulate_pistons()
+		_simulate_cannons(delta)
+		_simulate_pipes(delta)
 		
 		_step_simulation()
 		
@@ -5864,6 +5884,7 @@ func undo_history():
 		tags_array = snapshot.tags.duplicate()
 		chunks_active = snapshot.chunks.duplicate()
 		next_chunks_active = snapshot.next_chunks.duplicate()
+		_reconstruct_sources_from_cells()
 		_update_texture()
 		queue_redraw()
 
@@ -5876,6 +5897,7 @@ func redo_history():
 		tags_array = snapshot.tags.duplicate()
 		chunks_active = snapshot.chunks.duplicate()
 		next_chunks_active = snapshot.next_chunks.duplicate()
+		_reconstruct_sources_from_cells()
 		_update_texture()
 		queue_redraw()
 
@@ -5886,9 +5908,10 @@ func _draw():
 	var s = _get_ui_scale()
 	var g_scale = float(grid_scale)
 	
-	# MUSICAL RHYTHM GRID (Prioridad Alta)
+	# MUSICAL RHYTHM GRID / MECHANISM GRID
 	var music_menu_node = get_parent().get_node_or_null("UI/MusicPanel")
-	if (music_menu_node and music_menu_node.visible) or _is_music_active():
+	var is_mechanism = selected_material == 96 or selected_material == 95 or selected_material == 93 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92
+	if (music_menu_node and music_menu_node.visible) or _is_music_active() or is_mechanism_mode_active or is_mechanism:
 		var grid_col = Color("#4D4D4D") # Muy visible
 		var thickness = 2.0
 		# Vertical lines - Safety margin for virtual/scaled resolutions
@@ -10467,7 +10490,7 @@ func _process_projectiles(delta):
 				_explode(gx, gy, p.get("explosion_radius", 6))
 			elif p.type == "fireball":
 				var converted = false
-				if hit_npc.team != -1 and hit_npc.team != p.team:
+				if p.get("team", -1) >= 0 and hit_npc.team != -1 and hit_npc.team != p.team:
 					if _get_lut_rand() < 0.05:
 						converted = true
 						_convert_to_ally(hit_npc, p.team)
@@ -10586,19 +10609,36 @@ func _process_projectiles(delta):
 	for idx in to_remove: active_projectiles.remove_at(idx)
 
 func _trigger_rock_impact(gx, gy, p):
-	# 1. Destroy cells in a radius of 3
-	var rad = 3
 	var mat = p.get("block_material", 2)
-	var mat_color = mat_colors_1[mat] if mat < mat_colors_1.size() else Color("#717E80")
-	for dy in range(-rad, rad + 1):
-		for dx in range(-rad, rad + 1):
-			if dx*dx + dy*dy <= rad*rad:
-				var tx = gx + dx; var ty = gy + dy
-				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-					var tid = _get_cell(tx, ty)
-					if tid > 0 and tid != 1:
-						_set_cell(tx, ty, 0)
-						
+	var is_liquid = false
+	if mat < material_tags_raw.size():
+		is_liquid = (material_tags_raw[mat] & SandboxMaterial.Tags.LIQUID) != 0
+		
+	if is_liquid:
+		# Splash liquid
+		var rad = 2
+		for dy in range(-rad, rad + 1):
+			for dx in range(-rad, rad + 1):
+				if dx*dx + dy*dy <= rad*rad:
+					var tx = gx + dx; var ty = gy + dy
+					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+						var tid = _get_cell(tx, ty)
+						if tid == 0 or tid == 3: # Empty or fire
+							_set_cell(tx, ty, mat)
+		_play_action_sound("bomb_drop", 0.08, -3.0, 1.5)
+	else:
+		# 1. Destroy cells in a radius of 3
+		var rad = 3
+		var mat_color = mat_colors_1[mat] if mat < mat_colors_1.size() else Color("#717E80")
+		for dy in range(-rad, rad + 1):
+			for dx in range(-rad, rad + 1):
+				if dx*dx + dy*dy <= rad*rad:
+					var tx = gx + dx; var ty = gy + dy
+					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+						var tid = _get_cell(tx, ty)
+						if tid > 0 and tid != 1:
+							_set_cell(tx, ty, 0)
+							
 	# 2. Damage nearby NPCs in a radius of 18
 	var nearby_npcs = _get_nearby_npcs(gx, gy, 18.0)
 	var has_z = _has_active_zombies()
@@ -10620,9 +10660,11 @@ func _trigger_rock_impact(gx, gy, p):
 				other.hit_flash = 5; other.hit_type = "explosive"
 				
 	# 3. Sound and particle effects
-	_play_action_sound("explosion", 0.1)
-	for _j in range(12):
-		_add_spark(float(gx) + _get_lut_rand_range(-1, 2), float(gy) + _get_lut_rand_range(-1, 2), _get_lut_rand_range(-80, 80), _get_lut_rand_range(-100, -30), mat_color if _get_lut_rand() > 0.4 else Color.WHITE, _get_lut_rand_range(0.3, 0.7))
+	if not is_liquid:
+		_play_action_sound("explosion", 0.1)
+		var mat_color = mat_colors_1[mat] if mat < mat_colors_1.size() else Color("#717E80")
+		for _j in range(12):
+			_add_spark(float(gx) + _get_lut_rand_range(-1, 2), float(gy) + _get_lut_rand_range(-1, 2), _get_lut_rand_range(-80, 80), _get_lut_rand_range(-100, -30), mat_color if _get_lut_rand() > 0.4 else Color.WHITE, _get_lut_rand_range(0.3, 0.7))
 
 func _find_closest_enemy(me, radar_range):
 	var closest = null; var min_dist_sq = radar_range * radar_range
@@ -11415,6 +11457,8 @@ func _clear_all():
 	active_npcs.clear()
 	active_logic_gates.clear()
 	active_pistons.clear()
+	active_cannons.clear()
+	active_pipes.clear()
 	active_projectiles.clear()
 	active_metronome_indices.clear()
 	door_registry.clear()
@@ -11811,6 +11855,14 @@ func _load_active_logic_gates(dict: Dictionary):
 					active_logic_gates.append(gate)
 
 func _reconstruct_sources_from_cells(dict: Dictionary = {}):
+	var old_pipe_elements = {}
+	for p in active_pipes:
+		if p.has("path") and p.has("elements"):
+			for i in range(p.path.size()):
+				var coord = p.path[i]
+				if i < p.elements.size():
+					old_pipe_elements[coord] = p.elements[i]
+					
 	active_battery_indices.clear()
 	active_electricity_source_indices.clear()
 	door_registry.clear()
@@ -11818,6 +11870,8 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 	phase_block_registry.clear()
 	active_metronome_indices.clear()
 	active_pistons.clear()
+	active_cannons.clear()
+	active_pipes.clear()
 	
 	# 1. Restore open doors, powered phase blocks, and timers from save dict if present
 	var translate_idx = func(old_idx: int) -> int:
@@ -11866,6 +11920,25 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 			door_registry[idx] = true
 		elif mid == 92:
 			phase_block_registry[idx] = true
+		elif mid == 95:
+			var px = idx % grid_width
+			var py = idx / grid_width
+			var gx = int(floor(float(px) / 4.0) * 4.0)
+			var gy = int(floor(float(py) / 4.0) * 4.0)
+			var already_registered = false
+			for c in active_cannons:
+				if c.pos.x == gx and c.pos.y == gy:
+					already_registered = true
+					break
+			if not already_registered:
+				var variant = (cells[idx] >> 24) & 0xFF
+				var orient = clampi(variant - 1, 0, 3)
+				var new_c = {
+					"pos": Vector2i(gx, gy),
+					"orientation": orient,
+					"cooldown": 0.0
+				}
+				active_cannons.append(new_c)
 		elif mid == 93:
 			var px = idx % grid_width
 			var py = idx / grid_width
@@ -11939,6 +12012,66 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 					"orientation": detected_orient
 				}
 				active_pistons.append(new_p)
+
+	# Reconstruct pipes paths from cells
+	var pipe_blocks = {}
+	for idx_pt in range(cells.size()):
+		if (cells[idx_pt] & 0xFFFF) == 96:
+			var px = idx_pt % grid_width
+			var py = idx_pt / grid_width
+			var gx = int(floor(float(px) / 4.0) * 4.0)
+			var gy = int(floor(float(py) / 4.0) * 4.0)
+			pipe_blocks[Vector2i(gx, gy)] = true
+			
+	var unvisited = pipe_blocks.keys()
+	
+	var get_neighbors = func(pt: Vector2i) -> Array:
+		var npts = []
+		var dirs = [Vector2i(4, 0), Vector2i(-4, 0), Vector2i(0, 4), Vector2i(0, -4)]
+		for d in dirs:
+			var target = pt + d
+			if pipe_blocks.has(target):
+				npts.append(target)
+		return npts
+		
+	while unvisited.size() > 0:
+		var start = unvisited[0]
+		for pt in unvisited:
+			if get_neighbors.call(pt).size() == 1:
+				start = pt
+				break
+				
+		var path = [start]
+		unvisited.erase(start)
+		
+		var current = start
+		while true:
+			var neighbors = get_neighbors.call(current)
+			var next_block = null
+			for n in neighbors:
+				if n in unvisited:
+					next_block = n
+					break
+			if next_block != null:
+				path.append(next_block)
+				unvisited.erase(next_block)
+				current = next_block
+			else:
+				break
+				
+		var elem_list = []
+		for pt in path:
+			if old_pipe_elements.has(pt):
+				elem_list.append(old_pipe_elements[pt])
+			else:
+				elem_list.append([])
+		active_pipes.append({
+			"path": path,
+			"elements": elem_list
+		})
+		
+	for p in active_pipes:
+		_update_pipe_visuals(p)
 
 func _get_gate_pin_cell_indices(gate, pin_type: String) -> Array:
 	var cx = gate["grid_pos"].x
@@ -12116,6 +12249,75 @@ func _place_piston(gx: int, gy: int):
 		"orientation": 0
 	}
 	active_pistons.append(new_p)
+
+func _place_cannon(gx: int, gy: int):
+	if gx < 0 or gx + 3 >= grid_width or gy < 0 or gy + 3 >= grid_height:
+		return
+		
+	# Check if there is an existing cannon at this exact snapping coordinate gx, gy
+	var existing_idx = -1
+	for idx in range(active_cannons.size()):
+		if active_cannons[idx].pos.x == gx and active_cannons[idx].pos.y == gy:
+			existing_idx = idx
+			break
+			
+	if existing_idx != -1:
+		# Rotate existing cannon!
+		var c = active_cannons[existing_idx]
+		c.orientation = (c.orientation + 1) % 4
+		
+		# Set the cells again with the new variant/orientation encoded
+		# variant = orientation + 1 (1: UP, 2: RIGHT, 3: DOWN, 4: LEFT)
+		var val_encoded = 95 | ((c.orientation + 1) << 24)
+		for oy in range(4):
+			for ox in range(4):
+				_set_cell(gx + ox, gy + oy, val_encoded)
+				
+		_play_action_sound("ui_click")
+		return
+		
+	# Remove any overlapping cannons
+	var i = active_cannons.size() - 1
+	while i >= 0:
+		var c = active_cannons[i]
+		if abs(c.pos.x - gx) < 4 and abs(c.pos.y - gy) < 4:
+			for oy in range(4):
+				for ox in range(4):
+					_set_cell(c.pos.x + ox, c.pos.y + oy, 0)
+			active_cannons.remove_at(i)
+		i -= 1
+		
+	# Place new cannon (initial orientation 0: UP)
+	var new_c = {
+		"pos": Vector2i(gx, gy),
+		"orientation": 0,
+		"cooldown": 0.0
+	}
+	active_cannons.append(new_c)
+	var val_encoded = 95 | ((0 + 1) << 24)
+	for oy in range(4):
+		for ox in range(4):
+			_set_cell(gx + ox, gy + oy, val_encoded)
+	_play_action_sound("ui_click")
+
+func _place_pipe(gx: int, gy: int):
+	if gx < 0 or gx + 3 >= grid_width or gy < 0 or gy + 3 >= grid_height:
+		return
+		
+	# Check if we already have a pipe at this snapping coordinate
+	var existing = false
+	for p in active_pipes:
+		if p.has("path") and Vector2i(gx, gy) in p.path:
+			existing = true
+			break
+			
+	if not existing:
+		# Draw the 4x4 block of material ID 96
+		for oy in range(4):
+			for ox in range(4):
+				_set_cell(gx + ox, gy + oy, 96)
+		_reconstruct_sources_from_cells()
+		_play_action_sound("ui_click")
 
 func _is_piston_base_powered(p) -> bool:
 	var px = p.pos.x
@@ -12882,8 +13084,8 @@ func _setup_music_ui(force_refresh: bool = false):
 		circ_vbox.add_child(circ_grid)
 		
 		# Circuits elements: Metal, TNT, NPC Trigger, Door, Phase Block, Battery, LED, Logic Gates (NOT, AND, OR, NAND, NOR, XOR, XNOR), Piston, Cannon
-		var circuit_items = ["metal", "tnt", "npc_act", "door", "phase_block", "battery", "led", "not", "and", "or", "nand", "nor", "xor", "xnor", "piston", "cannon"]
-		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🌀", "🔋", "💡", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "⚙️", "💣"]
+		var circuit_items = ["metal", "tnt", "npc_act", "door", "phase_block", "battery", "led", "not", "and", "or", "nand", "nor", "xor", "xnor", "piston", "cannon", "pipe"]
+		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🌀", "🔋", "💡", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "⚙️", "💣", "🔵"]
 		for i in range(circuit_items.size()):
 			var item_key = circuit_items[i]
 			var btn = Button.new()
@@ -12983,8 +13185,13 @@ func _setup_music_ui(force_refresh: bool = false):
 					is_mechanism_mode_active = true
 					_close_music_menu()
 				elif item_key == "cannon":
-					selected_material = -1
+					selected_material = 95
 					selected_circuit_tool = "cannon"
+					is_mechanism_mode_active = true
+					_close_music_menu()
+				elif item_key == "pipe":
+					selected_material = 96
+					selected_circuit_tool = "pipe"
 					is_mechanism_mode_active = true
 					_close_music_menu()
 				elif item_key == "not" or item_key == "and" or item_key == "or" or item_key == "nand" or item_key == "nor" or item_key == "xor" or item_key == "xnor":
@@ -15369,3 +15576,451 @@ func _show_fullscreen_image(tex: Texture2D, ratio: float):
 			_play_action_sound("ui_click")
 			zoom_overlay.queue_free()
 	)
+
+func _is_cannon_powered(c) -> bool:
+	var cx = c.pos.x
+	var cy = c.pos.y
+	for oy in range(4):
+		for ox in range(4):
+			var idx = (cy + oy) * grid_width + (cx + ox)
+			if idx >= 0 and idx < cells.size():
+				if charge_array[idx] > 0 or active_battery_indices.has(idx):
+					return true
+	return false
+
+func _find_connected_pipe_and_endpoint(c) -> Dictionary:
+	for p in active_pipes:
+		var path = p.get("path", [])
+		var L = path.size()
+		if L == 0: continue
+		
+		# Check start endpoint (path[0])
+		var pt0 = path[0]
+		if abs(pt0.x - c.pos.x) <= 4 and abs(pt0.y - c.pos.y) <= 4:
+			if abs(pt0.x - c.pos.x) < 4 or abs(pt0.y - c.pos.y) < 4:
+				return { "pipe": p, "endpoint_idx": 0 }
+				
+		# Check end endpoint (path[L-1])
+		var ptL = path[L - 1]
+		if abs(ptL.x - c.pos.x) <= 4 and abs(ptL.y - c.pos.y) <= 4:
+			if abs(ptL.x - c.pos.x) < 4 or abs(ptL.y - c.pos.y) < 4:
+				return { "pipe": p, "endpoint_idx": L - 1 }
+				
+	return {}
+
+func _find_connected_cannon(pt: Vector2i) -> Dictionary:
+	for c in active_cannons:
+		if abs(pt.x - c.pos.x) <= 4 and abs(pt.y - c.pos.y) <= 4:
+			if abs(pt.x - c.pos.x) < 4 or abs(pt.y - c.pos.y) < 4:
+				return { "cannon": c }
+	return {}
+
+func _fire_cannon(c, loaded_mat: int = 0):
+	var orient = c.get("orientation", 0)
+	var start_x = float(c.pos.x)
+	var start_y = float(c.pos.y)
+	var vx = 0.0
+	var vy = 0.0
+	
+	if orient == 0: # UP
+		start_x += 2.0
+		start_y -= 1.0
+		vy = -180.0
+	elif orient == 1: # RIGHT
+		start_x += 5.0
+		start_y += 2.0
+		vx = 180.0
+	elif orient == 2: # DOWN
+		start_x += 2.0
+		start_y += 5.0
+		vy = 180.0
+	elif orient == 3: # LEFT
+		start_x -= 1.0
+		start_y += 2.0
+		vx = -180.0
+		
+	_play_action_sound("explosion", 0.05, -5.0, 1.8)
+	
+	if loaded_mat > 0 and loaded_mat != 3:
+		# Launch block material
+		active_projectiles.append({
+			"pos": Vector2(start_x, start_y),
+			"vel": Vector2(vx, vy),
+			"team": -1,
+			"type": "thrown_rock",
+			"life": 3.0,
+			"block_material": loaded_mat,
+			"atk_dmg": 1.5,
+			"gravity": 0.0
+		})
+	else:
+		# Launch fireball
+		active_projectiles.append({
+			"pos": Vector2(start_x, start_y),
+			"vel": Vector2(vx, vy),
+			"team": -1,
+			"type": "fireball",
+			"life": 3.0,
+			"atk_dmg": 1.0,
+			"gravity": 0.0
+		})
+
+
+func _find_cannon_inlet_material(c) -> int:
+	var cx = c.pos.x
+	var cy = c.pos.y
+	var orient = c.get("orientation", 0)
+	
+	var check_cells = []
+	if orient == 0: # UP (inlet at Bottom)
+		for ox in range(4):
+			check_cells.append(Vector2i(cx + ox, cy + 4))
+	elif orient == 1: # RIGHT (inlet at Left)
+		for oy in range(4):
+			check_cells.append(Vector2i(cx - 1, cy + oy))
+	elif orient == 2: # DOWN (inlet at Top)
+		for ox in range(4):
+			check_cells.append(Vector2i(cx + ox, cy - 1))
+	elif orient == 3: # LEFT (inlet at Right)
+		for oy in range(4):
+			check_cells.append(Vector2i(cx + 4, cy + oy))
+			
+	for pt in check_cells:
+		if pt.x >= 0 and pt.x < grid_width and pt.y >= 0 and pt.y < dynamic_grid_height:
+			var mat = _get_cell(pt.x, pt.y)
+			if mat > 0 and mat != 95 and mat != 96:
+				var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+				if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+					# Absorb the cell
+					_set_cell(pt.x, pt.y, 0)
+					return mat
+	return 0
+
+func _simulate_cannons(delta: float):
+	if cells.size() == 0: return
+	var idx = active_cannons.size() - 1
+	while idx >= 0:
+		if idx >= active_cannons.size():
+			idx -= 1
+			continue
+		var c = active_cannons[idx]
+		
+		# Lazy cleanup: check if cannon base still exists
+		var base_cx = c.pos.x + 2
+		var base_cy = c.pos.y + 2
+		if base_cx < 0 or base_cx >= grid_width or base_cy < 0 or base_cy >= grid_height:
+			active_cannons.remove_at(idx)
+			idx -= 1
+			continue
+		if (cells[base_cy * grid_width + base_cx] & 0xFFFF) != 95:
+			active_cannons.remove_at(idx)
+			idx -= 1
+			continue
+			
+		if c.get("cooldown", 0.0) > 0.0:
+			c.cooldown -= delta
+			
+		if c.get("cooldown", 0.0) <= 0.0:
+			# 1. Try to load material from inlet
+			var loaded = _find_cannon_inlet_material(c)
+			if loaded > 0:
+				_fire_cannon(c, loaded)
+				c.cooldown = 1.0
+			else:
+				# 2. If no material loaded, fallback to electricity powered firing (infinite fireballs)
+				if _is_cannon_powered(c):
+					_fire_cannon(c, 0)
+					c.cooldown = 1.0
+			
+		idx -= 1
+
+func _update_pipe_visuals(p):
+	var path = p.path
+	var L = path.size()
+	for i in range(L):
+		var pt = path[i]
+		var gx = pt.x
+		var gy = pt.y
+		
+		# Find connections to adjacent blocks in path
+		var has_left_conn = false
+		var has_right_conn = false
+		var has_top_conn = false
+		var has_bottom_conn = false
+		
+		if i > 0:
+			var prev = path[i - 1]
+			if prev.x == pt.x - 4 and prev.y == pt.y: has_left_conn = true
+			elif prev.x == pt.x + 4 and prev.y == pt.y: has_right_conn = true
+			elif prev.x == pt.x and prev.y == pt.y - 4: has_top_conn = true
+			elif prev.x == pt.x and prev.y == pt.y + 4: has_bottom_conn = true
+		if i < L - 1:
+			var next = path[i + 1]
+			if next.x == pt.x - 4 and next.y == pt.y: has_left_conn = true
+			elif next.x == pt.x + 4 and next.y == pt.y: has_right_conn = true
+			elif next.x == pt.x and next.y == pt.y - 4: has_top_conn = true
+			elif next.x == pt.x and next.y == pt.y + 4: has_bottom_conn = true
+			
+		# Open visual endpoints opposite to connections
+		var is_left_open = has_left_conn
+		var is_right_open = has_right_conn
+		var is_top_open = has_top_conn
+		var is_bottom_open = has_bottom_conn
+		
+		if L == 1:
+			is_left_open = true
+			is_right_open = true
+		else:
+			if i == 0 or i == L - 1:
+				var conn_count = int(has_left_conn) + int(has_right_conn) + int(has_top_conn) + int(has_bottom_conn)
+				if conn_count == 1:
+					if has_left_conn: is_right_open = true
+					elif has_right_conn: is_left_open = true
+					elif has_top_conn: is_bottom_open = true
+					elif has_bottom_conn: is_top_open = true
+					
+		# Element rendering
+		var elems = p.elements[i]
+		var c0 = elems[0].mat if elems.size() > 0 else 0
+		var c1 = elems[1].mat if elems.size() > 1 else 0
+		var c2 = elems[2].mat if elems.size() > 2 else 0
+		var c3 = elems[3].mat if elems.size() > 3 else 0
+		
+		# Draw outer pipe walls (96) and openings (flowing elements or empty air 0)
+		_set_cell(gx, gy, 96)
+		_set_cell(gx + 3, gy, 96)
+		_set_cell(gx, gy + 3, 96)
+		_set_cell(gx + 3, gy + 3, 96)
+		
+		if is_top_open:
+			_set_cell(gx + 1, gy, c0)
+			_set_cell(gx + 2, gy, c1)
+		else:
+			_set_cell(gx + 1, gy, 96)
+			_set_cell(gx + 2, gy, 96)
+			
+		if is_bottom_open:
+			_set_cell(gx + 1, gy + 3, c2)
+			_set_cell(gx + 2, gy + 3, c3)
+		else:
+			_set_cell(gx + 1, gy + 3, 96)
+			_set_cell(gx + 2, gy + 3, 96)
+			
+		if is_left_open:
+			_set_cell(gx, gy + 1, c0)
+			_set_cell(gx, gy + 2, c2)
+		else:
+			_set_cell(gx, gy + 1, 96)
+			_set_cell(gx, gy + 2, 96)
+			
+		if is_right_open:
+			_set_cell(gx + 3, gy + 1, c1)
+			_set_cell(gx + 3, gy + 2, c3)
+		else:
+			_set_cell(gx + 3, gy + 1, 96)
+			_set_cell(gx + 3, gy + 2, 96)
+			
+		# Draw inner core
+		_set_cell(gx + 1, gy + 1, c0)
+		_set_cell(gx + 2, gy + 1, c1)
+		_set_cell(gx + 1, gy + 2, c2)
+		_set_cell(gx + 2, gy + 2, c3)
+
+func _find_pipe_endpoint_opening_side(p, endpoint_idx: int) -> String:
+	var path = p.path
+	var L = path.size()
+	if L == 0: return ""
+	var pt = path[endpoint_idx]
+	
+	if L == 1:
+		return "horizontal"
+		
+	var nb = path[1] if endpoint_idx == 0 else path[L - 2]
+	if nb.x > pt.x: return "left"
+	if nb.x < pt.x: return "right"
+	if nb.y > pt.y: return "top"
+	if nb.y < pt.y: return "bottom"
+	return ""
+
+func _find_pipe_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
+	var path = p.path
+	var pt = path[endpoint_idx]
+	var gx = pt.x
+	var gy = pt.y
+	var side = _find_pipe_endpoint_opening_side(p, endpoint_idx)
+	
+	if side == "left":
+		for oy in range(4):
+			var tx = gx - 1
+			var ty = gy + oy
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				var mat = _get_cell(tx, ty)
+				if mat > 0 and mat != 95 and mat != 96:
+					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+						return Vector2i(tx, ty)
+	elif side == "right":
+		for oy in range(4):
+			var tx = gx + 4
+			var ty = gy + oy
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				var mat = _get_cell(tx, ty)
+				if mat > 0 and mat != 95 and mat != 96:
+					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+						return Vector2i(tx, ty)
+	elif side == "top" or side == "horizontal":
+		for ox in range(4):
+			var tx = gx + ox
+			var ty = gy - 1
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				var mat = _get_cell(tx, ty)
+				if mat > 0 and mat != 95 and mat != 96:
+					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+						return Vector2i(tx, ty)
+	elif side == "bottom":
+		for ox in range(4):
+			var tx = gx + ox
+			var ty = gy + 4
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				var mat = _get_cell(tx, ty)
+				if mat > 0 and mat != 95 and mat != 96:
+					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+						return Vector2i(tx, ty)
+	return Vector2i(-1, -1)
+
+func _find_pipe_ejection_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
+	var path = p.path
+	var pt = path[endpoint_idx]
+	var gx = pt.x
+	var gy = pt.y
+	var side = _find_pipe_endpoint_opening_side(p, endpoint_idx)
+	
+	if side == "bottom" or side == "horizontal":
+		for ox in range(4):
+			var tx = gx + ox
+			var ty = gy + 4
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				if _get_cell(tx, ty) == 0:
+					return Vector2i(tx, ty)
+	if side == "top":
+		for ox in range(4):
+			var tx = gx + ox
+			var ty = gy - 1
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				if _get_cell(tx, ty) == 0:
+					return Vector2i(tx, ty)
+	if side == "left" or side == "horizontal":
+		for oy in range(4):
+			var tx = gx - 1
+			var ty = gy + oy
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				if _get_cell(tx, ty) == 0:
+					return Vector2i(tx, ty)
+	if side == "right" or side == "horizontal":
+		for oy in range(4):
+			var tx = gx + 4
+			var ty = gy + oy
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				if _get_cell(tx, ty) == 0:
+					return Vector2i(tx, ty)
+	return Vector2i(-1, -1)
+
+func _simulate_pipes(delta: float):
+	if active_pipes.size() == 0: return
+	if _frame_count % 4 != 0:
+		return
+		
+	for p in active_pipes:
+		var path = p.get("path", [])
+		var L = path.size()
+		if L == 0: continue
+		
+		# 1. Eject elements at the ends (or load connected cannons)
+		var end_idx = L - 1
+		var end_pt = path[end_idx]
+		var end_elems = p.elements[end_idx]
+		var next_end_elems = []
+		var end_conn = _find_connected_cannon(end_pt)
+		
+		for elem in end_elems:
+			if elem.dir == 1:
+				if not end_conn.is_empty():
+					var c = end_conn["cannon"]
+					if c.get("loaded_material", 0) == 0:
+						c["loaded_material"] = elem.mat
+					else:
+						next_end_elems.append(elem)
+				else:
+					var empty_pos = _find_pipe_ejection_cell_at_endpoint(p, end_idx)
+					if empty_pos.x != -1:
+						_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+					else:
+						next_end_elems.append(elem)
+			else:
+				next_end_elems.append(elem)
+		p.elements[end_idx] = next_end_elems
+		
+		var start_pt = path[0]
+		var start_elems = p.elements[0]
+		var next_start_elems = []
+		var start_conn = _find_connected_cannon(start_pt)
+		
+		for elem in start_elems:
+			if elem.dir == -1:
+				if not start_conn.is_empty():
+					var c = start_conn["cannon"]
+					if c.get("loaded_material", 0) == 0:
+						c["loaded_material"] = elem.mat
+					else:
+						next_start_elems.append(elem)
+				else:
+					var empty_pos = _find_pipe_ejection_cell_at_endpoint(p, 0)
+					if empty_pos.x != -1:
+						_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+					else:
+						next_start_elems.append(elem)
+			else:
+				next_start_elems.append(elem)
+		p.elements[0] = next_start_elems
+		
+		# 2. Flow propagation
+		for i in range(L - 2, -1, -1):
+			var cur_elems = p.elements[i]
+			var next_cur = []
+			for elem in cur_elems:
+				if elem.dir == 1 and p.elements[i+1].size() < 4:
+					p.elements[i+1].append(elem)
+				else:
+					next_cur.append(elem)
+			p.elements[i] = next_cur
+			
+		for i in range(1, L):
+			var cur_elems = p.elements[i]
+			var next_cur = []
+			for elem in cur_elems:
+				if elem.dir == -1 and p.elements[i-1].size() < 4:
+					p.elements[i-1].append(elem)
+				else:
+					next_cur.append(elem)
+			p.elements[i] = next_cur
+			
+		# 3. Suck in absorbable elements (liquids, powders, sand, etc.) through openings
+		if p.elements[0].size() < 4:
+			var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, 0)
+			if absorb_pos.x != -1:
+				var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+				_set_cell(absorb_pos.x, absorb_pos.y, 0)
+				p.elements[0].append({ "mat": mat, "dir": 1 })
+				
+		if p.elements[end_idx].size() < 4:
+			var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
+			if absorb_pos.x != -1:
+				var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+				_set_cell(absorb_pos.x, absorb_pos.y, 0)
+				p.elements[end_idx].append({ "mat": mat, "dir": -1 })
+				
+		# 4. Draw visual representation
+		_update_pipe_visuals(p)

@@ -9,6 +9,13 @@ uniform float tornado_x = -100.0;
 uniform float tornado_ground_y = 1000.0;
 uniform float tornado_intensity = 0.0;
 
+int get_mat_id(sampler2D tex, vec2 uv, vec2 offset, vec2 tex_size) {
+    vec4 raw = texture(tex, uv + offset / tex_size);
+    int low = int(raw.r * 255.0 + 0.5);
+    int high = int(raw.g * 255.0 + 0.5);
+    return low + (high * 256);
+}
+
 void fragment() {
     // 1. Get raw pixel data (R = ID, G = Direct Color Marker)
     vec4 raw_data = texture(TEXTURE, UV);
@@ -118,8 +125,50 @@ void fragment() {
             }
         }
 
+        // CANNON (ID 95) SPECIAL RENDERING
+        if (id == 95) {
+            ivec2 tex_size = textureSize(TEXTURE, 0);
+            ivec2 coord = ivec2(UV * vec2(tex_size));
+            int px = coord.x % 4;
+            int py = coord.y % 4;
+            
+            // Outer frame
+            if (px == 0 || px == 3 || py == 0 || py == 3) {
+                color.rgb *= 0.6; // Dark metallic frame
+            }
+            
+            // Draw barrel depending on variant (1: UP, 2: RIGHT, 3: DOWN, 4: LEFT)
+            if (variant == 1) { // UP
+                if ((px == 1 || px == 2) && (py == 0 || py == 1)) {
+                    color.rgb = vec3(0.08, 0.09, 0.12); // Hollow dark barrel
+                }
+            } else if (variant == 2) { // RIGHT
+                if ((px == 2 || px == 3) && (py == 1 || py == 2)) {
+                    color.rgb = vec3(0.08, 0.09, 0.12);
+                }
+            } else if (variant == 3) { // DOWN
+                if ((px == 1 || px == 2) && (py == 2 || py == 3)) {
+                    color.rgb = vec3(0.08, 0.09, 0.12);
+                }
+            } else if (variant == 4) { // LEFT
+                if ((px == 0 || px == 1) && (py == 1 || py == 2)) {
+                    color.rgb = vec3(0.08, 0.09, 0.12);
+                }
+            }
+            
+            // Center glowing core (grows brighter with charge)
+            if (px >= 1 && px <= 2 && py >= 1 && py <= 2 && !(variant == 1 && py == 1) && !(variant == 2 && px == 2) && !(variant == 3 && py == 2) && !(variant == 4 && px == 1)) {
+                vec3 glow_color = vec3(0.9, 0.25, 0.05); // Energetic amber-orange
+                if (charge > 0.05) {
+                    glow_color = vec3(1.0, 0.6, 0.0); // Bright charged yellow-orange
+                }
+                color.rgb = mix(color.rgb, glow_color, 0.7);
+            }
+        }
+
+
         // 5. ELECTRIC GLOW (High Intensity Sparks with Amber Contrast)
-        if (charge > 0.05 && id > 0 && id != 13 && id != 25 && id != 5 && id != 7 && id != 20 && id != 71 && id != 72 && id != 77 && id != 90 && id != 91) {
+        if (charge > 0.05 && id > 0 && id != 13 && id != 25 && id != 5 && id != 7 && id != 20 && id != 71 && id != 72 && id != 77 && id != 90 && id != 91 && id != 95 && id != 96) {
             float spark_intensity = smoothstep(0.12, 1.0, charge);
             vec4 electric_color = vec4(1.0, 0.7, 0.0, 1.0); // Amber/Orange-Yellow default
             
