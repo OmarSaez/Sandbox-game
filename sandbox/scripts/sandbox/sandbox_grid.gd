@@ -505,6 +505,7 @@ var music_next_idx: int = 0
 var music_panel: PanelContainer
 var selected_mechanism_tab: int = 0 # 0: Circuits, 1: Music
 var circuit_panel: PanelContainer
+var cannon_settings_panel: PanelContainer
 var is_mechanism_mode_active: bool = false
 var selected_circuit_tool: String = ""
 var active_logic_gates: Array = []
@@ -1192,6 +1193,9 @@ func _ready():
 	_register_material(295, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 90
 	_register_material(395, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 135
 	_register_material(495, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 180
+	_register_material(595, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 225
+	_register_material(695, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 270
+	_register_material(795, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 315
 	_register_material(96, Color("#0265A6"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Pipe
 	_register_material(97, Color("#014D80"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Pipe X2
 	
@@ -5350,7 +5354,7 @@ func _is_position_over_ui(pos: Vector2) -> bool:
 	if is_instance_valid(action_vbox) and action_vbox.get_global_rect().has_point(pos):
 		return true
 
-	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble, zoom_tutorial_bubble, active_tooltip_panel]:
+	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble, zoom_tutorial_bubble, active_tooltip_panel, cannon_settings_panel]:
 		if is_instance_valid(panel) and panel.visible and panel.get_global_rect().has_point(pos):
 			return true
 	return false
@@ -5392,6 +5396,9 @@ func _is_any_ui_blocking() -> bool:
 		return true
 		
 	if is_instance_valid(save_panel) and save_panel.get_global_rect().has_point(m_pos):
+		return true
+		
+	if is_instance_valid(cannon_settings_panel) and cannon_settings_panel.visible and cannon_settings_panel.get_global_rect().has_point(m_pos):
 		return true
 		
 	if is_instance_valid(achievement_panel) and achievement_panel.visible and achievement_panel.get_global_rect().has_point(m_pos):
@@ -5665,6 +5672,7 @@ func _process(delta):
 				if is_instance_valid(music_panel) and music_panel.visible: _close_music_menu()
 				if is_instance_valid(achievement_panel) and achievement_panel.visible: achievement_panel.visible = false
 				if is_instance_valid(save_panel): save_panel.queue_free()
+				if is_instance_valid(cannon_settings_panel): cannon_settings_panel.queue_free()
 
 		# DRAW LOGIC (Only if touch session started on Sandbox, current position is Sandbox, and NOT in selection mode)
 		# 4. DRAWING & TOOLS BLOCK (If controlling an NPC or selecting one)
@@ -11984,7 +11992,7 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 			door_registry[idx] = true
 		elif mid == 92:
 			phase_block_registry[idx] = true
-		elif mid == 95 or mid == 195 or mid == 295 or mid == 395 or mid == 495:
+		elif mid == 95 or mid == 195 or mid == 295 or mid == 395 or mid == 495 or mid == 595 or mid == 695 or mid == 795:
 			var px = idx % grid_width
 			var py = idx / grid_width
 			var val = cells[idx]
@@ -12386,73 +12394,142 @@ func _place_piston(gx: int, gy: int):
 		"orientation": 0
 	}
 	active_pistons.append(new_p)
-func _get_cannon_active_cells(orient: int) -> Array:
+func _get_cannon_active_cells(orient: int, inlet_side: String = "") -> Array:
+	if inlet_side == "":
+		if orient == 0: inlet_side = "left"
+		elif orient == 1: inlet_side = "bottom"
+		elif orient == 2: inlet_side = "bottom"
+		elif orient == 3: inlet_side = "bottom"
+		elif orient == 4: inlet_side = "right"
+		else: inlet_side = "left"
+
 	var list = []
-	# 1. Base (always active)
-	list.append(Vector2i(3, 7))
-	list.append(Vector2i(4, 7))
-	list.append(Vector2i(5, 7))
-	list.append(Vector2i(6, 7))
-	list.append(Vector2i(3, 8))
-	list.append(Vector2i(6, 8))
-	list.append(Vector2i(3, 9))
-	list.append(Vector2i(6, 9))
-	list.append(Vector2i(3, 10))
-	list.append(Vector2i(6, 10))
-	
-	# 2. Main Body (always active)
-	for py in range(3, 7):
-		for px in range(3, 7):
-			list.append(Vector2i(px, py))
-			
-	# 3. Pivot & Barrel (depends on orientation)
-	if orient == 0: # 0 deg (Right)
-		list.append(Vector2i(7, 4))
-		list.append(Vector2i(7, 5))
+	# 1. Base / Stand (depends on inlet_side, shifted by +1)
+	if inlet_side == "bottom":
+		list.append(Vector2i(4, 8))
+		list.append(Vector2i(5, 8))
+		list.append(Vector2i(6, 8))
+		list.append(Vector2i(7, 8))
+		list.append(Vector2i(4, 9))
+		list.append(Vector2i(7, 9))
+		list.append(Vector2i(4, 10))
+		list.append(Vector2i(7, 10))
+		list.append(Vector2i(4, 11))
+		list.append(Vector2i(7, 11))
+	elif inlet_side == "top":
+		list.append(Vector2i(4, 3))
+		list.append(Vector2i(5, 3))
+		list.append(Vector2i(6, 3))
+		list.append(Vector2i(7, 3))
+		list.append(Vector2i(4, 2))
+		list.append(Vector2i(7, 2))
+		list.append(Vector2i(4, 1))
+		list.append(Vector2i(7, 1))
+		list.append(Vector2i(4, 0))
+		list.append(Vector2i(7, 0))
+	elif inlet_side == "left":
+		list.append(Vector2i(3, 4))
+		list.append(Vector2i(3, 5))
+		list.append(Vector2i(3, 6))
+		list.append(Vector2i(3, 7))
+		list.append(Vector2i(2, 4))
+		list.append(Vector2i(2, 7))
+		list.append(Vector2i(1, 4))
+		list.append(Vector2i(1, 7))
+		list.append(Vector2i(0, 4))
+		list.append(Vector2i(0, 7))
+	elif inlet_side == "right":
 		list.append(Vector2i(8, 4))
 		list.append(Vector2i(8, 5))
+		list.append(Vector2i(8, 6))
+		list.append(Vector2i(8, 7))
+		list.append(Vector2i(9, 4))
+		list.append(Vector2i(9, 7))
+		list.append(Vector2i(10, 4))
+		list.append(Vector2i(10, 7))
+		list.append(Vector2i(11, 4))
+		list.append(Vector2i(11, 7))
+	
+	# 2. Main Body (always active, shifted by +1)
+	for py in range(4, 8):
+		for px in range(4, 8):
+			list.append(Vector2i(px, py))
+			
+	# 3. Pivot & Barrel (depends on orientation, shifted by +1)
+	if orient == 0: # 0 deg (Right)
+		list.append(Vector2i(8, 5))
+		list.append(Vector2i(8, 6))
+		list.append(Vector2i(9, 5))
+		list.append(Vector2i(9, 6))
 	elif orient == 1: # 45 deg (Top-Right)
 		# Pivot
-		list.append(Vector2i(6, 3))
 		list.append(Vector2i(7, 4))
+		list.append(Vector2i(8, 5))
 		# Barrel
-		list.append(Vector2i(7, 1))
-		list.append(Vector2i(7, 2))
 		list.append(Vector2i(8, 2))
 		list.append(Vector2i(8, 3))
+		list.append(Vector2i(9, 3))
+		list.append(Vector2i(9, 4))
 	elif orient == 2: # 90 deg (Up)
 		# Pivot
-		list.append(Vector2i(4, 2))
-		list.append(Vector2i(5, 2))
+		list.append(Vector2i(5, 3))
+		list.append(Vector2i(6, 3))
 		# Barrel
-		list.append(Vector2i(4, 0))
-		list.append(Vector2i(5, 0))
-		list.append(Vector2i(4, 1))
 		list.append(Vector2i(5, 1))
+		list.append(Vector2i(6, 1))
+		list.append(Vector2i(5, 2))
+		list.append(Vector2i(6, 2))
 	elif orient == 3: # 135 deg (Top-Left)
 		# Pivot
-		list.append(Vector2i(3, 3))
-		list.append(Vector2i(2, 4))
+		list.append(Vector2i(4, 4))
+		list.append(Vector2i(3, 5))
 		# Barrel
-		list.append(Vector2i(2, 1))
-		list.append(Vector2i(2, 2))
-		list.append(Vector2i(1, 2))
-		list.append(Vector2i(1, 3))
+		list.append(Vector2i(3, 2))
+		list.append(Vector2i(3, 3))
+		list.append(Vector2i(2, 3))
+		list.append(Vector2i(2, 4))
 	elif orient == 4: # 180 deg (Left)
 		# Pivot
-		list.append(Vector2i(2, 4))
-		list.append(Vector2i(2, 5))
+		list.append(Vector2i(3, 5))
+		list.append(Vector2i(3, 6))
 		# Barrel
-		list.append(Vector2i(1, 4))
-		list.append(Vector2i(1, 5))
+		list.append(Vector2i(2, 5))
+		list.append(Vector2i(2, 6))
+	elif orient == 5: # 225 deg (Bottom-Left)
+		# Pivot
+		list.append(Vector2i(4, 7))
+		list.append(Vector2i(3, 6))
+		# Barrel
+		list.append(Vector2i(3, 9))
+		list.append(Vector2i(3, 8))
+		list.append(Vector2i(2, 8))
+		list.append(Vector2i(2, 7))
+	elif orient == 6: # 270 deg (Down)
+		# Pivot
+		list.append(Vector2i(5, 8))
+		list.append(Vector2i(6, 8))
+		# Barrel
+		list.append(Vector2i(5, 10))
+		list.append(Vector2i(6, 10))
+		list.append(Vector2i(5, 9))
+		list.append(Vector2i(6, 9))
+	elif orient == 7: # 315 deg (Bottom-Right)
+		# Pivot
+		list.append(Vector2i(7, 7))
+		list.append(Vector2i(8, 6))
+		# Barrel
+		list.append(Vector2i(8, 9))
+		list.append(Vector2i(8, 8))
+		list.append(Vector2i(9, 8))
+		list.append(Vector2i(9, 7))
 		
 	return list
 
 func _place_cannon(gx: int, gy: int):
-	# The 10x11 bounds are: tx = gx + px - 3, ty = gy + py - 3
-	# So tx ranges from gx-3 to gx+6, ty ranges from gy-3 to gy+7.
-	# We must make sure that gx-3 >= 0 and gx+6 < grid_width and gy-3 >= 0 and gy+7 < grid_height.
-	if gx - 3 < 0 or gx + 6 >= grid_width or gy - 3 < 0 or gy + 7 >= grid_height:
+	# The 12x12 bounds are: tx = gx + px - 4, ty = gy + py - 4
+	# So tx ranges from gx-4 to gx+7, ty ranges from gy-4 to gy+7.
+	# We must make sure that gx-4 >= 0 and gx+7 < grid_width and gy-4 >= 0 and gy+7 < grid_height.
+	if gx - 4 < 0 or gx + 7 >= grid_width or gy - 4 < 0 or gy + 7 >= grid_height:
 		return
 		
 	# Check if there is an existing cannon at this exact snapping coordinate gx, gy
@@ -12463,28 +12540,8 @@ func _place_cannon(gx: int, gy: int):
 			break
 			
 	if existing_idx != -1:
-		# Rotate existing cannon! (5 orientations: 0 to 4)
 		var c = active_cannons[existing_idx]
-		c.orientation = (c.orientation + 1) % 5
-		
-		# Clear the 10x11 area first so no legacy/orphan barrel cells remain
-		for py in range(11):
-			for px in range(10):
-				var tx = gx + px - 3
-				var ty = gy + py - 3
-				_set_cell(tx, ty, 0)
-				
-		# Write the new cells for the new orientation
-		var active_cells = _get_cannon_active_cells(c.orientation)
-		var mat_id = 95 + c.orientation * 100
-		for pt in active_cells:
-			var tx = gx + pt.x - 3
-			var ty = gy + pt.y - 3
-			var variant = pt.x | (pt.y << 4)
-			var val_encoded = mat_id | (variant << 24)
-			_set_cell(tx, ty, val_encoded)
-			
-		_play_action_sound("ui_click")
+		_open_cannon_settings_panel(c)
 		return
 		
 	# Remove any overlapping cannons (anchors within 6 cells)
@@ -12492,11 +12549,11 @@ func _place_cannon(gx: int, gy: int):
 	while i >= 0:
 		var c = active_cannons[i]
 		if abs(c.pos.x - gx) < 6 and abs(c.pos.y - gy) < 6:
-			# Clear their 10x11 area
-			for py in range(11):
-				for px in range(10):
-					var tx = c.pos.x + px - 3
-					var ty = c.pos.y + py - 3
+			# Clear their 12x12 area
+			for py in range(12):
+				for px in range(12):
+					var tx = c.pos.x + px - 4
+					var ty = c.pos.y + py - 4
 					if tx >= 0 and tx < grid_width and ty >= 0 and ty < grid_height:
 						_set_cell(tx, ty, 0)
 			active_cannons.remove_at(i)
@@ -12506,23 +12563,24 @@ func _place_cannon(gx: int, gy: int):
 	var new_c = {
 		"pos": Vector2i(gx, gy),
 		"orientation": 0,
-		"cooldown": 0.0
+		"cooldown": 0.0,
+		"inlet_side": "left"
 	}
 	active_cannons.append(new_c)
 	
-	# Clear the 10x11 area
-	for py in range(11):
-		for px in range(10):
-			var tx = gx + px - 3
-			var ty = gy + py - 3
+	# Clear the 12x12 area
+	for py in range(12):
+		for px in range(12):
+			var tx = gx + px - 4
+			var ty = gy + py - 4
 			_set_cell(tx, ty, 0)
 			
 	# Write active cells for orientation 0
-	var active_cells = _get_cannon_active_cells(0)
+	var active_cells = _get_cannon_active_cells(0, "left")
 	var mat_id = 95
 	for pt in active_cells:
-		var tx = gx + pt.x - 3
-		var ty = gy + pt.y - 3
+		var tx = gx + pt.x - 4
+		var ty = gy + pt.y - 4
 		var variant = pt.x | (pt.y << 4)
 		var val_encoded = mat_id | (variant << 24)
 		_set_cell(tx, ty, val_encoded)
@@ -15841,6 +15899,34 @@ func _is_cannon_powered(c) -> bool:
 					return true
 	return false
 
+func _is_pipe_connected_on_inlet(c, pt: Vector2i, is_x2: bool) -> bool:
+	var inlet_side = c.get("inlet_side", "left")
+	var cx = c.pos.x
+	var cy = c.pos.y
+	
+	if pt.x == cx + 2 and pt.y == cy + 2:
+		return true
+		
+	if not is_x2:
+		if inlet_side == "left":
+			return pt.x == cx - 5 and pt.y >= cy and pt.y <= cy + 3
+		elif inlet_side == "right":
+			return pt.x == cx + 8 and pt.y >= cy and pt.y <= cy + 3
+		elif inlet_side == "top":
+			return pt.y == cy - 5 and pt.x >= cx and pt.x <= cx + 3
+		elif inlet_side == "bottom":
+			return pt.y == cy + 8 and pt.x >= cx and pt.x <= cx + 3
+	else:
+		if inlet_side == "left":
+			return abs(pt.x - (cx - 5)) <= 4 and abs(pt.y - (cy + 1.5)) <= 4
+		elif inlet_side == "right":
+			return abs(pt.x - (cx + 8)) <= 4 and abs(pt.y - (cy + 1.5)) <= 4
+		elif inlet_side == "top":
+			return abs(pt.y - (cy - 5)) <= 4 and abs(pt.x - (cx + 1.5)) <= 4
+		elif inlet_side == "bottom":
+			return abs(pt.y - (cy + 8)) <= 4 and abs(pt.x - (cx + 1.5)) <= 4
+	return false
+
 func _find_connected_pipe_and_endpoint(c) -> Dictionary:
 	for p in active_pipes:
 		var path = p.get("path", [])
@@ -15849,15 +15935,13 @@ func _find_connected_pipe_and_endpoint(c) -> Dictionary:
 		
 		# Check start endpoint (path[0])
 		var pt0 = path[0]
-		if abs(pt0.x - c.pos.x) <= 4 and abs(pt0.y - c.pos.y) <= 4:
-			if abs(pt0.x - c.pos.x) < 4 or abs(pt0.y - c.pos.y) < 4:
-				return { "pipe": p, "endpoint_idx": 0 }
+		if _is_pipe_connected_on_inlet(c, pt0, false):
+			return { "pipe": p, "endpoint_idx": 0 }
 				
 		# Check end endpoint (path[L-1])
 		var ptL = path[L - 1]
-		if abs(ptL.x - c.pos.x) <= 4 and abs(ptL.y - c.pos.y) <= 4:
-			if abs(ptL.x - c.pos.x) < 4 or abs(ptL.y - c.pos.y) < 4:
-				return { "pipe": p, "endpoint_idx": L - 1 }
+		if _is_pipe_connected_on_inlet(c, ptL, false):
+			return { "pipe": p, "endpoint_idx": L - 1 }
 				
 	for p in active_pipes_x2:
 		var path = p.get("path", [])
@@ -15866,15 +15950,13 @@ func _find_connected_pipe_and_endpoint(c) -> Dictionary:
 		
 		# Check start endpoint (path[0]) for double pipe (8x8 blocks)
 		var pt0 = path[0]
-		if abs(pt0.x - c.pos.x) <= 8 and abs(pt0.y - c.pos.y) <= 8:
-			if abs(pt0.x - c.pos.x) < 8 or abs(pt0.y - c.pos.y) < 8:
-				return { "pipe": p, "endpoint_idx": 0 }
+		if _is_pipe_connected_on_inlet(c, pt0, true):
+			return { "pipe": p, "endpoint_idx": 0 }
 				
 		# Check end endpoint (path[L-1]) for double pipe (8x8 blocks)
 		var ptL = path[L - 1]
-		if abs(ptL.x - c.pos.x) <= 8 and abs(ptL.y - c.pos.y) <= 8:
-			if abs(ptL.x - c.pos.x) < 8 or abs(ptL.y - c.pos.y) < 8:
-				return { "pipe": p, "endpoint_idx": L - 1 }
+		if _is_pipe_connected_on_inlet(c, ptL, true):
+			return { "pipe": p, "endpoint_idx": L - 1 }
 				
 	return {}
 
@@ -15886,7 +15968,7 @@ func _find_connected_cannon(pt: Vector2i) -> Dictionary:
 	return {}
 
 func _is_cannon_base_material(mat: int) -> bool:
-	return mat == 95 or mat == 195 or mat == 295 or mat == 395 or mat == 495
+	return mat == 95 or mat == 195 or mat == 295 or mat == 395 or mat == 495 or mat == 595 or mat == 695 or mat == 795
 
 func _get_next_cannon_shoot_material(c) -> int:
 	var loaded_mat = c.get("loaded_material", 0)
@@ -15955,6 +16037,27 @@ func _fire_cannon(c, loaded_mat1: int = 0, loaded_mat2: int = 0, is_stream: bool
 		vy = 0.0
 		px = 0.0
 		py = 1.0
+	elif orient == 5: # 225 deg (Bottom-Left)
+		center_x -= 2.0
+		center_y += 5.0
+		vx = -127.28
+		vy = 127.28
+		px = -0.707
+		py = -0.707
+	elif orient == 6: # 270 deg (Down)
+		center_x += 1.5
+		center_y += 6.0
+		vx = 0.0
+		vy = 180.0
+		px = 1.0
+		py = 0.0
+	elif orient == 7: # 315 deg (Bottom-Right)
+		center_x += 5.0
+		center_y += 5.0
+		vx = 127.28
+		vy = 127.28
+		px = 0.707
+		py = -0.707
 		
 	var vol_boost = -18.0 if is_stream else -5.0
 	_play_action_sound("explosion", 0.05, vol_boost, 1.8)
@@ -16017,28 +16120,32 @@ func _fire_cannon(c, loaded_mat1: int = 0, loaded_mat2: int = 0, is_stream: bool
 func _find_cannon_inlet_material(c) -> int:
 	var cx = c.pos.x
 	var cy = c.pos.y
-	var orient = c.get("orientation", 0)
+	var inlet_side = c.get("inlet_side", "")
 	
+	# Fallback if inlet_side is not set yet
+	if inlet_side == "":
+		var orient = c.get("orientation", 0)
+		if orient == 0: inlet_side = "left"
+		elif orient == 1: inlet_side = "bottom"
+		elif orient == 2: inlet_side = "bottom"
+		elif orient == 3: inlet_side = "bottom"
+		elif orient == 4: inlet_side = "right"
+		else: inlet_side = "left"
+		c["inlet_side"] = inlet_side
+		
 	var check_cells = []
-	if orient == 0: # Right (inlet at Left)
+	if inlet_side == "left":
 		for oy in range(4):
-			check_cells.append(Vector2i(cx - 1, cy + oy))
-	elif orient == 1: # Top-Right (inlet at Left or Bottom)
+			check_cells.append(Vector2i(cx - 5, cy + oy))
+	elif inlet_side == "right":
 		for oy in range(4):
-			check_cells.append(Vector2i(cx - 1, cy + oy))
+			check_cells.append(Vector2i(cx + 8, cy + oy))
+	elif inlet_side == "top":
+		for ox in range(4):
+			check_cells.append(Vector2i(cx + ox, cy - 5))
+	elif inlet_side == "bottom":
 		for ox in range(4):
 			check_cells.append(Vector2i(cx + ox, cy + 8))
-	elif orient == 2: # Up (inlet at Bottom)
-		for ox in range(4):
-			check_cells.append(Vector2i(cx + ox, cy + 8))
-	elif orient == 3: # Top-Left (inlet at Right or Bottom)
-		for oy in range(4):
-			check_cells.append(Vector2i(cx + 4, cy + oy))
-		for ox in range(4):
-			check_cells.append(Vector2i(cx + ox, cy + 8))
-	elif orient == 4: # Left (inlet at Right)
-		for oy in range(4):
-			check_cells.append(Vector2i(cx + 4, cy + oy))
 			
 	for pt in check_cells:
 		if pt.x >= 0 and pt.x < grid_width and pt.y >= 0 and pt.y < dynamic_grid_height:
@@ -17052,3 +17159,319 @@ func _simulate_pipes(delta: float):
 		_update_pipe_visuals(p)
 	for p in active_pipes_x2:
 		_update_pipe_x2_visuals(p)
+
+func _is_orientation_allowed(orient: int, inlet_side: String) -> bool:
+	if inlet_side == "left":
+		return orient != 3 and orient != 4 and orient != 5
+	elif inlet_side == "right":
+		return orient != 7 and orient != 0 and orient != 1
+	elif inlet_side == "top":
+		return orient != 1 and orient != 2 and orient != 3
+	elif inlet_side == "bottom":
+		return orient != 5 and orient != 6 and orient != 7
+	return true
+
+func _open_cannon_settings_panel(c):
+	if is_instance_valid(cannon_settings_panel):
+		cannon_settings_panel.queue_free()
+		
+	var s = _get_ui_scale()
+	
+	cannon_settings_panel = PanelContainer.new()
+	cannon_settings_panel.name = "CannonSettingsPanel"
+	ui_root.add_child(cannon_settings_panel)
+	
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.08, 0.08, 0.12, 0.95) # Dark premium slate
+	panel_style.border_width_left = 3
+	panel_style.border_width_top = 3
+	panel_style.border_width_right = 3
+	panel_style.border_width_bottom = 3
+	panel_style.border_color = Color(0.8, 0.6, 0.2) # Glowing gold border
+	panel_style.corner_radius_top_left = 24
+	panel_style.corner_radius_top_right = 24
+	panel_style.corner_radius_bottom_left = 24
+	panel_style.corner_radius_bottom_right = 24
+	cannon_settings_panel.add_theme_stylebox_override("panel", panel_style)
+	cannon_settings_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	
+	_align_panel_to_hud(cannon_settings_panel, 340 * s, 460 * s)
+	
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 15 * s)
+	cannon_settings_panel.add_child(main_vbox)
+	
+	# Header
+	var header_hbox = HBoxContainer.new()
+	main_vbox.add_child(header_hbox)
+	
+	var spacer_left = Control.new()
+	spacer_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_hbox.add_child(spacer_left)
+	
+	var title = Label.new()
+	title.text = "Controlador"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", _get_safe_font())
+	title.add_theme_font_size_override("font_size", 28 * s)
+	title.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0))
+	header_hbox.add_child(title)
+	
+	var spacer_right = Control.new()
+	spacer_right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_hbox.add_child(spacer_right)
+	
+	var close_btn = Button.new()
+	close_btn.text = "X"
+	close_btn.custom_minimum_size = Vector2(40 * s, 40 * s)
+	close_btn.add_theme_font_override("font", _get_safe_font())
+	close_btn.add_theme_font_size_override("font_size", 18 * s)
+	var close_style = StyleBoxFlat.new()
+	close_style.bg_color = Color(0.35, 0.15, 0.15, 0.8)
+	close_style.set_corner_radius_all(20 * s)
+	close_btn.add_theme_stylebox_override("normal", close_style)
+	close_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		cannon_settings_panel.queue_free()
+	)
+	header_hbox.add_child(close_btn)
+	
+	var div = ColorRect.new()
+	div.custom_minimum_size.y = 2 * s
+	div.color = Color(0.3, 0.3, 0.4, 0.5)
+	main_vbox.add_child(div)
+	
+	# Direction row
+	var dir_hbox = HBoxContainer.new()
+	dir_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	dir_hbox.add_theme_constant_override("separation", 20 * s)
+	main_vbox.add_child(dir_hbox)
+	
+	var btn_left = Button.new()
+	btn_left.text = "◀"
+	btn_left.custom_minimum_size = Vector2(50 * s, 50 * s)
+	btn_left.add_theme_font_size_override("font_size", 22 * s)
+	var arrow_style = StyleBoxFlat.new()
+	arrow_style.bg_color = Color(0.2, 0.2, 0.28, 0.9)
+	arrow_style.border_width_left = 1; arrow_style.border_width_top = 1; arrow_style.border_width_right = 1; arrow_style.border_width_bottom = 1
+	arrow_style.border_color = Color(0.5, 0.5, 0.6)
+	arrow_style.set_corner_radius_all(10 * s)
+	btn_left.add_theme_stylebox_override("normal", arrow_style)
+	dir_hbox.add_child(btn_left)
+	
+	var dir_label = Label.new()
+	dir_label.text = "Dirección"
+	dir_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	dir_label.add_theme_font_override("font", _get_safe_font())
+	dir_label.add_theme_font_size_override("font_size", 20 * s)
+	dir_hbox.add_child(dir_label)
+	
+	var btn_right = Button.new()
+	btn_right.text = "▶"
+	btn_right.custom_minimum_size = Vector2(50 * s, 50 * s)
+	btn_right.add_theme_font_size_override("font_size", 22 * s)
+	btn_right.add_theme_stylebox_override("normal", arrow_style)
+	dir_hbox.add_child(btn_right)
+	
+	# Preview
+	var preview_container = PanelContainer.new()
+	var preview_style = StyleBoxFlat.new()
+	preview_style.bg_color = Color(0.04, 0.04, 0.06, 1.0)
+	preview_style.border_width_left = 2; preview_style.border_width_top = 2; preview_style.border_width_right = 2; preview_style.border_width_bottom = 2
+	preview_style.border_color = Color(0.25, 0.25, 0.35)
+	preview_style.corner_radius_top_left = 12
+	preview_style.corner_radius_top_right = 12
+	preview_style.corner_radius_bottom_left = 12
+	preview_style.corner_radius_bottom_right = 12
+	preview_container.add_theme_stylebox_override("panel", preview_style)
+	preview_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	main_vbox.add_child(preview_container)
+	
+	var preview_ctrl = Control.new()
+	preview_ctrl.custom_minimum_size = Vector2(180 * s, 180 * s)
+	preview_container.add_child(preview_ctrl)
+	
+	var conn_label = Label.new()
+	conn_label.text = "Conexión de Tubería"
+	conn_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	conn_label.add_theme_font_override("font", _get_safe_font())
+	conn_label.add_theme_font_size_override("font_size", 18 * s)
+	conn_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+	main_vbox.add_child(conn_label)
+	
+	var redraw_preview = func():
+		preview_ctrl.queue_redraw()
+		
+	var update_cannon_in_grid = func():
+		for py in range(12):
+			for px in range(12):
+				var tx = c.pos.x + px - 4
+				var ty = c.pos.y + py - 4
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < grid_height:
+					_set_cell(tx, ty, 0)
+					
+		var inlet_side = c.get("inlet_side", "left")
+		var active_cells = _get_cannon_active_cells(c.orientation, inlet_side)
+		var mat_id = 95 + c.orientation * 100
+		for pt in active_cells:
+			var tx = c.pos.x + pt.x - 4
+			var ty = c.pos.y + pt.y - 4
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < grid_height:
+				var variant = pt.x | (pt.y << 4)
+				var val_encoded = mat_id | (variant << 24)
+				_set_cell(tx, ty, val_encoded)
+				
+	btn_left.pressed.connect(func():
+		_play_action_sound("ui_click")
+		var prev_orient = (c.orientation + 7) % 8
+		while not _is_orientation_allowed(prev_orient, c.get("inlet_side", "left")):
+			prev_orient = (prev_orient + 7) % 8
+		c.orientation = prev_orient
+		update_cannon_in_grid.call()
+		redraw_preview.call()
+	)
+	
+	btn_right.pressed.connect(func():
+		_play_action_sound("ui_click")
+		var next_orient = (c.orientation + 1) % 8
+		while not _is_orientation_allowed(next_orient, c.get("inlet_side", "left")):
+			next_orient = (next_orient + 1) % 8
+		c.orientation = next_orient
+		update_cannon_in_grid.call()
+		redraw_preview.call()
+	)
+	
+	preview_ctrl.draw.connect(func():
+		var size = preview_ctrl.size
+		var pixel_size = size.x / 12.0
+		var inlet_side = c.get("inlet_side", "left")
+		
+		# Draw stand/base dynamically based on inlet_side (White)
+		var stand_cells = []
+		if inlet_side == "bottom":
+			stand_cells = [
+				Vector2i(3, 7), Vector2i(4, 7), Vector2i(5, 7), Vector2i(6, 7),
+				Vector2i(3, 8), Vector2i(6, 8),
+				Vector2i(3, 9), Vector2i(6, 9),
+				Vector2i(3, 10), Vector2i(6, 10)
+			]
+		elif inlet_side == "top":
+			stand_cells = [
+				Vector2i(3, 2), Vector2i(4, 2), Vector2i(5, 2), Vector2i(6, 2),
+				Vector2i(3, 1), Vector2i(6, 1),
+				Vector2i(3, 0), Vector2i(6, 0),
+				Vector2i(3, -1), Vector2i(6, -1)
+			]
+		elif inlet_side == "left":
+			stand_cells = [
+				Vector2i(2, 3), Vector2i(2, 4), Vector2i(2, 5), Vector2i(2, 6),
+				Vector2i(1, 3), Vector2i(1, 6),
+				Vector2i(0, 3), Vector2i(0, 6),
+				Vector2i(-1, 3), Vector2i(-1, 6)
+			]
+		elif inlet_side == "right":
+			stand_cells = [
+				Vector2i(7, 3), Vector2i(7, 4), Vector2i(7, 5), Vector2i(7, 6),
+				Vector2i(8, 3), Vector2i(8, 6),
+				Vector2i(9, 3), Vector2i(9, 6),
+				Vector2i(10, 3), Vector2i(10, 6)
+			]
+			
+		for cell in stand_cells:
+			var rect = Rect2((cell.x + 1) * pixel_size, (cell.y + 1) * pixel_size, pixel_size, pixel_size)
+			preview_ctrl.draw_rect(rect, Color.WHITE)
+			
+		# Draw body
+		var body_color = Color(0.25, 0.3, 0.38)
+		for py in range(3, 7):
+			for px in range(3, 7):
+				var rect = Rect2((px + 1) * pixel_size, (py + 1) * pixel_size, pixel_size, pixel_size)
+				preview_ctrl.draw_rect(rect, body_color)
+				
+		# Draw Pivot and Barrel
+		var pivot_cells = []
+		var barrel_cells = []
+		if c.orientation == 0:
+			pivot_cells = [Vector2i(7, 4), Vector2i(7, 5)]
+			barrel_cells = [Vector2i(8, 4), Vector2i(8, 5)]
+		elif c.orientation == 1:
+			pivot_cells = [Vector2i(6, 3), Vector2i(7, 4)]
+			barrel_cells = [Vector2i(7, 1), Vector2i(7, 2), Vector2i(8, 2), Vector2i(8, 3)]
+		elif c.orientation == 2:
+			pivot_cells = [Vector2i(4, 2), Vector2i(5, 2)]
+			barrel_cells = [Vector2i(4, 0), Vector2i(5, 0), Vector2i(4, 1), Vector2i(5, 1)]
+		elif c.orientation == 3:
+			pivot_cells = [Vector2i(3, 3), Vector2i(2, 4)]
+			barrel_cells = [Vector2i(2, 1), Vector2i(2, 2), Vector2i(1, 2), Vector2i(1, 3)]
+		elif c.orientation == 4:
+			pivot_cells = [Vector2i(2, 4), Vector2i(2, 5)]
+			barrel_cells = [Vector2i(1, 4), Vector2i(1, 5)]
+		elif c.orientation == 5:
+			pivot_cells = [Vector2i(3, 6), Vector2i(2, 5)]
+			barrel_cells = [Vector2i(2, 8), Vector2i(2, 7), Vector2i(1, 7), Vector2i(1, 6)]
+		elif c.orientation == 6:
+			pivot_cells = [Vector2i(4, 7), Vector2i(5, 7)]
+			barrel_cells = [Vector2i(4, 9), Vector2i(5, 9), Vector2i(4, 8), Vector2i(5, 8)]
+		elif c.orientation == 7:
+			pivot_cells = [Vector2i(6, 6), Vector2i(7, 5)]
+			barrel_cells = [Vector2i(7, 8), Vector2i(7, 7), Vector2i(8, 7), Vector2i(8, 6)]
+			
+		for cell in pivot_cells:
+			var rect = Rect2((cell.x + 1) * pixel_size, (cell.y + 1) * pixel_size, pixel_size, pixel_size)
+			preview_ctrl.draw_rect(rect, Color.RED)
+			
+		for cell in barrel_cells:
+			var rect = Rect2((cell.x + 1) * pixel_size, (cell.y + 1) * pixel_size, pixel_size, pixel_size)
+			preview_ctrl.draw_rect(rect, body_color)
+			
+		# Draw Tappable Indicator Points
+		var sides = ["left", "right", "top", "bottom"]
+		for side in sides:
+			if _is_orientation_allowed(c.orientation, side):
+				var center = Vector2(0, 0)
+				if side == "left":
+					center = Vector2(1.5 * pixel_size, 5.5 * pixel_size)
+				elif side == "right":
+					center = Vector2(10.5 * pixel_size, 5.5 * pixel_size)
+				elif side == "top":
+					center = Vector2(5.5 * pixel_size, 1.5 * pixel_size)
+				elif side == "bottom":
+					center = Vector2(5.5 * pixel_size, 10.5 * pixel_size)
+					
+				if side == inlet_side:
+					preview_ctrl.draw_circle(center, 8 * s, Color(0.0, 0.7, 1.0))
+					preview_ctrl.draw_circle(center, 4 * s, Color.WHITE)
+				else:
+					var pulse = 1.0 + 0.15 * sin(Time.get_ticks_msec() * 0.01)
+					preview_ctrl.draw_circle(center, 8 * s * pulse, Color(0.0, 0.8, 0.4, 0.4))
+					preview_ctrl.draw_circle(center, 5 * s, Color(0.0, 0.9, 0.5))
+	)
+	
+	preview_ctrl.gui_input.connect(func(event):
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			var local_pos = event.position
+			var size = preview_ctrl.size
+			var pixel_size = size.x / 12.0
+			
+			var sides = {
+				"left": Vector2(1.5 * pixel_size, 5.5 * pixel_size),
+				"right": Vector2(10.5 * pixel_size, 5.5 * pixel_size),
+				"top": Vector2(5.5 * pixel_size, 1.5 * pixel_size),
+				"bottom": Vector2(5.5 * pixel_size, 10.5 * pixel_size)
+			}
+			
+			var closest_side = ""
+			var min_dist = 9999.0
+			for side in sides.keys():
+				if _is_orientation_allowed(c.orientation, side):
+					var dist = local_pos.distance_to(sides[side])
+					if dist < min_dist:
+						min_dist = dist
+						closest_side = side
+						
+			if min_dist < 30 * s and closest_side != "" and closest_side != c.get("inlet_side", "left"):
+				_play_action_sound("ui_click")
+				c["inlet_side"] = closest_side
+				update_cannon_in_grid.call()
+				redraw_preview.call()
+	)
