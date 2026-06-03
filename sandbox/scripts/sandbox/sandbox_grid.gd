@@ -12463,13 +12463,12 @@ func _get_cannon_active_cells(orient: int, inlet_side: String = "") -> Array:
 		list.append(Vector2i(9, 6))
 	elif orient == 1: # 45 deg (Top-Right)
 		# Pivot
-		list.append(Vector2i(7, 4))
-		list.append(Vector2i(8, 5))
+		list.append(Vector2i(7, 3))
+		list.append(Vector2i(8, 4))
 		# Barrel
 		list.append(Vector2i(8, 2))
 		list.append(Vector2i(8, 3))
 		list.append(Vector2i(9, 3))
-		list.append(Vector2i(9, 4))
 	elif orient == 2: # 90 deg (Up)
 		# Pivot
 		list.append(Vector2i(5, 3))
@@ -12481,13 +12480,12 @@ func _get_cannon_active_cells(orient: int, inlet_side: String = "") -> Array:
 		list.append(Vector2i(6, 2))
 	elif orient == 3: # 135 deg (Top-Left)
 		# Pivot
-		list.append(Vector2i(4, 4))
-		list.append(Vector2i(3, 5))
+		list.append(Vector2i(4, 3))
+		list.append(Vector2i(3, 4))
 		# Barrel
 		list.append(Vector2i(3, 2))
 		list.append(Vector2i(3, 3))
 		list.append(Vector2i(2, 3))
-		list.append(Vector2i(2, 4))
 	elif orient == 4: # 180 deg (Left)
 		# Pivot
 		list.append(Vector2i(3, 5))
@@ -12497,13 +12495,12 @@ func _get_cannon_active_cells(orient: int, inlet_side: String = "") -> Array:
 		list.append(Vector2i(2, 6))
 	elif orient == 5: # 225 deg (Bottom-Left)
 		# Pivot
-		list.append(Vector2i(4, 7))
-		list.append(Vector2i(3, 6))
+		list.append(Vector2i(4, 8))
+		list.append(Vector2i(3, 7))
 		# Barrel
 		list.append(Vector2i(3, 9))
 		list.append(Vector2i(3, 8))
 		list.append(Vector2i(2, 8))
-		list.append(Vector2i(2, 7))
 	elif orient == 6: # 270 deg (Down)
 		# Pivot
 		list.append(Vector2i(5, 8))
@@ -12515,13 +12512,12 @@ func _get_cannon_active_cells(orient: int, inlet_side: String = "") -> Array:
 		list.append(Vector2i(6, 9))
 	elif orient == 7: # 315 deg (Bottom-Right)
 		# Pivot
-		list.append(Vector2i(7, 7))
-		list.append(Vector2i(8, 6))
+		list.append(Vector2i(7, 8))
+		list.append(Vector2i(8, 7))
 		# Barrel
 		list.append(Vector2i(8, 9))
 		list.append(Vector2i(8, 8))
 		list.append(Vector2i(9, 8))
-		list.append(Vector2i(9, 7))
 		
 	return list
 
@@ -17395,26 +17391,26 @@ func _open_cannon_settings_panel(c):
 			pivot_cells = [Vector2i(7, 4), Vector2i(7, 5)]
 			barrel_cells = [Vector2i(8, 4), Vector2i(8, 5)]
 		elif c.orientation == 1:
-			pivot_cells = [Vector2i(6, 3), Vector2i(7, 4)]
-			barrel_cells = [Vector2i(7, 1), Vector2i(7, 2), Vector2i(8, 2), Vector2i(8, 3)]
+			pivot_cells = [Vector2i(6, 2), Vector2i(7, 3)]
+			barrel_cells = [Vector2i(7, 1), Vector2i(7, 2), Vector2i(8, 2)]
 		elif c.orientation == 2:
 			pivot_cells = [Vector2i(4, 2), Vector2i(5, 2)]
 			barrel_cells = [Vector2i(4, 0), Vector2i(5, 0), Vector2i(4, 1), Vector2i(5, 1)]
 		elif c.orientation == 3:
-			pivot_cells = [Vector2i(3, 3), Vector2i(2, 4)]
-			barrel_cells = [Vector2i(2, 1), Vector2i(2, 2), Vector2i(1, 2), Vector2i(1, 3)]
+			pivot_cells = [Vector2i(3, 2), Vector2i(2, 3)]
+			barrel_cells = [Vector2i(2, 1), Vector2i(2, 2), Vector2i(1, 2)]
 		elif c.orientation == 4:
 			pivot_cells = [Vector2i(2, 4), Vector2i(2, 5)]
 			barrel_cells = [Vector2i(1, 4), Vector2i(1, 5)]
 		elif c.orientation == 5:
-			pivot_cells = [Vector2i(3, 6), Vector2i(2, 5)]
-			barrel_cells = [Vector2i(2, 8), Vector2i(2, 7), Vector2i(1, 7), Vector2i(1, 6)]
+			pivot_cells = [Vector2i(3, 7), Vector2i(2, 6)]
+			barrel_cells = [Vector2i(2, 8), Vector2i(2, 7), Vector2i(1, 7)]
 		elif c.orientation == 6:
 			pivot_cells = [Vector2i(4, 7), Vector2i(5, 7)]
 			barrel_cells = [Vector2i(4, 9), Vector2i(5, 9), Vector2i(4, 8), Vector2i(5, 8)]
 		elif c.orientation == 7:
-			pivot_cells = [Vector2i(6, 6), Vector2i(7, 5)]
-			barrel_cells = [Vector2i(7, 8), Vector2i(7, 7), Vector2i(8, 7), Vector2i(8, 6)]
+			pivot_cells = [Vector2i(6, 7), Vector2i(7, 6)]
+			barrel_cells = [Vector2i(7, 8), Vector2i(7, 7), Vector2i(8, 7)]
 			
 		for cell in pivot_cells:
 			var rect = Rect2((cell.x + 1) * pixel_size, (cell.y + 1) * pixel_size, pixel_size, pixel_size)

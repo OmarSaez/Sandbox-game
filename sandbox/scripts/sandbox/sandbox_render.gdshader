@@ -145,9 +145,9 @@ void fragment() {
                     is_barrel = true;
                 }
             } else if (orient == 1) {
-                if ((px == 7 && py == 4) || (px == 8 && py == 5)) {
+                if ((px == 7 && py == 3) || (px == 8 && py == 4)) {
                     is_pivot = true;
-                } else if ((px == 8 && (py == 2 || py == 3)) || (px == 9 && (py == 3 || py == 4))) {
+                } else if ((px == 8 && (py == 2 || py == 3)) || (px == 9 && py == 3)) {
                     is_barrel = true;
                 }
             } else if (orient == 2) {
@@ -157,9 +157,9 @@ void fragment() {
                     is_barrel = true;
                 }
             } else if (orient == 3) {
-                if ((px == 4 && py == 4) || (px == 3 && py == 5)) {
+                if ((px == 4 && py == 3) || (px == 3 && py == 4)) {
                     is_pivot = true;
-                } else if ((px == 3 && (py == 2 || py == 3)) || (px == 2 && (py == 3 || py == 4))) {
+                } else if ((px == 3 && (py == 2 || py == 3)) || (px == 2 && py == 3)) {
                     is_barrel = true;
                 }
             } else if (orient == 4) {
@@ -169,9 +169,9 @@ void fragment() {
                     is_barrel = true;
                 }
             } else if (orient == 5) {
-                if ((px == 4 && py == 7) || (px == 3 && py == 6)) {
+                if ((px == 4 && py == 8) || (px == 3 && py == 7)) {
                     is_pivot = true;
-                } else if ((px == 3 && (py == 9 || py == 8)) || (px == 2 && (py == 8 || py == 7))) {
+                } else if ((px == 3 && (py == 9 || py == 8)) || (px == 2 && py == 8)) {
                     is_barrel = true;
                 }
             } else if (orient == 6) {
@@ -181,9 +181,9 @@ void fragment() {
                     is_barrel = true;
                 }
             } else if (orient == 7) {
-                if ((px == 7 && py == 7) || (px == 8 && py == 6)) {
+                if ((px == 7 && py == 8) || (px == 8 && py == 7)) {
                     is_pivot = true;
-                } else if ((px == 8 && (py == 9 || py == 8)) || (px == 9 && (py == 8 || py == 7))) {
+                } else if ((px == 8 && (py == 9 || py == 8)) || (px == 9 && py == 8)) {
                     is_barrel = true;
                 }
             }
@@ -213,13 +213,13 @@ void fragment() {
             } else if (is_barrel) {
                 bool is_tip = false;
                 if (orient == 0 && px == 9) is_tip = true;
-                else if (orient == 1 && px == 9 && py == 3) is_tip = true;
+                else if (orient == 1 && px == 9 && py == 2) is_tip = true;
                 else if (orient == 2 && py == 1) is_tip = true;
-                else if (orient == 3 && px == 2 && py == 3) is_tip = true;
+                else if (orient == 3 && px == 2 && py == 2) is_tip = true;
                 else if (orient == 4 && px == 2) is_tip = true;
-                else if (orient == 5 && px == 2 && py == 8) is_tip = true;
+                else if (orient == 5 && px == 2 && py == 9) is_tip = true;
                 else if (orient == 6 && py == 10) is_tip = true;
-                else if (orient == 7 && px == 9 && py == 8) is_tip = true;
+                else if (orient == 7 && px == 9 && py == 9) is_tip = true;
 
                 if (is_tip) {
                     color.rgb = vec3(0.18, 0.22, 0.28); // Dark muzzle opening
