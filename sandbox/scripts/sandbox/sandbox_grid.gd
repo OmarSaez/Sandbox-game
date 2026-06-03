@@ -15847,6 +15847,11 @@ func _simulate_cannons(delta: float):
 func _update_pipe_visuals(p):
 	var path = p.path
 	var L = path.size()
+	
+	var phase = _frame_count % 4
+	var flow_dir = p.get("flow_dir", 0)
+	
+	# First pass: static pipe structure (walls + air core 0)
 	for i in range(L):
 		var pt = path[i]
 		var gx = pt.x
@@ -15889,57 +15894,107 @@ func _update_pipe_visuals(p):
 					elif has_top_conn: is_bottom_open = true
 					elif has_bottom_conn: is_top_open = true
 					
-		# Element rendering
-		var elems = p.elements[i]
-		var c0 = elems[0].mat if elems.size() > 0 else 0
-		var c1 = elems[1].mat if elems.size() > 1 else 0
-		var c2 = elems[2].mat if elems.size() > 2 else 0
-		var c3 = elems[3].mat if elems.size() > 3 else 0
-		
-		# Draw outer pipe walls (96) and openings (flowing elements or empty air 0)
+		# Draw outer pipe walls (96) and empty cores/openings
 		_set_cell(gx, gy, 96)
 		_set_cell(gx + 3, gy, 96)
 		_set_cell(gx, gy + 3, 96)
 		_set_cell(gx + 3, gy + 3, 96)
 		
 		if is_top_open:
-			_set_cell(gx + 1, gy, c0)
-			_set_cell(gx + 2, gy, c1)
+			_set_cell(gx + 1, gy, 0)
+			_set_cell(gx + 2, gy, 0)
 		else:
 			_set_cell(gx + 1, gy, 96)
 			_set_cell(gx + 2, gy, 96)
 			
 		if is_bottom_open:
-			_set_cell(gx + 1, gy + 3, c2)
-			_set_cell(gx + 2, gy + 3, c3)
+			_set_cell(gx + 1, gy + 3, 0)
+			_set_cell(gx + 2, gy + 3, 0)
 		else:
 			_set_cell(gx + 1, gy + 3, 96)
 			_set_cell(gx + 2, gy + 3, 96)
 			
 		if is_left_open:
-			_set_cell(gx, gy + 1, c0)
-			_set_cell(gx, gy + 2, c2)
+			_set_cell(gx, gy + 1, 0)
+			_set_cell(gx, gy + 2, 0)
 		else:
 			_set_cell(gx, gy + 1, 96)
 			_set_cell(gx, gy + 2, 96)
 			
 		if is_right_open:
-			_set_cell(gx + 3, gy + 1, c1)
-			_set_cell(gx + 3, gy + 2, c3)
+			_set_cell(gx + 3, gy + 1, 0)
+			_set_cell(gx + 3, gy + 2, 0)
 		else:
 			_set_cell(gx + 3, gy + 1, 96)
 			_set_cell(gx + 3, gy + 2, 96)
 			
-		# Draw inner core
-		_set_cell(gx + 1, gy + 1, c0)
-		_set_cell(gx + 2, gy + 1, c1)
-		_set_cell(gx + 1, gy + 2, c2)
-		_set_cell(gx + 2, gy + 2, c3)
+		# Draw inner core (0)
+		_set_cell(gx + 1, gy + 1, 0)
+		_set_cell(gx + 2, gy + 1, 0)
+		_set_cell(gx + 1, gy + 2, 0)
+		_set_cell(gx + 2, gy + 2, 0)
+
+	# Second pass: draw traveling elements at interpolated position
+	for i in range(L):
+		var pt = path[i]
+		var gx = pt.x
+		var gy = pt.y
+		
+		var elems = p.elements[i]
+		if elems.size() == 0: continue
+		
+		var c0 = elems[0].mat if elems.size() > 0 else 0
+		var c1 = elems[1].mat if elems.size() > 1 else 0
+		var c2 = elems[2].mat if elems.size() > 2 else 0
+		var c3 = elems[3].mat if elems.size() > 3 else 0
+		
+		# Compute interpolation target
+		var next_pt = pt
+		if flow_dir == 1:
+			if i < L - 1:
+				next_pt = path[i + 1]
+			else:
+				var side = _find_pipe_endpoint_opening_side(p, i)
+				var ejection_dir = Vector2i(0, 0)
+				if side == "bottom" or side == "horizontal": ejection_dir = Vector2i(0, 1)
+				elif side == "top": ejection_dir = Vector2i(0, -1)
+				elif side == "left": ejection_dir = Vector2i(-1, 0)
+				elif side == "right": ejection_dir = Vector2i(1, 0)
+				next_pt = pt + ejection_dir * 4
+		elif flow_dir == -1:
+			if i > 0:
+				next_pt = path[i - 1]
+			else:
+				var side = _find_pipe_endpoint_opening_side(p, i)
+				var ejection_dir = Vector2i(0, 0)
+				if side == "bottom" or side == "horizontal": ejection_dir = Vector2i(0, 1)
+				elif side == "top": ejection_dir = Vector2i(0, -1)
+				elif side == "left": ejection_dir = Vector2i(-1, 0)
+				elif side == "right": ejection_dir = Vector2i(1, 0)
+				next_pt = pt + ejection_dir * 4
+				
+		var offset = Vector2i(0, 0)
+		if flow_dir != 0:
+			var diff = next_pt - pt
+			offset = Vector2i(
+				int(round(float(diff.x) / 4.0 * float(phase))),
+				int(round(float(diff.y) / 4.0 * float(phase)))
+			)
+			
+		# Write material cells with offset
+		if c0 > 0: _set_cell(gx + 1 + offset.x, gy + 1 + offset.y, c0)
+		if c1 > 0: _set_cell(gx + 2 + offset.x, gy + 1 + offset.y, c1)
+		if c2 > 0: _set_cell(gx + 1 + offset.x, gy + 2 + offset.y, c2)
+		if c3 > 0: _set_cell(gx + 2 + offset.x, gy + 2 + offset.y, c3)
 
 func _update_pipe_x2_visuals(p):
 	var path = p.path
 	var L = path.size()
 	
+	var phase = _frame_count % 4
+	var flow_dir = p.get("flow_dir", 0)
+	
+	# First pass: draw static structures (walls and cores set to 0)
 	for i in range(L):
 		var pt = path[i]
 		var gx = pt.x
@@ -15982,9 +16037,6 @@ func _update_pipe_x2_visuals(p):
 					elif has_top_conn: is_bottom_open = true
 					elif has_bottom_conn: is_top_open = true
 					
-		# Element rendering
-		var block_elems = p.elements[i] if (p.has("elements") and i < p.elements.size()) else []
-		
 		# Fill block with wall (97)
 		for dy in range(8):
 			for dx in range(8):
@@ -16012,16 +16064,60 @@ func _update_pipe_x2_visuals(p):
 			for dx in range(6, 8):
 				for dy in range(2, 6):
 					_set_cell(gx + dx, gy + dy, 0)
-					
-		# Determine orientation for layout spacing
-		var is_horizontal = has_left_conn or has_right_conn or (not has_top_conn and not has_bottom_conn)
+
+	# Second pass: draw elements at their interpolated positions
+	for i in range(L):
+		var pt = path[i]
+		var gx = pt.x
+		var gy = pt.y
 		
-		# Draw elements and their trails into active openings
-		var lane_counts = {}
-		var active_flow_dir = p.get("flow_dir", 0)
-		if active_flow_dir == 0:
-			active_flow_dir = 1
+		var block_elems = p.elements[i] if (p.has("elements") and i < p.elements.size()) else []
+		if block_elems.size() == 0: continue
+		
+		var is_horizontal = false
+		if i > 0:
+			var prev = path[i - 1]
+			if prev.x != pt.x: is_horizontal = true
+		elif i < L - 1:
+			var next = path[i + 1]
+			if next.x != pt.x: is_horizontal = true
+		else:
+			is_horizontal = true
 			
+		# Compute interpolation target
+		var next_pt = pt
+		if flow_dir == 1:
+			if i < L - 1:
+				next_pt = path[i + 1]
+			else:
+				var side = _find_pipe_x2_endpoint_opening_side(p, i)
+				var ejection_dir = Vector2i(0, 0)
+				if side == "bottom" or side == "horizontal": ejection_dir = Vector2i(0, 1)
+				elif side == "top": ejection_dir = Vector2i(0, -1)
+				elif side == "left": ejection_dir = Vector2i(-1, 0)
+				elif side == "right": ejection_dir = Vector2i(1, 0)
+				next_pt = pt + ejection_dir * 8
+		elif flow_dir == -1:
+			if i > 0:
+				next_pt = path[i - 1]
+			else:
+				var side = _find_pipe_x2_endpoint_opening_side(p, i)
+				var ejection_dir = Vector2i(0, 0)
+				if side == "bottom" or side == "horizontal": ejection_dir = Vector2i(0, 1)
+				elif side == "top": ejection_dir = Vector2i(0, -1)
+				elif side == "left": ejection_dir = Vector2i(-1, 0)
+				elif side == "right": ejection_dir = Vector2i(1, 0)
+				next_pt = pt + ejection_dir * 8
+				
+		var offset = Vector2i(0, 0)
+		if flow_dir != 0:
+			var diff = next_pt - pt
+			offset = Vector2i(
+				int(round(float(diff.x) / 4.0 * float(phase))),
+				int(round(float(diff.y) / 4.0 * float(phase)))
+			)
+			
+		var lane_counts = {}
 		for elem in block_elems:
 			var mat = elem.mat
 			if mat > 0:
@@ -16037,32 +16133,18 @@ func _update_pipe_x2_visuals(p):
 				
 				if is_horizontal:
 					py = lane
-					if active_flow_dir == -1:
+					if flow_dir == -1:
 						px = clamp(2 + count, 2, 5)
 					else:
 						px = clamp(5 - count, 2, 5)
 				else:
 					px = lane
-					if active_flow_dir == -1:
+					if flow_dir == -1:
 						py = clamp(2 + count, 2, 5)
 					else:
 						py = clamp(5 - count, 2, 5)
 						
-				_set_cell(gx + px, gy + py, mat)
-				
-				# If that opening is open, draw the trail
-				if is_top_open and py == 2:
-					_set_cell(gx + px, gy + 1, mat)
-					_set_cell(gx + px, gy + 0, mat)
-				if is_bottom_open and py == 5:
-					_set_cell(gx + px, gy + 6, mat)
-					_set_cell(gx + px, gy + 7, mat)
-				if is_left_open and px == 2:
-					_set_cell(gx + 1, gy + py, mat)
-					_set_cell(gx + 0, gy + py, mat)
-				if is_right_open and px == 5:
-					_set_cell(gx + 6, gy + py, mat)
-					_set_cell(gx + 7, gy + py, mat)
+				_set_cell(gx + px + offset.x, gy + py + offset.y, mat)
 
 func _find_pipe_x2_endpoint_opening_side(p, endpoint_idx: int) -> String:
 	var path = p.path
@@ -16240,10 +16322,11 @@ func _find_pipe_x2_ejection_cell_at_endpoint(p, endpoint_idx: int, preferred_lan
 	var gy = pt.y
 	var side = _find_pipe_x2_endpoint_opening_side(p, endpoint_idx)
 	
-	var offsets = [preferred_lane]
-	for o in [2, 3, 4, 5]:
-		if o != preferred_lane:
-			offsets.append(o)
+	var offsets = []
+	if preferred_lane == 2 or preferred_lane == 3:
+		offsets = [3, 4, 2, 5]
+	else:
+		offsets = [4, 3, 5, 2]
 			
 	if side == "bottom" or side == "horizontal":
 		for ox in offsets:
@@ -16277,212 +16360,223 @@ func _find_pipe_x2_ejection_cell_at_endpoint(p, endpoint_idx: int, preferred_lan
 
 func _simulate_pipes(delta: float):
 	if active_pipes.size() == 0 and active_pipes_x2.size() == 0: return
-	if _frame_count % 4 != 0:
-		return
-		
-	for p in active_pipes:
-		var path = p.get("path", [])
-		var L = path.size()
-		if L == 0: continue
-		var end_idx = L - 1
-		
-		# 1. Check/update flow direction based on contents and input presence
-		var total_elems = 0
-		for list in p.elements:
-			total_elems += list.size()
-		if total_elems == 0:
-			p["flow_dir"] = 0
+	
+	if _frame_count % 4 == 0:
+		for p in active_pipes:
+			var path = p.get("path", [])
+			var L = path.size()
+			if L == 0: continue
+			var end_idx = L - 1
 			
-		if p.get("flow_dir", 0) == 0:
-			var absorb_pos_0 = _find_pipe_absorbable_cell_at_endpoint(p, 0)
-			if absorb_pos_0.x != -1:
-				p["flow_dir"] = 1
+			# 1. Check/update flow direction based on contents and input presence
+			var total_elems = 0
+			for list in p.elements:
+				total_elems += list.size()
+			if total_elems == 0:
+				var empty_ticks = p.get("empty_ticks", 0) + 1
+				p["empty_ticks"] = empty_ticks
+				if empty_ticks >= 15:
+					p["flow_dir"] = 0
 			else:
-				var absorb_pos_end = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
-				if absorb_pos_end.x != -1:
-					p["flow_dir"] = -1
-					
-		var flow_dir = p.get("flow_dir", 0)
-		if flow_dir == 1:
-			# --- FORWARD SIMULATION (0 -> end_idx) ---
-			# Eject at end
-			var end_pt = path[end_idx]
-			var end_elems = p.elements[end_idx]
-			var next_end_elems = []
-			var end_conn = _find_connected_cannon(end_pt)
-			for elem in end_elems:
-				if not end_conn.is_empty():
-					var c = end_conn["cannon"]
-					if c.get("loaded_material", 0) == 0:
-						c["loaded_material"] = elem.mat
-					else:
-						next_end_elems.append(elem)
-				else:
-					var empty_pos = _find_pipe_ejection_cell_at_endpoint(p, end_idx)
-					if empty_pos.x != -1:
-						_set_cell(empty_pos.x, empty_pos.y, elem.mat)
-					else:
-						next_end_elems.append(elem)
-			p.elements[end_idx] = next_end_elems
-			
-			# Propagate forward
-			for i in range(L - 2, -1, -1):
-				var cur_elems = p.elements[i]
-				var next_cur = []
-				for elem in cur_elems:
-					if p.elements[i+1].size() < 4:
-						p.elements[i+1].append(elem)
-					else:
-						next_cur.append(elem)
-				p.elements[i] = next_cur
+				p["empty_ticks"] = 0
 				
-			# Absorb at start (0)
-			if p.elements[0].size() < 4:
-				var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, 0)
-				if absorb_pos.x != -1:
-					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
-					_set_cell(absorb_pos.x, absorb_pos.y, 0)
-					p.elements[0].append({ "mat": mat, "dir": 1 })
-					
-		elif flow_dir == -1:
-			# --- BACKWARD SIMULATION (end_idx -> 0) ---
-			# Eject at start (0)
-			var start_pt = path[0]
-			var start_elems = p.elements[0]
-			var next_start_elems = []
-			var start_conn = _find_connected_cannon(start_pt)
-			for elem in start_elems:
-				if not start_conn.is_empty():
-					var c = start_conn["cannon"]
-					if c.get("loaded_material", 0) == 0:
-						c["loaded_material"] = elem.mat
-					else:
-						next_start_elems.append(elem)
+			if p.get("flow_dir", 0) == 0:
+				var absorb_pos_0 = _find_pipe_absorbable_cell_at_endpoint(p, 0)
+				if absorb_pos_0.x != -1:
+					p["flow_dir"] = 1
 				else:
-					var empty_pos = _find_pipe_ejection_cell_at_endpoint(p, 0)
-					if empty_pos.x != -1:
-						_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+					var absorb_pos_end = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
+					if absorb_pos_end.x != -1:
+						p["flow_dir"] = -1
+						
+			var flow_dir = p.get("flow_dir", 0)
+			if flow_dir == 1:
+				# --- FORWARD SIMULATION (0 -> end_idx) ---
+				# Eject at end
+				var end_pt = path[end_idx]
+				var end_elems = p.elements[end_idx]
+				var next_end_elems = []
+				var end_conn = _find_connected_cannon(end_pt)
+				for elem in end_elems:
+					if not end_conn.is_empty():
+						var c = end_conn["cannon"]
+						if c.get("loaded_material", 0) == 0:
+							c["loaded_material"] = elem.mat
+						else:
+							next_end_elems.append(elem)
 					else:
-						next_start_elems.append(elem)
-			p.elements[0] = next_start_elems
-			
-			# Propagate backward
-			for i in range(1, L):
-				var cur_elems = p.elements[i]
-				var next_cur = []
-				for elem in cur_elems:
-					if p.elements[i-1].size() < 4:
-						p.elements[i-1].append(elem)
-					else:
-						next_cur.append(elem)
-				p.elements[i] = next_cur
+						var empty_pos = _find_pipe_ejection_cell_at_endpoint(p, end_idx)
+						if empty_pos.x != -1:
+							_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+						else:
+							next_end_elems.append(elem)
+				p.elements[end_idx] = next_end_elems
 				
-			# Absorb at end
-			if p.elements[end_idx].size() < 4:
-				var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
-				if absorb_pos.x != -1:
-					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
-					_set_cell(absorb_pos.x, absorb_pos.y, 0)
-					p.elements[end_idx].append({ "mat": mat, "dir": -1 })
+				# Propagate forward
+				for i in range(L - 2, -1, -1):
+					var cur_elems = p.elements[i]
+					var next_cur = []
+					for elem in cur_elems:
+						if p.elements[i+1].size() < 4:
+							p.elements[i+1].append(elem)
+						else:
+							next_cur.append(elem)
+					p.elements[i] = next_cur
 					
-		_update_pipe_visuals(p)
+				# Absorb at start (0)
+				if p.elements[0].size() < 4:
+					var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, 0)
+					if absorb_pos.x != -1:
+						var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+						_set_cell(absorb_pos.x, absorb_pos.y, 0)
+						p.elements[0].append({ "mat": mat, "dir": 1 })
+						
+			elif flow_dir == -1:
+				# --- BACKWARD SIMULATION (end_idx -> 0) ---
+				# Eject at start (0)
+				var start_pt = path[0]
+				var start_elems = p.elements[0]
+				var next_start_elems = []
+				var start_conn = _find_connected_cannon(start_pt)
+				for elem in start_elems:
+					if not start_conn.is_empty():
+						var c = start_conn["cannon"]
+						if c.get("loaded_material", 0) == 0:
+							c["loaded_material"] = elem.mat
+						else:
+							next_start_elems.append(elem)
+					else:
+						var empty_pos = _find_pipe_ejection_cell_at_endpoint(p, 0)
+						if empty_pos.x != -1:
+							_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+						else:
+							next_start_elems.append(elem)
+				p.elements[0] = next_start_elems
+				
+				# Propagate backward
+				for i in range(1, L):
+					var cur_elems = p.elements[i]
+					var next_cur = []
+					for elem in cur_elems:
+						if p.elements[i-1].size() < 4:
+							p.elements[i-1].append(elem)
+						else:
+							next_cur.append(elem)
+					p.elements[i] = next_cur
+					
+				# Absorb at end
+				if p.elements[end_idx].size() < 4:
+					var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
+					if absorb_pos.x != -1:
+						var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+						_set_cell(absorb_pos.x, absorb_pos.y, 0)
+						p.elements[end_idx].append({ "mat": mat, "dir": -1 })
 
-	for p in active_pipes_x2:
-		var path = p.get("path", [])
-		var L = path.size()
-		if L == 0: continue
-		var end_idx = L - 1
-		
-		var total_elems = 0
-		for list in p.elements:
-			total_elems += list.size()
-		if total_elems == 0:
-			p["flow_dir"] = 0
+		for p in active_pipes_x2:
+			var path = p.get("path", [])
+			var L = path.size()
+			if L == 0: continue
+			var end_idx = L - 1
 			
-		if p.get("flow_dir", 0) == 0:
-			var absorb_pos_0 = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0)
-			if absorb_pos_0.x != -1:
-				p["flow_dir"] = 1
+			var total_elems = 0
+			for list in p.elements:
+				total_elems += list.size()
+			if total_elems == 0:
+				var empty_ticks = p.get("empty_ticks", 0) + 1
+				p["empty_ticks"] = empty_ticks
+				if empty_ticks >= 15:
+					p["flow_dir"] = 0
 			else:
-				var absorb_pos_end = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx)
-				if absorb_pos_end.x != -1:
-					p["flow_dir"] = -1
-					
-		var flow_dir = p.get("flow_dir", 0)
-		if flow_dir == 1:
-			# --- FORWARD SIMULATION (0 -> end_idx) ---
-			# Eject at end
-			var end_elems = p.elements[end_idx]
-			var next_end_elems = []
-			for elem in end_elems:
-				var preferred_lane = elem.get("lane", 2)
-				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, end_idx, preferred_lane)
-				if empty_pos.x != -1:
-					_set_cell(empty_pos.x, empty_pos.y, elem.mat)
-				else:
-					next_end_elems.append(elem)
-			p.elements[end_idx] = next_end_elems
-			
-			# Propagate forward
-			for i in range(L - 2, -1, -1):
-				var cur_elems = p.elements[i]
-				var next_cur = []
-				for elem in cur_elems:
-					if p.elements[i+1].size() < 8:
-						p.elements[i+1].append(elem)
-					else:
-						next_cur.append(elem)
-				p.elements[i] = next_cur
+				p["empty_ticks"] = 0
 				
-			# Absorb at start (0)
-			while p.elements[0].size() < 8:
-				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0)
-				if absorb_pos.x != -1:
-					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
-					_set_cell(absorb_pos.x, absorb_pos.y, 0)
-					var side = _find_pipe_x2_endpoint_opening_side(p, 0)
-					var pt = path[0]
-					var lane = (absorb_pos.y - pt.y) if (side == "left" or side == "right") else (absorb_pos.x - pt.x)
-					p.elements[0].append({ "mat": mat, "dir": 1, "lane": lane })
+			if p.get("flow_dir", 0) == 0:
+				var absorb_pos_0 = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0)
+				if absorb_pos_0.x != -1:
+					p["flow_dir"] = 1
 				else:
-					break
-					
-		elif flow_dir == -1:
-			# --- BACKWARD SIMULATION (end_idx -> 0) ---
-			# Eject at start (0)
-			var start_elems = p.elements[0]
-			var next_start_elems = []
-			for elem in start_elems:
-				var preferred_lane = elem.get("lane", 2)
-				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, 0, preferred_lane)
-				if empty_pos.x != -1:
-					_set_cell(empty_pos.x, empty_pos.y, elem.mat)
-				else:
-					next_start_elems.append(elem)
-			p.elements[0] = next_start_elems
-			
-			# Propagate backward
-			for i in range(1, L):
-				var cur_elems = p.elements[i]
-				var next_cur = []
-				for elem in cur_elems:
-					if p.elements[i-1].size() < 8:
-						p.elements[i-1].append(elem)
+					var absorb_pos_end = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx)
+					if absorb_pos_end.x != -1:
+						p["flow_dir"] = -1
+						
+			var flow_dir = p.get("flow_dir", 0)
+			if flow_dir == 1:
+				# --- FORWARD SIMULATION (0 -> end_idx) ---
+				# Eject at end
+				var end_elems = p.elements[end_idx]
+				var next_end_elems = []
+				for elem in end_elems:
+					var preferred_lane = elem.get("lane", 2)
+					var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, end_idx, preferred_lane)
+					if empty_pos.x != -1:
+						_set_cell(empty_pos.x, empty_pos.y, elem.mat)
 					else:
-						next_cur.append(elem)
-				p.elements[i] = next_cur
+						next_end_elems.append(elem)
+				p.elements[end_idx] = next_end_elems
 				
-			# Absorb at end
-			while p.elements[end_idx].size() < 8:
-				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx)
-				if absorb_pos.x != -1:
-					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
-					_set_cell(absorb_pos.x, absorb_pos.y, 0)
-					var side = _find_pipe_x2_endpoint_opening_side(p, end_idx)
-					var pt = path[end_idx]
-					var lane = (absorb_pos.y - pt.y) if (side == "left" or side == "right") else (absorb_pos.x - pt.x)
-					p.elements[end_idx].append({ "mat": mat, "dir": -1, "lane": lane })
-				else:
-					break
+				# Propagate forward
+				for i in range(L - 2, -1, -1):
+					var cur_elems = p.elements[i]
+					var next_cur = []
+					for elem in cur_elems:
+						if p.elements[i+1].size() < 8:
+							p.elements[i+1].append(elem)
+						else:
+							next_cur.append(elem)
+					p.elements[i] = next_cur
 					
+				# Absorb at start (0)
+				while p.elements[0].size() < 8:
+					var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0)
+					if absorb_pos.x != -1:
+						var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+						_set_cell(absorb_pos.x, absorb_pos.y, 0)
+						var side = _find_pipe_x2_endpoint_opening_side(p, 0)
+						var pt = path[0]
+						var lane = (absorb_pos.y - pt.y) if (side == "left" or side == "right") else (absorb_pos.x - pt.x)
+						p.elements[0].append({ "mat": mat, "dir": 1, "lane": lane })
+					else:
+						break
+						
+			elif flow_dir == -1:
+				# --- BACKWARD SIMULATION (end_idx -> 0) ---
+				# Eject at start (0)
+				var start_elems = p.elements[0]
+				var next_start_elems = []
+				for elem in start_elems:
+					var preferred_lane = elem.get("lane", 2)
+					var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, 0, preferred_lane)
+					if empty_pos.x != -1:
+						_set_cell(empty_pos.x, empty_pos.y, elem.mat)
+					else:
+						next_start_elems.append(elem)
+				p.elements[0] = next_start_elems
+				
+				# Propagate backward
+				for i in range(1, L):
+					var cur_elems = p.elements[i]
+					var next_cur = []
+					for elem in cur_elems:
+						if p.elements[i-1].size() < 8:
+							p.elements[i-1].append(elem)
+						else:
+							next_cur.append(elem)
+					p.elements[i] = next_cur
+					
+				# Absorb at end
+				while p.elements[end_idx].size() < 8:
+					var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx)
+					if absorb_pos.x != -1:
+						var mat = _get_cell(absorb_pos.x, absorb_pos.y)
+						_set_cell(absorb_pos.x, absorb_pos.y, 0)
+						var side = _find_pipe_x2_endpoint_opening_side(p, end_idx)
+						var pt = path[end_idx]
+						var lane = (absorb_pos.y - pt.y) if (side == "left" or side == "right") else (absorb_pos.x - pt.x)
+						p.elements[end_idx].append({ "mat": mat, "dir": -1, "lane": lane })
+					else:
+						break
+						
+	# Draw/animate visuals every frame (60 Hz)
+	for p in active_pipes:
+		_update_pipe_visuals(p)
+	for p in active_pipes_x2:
 		_update_pipe_x2_visuals(p)
