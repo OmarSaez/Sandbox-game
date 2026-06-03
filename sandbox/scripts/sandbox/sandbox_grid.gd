@@ -910,11 +910,13 @@ func _ready():
 	
 	# Initialize Google Play Game Services on Android
 	if OS.has_feature("android") and Engine.has_singleton("GodotPlayGameServices"):
-		var init_status = GodotPlayGameServices.initialize()
-		if init_status == 0: # PlayGamesPluginError.OK
-			play_games_achievements_client = PlayGamesAchievementsClient.new()
-			add_child(play_games_achievements_client)
-			print("Google Play Games Services client successfully setup!")
+		var gps = get_node_or_null("/root/GodotPlayGameServices")
+		if gps:
+			var init_status = gps.initialize()
+			if init_status == 0: # PlayGamesPluginError.OK
+				play_games_achievements_client = PlayGamesAchievementsClient.new()
+				add_child(play_games_achievements_client)
+				print("Google Play Games Services client successfully setup!")
 			
 	Engine.max_fps = 60 # Cierra la puerta al stutter en pantallas 120Hz/LTPO
 	is_grid_ready = false # Safeguard during async _ready
@@ -2038,7 +2040,7 @@ var action_vbox: VBoxContainer
 var material_scroll: ScrollContainer
 var cached_hud_height: float = 362.0 # Performance optimization: Cached for panel alignment
 
-var play_games_achievements_client: PlayGamesAchievementsClient = null
+var play_games_achievements_client = null
 
 const GOOGLE_PLAY_ACHIEVEMENTS = {
 	"massive_fight": "CgkIx9-23rkFEAIQAA",
@@ -8465,8 +8467,11 @@ func _trigger_controlled_npc_action():
 					var target_x = float(aim_target.pos.x)
 					var target_y = float(aim_target.pos.y)
 					var dir = 1 if (target_x - controlled_npc.pos.x) > 0 else -1
-					target_x += _get_lut_rand_range(-5.0, 5.0)
-					target_y += _get_lut_rand_range(-3.0, 3.0)
+					controlled_npc["last_dir"] = dir
+					controlled_npc.dir = dir
+					face_dir = dir
+					target_x += _get_lut_rand_range(-10.0, 10.0)
+					target_y += _get_lut_rand_range(-6.0, 6.0)
 					var dist_x = abs(target_x - controlled_npc.pos.x)
 					if dist_x < 2.0: dist_x = 2.0
 					var time_to_target = dist_x / 120.0
@@ -8493,6 +8498,9 @@ func _trigger_controlled_npc_action():
 			var face_dir = controlled_npc.get("last_dir", 1)
 			var target = _find_controlled_aim_target(controlled_npc, face_dir, 160.0)
 			if target:
+				var target_dir = 1 if (target.pos.x - controlled_npc.pos.x) > 0 else -1
+				controlled_npc["last_dir"] = target_dir
+				controlled_npc.dir = target_dir
 				_shoot_arrow(controlled_npc, target)
 			else:
 				var dummy_target = {"pos": Vector2i(controlled_npc.pos.x + face_dir * 100, controlled_npc.pos.y)}
@@ -8521,6 +8529,9 @@ func _trigger_controlled_npc_action():
 			var face_dir = controlled_npc.get("last_dir", 1)
 			var target = _find_controlled_aim_target(controlled_npc, face_dir, 150.0)
 			if target:
+				var target_dir = 1 if (target.pos.x - controlled_npc.pos.x) > 0 else -1
+				controlled_npc["last_dir"] = target_dir
+				controlled_npc.dir = target_dir
 				_shoot_fireball(controlled_npc, target)
 			else:
 				var dummy_target = {"pos": Vector2i(controlled_npc.pos.x + face_dir * 90, controlled_npc.pos.y)}
@@ -10194,8 +10205,8 @@ func _shoot_arrow(npc, target):
 	var target_x = float(target.pos.x)
 	var target_y = float(target.pos.y)
 	if npc == controlled_npc and target.get("hp") != null:
-		target_x += _get_lut_rand_range(-5.0, 5.0)
-		target_y += _get_lut_rand_range(-3.0, 3.0)
+		target_x += _get_lut_rand_range(-10.0, 10.0)
+		target_y += _get_lut_rand_range(-6.0, 6.0)
 	var dx = target_x - npc.pos.x
 	var dir = 1 if (target.pos.x - npc.pos.x) > 0 else -1
 	var aim_dy = (target_y + 2.0) - npc.pos.y
@@ -10216,8 +10227,8 @@ func _shoot_fireball(npc, target):
 	var target_x = float(target.pos.x)
 	var target_y = float(target.pos.y)
 	if npc == controlled_npc and target.get("hp") != null:
-		target_x += _get_lut_rand_range(-5.0, 5.0)
-		target_y += _get_lut_rand_range(-3.0, 3.0)
+		target_x += _get_lut_rand_range(-10.0, 10.0)
+		target_y += _get_lut_rand_range(-6.0, 6.0)
 	var dx = target_x - npc.pos.x
 	var dir = 1 if (target.pos.x - npc.pos.x) > 0 else -1
 	var aim_dy = (target_y + 2.0) - npc.pos.y
@@ -10234,7 +10245,7 @@ func _shoot_fireball(npc, target):
 func _is_npc_suffocating(npc) -> bool:
 	return npc.hp > 0 and npc.suffocation_timer > 0.0
 
-func _launch_flying_block(tx: int, ty: int, vx: float, vy: float, team: int = 0, lifetime: float = 2.5) -> bool:
+func _launch_flying_block(tx: int, ty: int, vx: float, vy: float, team: int = 0, lifetime: float = 2.5, gravity: float = 200.0) -> bool:
 	if tx < 0 or tx >= grid_width or ty < 0 or ty >= dynamic_grid_height:
 		return false
 	var tid = cells[ty * grid_width + tx] & 0xFFFF
@@ -10246,7 +10257,8 @@ func _launch_flying_block(tx: int, ty: int, vx: float, vy: float, team: int = 0,
 			"team": team,
 			"type": "magic_lifted",
 			"life": lifetime,
-			"block_material": tid
+			"block_material": tid,
+			"gravity": gravity
 		})
 		return true
 	return false
@@ -10539,34 +10551,54 @@ func _process_projectiles(delta):
 				for _j in range(5): _add_spark(float(gx), float(gy), _get_lut_rand_range(-40, 40), _get_lut_rand_range(-40, 0), Color.WHITE, 0.3)
 			to_remove.append(i); continue
 			
-		# 4. Check Grid collisions (Solid blocks)
+		# 4. Check Grid collisions (Solid blocks) with sweep to prevent tunneling
 		var collides_block = false
-		if p.type == "thrown_rock":
-			for ox in range(2):
-				for oy in range(2):
-					var tx = gx + ox; var ty = gy + oy
-					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-						var tid = _get_cell(tx, ty)
-						if tid != 0 and tid != 15 and tid != 3 and tid != 17:
-							collides_block = true; break
-				if collides_block: break
-		elif p.type == "bomber_bomb":
-			var collides = false
-			for ox in range(-1, 1):
-				for oy in range(-1, 1):
-					var tx = gx + ox; var ty = gy + oy
-					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-						if _get_cell(tx, ty) != 0:
-							collides = true; break
-				if collides: break
-			if collides:
+		var hit_gx = gx
+		var hit_gy = gy
+		var last_empty_gx = last_gx
+		var last_empty_gy = last_gy
+		
+		var sweep_steps = max(1, max(abs(gx - last_gx), abs(gy - last_gy)))
+		for s_idx in range(1, sweep_steps + 1):
+			var t_fraction = float(s_idx) / sweep_steps
+			var tx = int(round(lerp(float(last_gx), float(gx), t_fraction)))
+			var ty = int(round(lerp(float(last_gy), float(gy), t_fraction)))
+			
+			var is_colliding_step = false
+			if p.type == "thrown_rock":
+				for ox in range(2):
+					for oy in range(2):
+						var cx = tx + ox; var cy = ty + oy
+						if cx >= 0 and cx < grid_width and cy >= 0 and cy < dynamic_grid_height:
+							var tid = _get_cell(cx, cy)
+							if tid != 0 and tid != 15 and tid != 3 and tid != 17:
+								is_colliding_step = true; break
+					if is_colliding_step: break
+			elif p.type == "bomber_bomb":
+				for ox in range(-1, 1):
+					for oy in range(-1, 1):
+						var cx = tx + ox; var cy = ty + oy
+						if cx >= 0 and cx < grid_width and cy >= 0 and cy < dynamic_grid_height:
+							if _get_cell(cx, cy) != 0:
+								is_colliding_step = true; break
+					if is_colliding_step: break
+			else:
+				var tid = _get_cell(tx, ty)
+				if tid != 0 and tid != 15 and tid != 3 and tid != 17:
+					is_colliding_step = true
+					
+			if is_colliding_step:
 				collides_block = true
-		else:
-			var tid = _get_cell(gx, gy)
-			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
-				collides_block = true
+				hit_gx = tx
+				hit_gy = ty
+				break
+			else:
+				last_empty_gx = tx
+				last_empty_gy = ty
 				
 		if collides_block:
+			gx = hit_gx
+			gy = hit_gy
 			if p.type == "thrown_rock":
 				_trigger_rock_impact(gx, gy, p)
 			elif p.type == "bomber_bomb":
@@ -10575,13 +10607,13 @@ func _process_projectiles(delta):
 				var mat = p.get("block_material", 1)
 				var placed = false
 				for oy in range(0, -6, -1):
-					var ty = gy + oy
-					if ty >= 0 and ty < dynamic_grid_height and _get_cell(gx, ty) == 0:
-						_set_cell(gx, ty, mat)
+					var ty = last_empty_gy + oy
+					if ty >= 0 and ty < dynamic_grid_height and _get_cell(last_empty_gx, ty) == 0:
+						_set_cell(last_empty_gx, ty, mat)
 						placed = true
 						break
 				if not placed:
-					_set_cell(gx, gy, mat)
+					_set_cell(last_empty_gx, last_empty_gy, mat)
 			elif p.type == "fireball":
 				var hit_mat = _get_cell(gx, gy)
 				var hit_flammable = false
@@ -15827,6 +15859,23 @@ func _find_connected_pipe_and_endpoint(c) -> Dictionary:
 			if abs(ptL.x - c.pos.x) < 4 or abs(ptL.y - c.pos.y) < 4:
 				return { "pipe": p, "endpoint_idx": L - 1 }
 				
+	for p in active_pipes_x2:
+		var path = p.get("path", [])
+		var L = path.size()
+		if L == 0: continue
+		
+		# Check start endpoint (path[0]) for double pipe (8x8 blocks)
+		var pt0 = path[0]
+		if abs(pt0.x - c.pos.x) <= 8 and abs(pt0.y - c.pos.y) <= 8:
+			if abs(pt0.x - c.pos.x) < 8 or abs(pt0.y - c.pos.y) < 8:
+				return { "pipe": p, "endpoint_idx": 0 }
+				
+		# Check end endpoint (path[L-1]) for double pipe (8x8 blocks)
+		var ptL = path[L - 1]
+		if abs(ptL.x - c.pos.x) <= 8 and abs(ptL.y - c.pos.y) <= 8:
+			if abs(ptL.x - c.pos.x) < 8 or abs(ptL.y - c.pos.y) < 8:
+				return { "pipe": p, "endpoint_idx": L - 1 }
+				
 	return {}
 
 func _find_connected_cannon(pt: Vector2i) -> Dictionary:
@@ -15839,64 +15888,130 @@ func _find_connected_cannon(pt: Vector2i) -> Dictionary:
 func _is_cannon_base_material(mat: int) -> bool:
 	return mat == 95 or mat == 195 or mat == 295 or mat == 395 or mat == 495
 
-func _fire_cannon(c, loaded_mat: int = 0):
+func _get_next_cannon_shoot_material(c) -> int:
+	var loaded_mat = c.get("loaded_material", 0)
+	if loaded_mat > 0:
+		c["loaded_material"] = 0
+		return loaded_mat
+		
+	var end_info = _find_connected_pipe_and_endpoint(c)
+	if not end_info.is_empty():
+		var p = end_info["pipe"]
+		var idx = end_info["endpoint_idx"]
+		var elems = p.elements[idx]
+		for i in range(elems.size()):
+			var elem = elems[i]
+			if not elem.has("npc_id") and elem.get("mat", 0) > 0:
+				var mat = elem.mat
+				elems.remove_at(i)
+				return mat
+				
+	return _find_cannon_inlet_material(c)
+
+func _fire_cannon(c, loaded_mat1: int = 0, loaded_mat2: int = 0, is_stream: bool = false):
 	var orient = c.get("orientation", 0)
 	var start_x = float(c.pos.x)
 	var start_y = float(c.pos.y)
 	var vx = 0.0
 	var vy = 0.0
 	
+	var center_x = start_x
+	var center_y = start_y
+	var px = 0.0
+	var py = 0.0
+	
 	if orient == 0: # 0 deg (Right)
-		start_x += 5.5
-		start_y += 1.5
+		center_x += 5.5
+		center_y += 1.5
 		vx = 180.0
 		vy = 0.0
+		px = 0.0
+		py = 1.0
 	elif orient == 1: # 45 deg (Top-Right)
-		start_x += 5.0
-		start_y -= 2.0
+		center_x += 5.0
+		center_y -= 2.0
 		vx = 127.28
 		vy = -127.28
+		px = 0.707
+		py = 0.707
 	elif orient == 2: # 90 deg (Up)
-		start_x += 1.5
-		start_y -= 3.0
+		center_x += 1.5
+		center_y -= 3.0
 		vx = 0.0
 		vy = -180.0
+		px = 1.0
+		py = 0.0
 	elif orient == 3: # 135 deg (Top-Left)
-		start_x -= 2.0
-		start_y -= 2.0
+		center_x -= 2.0
+		center_y -= 2.0
 		vx = -127.28
 		vy = -127.28
+		px = -0.707
+		py = 0.707
 	elif orient == 4: # 180 deg (Left)
-		start_x -= 2.0
-		start_y += 1.5
+		center_x -= 2.0
+		center_y += 1.5
 		vx = -180.0
 		vy = 0.0
+		px = 0.0
+		py = 1.0
 		
-	_play_action_sound("explosion", 0.05, -5.0, 1.8)
+	var vol_boost = -18.0 if is_stream else -5.0
+	_play_action_sound("explosion", 0.05, vol_boost, 1.8)
 	
-	if loaded_mat > 0 and loaded_mat != 3:
-		# Launch block material
-		active_projectiles.append({
-			"pos": Vector2(start_x, start_y),
-			"vel": Vector2(vx, vy),
-			"team": -1,
-			"type": "thrown_rock",
-			"life": 3.0,
-			"block_material": loaded_mat,
-			"atk_dmg": 1.5,
-			"gravity": 0.0
-		})
-	else:
-		# Launch fireball
-		active_projectiles.append({
-			"pos": Vector2(start_x, start_y),
-			"vel": Vector2(vx, vy),
-			"team": -1,
-			"type": "fireball",
-			"life": 3.0,
-			"atk_dmg": 1.0,
-			"gravity": 0.0
-		})
+	var posA = Vector2(center_x - px * 0.5, center_y - py * 0.5)
+	var posB = Vector2(center_x + px * 0.5, center_y + py * 0.5)
+	
+	var launch_projectile = func(pos: Vector2, mat: int):
+		if mat > 0 and mat != 3:
+			# Launch block material
+			var tx = int(round(pos.x))
+			var ty = int(round(pos.y))
+			var success = false
+			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+				var old_mat = _get_cell(tx, ty)
+				_set_cell(tx, ty, mat)
+				success = _launch_flying_block(tx, ty, vx, vy, -1, 3.0, 120.0)
+				if not success:
+					_set_cell(tx, ty, old_mat)
+			if not success:
+				active_projectiles.append({
+					"pos": pos,
+					"vel": Vector2(vx, vy),
+					"team": -1,
+					"type": "thrown_rock",
+					"life": 3.0,
+					"block_material": mat,
+					"atk_dmg": 1.5,
+					"gravity": 120.0
+				})
+		else:
+			# Launch fireball
+			active_projectiles.append({
+				"pos": pos,
+				"vel": Vector2(vx, vy),
+				"team": -1,
+				"type": "fireball",
+				"life": 3.0,
+				"atk_dmg": 1.0,
+				"gravity": 0.0
+			})
+
+	var fire_A = false
+	var fire_B = false
+	
+	if loaded_mat1 > 0:
+		fire_A = true
+	if loaded_mat2 > 0:
+		fire_B = true
+	if loaded_mat1 == 0 and loaded_mat2 == 0:
+		fire_A = true
+		fire_B = true
+		
+	if fire_A:
+		launch_projectile.call(posA, loaded_mat1)
+	if fire_B:
+		launch_projectile.call(posB, loaded_mat2)
 
 
 func _find_cannon_inlet_material(c) -> int:
@@ -15971,16 +16086,22 @@ func _simulate_cannons(delta: float):
 			c.cooldown -= delta
 			
 		if c.get("cooldown", 0.0) <= 0.0:
-			# 1. Try to load material from inlet
-			var loaded = _find_cannon_inlet_material(c)
-			if loaded > 0:
-				_fire_cannon(c, loaded)
-				c.cooldown = 1.0
+			var powered = _is_cannon_powered(c)
+			var is_stream = powered
+			var cooldown_time = 0.06 if powered else 1.0
+			
+			var loaded1 = _get_next_cannon_shoot_material(c)
+			if loaded1 > 0:
+				var loaded2 = _get_next_cannon_shoot_material(c)
+				if loaded2 == 0:
+					loaded2 = loaded1
+				_fire_cannon(c, loaded1, loaded2, is_stream)
+				c.cooldown = cooldown_time
 			else:
 				# 2. If no material loaded, fallback to electricity powered firing (infinite fireballs)
-				if _is_cannon_powered(c):
-					_fire_cannon(c, 0)
-					c.cooldown = 1.0
+				if powered:
+					_fire_cannon(c, 0, 0, is_stream)
+					c.cooldown = cooldown_time
 			
 		idx -= 1
 
