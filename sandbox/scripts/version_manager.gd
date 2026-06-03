@@ -53,16 +53,23 @@ func _on_request_completed(result: int, response_code: int, headers: PackedStrin
 	var latest_version = str(data.get("latest_version", "1.2.0"))
 	var min_version = str(data.get("min_version", "1.2.0"))
 	var update_url = str(data.get("update_url", DEFAULT_PLAY_STORE_URL))
-	if update_url.contains("dbox.elexstudio"):
-		update_url = update_url.replace("dbox.elexstudio", "com.sandbox.elexstudio")
 	
 	# Detectar idioma para el registro de cambios (changelog)
 	var current_lang = TranslationServer.get_locale().split("_")[0]
 	var changelog = ""
-	if current_lang == "es":
-		changelog = str(data.get("changelog_es", "Nueva versión disponible con mejoras de estabilidad."))
-	else:
-		changelog = str(data.get("changelog_en", "New version available with stability improvements."))
+	match current_lang:
+		"es":
+			changelog = str(data.get("changelog_es", "Nueva versión disponible con mejoras de estabilidad."))
+		"it":
+			changelog = str(data.get("changelog_it", "Nuova versione disponibile con miglioramenti della stabilità."))
+		"fr":
+			changelog = str(data.get("changelog_fr", "Nouvelle version disponible avec des améliorations de stabilité."))
+		"de":
+			changelog = str(data.get("changelog_de", "Neue Version verfügbar mit Stabilitätsverbesserungen."))
+		"pt":
+			changelog = str(data.get("changelog_pt", "Nova versão disponível com melhorias de estabilidade."))
+		_:
+			changelog = str(data.get("changelog_en", "New version available with stability improvements."))
 		
 	# Obtener la versión actual configurada en el proyecto
 	var current_version = ProjectSettings.get_setting("application/config/version", "1.2.0")
