@@ -12140,16 +12140,20 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 		for pt in path:
 			var item = old_pipe_x2_elements.get(pt, null)
 			if item is Dictionary and item.has("a") and item.has("b"):
-				elem_list.append(item)
+				var flat = []
+				for elem in item["a"]:
+					flat.append(elem)
+				for elem in item["b"]:
+					flat.append(elem)
+				elem_list.append(flat)
 			elif item is Array:
-				elem_list.append({ "a": item, "b": [] })
+				elem_list.append(item)
 			else:
-				elem_list.append({ "a": [], "b": [] })
+				elem_list.append([])
 		active_pipes_x2.append({
 			"path": path,
 			"elements": elem_list,
-			"flow_dir_a": 0,
-			"flow_dir_b": 0
+			"flow_dir": 0
 		})
 		
 	for p in active_pipes_x2:
@@ -15935,6 +15939,11 @@ func _update_pipe_visuals(p):
 func _update_pipe_x2_visuals(p):
 	var path = p.path
 	var L = path.size()
+	var core_coords = [
+		Vector2i(2, 2), Vector2i(3, 2), Vector2i(4, 2), Vector2i(5, 2),
+		Vector2i(2, 5), Vector2i(3, 5), Vector2i(4, 5), Vector2i(5, 5)
+	]
+	
 	for i in range(L):
 		var pt = path[i]
 		var gx = pt.x
@@ -15978,65 +15987,57 @@ func _update_pipe_x2_visuals(p):
 					elif has_bottom_conn: is_top_open = true
 					
 		# Element rendering
-		var block_elems = p.elements[i] if (p.has("elements") and i < p.elements.size()) else null
-		var elems_a = block_elems.get("a", []) if block_elems is Dictionary else []
-		var ca0 = elems_a[0].mat if elems_a.size() > 0 else 0
-		var ca1 = elems_a[1].mat if elems_a.size() > 1 else 0
-		var ca2 = elems_a[2].mat if elems_a.size() > 2 else 0
-		var ca3 = elems_a[3].mat if elems_a.size() > 3 else 0
+		var block_elems = p.elements[i] if (p.has("elements") and i < p.elements.size()) else []
 		
-		var elems_b = block_elems.get("b", []) if block_elems is Dictionary else []
-		var cb0 = elems_b[0].mat if elems_b.size() > 0 else 0
-		var cb1 = elems_b[1].mat if elems_b.size() > 1 else 0
-		var cb2 = elems_b[2].mat if elems_b.size() > 2 else 0
-		var cb3 = elems_b[3].mat if elems_b.size() > 3 else 0
-		
-		# Draw the 8x8 block
+		# Fill block with wall (97)
 		for dy in range(8):
 			for dx in range(8):
-				var cell_val = 97
+				_set_cell(gx + dx, gy + dy, 97)
 				
-				# Check Channel A
-				var is_in_a = (
-					(is_top_open and (dx == 1 or dx == 2) and dy <= 4) or
-					(is_bottom_open and (dx == 1 or dx == 2) and dy >= 3) or
-					(is_left_open and (dy == 1 or dy == 2) and dx <= 4) or
-					(is_right_open and (dy == 1 or dy == 2) and dx >= 3)
-				)
-				if is_in_a:
-					cell_val = 0
-					# Core
-					if dx == 1 and dy == 1: cell_val = ca0
-					elif dx == 2 and dy == 1: cell_val = ca1
-					elif dx == 1 and dy == 2: cell_val = ca2
-					elif dx == 2 and dy == 2: cell_val = ca3
-					# Borders
-					elif dy == 0: cell_val = ca0 if dx == 1 else ca1
-					elif dy == 7: cell_val = ca2 if dx == 1 else ca3
-					elif dx == 0: cell_val = ca0 if dy == 1 else ca2
-					elif dx == 7: cell_val = ca1 if dy == 1 else ca3
+		# Clear core to empty (0)
+		for dy in range(2, 6):
+			for dx in range(2, 6):
+				_set_cell(gx + dx, gy + dy, 0)
+				
+		# Open visual endpoints
+		if is_top_open:
+			for dy in range(2):
+				for dx in range(2, 6):
+					_set_cell(gx + dx, gy + dy, 0)
+		if is_bottom_open:
+			for dy in range(6, 8):
+				for dx in range(2, 6):
+					_set_cell(gx + dx, gy + dy, 0)
+		if is_left_open:
+			for dx in range(2):
+				for dy in range(2, 6):
+					_set_cell(gx + dx, gy + dy, 0)
+		if is_right_open:
+			for dx in range(6, 8):
+				for dy in range(2, 6):
+					_set_cell(gx + dx, gy + dy, 0)
 					
-				# Check Channel B
-				var is_in_b = (
-					(is_top_open and (dx == 5 or dx == 6) and dy <= 4) or
-					(is_bottom_open and (dx == 5 or dx == 6) and dy >= 3) or
-					(is_left_open and (dy == 5 or dy == 6) and dx <= 4) or
-					(is_right_open and (dy == 5 or dy == 6) and dx >= 3)
-				)
-				if is_in_b:
-					cell_val = 0
-					# Core
-					if dx == 5 and dy == 5: cell_val = cb0
-					elif dx == 6 and dy == 5: cell_val = cb1
-					elif dx == 5 and dy == 6: cell_val = cb2
-					elif dx == 6 and dy == 6: cell_val = cb3
-					# Borders
-					elif dy == 0: cell_val = cb0 if dx == 5 else cb1
-					elif dy == 7: cell_val = cb2 if dx == 5 else cb3
-					elif dx == 0: cell_val = cb0 if dy == 5 else cb2
-					elif dx == 7: cell_val = cb1 if dy == 5 else cb3
-					
-				_set_cell(gx + dx, gy + dy, cell_val)
+		# Draw elements and their trails into active openings
+		for k in range(min(block_elems.size(), 8)):
+			var elem = block_elems[k]
+			var mat = elem.mat
+			if mat > 0:
+				var pos = core_coords[k]
+				_set_cell(gx + pos.x, gy + pos.y, mat)
+				
+				# If that opening is open, draw the trail
+				if is_top_open and pos.y == 2:
+					_set_cell(gx + pos.x, gy + 1, mat)
+					_set_cell(gx + pos.x, gy + 0, mat)
+				if is_bottom_open and pos.y == 5:
+					_set_cell(gx + pos.x, gy + 6, mat)
+					_set_cell(gx + pos.x, gy + 7, mat)
+				if is_left_open and pos.x == 2:
+					_set_cell(gx + 1, gy + pos.y, mat)
+					_set_cell(gx + 0, gy + pos.y, mat)
+				if is_right_open and pos.x == 5:
+					_set_cell(gx + 6, gy + pos.y, mat)
+					_set_cell(gx + 7, gy + pos.y, mat)
 
 func _find_pipe_x2_endpoint_opening_side(p, endpoint_idx: int) -> String:
 	var path = p.path
@@ -16156,14 +16157,14 @@ func _find_pipe_ejection_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 					return Vector2i(tx, ty)
 	return Vector2i(-1, -1)
 
-func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int, channel: String) -> Vector2i:
+func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 	var path = p.path
 	var pt = path[endpoint_idx]
 	var gx = pt.x
 	var gy = pt.y
 	var side = _find_pipe_x2_endpoint_opening_side(p, endpoint_idx)
 	
-	var offsets = [1, 2] if channel == "A" else [5, 6]
+	var offsets = [2, 3, 4, 5]
 	
 	if side == "left":
 		for oy in offsets:
@@ -16207,14 +16208,14 @@ func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int, channel: St
 						return Vector2i(tx, ty)
 	return Vector2i(-1, -1)
 
-func _find_pipe_x2_ejection_cell_at_endpoint(p, endpoint_idx: int, channel: String) -> Vector2i:
+func _find_pipe_x2_ejection_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 	var path = p.path
 	var pt = path[endpoint_idx]
 	var gx = pt.x
 	var gy = pt.y
 	var side = _find_pipe_x2_endpoint_opening_side(p, endpoint_idx)
 	
-	var offsets = [1, 2] if channel == "A" else [5, 6]
+	var offsets = [2, 3, 4, 5]
 	
 	if side == "bottom" or side == "horizontal":
 		for ox in offsets:
@@ -16364,158 +16365,84 @@ func _simulate_pipes(delta: float):
 		if L == 0: continue
 		var end_idx = L - 1
 		
-		# --- Channel A Flow ---
-		var total_elems_a = 0
-		for block in p.elements:
-			total_elems_a += block["a"].size()
-		if total_elems_a == 0:
-			p["flow_dir_a"] = 0
+		var total_elems = 0
+		for list in p.elements:
+			total_elems += list.size()
+		if total_elems == 0:
+			p["flow_dir"] = 0
 			
-		if p.get("flow_dir_a", 0) == 0:
-			var absorb_pos_0 = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0, "A")
+		if p.get("flow_dir", 0) == 0:
+			var absorb_pos_0 = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0)
 			if absorb_pos_0.x != -1:
-				p["flow_dir_a"] = 1
+				p["flow_dir"] = 1
 			else:
-				var absorb_pos_end = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx, "A")
+				var absorb_pos_end = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx)
 				if absorb_pos_end.x != -1:
-					p["flow_dir_a"] = -1
+					p["flow_dir"] = -1
 					
-		var flow_dir_a = p.get("flow_dir_a", 0)
-		if flow_dir_a == 1:
-			# Channel A Forward
-			var end_block = p.elements[end_idx]
-			var end_elems_a = end_block["a"]
-			var next_end_elems_a = []
-			for elem in end_elems_a:
-				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, end_idx, "A")
+		var flow_dir = p.get("flow_dir", 0)
+		if flow_dir == 1:
+			# --- FORWARD SIMULATION (0 -> end_idx) ---
+			# Eject at end
+			var end_elems = p.elements[end_idx]
+			var next_end_elems = []
+			for elem in end_elems:
+				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, end_idx)
 				if empty_pos.x != -1:
 					_set_cell(empty_pos.x, empty_pos.y, elem.mat)
 				else:
-					next_end_elems_a.append(elem)
-			end_block["a"] = next_end_elems_a
+					next_end_elems.append(elem)
+			p.elements[end_idx] = next_end_elems
 			
+			# Propagate forward
 			for i in range(L - 2, -1, -1):
-				var cur_elems = p.elements[i]["a"]
+				var cur_elems = p.elements[i]
 				var next_cur = []
 				for elem in cur_elems:
-					if p.elements[i+1]["a"].size() < 4:
-						p.elements[i+1]["a"].append(elem)
+					if p.elements[i+1].size() < 8:
+						p.elements[i+1].append(elem)
 					else:
 						next_cur.append(elem)
-				p.elements[i]["a"] = next_cur
+				p.elements[i] = next_cur
 				
-			if p.elements[0]["a"].size() < 4:
-				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0, "A")
+			# Absorb at start (0)
+			if p.elements[0].size() < 8:
+				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0)
 				if absorb_pos.x != -1:
 					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
 					_set_cell(absorb_pos.x, absorb_pos.y, 0)
-					p.elements[0]["a"].append({ "mat": mat, "dir": 1 })
+					p.elements[0].append({ "mat": mat, "dir": 1 })
 					
-		elif flow_dir_a == -1:
-			# Channel A Backward
-			var start_block = p.elements[0]
-			var start_elems_a = start_block["a"]
-			var next_start_elems_a = []
-			for elem in start_elems_a:
-				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, 0, "A")
+		elif flow_dir == -1:
+			# --- BACKWARD SIMULATION (end_idx -> 0) ---
+			# Eject at start (0)
+			var start_elems = p.elements[0]
+			var next_start_elems = []
+			for elem in start_elems:
+				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, 0)
 				if empty_pos.x != -1:
 					_set_cell(empty_pos.x, empty_pos.y, elem.mat)
 				else:
-					next_start_elems_a.append(elem)
-			start_block["a"] = next_start_elems_a
+					next_start_elems.append(elem)
+			p.elements[0] = next_start_elems
 			
+			# Propagate backward
 			for i in range(1, L):
-				var cur_elems = p.elements[i]["a"]
+				var cur_elems = p.elements[i]
 				var next_cur = []
 				for elem in cur_elems:
-					if p.elements[i-1]["a"].size() < 4:
-						p.elements[i-1]["a"].append(elem)
+					if p.elements[i-1].size() < 8:
+						p.elements[i-1].append(elem)
 					else:
 						next_cur.append(elem)
-				p.elements[i]["a"] = next_cur
+				p.elements[i] = next_cur
 				
-			if p.elements[end_idx]["a"].size() < 4:
-				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx, "A")
+			# Absorb at end
+			if p.elements[end_idx].size() < 8:
+				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx)
 				if absorb_pos.x != -1:
 					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
 					_set_cell(absorb_pos.x, absorb_pos.y, 0)
-					p.elements[end_idx]["a"].append({ "mat": mat, "dir": -1 })
-					
-		# --- Channel B Flow ---
-		var total_elems_b = 0
-		for block in p.elements:
-			total_elems_b += block["b"].size()
-		if total_elems_b == 0:
-			p["flow_dir_b"] = 0
-			
-		if p.get("flow_dir_b", 0) == 0:
-			var absorb_pos_0 = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0, "B")
-			if absorb_pos_0.x != -1:
-				p["flow_dir_b"] = 1
-			else:
-				var absorb_pos_end = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx, "B")
-				if absorb_pos_end.x != -1:
-					p["flow_dir_b"] = -1
-					
-		var flow_dir_b = p.get("flow_dir_b", 0)
-		if flow_dir_b == 1:
-			# Channel B Forward
-			var end_block = p.elements[end_idx]
-			var end_elems_b = end_block["b"]
-			var next_end_elems_b = []
-			for elem in end_elems_b:
-				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, end_idx, "B")
-				if empty_pos.x != -1:
-					_set_cell(empty_pos.x, empty_pos.y, elem.mat)
-				else:
-					next_end_elems_b.append(elem)
-			end_block["b"] = next_end_elems_b
-			
-			for i in range(L - 2, -1, -1):
-				var cur_elems = p.elements[i]["b"]
-				var next_cur = []
-				for elem in cur_elems:
-					if p.elements[i+1]["b"].size() < 4:
-						p.elements[i+1]["b"].append(elem)
-					else:
-						next_cur.append(elem)
-				p.elements[i]["b"] = next_cur
-				
-			if p.elements[0]["b"].size() < 4:
-				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0, "B")
-				if absorb_pos.x != -1:
-					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
-					_set_cell(absorb_pos.x, absorb_pos.y, 0)
-					p.elements[0]["b"].append({ "mat": mat, "dir": 1 })
-					
-		elif flow_dir_b == -1:
-			# Channel B Backward
-			var start_block = p.elements[0]
-			var start_elems_b = start_block["b"]
-			var next_start_elems_b = []
-			for elem in start_elems_b:
-				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, 0, "B")
-				if empty_pos.x != -1:
-					_set_cell(empty_pos.x, empty_pos.y, elem.mat)
-				else:
-					next_start_elems_b.append(elem)
-			start_block["b"] = next_start_elems_b
-			
-			for i in range(1, L):
-				var cur_elems = p.elements[i]["b"]
-				var next_cur = []
-				for elem in cur_elems:
-					if p.elements[i-1]["b"].size() < 4:
-						p.elements[i-1]["b"].append(elem)
-					else:
-						next_cur.append(elem)
-				p.elements[i]["b"] = next_cur
-				
-			if p.elements[end_idx]["b"].size() < 4:
-				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx, "B")
-				if absorb_pos.x != -1:
-					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
-					_set_cell(absorb_pos.x, absorb_pos.y, 0)
-					p.elements[end_idx]["b"].append({ "mat": mat, "dir": -1 })
+					p.elements[end_idx].append({ "mat": mat, "dir": -1 })
 					
 		_update_pipe_x2_visuals(p)
