@@ -8,12 +8,13 @@ extends Node
 const CONFIG_URL = "https://raw.githubusercontent.com/OmarSaez/Sandbox-game/main/version_config.json"
 
 # URL de respaldo de la Play Store por si el JSON no la especifica.
-const DEFAULT_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=dbox.elexstudio"
+const DEFAULT_PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.sandbox.elexstudio"
 
 func _ready() -> void:
 	# Solo realizamos la comprobación de versión en dispositivos móviles o en builds reales.
 	# Si estás en el editor, puedes simularlo desactivando esta condición.
 	if OS.has_feature("editor"):
+		_sync_version_from_export_presets()
 		print("VERSION_MANAGER: Ejecutándose en el editor. Saltando comprobación real (puedes comentarlo para probar).")
 		# return # Descomenta para probar el flujo de actualización en el editor.
 
@@ -68,12 +69,12 @@ func _on_request_completed(result: int, response_code: int, headers: PackedStrin
 	# 1. Comprobar si requiere Actualización Crítica/Obligatoria
 	if _is_version_older(current_version, min_version):
 		print("VERSION_MANAGER: Versión obsoleta detectada. Mostrando bloqueo crítico.")
-		_show_update_modal(changelog, update_url, true)
+		_show_update_modal(changelog, update_url, true, current_version, latest_version, min_version)
 		
 	# 2. Comprobar si requiere Actualización Opcional/Recomendada
 	elif _is_version_older(current_version, latest_version):
 		print("VERSION_MANAGER: Nueva actualización disponible. Mostrando aviso opcional.")
-		_show_update_modal(changelog, update_url, false)
+		_show_update_modal(changelog, update_url, false, current_version, latest_version, min_version)
 		
 	else:
 		print("VERSION_MANAGER: El juego está actualizado.")
@@ -101,7 +102,7 @@ func _is_version_older(current: String, target: String) -> bool:
 	return false
 
 # Crea e instancia la UI del aviso de actualización programáticamente
-func _show_update_modal(changelog_text: String, update_url: String, is_critical: bool) -> void:
+func _show_update_modal(changelog_text: String, update_url: String, is_critical: bool, current_version: String, latest_version: String, min_version: String) -> void:
 	var canvas_layer = CanvasLayer.new()
 	canvas_layer.layer = 120 # Capa alta por encima de la UI del juego
 	add_child(canvas_layer)
@@ -122,7 +123,8 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	var panel = PanelContainer.new()
 	# Adaptar tamaño según plataforma
 	var panel_width = 800 if not OS.has_feature("mobile") else 950
-	panel.custom_minimum_size = Vector2(panel_width, 420)
+	var panel_height = 450 if not OS.has_feature("mobile") else 520
+	panel.custom_minimum_size = Vector2(panel_width, panel_height)
 	
 	# Estilo visual moderno y "premium" (Dark Mode con bordes redondeados y sombra)
 	var stylebox = StyleBoxFlat.new()
@@ -168,7 +170,7 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	else:
 		title_label.text = "Actualización Disponible" if TranslationServer.get_locale().split("_")[0] == "es" else "Update Available"
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_label.add_theme_font_size_override("font_size", 28)
+	title_label.add_theme_font_size_override("font_size", 36)
 	title_label.add_theme_color_override("font_color", Color(0.95, 0.96, 1.0))
 	vbox.add_child(title_label)
 	
@@ -177,9 +179,28 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	desc_label.text = changelog_text
 	desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	desc_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	desc_label.add_theme_font_size_override("font_size", 18)
+	desc_label.add_theme_font_size_override("font_size", 24)
 	desc_label.add_theme_color_override("font_color", Color(0.72, 0.75, 0.82))
 	vbox.add_child(desc_label)
+	
+	# 7.5 Sub-sección de Versiones (Tu versión, Última versión, Mínima versión)
+	var is_es = TranslationServer.get_locale().split("_")[0] == "es"
+	var ver_text = ""
+	if is_es:
+		ver_text = "Tu versión: %s  |  Última versión: %s" % [current_version, latest_version]
+		if is_critical:
+			ver_text += "  |  Mínima requerida: %s" % min_version
+	else:
+		ver_text = "Your version: %s  |  Latest version: %s" % [current_version, latest_version]
+		if is_critical:
+			ver_text += "  |  Min required: %s" % min_version
+			
+	var ver_label = Label.new()
+	ver_label.text = ver_text
+	ver_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ver_label.add_theme_font_size_override("font_size", 20)
+	ver_label.add_theme_color_override("font_color", Color(0.45, 0.65, 0.95))
+	vbox.add_child(ver_label)
 	
 	# 8. Contenedor de Botones
 	var buttons_box = HBoxContainer.new()
@@ -219,8 +240,8 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	if not is_critical:
 		var later_btn = Button.new()
 		later_btn.text = "Luego" if TranslationServer.get_locale().split("_")[0] == "es" else "Later"
-		later_btn.custom_minimum_size = Vector2(160, 56)
-		later_btn.add_theme_font_size_override("font_size", 18)
+		later_btn.custom_minimum_size = Vector2(200, 64)
+		later_btn.add_theme_font_size_override("font_size", 22)
 		later_btn.add_theme_stylebox_override("normal", style_later_normal)
 		later_btn.add_theme_stylebox_override("hover", style_later_hover)
 		later_btn.add_theme_stylebox_override("pressed", style_later_pressed)
@@ -232,8 +253,8 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	# Botón "Actualizar" (Siempre visible)
 	var update_btn = Button.new()
 	update_btn.text = "Actualizar" if TranslationServer.get_locale().split("_")[0] == "es" else "Update"
-	update_btn.custom_minimum_size = Vector2(180, 56)
-	update_btn.add_theme_font_size_override("font_size", 18)
+	update_btn.custom_minimum_size = Vector2(220, 64)
+	update_btn.add_theme_font_size_override("font_size", 22)
 	update_btn.add_theme_stylebox_override("normal", style_update_normal)
 	update_btn.add_theme_stylebox_override("hover", style_update_hover)
 	update_btn.add_theme_stylebox_override("pressed", style_update_pressed)
@@ -243,7 +264,7 @@ func _show_update_modal(changelog_text: String, update_url: String, is_critical:
 	)
 	
 	# --- ANIMACIÓN DE APERTURA (TWEEN) ---
-	panel.pivot_offset = Vector2(panel_width / 2.0, 210.0) # Pivote centrado
+	panel.pivot_offset = Vector2(panel_width / 2.0, panel_height / 2.0) # Pivote centrado
 	panel.scale = Vector2(0.8, 0.8)
 	panel.modulate.a = 0.0
 	
@@ -268,3 +289,28 @@ func _close_modal(layer: CanvasLayer) -> void:
 	
 	await tween.finished
 	layer.queue_free()
+
+func _sync_version_from_export_presets() -> void:
+	var path = "res://export_presets.cfg"
+	if not FileAccess.file_exists(path):
+		return
+		
+	var config = ConfigFile.new()
+	var err = config.load(path)
+	if err != OK:
+		return
+		
+	var android_version = ""
+	for section in config.get_sections():
+		if config.has_section_key(section, "platform") and config.get_value(section, "platform") == "Android":
+			var options_section = section + ".options"
+			if config.has_section_key(options_section, "version/name"):
+				android_version = str(config.get_value(options_section, "version/name"))
+				break
+				
+	if android_version != "":
+		var current_version = str(ProjectSettings.get_setting("application/config/version", ""))
+		if current_version != android_version:
+			print("VERSION_SYNC: Sincronizando versión de export_presets.cfg (", android_version, ") a project.godot (era: ", current_version, ")")
+			ProjectSettings.set_setting("application/config/version", android_version)
+			ProjectSettings.save()

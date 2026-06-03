@@ -13682,6 +13682,105 @@ func _sanitize_filename(filename: String) -> String:
 		result = result.replace(c, "_")
 	return result.strip_edges()
 
+func _is_version_newer(imported_ver: String, current_ver: String) -> bool:
+	var imp_parts = imported_ver.split(".")
+	var curr_parts = current_ver.split(".")
+	var max_parts = max(imp_parts.size(), curr_parts.size())
+	for i in range(max_parts):
+		var imp_val = 0
+		if i < imp_parts.size():
+			imp_val = int(imp_parts[i])
+		var curr_val = 0
+		if i < curr_parts.size():
+			curr_val = int(curr_parts[i])
+		if imp_val > curr_val:
+			return true
+		elif imp_val < curr_val:
+			return false
+	return false
+
+func _show_confirm_dialog(title_text: String, message_text: String, on_confirm: Callable):
+	var s = _get_ui_scale()
+	var dialog_container = Control.new()
+	dialog_container.name = "ConfirmDialogContainer"
+	dialog_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	dialog_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dialog_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	save_panel.add_child(dialog_container)
+	
+	var dialog = PanelContainer.new()
+	dialog_container.add_child(dialog)
+	
+	var d_style = StyleBoxFlat.new()
+	d_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
+	d_style.border_width_left = 3; d_style.border_width_top = 3
+	d_style.border_width_right = 3; d_style.border_width_bottom = 3
+	d_style.border_color = Color(0.6, 0.5, 0.2)
+	d_style.corner_radius_top_left = 30
+	d_style.corner_radius_top_right = 30
+	dialog.add_theme_stylebox_override("panel", d_style)
+	dialog.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_top", 40 * s)
+	margin.add_theme_constant_override("margin_bottom", 40 * s)
+	margin.add_theme_constant_override("margin_left", 30 * s)
+	margin.add_theme_constant_override("margin_right", 30 * s)
+	dialog.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 25 * s)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	margin.add_child(vbox)
+	
+	var lbl_title = Label.new()
+	lbl_title.text = title_text
+	lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_title.add_theme_font_size_override("font_size", 28 * s)
+	lbl_title.add_theme_font_override("font", _get_safe_font())
+	vbox.add_child(lbl_title)
+	
+	var lbl_msg = Label.new()
+	lbl_msg.text = message_text
+	lbl_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl_msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl_msg.add_theme_font_size_override("font_size", 22 * s)
+	vbox.add_child(lbl_msg)
+	
+	var hbox = HBoxContainer.new()
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	hbox.add_theme_constant_override("separation", 30 * s)
+	vbox.add_child(hbox)
+	
+	var yes_btn = Button.new()
+	yes_btn.text = tr("yes") if tr("yes") != "yes" else "Yes"
+	yes_btn.custom_minimum_size = Vector2(140 * s, 50 * s)
+	yes_btn.add_theme_font_size_override("font_size", 20 * s)
+	yes_btn.add_theme_font_override("font", _get_safe_font())
+	var yes_style = StyleBoxFlat.new()
+	yes_style.bg_color = Color(0.2, 0.6, 0.2)
+	yes_style.set_corner_radius_all(10 * s)
+	yes_btn.add_theme_stylebox_override("normal", yes_style)
+	yes_btn.pressed.connect(func():
+		dialog_container.queue_free()
+		on_confirm.call()
+	)
+	hbox.add_child(yes_btn)
+	
+	var no_btn = Button.new()
+	no_btn.text = tr("no") if tr("no") != "no" else "No"
+	no_btn.custom_minimum_size = Vector2(140 * s, 50 * s)
+	no_btn.add_theme_font_size_override("font_size", 20 * s)
+	no_btn.add_theme_font_override("font", _get_safe_font())
+	var no_style = StyleBoxFlat.new()
+	no_style.bg_color = Color(0.6, 0.2, 0.2)
+	no_style.set_corner_radius_all(10 * s)
+	no_btn.add_theme_stylebox_override("normal", no_style)
+	no_btn.pressed.connect(func():
+		dialog_container.queue_free()
+	)
+	hbox.add_child(no_btn)
+
 func _show_modal_message(title_text: String, message_text: String):
 	var s = _get_ui_scale()
 	var dialog_container = Control.new()
@@ -13951,7 +14050,8 @@ func _on_share_pressed(slot_idx: int, slot_name: String):
 				return
 				
 			var sbu_dict = {
-				"version": 1,
+				"version": 2,
+				"game_version": str(ProjectSettings.get_setting("application/config/version", "1.2.0")),
 				"name": slot_name,
 				"grid_data": data_dict
 			}
@@ -14107,6 +14207,21 @@ func _import_sbu_file(file_path: String, slot_idx: int):
 		)
 		return
 		
+	var current_ver = str(ProjectSettings.get_setting("application/config/version", "1.2.0"))
+	var imported_ver = str(sbu_dict.get("game_version", ""))
+	
+	if imported_ver != "" and _is_version_newer(imported_ver, current_ver):
+		var msg = tr("import_newer_version_warning").format([imported_ver, current_ver])
+		_show_confirm_dialog(
+			tr("import_btn_ui"),
+			msg,
+			func():
+				_execute_import_data(sbu_dict, file_path, slot_idx)
+		)
+	else:
+		_execute_import_data(sbu_dict, file_path, slot_idx)
+
+func _execute_import_data(sbu_dict: Dictionary, file_path: String, slot_idx: int):
 	var target_dat_path = "user://save_slot_" + str(slot_idx) + ".dat"
 	var target_png_path = "user://save_slot_" + str(slot_idx) + ".png"
 	
