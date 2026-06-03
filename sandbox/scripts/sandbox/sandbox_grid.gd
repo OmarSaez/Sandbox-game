@@ -11929,6 +11929,7 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 							break
 					if head_found:
 						ext = ey
+					else:
 						break
 				var new_p = {
 					"pos": Vector2i(gx, gy),
