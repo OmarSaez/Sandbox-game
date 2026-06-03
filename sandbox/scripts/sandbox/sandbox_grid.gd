@@ -4323,7 +4323,10 @@ func _save_rotation_cache():
 		"bg_paint": background_img.get_data().to_int32_array(),
 		"npcs": clean_npcs,
 		"npc_id_counter": _npc_id_counter,
-		"active_logic_gates": active_logic_gates
+		"active_logic_gates": active_logic_gates,
+		"door_registry": door_registry.keys(),
+		"door_close_timers": door_close_timers,
+		"phase_block_registry": phase_block_registry.keys()
 	}
 	var file = FileAccess.open_compressed(path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
 	if file:
@@ -5340,6 +5343,10 @@ func _is_any_ui_blocking() -> bool:
 	if is_blocking: return true # GLOBAL MODAL BLOCKER
 	if is_mouse_over_ui: return true
 	if is_npc_mode_menu_open: return true # GLOBAL PROTECTOR: Block all workspace edits while arcade menu is up
+	
+	if is_instance_valid(phase_block_tutorial_bubble): return true
+	if is_instance_valid(logic_gate_tutorial_bubble): return true
+	if is_instance_valid(zoom_tutorial_bubble): return true
 	
 	# 1. SMART HUD BLOCKING (Precise Rect Check)
 	# Use Viewport coordinates (Pixels) for UI intersection to avoid zoom interference.
@@ -6945,7 +6952,7 @@ func _process_electricity():
 				if powered_frame[n_idx] == frame: continue
 				
 				var n_pid = cells[n_idx] & 0xFFFF
-				if n_pid <= 0: continue
+				if n_pid <= 0 and not phase_block_registry.has(n_idx): continue
 				
 				# Skip logic gate body cells
 				if n_pid >= 81 and n_pid <= 87:
@@ -6980,7 +6987,8 @@ func _process_electricity():
 				var n_idx = row_offset + nx
 				if charge_array[n_idx] == 0:
 					var n_pid = cells[n_idx] & 0xFFFF
-					if n_pid <= 0: continue
+					var is_pb = phase_block_registry.has(n_idx)
+					if n_pid <= 0 and not is_pb: continue
 					
 					# Skip logic gate body cells
 					if n_pid >= 81 and n_pid <= 87:
@@ -6989,7 +6997,7 @@ func _process_electricity():
 							continue
 							
 					var n_tags = tags_array[n_idx]
-					if n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
+					if is_pb or (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
 						charge_array[n_idx] = 100
 						new_active_charges.append(n_idx)
 						
@@ -10737,6 +10745,17 @@ func _check_npc_environment_damage(npc) -> bool:
 		
 	var air_found = false
 	
+	var check_powered_pb = func(row_off: int, col_x: int) -> bool:
+		var idx = row_off + col_x
+		if charge_array[idx] > 0: return true
+		var px2 = idx % grid_width
+		var py2 = idx / grid_width
+		if px2 > 0 and (charge_array[idx - 1] > 0 or active_battery_indices.has(idx - 1)): return true
+		if px2 < grid_width - 1 and (charge_array[idx + 1] > 0 or active_battery_indices.has(idx + 1)): return true
+		if py2 > 0 and (charge_array[idx - grid_width] > 0 or active_battery_indices.has(idx - grid_width)): return true
+		if py2 < dynamic_grid_height - 1 and (charge_array[idx + grid_width] > 0 or active_battery_indices.has(idx + grid_width)): return true
+		return false
+	
 	# 1. Check top row (above head/lying body)
 	var ty_top = py - 1
 	if ty_top >= 0:
@@ -10746,6 +10765,8 @@ func _check_npc_environment_damage(npc) -> bool:
 			if tx >= 0 and tx < grid_width:
 				var nid = cells[row_offset + tx] & 0xFFFF
 				if nid == 0 or nid == 15 or nid == 17:
+					air_found = true; break
+				if nid == 92 and check_powered_pb.call(row_offset, tx):
 					air_found = true; break
 				var tags = material_tags_raw[nid]
 				if (tags & SandboxMaterial.Tags.SOLID) == 0 and (tags & SandboxMaterial.Tags.POWDER) == 0 and (tags & SandboxMaterial.Tags.LIQUID) == 0:
@@ -10764,6 +10785,8 @@ func _check_npc_environment_damage(npc) -> bool:
 					var nid = cells[row_offset + tx_l] & 0xFFFF
 					if nid == 0 or nid == 15 or nid == 17:
 						air_found = true; break
+					if nid == 92 and check_powered_pb.call(row_offset, tx_l):
+						air_found = true; break
 					var tags = material_tags_raw[nid]
 					if (tags & SandboxMaterial.Tags.SOLID) == 0 and (tags & SandboxMaterial.Tags.POWDER) == 0 and (tags & SandboxMaterial.Tags.LIQUID) == 0:
 						air_found = true; break
@@ -10772,6 +10795,8 @@ func _check_npc_environment_damage(npc) -> bool:
 				if tx_r < grid_width:
 					var nid = cells[row_offset + tx_r] & 0xFFFF
 					if nid == 0 or nid == 15 or nid == 17:
+						air_found = true; break
+					if nid == 92 and check_powered_pb.call(row_offset, tx_r):
 						air_found = true; break
 					var tags = material_tags_raw[nid]
 					if (tags & SandboxMaterial.Tags.SOLID) == 0 and (tags & SandboxMaterial.Tags.POWDER) == 0 and (tags & SandboxMaterial.Tags.LIQUID) == 0:
@@ -10812,6 +10837,24 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
 				if tid == 90 or tid == 91:
 					continue
+				if tid == 92:
+					var idx = row_offset + gx + ox
+					var is_pb_powered = false
+					var px = idx % grid_width
+					var py = idx / grid_width
+					if charge_array[idx] > 0:
+						is_pb_powered = true
+					else:
+						if px > 0 and (charge_array[idx - 1] > 0 or active_battery_indices.has(idx - 1)):
+							is_pb_powered = true
+						elif px < grid_width - 1 and (charge_array[idx + 1] > 0 or active_battery_indices.has(idx + 1)):
+							is_pb_powered = true
+						elif py > 0 and (charge_array[idx - grid_width] > 0 or active_battery_indices.has(idx - grid_width)):
+							is_pb_powered = true
+						elif py < dynamic_grid_height - 1 and (charge_array[idx + grid_width] > 0 or active_battery_indices.has(idx + grid_width)):
+							is_pb_powered = true
+					if is_pb_powered:
+						continue
 				# Si es sólido, pero es una PLANTA, permitimos el paso (los soldados las pisan/atraviesan)
 				var tags = material_tags_raw[tid]
 				if (tags & SandboxMaterial.Tags.PLANT): continue
@@ -11777,16 +11820,37 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 	active_pistons.clear()
 	
 	# 1. Restore open doors, powered phase blocks, and timers from save dict if present
+	var translate_idx = func(old_idx: int) -> int:
+		if not dict.has("width") or not dict.has("height"):
+			return old_idx
+		var old_w = int(dict["width"])
+		var old_h = int(dict["height"])
+		var old_y = old_idx / old_w
+		var old_x = old_idx % old_w
+		var y_offset = old_h - grid_height
+		var x_offset = int((old_w - grid_width) / 2.0)
+		var new_x = old_x - x_offset
+		var new_y = old_y - y_offset
+		if new_x >= 0 and new_x < grid_width and new_y >= 0 and new_y < grid_height:
+			return new_y * grid_width + new_x
+		return -1
+
 	if dict.has("door_registry"):
 		for idx in dict["door_registry"]:
-			door_registry[int(idx)] = true
+			var new_idx = translate_idx.call(int(idx))
+			if new_idx != -1:
+				door_registry[new_idx] = true
 	if dict.has("door_close_timers"):
 		var timers = dict["door_close_timers"]
 		for idx_str in timers:
-			door_close_timers[int(idx_str)] = float(timers[idx_str])
+			var new_idx = translate_idx.call(int(idx_str))
+			if new_idx != -1:
+				door_close_timers[new_idx] = float(timers[idx_str])
 	if dict.has("phase_block_registry"):
 		for idx in dict["phase_block_registry"]:
-			phase_block_registry[int(idx)] = true
+			var new_idx = translate_idx.call(int(idx))
+			if new_idx != -1:
+				phase_block_registry[new_idx] = true
 			
 	# 2. Loop over cells to reconstruct batteries, electricity source blocks, metronomes, and solid doors/phase blocks
 	if cells.size() == 0: return
@@ -12476,13 +12540,10 @@ func _show_logic_gate_tutorial_bubble(grid_pos: Vector2i):
 	
 	ui_root.add_child(bubble)
 	
-	# Position bubble above the logic gate
-	var local_pos = Vector2((grid_pos.x * 4 + 6) * grid_scale, (grid_pos.y * 4) * grid_scale)
-	var screen_pos = get_global_transform_with_canvas() * local_pos
-	
-	bubble.position = screen_pos - Vector2(160 * s, 130 * s)
-	bubble.position.x = clamp(bubble.position.x, 10 * s, get_viewport_rect().size.x - 330 * s)
-	bubble.position.y = clamp(bubble.position.y, 10 * s, get_viewport_rect().size.y - 150 * s)
+	# Center horizontally and position near the top of the screen (e.g. y = 120 * s) to avoid covering the finger/drawing area
+	var screen_size = get_viewport_rect().size
+	bubble.position.x = (screen_size.x - 320 * s) / 2
+	bubble.position.y = 120 * s
 
 func _check_phase_block_tutorial(grid_pos: Vector2i):
 	if not is_phase_block_tutorial_done:
@@ -12568,13 +12629,10 @@ func _show_phase_block_tutorial_bubble(grid_pos: Vector2i):
 	
 	ui_root.add_child(bubble)
 	
-	# Position bubble above the Phase Block
-	var local_pos = Vector2((grid_pos.x * 4 + 2) * grid_scale, (grid_pos.y * 4) * grid_scale)
-	var screen_pos = get_global_transform_with_canvas() * local_pos
-	
-	bubble.position = screen_pos - Vector2(160 * s, 130 * s)
-	bubble.position.x = clamp(bubble.position.x, 10 * s, get_viewport_rect().size.x - 330 * s)
-	bubble.position.y = clamp(bubble.position.y, 10 * s, get_viewport_rect().size.y - 150 * s)
+	# Center horizontally and position near the top of the screen (e.g. y = 120 * s) to avoid covering the finger/drawing area
+	var screen_size = get_viewport_rect().size
+	bubble.position.x = (screen_size.x - 320 * s) / 2
+	bubble.position.y = 120 * s
 
 func _update_phase_blocks():
 	if phase_block_registry.size() == 0: return
@@ -12583,7 +12641,11 @@ func _update_phase_blocks():
 	var w = grid_width
 	var h = dynamic_grid_height
 	
+	var invalid_indices = []
 	for idx in phase_block_registry:
+		if idx < 0 or idx >= cells.size():
+			invalid_indices.append(idx)
+			continue
 		var cx = idx % w
 		var cy = idx / w
 		
@@ -12593,22 +12655,22 @@ func _update_phase_blocks():
 		# Left
 		if cx > 0:
 			var n = idx - 1
-			if charge_array[n] > 0 or active_battery_indices.has(n):
+			if n >= 0 and n < charge_array.size() and (charge_array[n] > 0 or active_battery_indices.has(n)):
 				is_powered = true
 		# Right
 		if not is_powered and cx < w - 1:
 			var n = idx + 1
-			if charge_array[n] > 0 or active_battery_indices.has(n):
+			if n >= 0 and n < charge_array.size() and (charge_array[n] > 0 or active_battery_indices.has(n)):
 				is_powered = true
 		# Up
 		if not is_powered and cy > 0:
 			var n = idx - w
-			if charge_array[n] > 0 or active_battery_indices.has(n):
+			if n >= 0 and n < charge_array.size() and (charge_array[n] > 0 or active_battery_indices.has(n)):
 				is_powered = true
 		# Down
 		if not is_powered and cy < h - 1:
 			var n = idx + w
-			if charge_array[n] > 0 or active_battery_indices.has(n):
+			if n >= 0 and n < charge_array.size() and (charge_array[n] > 0 or active_battery_indices.has(n)):
 				is_powered = true
 				
 		var curr_mat = cells[idx] & 0xFFFF
@@ -12624,6 +12686,8 @@ func _update_phase_blocks():
 				tags_array[idx] = SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED
 				_activate_chunk(cx / 4, cy / 4)
 				
+	for idx in invalid_indices:
+		phase_block_registry.erase(idx)
 	is_phase_block_updating = false
 
 func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false):
