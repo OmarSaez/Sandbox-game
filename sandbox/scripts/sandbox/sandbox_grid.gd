@@ -12966,27 +12966,37 @@ func _check_logic_gate_tutorial(grid_pos: Vector2i):
 		_show_logic_gate_tutorial_bubble(grid_pos)
 
 func _show_logic_gate_tutorial_bubble(grid_pos: Vector2i):
+	logic_gate_tutorial_bubble = _show_unified_tutorial_bubble(
+		grid_pos,
+		"tut_logic_gate",
+		func():
+			is_logic_gate_tutorial_done = true
+			_save_tool_settings(),
+		Color(0.25, 0.45, 0.85, 0.95)
+	)
+
+func _show_unified_tutorial_bubble(grid_pos: Vector2i, text_key: String, on_got_it: Callable, border_color: Color) -> PanelContainer:
 	if is_instance_valid(logic_gate_tutorial_bubble):
 		logic_gate_tutorial_bubble.queue_free()
-	
+	if is_instance_valid(phase_block_tutorial_bubble):
+		phase_block_tutorial_bubble.queue_free()
+
+		
 	if not is_instance_valid(ui_root):
 		ui_root = get_parent().get_node_or_null("UI")
-		if not ui_root: return
-	
+		if not ui_root: return null
+		
 	var s = _get_ui_scale()
 	
-	# Create panel container
 	var bubble = PanelContainer.new()
-	logic_gate_tutorial_bubble = bubble
 	bubble.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	# Styling: Glassmorphism look
 	var p_style = StyleBoxFlat.new()
-	p_style.bg_color = Color(0.08, 0.08, 0.12, 0.96) # Dark slate semi-transparent
+	p_style.bg_color = Color(0.08, 0.08, 0.12, 0.96)
 	p_style.set_corner_radius_all(18 * s)
 	p_style.border_width_left = 3; p_style.border_width_top = 3
 	p_style.border_width_right = 3; p_style.border_width_bottom = 3
-	p_style.border_color = Color(0.25, 0.45, 0.85, 0.95) # Vivid royal blue
+	p_style.border_color = border_color
 	p_style.shadow_color = Color(0, 0, 0, 0.45)
 	p_style.shadow_size = 10
 	bubble.add_theme_stylebox_override("panel", p_style)
@@ -13006,29 +13016,29 @@ func _show_logic_gate_tutorial_bubble(grid_pos: Vector2i):
 	
 	var lbl = Label.new()
 	lbl.mouse_filter = Control.MOUSE_FILTER_STOP
-	lbl.text = "💡 Consejo: ¡Toca la compuerta de nuevo para rotarla!" if OS.get_locale_language() == "es" else "💡 Tip: Tap the logic gate again to rotate it!"
+	lbl.text = tr(text_key)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lbl.custom_minimum_size = Vector2(280 * s, 0)
 	lbl.add_theme_font_override("font", _get_safe_font())
-	lbl.add_theme_font_size_override("font_size", 18 * s)
+	lbl.add_theme_font_size_override("font_size", 20 * s)
 	lbl.add_theme_color_override("font_color", Color.WHITE)
 	vbox.add_child(lbl)
 	
 	var btn = Button.new()
 	btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	btn.text = "Entiendo" if OS.get_locale_language() == "es" else "Got it"
+	btn.text = tr("GOT_IT")
 	btn.custom_minimum_size = Vector2(130 * s, 46 * s)
 	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	btn.add_theme_font_override("font", _get_safe_font())
-	btn.add_theme_font_size_override("font_size", 17 * s)
+	btn.add_theme_font_size_override("font_size", 18 * s)
 	
 	var btn_style_norm = StyleBoxFlat.new()
-	btn_style_norm.bg_color = Color(0.25, 0.45, 0.85, 1.0)
+	btn_style_norm.bg_color = border_color
 	btn_style_norm.set_corner_radius_all(10 * s)
 	
 	var btn_style_hover = btn_style_norm.duplicate()
-	btn_style_hover.bg_color = Color(0.3, 0.55, 0.95, 1.0)
+	btn_style_hover.bg_color = border_color.lightened(0.15)
 	
 	btn.add_theme_stylebox_override("normal", btn_style_norm)
 	btn.add_theme_stylebox_override("hover", btn_style_hover)
@@ -13037,18 +13047,32 @@ func _show_logic_gate_tutorial_bubble(grid_pos: Vector2i):
 	
 	btn.pressed.connect(func():
 		_play_action_sound("ui_click")
-		is_logic_gate_tutorial_done = true
-		_save_tool_settings()
+		on_got_it.call()
 		bubble.queue_free()
 	)
 	vbox.add_child(btn)
 	
 	ui_root.add_child(bubble)
 	
-	# Center horizontally and position near the top of the screen (e.g. y = 120 * s) to avoid covering the finger/drawing area
+	var world_pos = Vector2(grid_pos.x * grid_scale, grid_pos.y * grid_scale)
+	var screen_pos = get_global_transform_with_canvas() * world_pos
+	
+	var bubble_w = 320 * s
+	var bubble_h = 240 * s
+	var margin_y = 20 * s
+	
+	var target_y = screen_pos.y - bubble_h - margin_y
+	if target_y < 30 * s:
+		target_y = screen_pos.y + 40 * s
+		
+	bubble.position.x = screen_pos.x - bubble_w / 2
+	bubble.position.y = target_y
+	
 	var screen_size = get_viewport_rect().size
-	bubble.position.x = (screen_size.x - 320 * s) / 2
-	bubble.position.y = 120 * s
+	bubble.position.x = clamp(bubble.position.x, 10 * s, screen_size.x - bubble_w - 10 * s)
+	bubble.position.y = clamp(bubble.position.y, 10 * s, screen_size.y - bubble_h - 10 * s)
+	
+	return bubble
 
 func _check_phase_block_tutorial(grid_pos: Vector2i):
 	if not is_phase_block_tutorial_done:
