@@ -1185,7 +1185,11 @@ func _ready():
 	_register_material(92, Color("#00F0FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Phase Block
 	_register_material(93, Color("#466282"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR) # Piston Base
 	_register_material(94, Color("#8CAEC4"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR) # Piston Head/Shaft
-	_register_material(95, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base
+	_register_material(95, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 0
+	_register_material(195, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 45
+	_register_material(295, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 90
+	_register_material(395, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 135
+	_register_material(495, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 180
 	_register_material(96, Color("#0265A6"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Pipe
 	_register_material(97, Color("#014D80"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Pipe X2
 	
@@ -9113,25 +9117,27 @@ func _process_npcs(delta):
 		var npc = active_npcs[i]
 		
 		if npc.get("pipe_inside_id", -1) != -1 or npc.get("is_in_pipe", false):
-			if npc.invul_timer > 0:
-				npc.invul_timer = max(0.0, npc.invul_timer - 0.05)
+			var invul = npc.get("invul_timer", 0.0)
+			if invul > 0:
+				npc["invul_timer"] = max(0.0, invul - 0.05)
 			continue
 			
 		# Sanitize NaN or Inf states to prevent stuck/immortal ghost NPCs
-		if is_nan(npc.hp) or is_nan(npc.pos.x) or is_nan(npc.pos.y):
+		if is_nan(npc.get("hp", 0.0)) or is_nan(npc.pos.x) or is_nan(npc.pos.y):
 			npc.hp = 0.0
 			npc.pos.x = clamp(npc.pos.x, 0.0, float(grid_width - 2))
 			npc.pos.y = clamp(npc.pos.y, 0.0, float(dynamic_grid_height - 6))
 		if is_nan(npc.get("invul_timer", 0.0)):
 			npc["invul_timer"] = 0.0
-		if npc.hp > 99999.0:
+		if npc.get("hp", 0.0) > 99999.0:
 			npc.hp = npc.get("max_hp", 100.0)
 			
 		var profile = NPC_PROFILES.get(npc.type, {})
 		
 		# Decrement invulnerability protection timer
-		if npc.invul_timer > 0:
-			npc.invul_timer = max(0.0, npc.invul_timer - 0.05)
+		var invul_val = npc.get("invul_timer", 0.0)
+		if invul_val > 0:
+			npc["invul_timer"] = max(0.0, invul_val - 0.05)
 		
 		# Procesar timers de emojis y visibilidad (Lógica de Ciclo Emocional Optimizado)
 		var emotes = []
@@ -10378,8 +10384,8 @@ func _process_mage_rescue(npc):
 
 func _convert_to_ally(npc, new_team):
 	_draw_npc_pixels(npc, 0)
-	npc.team = new_team
-	npc.invul_timer = 1.0 # 1s protection to prevent instant friendly-fire death
+	npc["team"] = new_team
+	npc["invul_timer"] = 1.0 # 1s protection to prevent instant friendly-fire death
 	_set_npc_emoji(npc, "↪️", 2.0)
 	_play_action_sound("medic_heal", 0.08, 0.0, 0.9)
 	var team_colors = [Color("#A83938"), Color("#384BA8"), Color("#C79B1E"), Color("#74A838")]
@@ -10392,13 +10398,13 @@ func _convert_to_zombie(npc):
 	_draw_npc_pixels(npc, 0)
 	var is_tank = _get_lut_rand() < 0.2
 	if is_tank:
-		npc.type = "zombie_tank"
-		npc.max_hp = _get_lut_rand_range(280.0, 320.0)
+		npc["type"] = "zombie_tank"
+		npc["max_hp"] = _get_lut_rand_range(280.0, 320.0)
 	else:
-		npc.type = "zombie"
-		npc.max_hp = _get_lut_rand_range(80.0, 110.0)
-	npc.team = -1
-	npc.hp = npc.max_hp
+		npc["type"] = "zombie"
+		npc["max_hp"] = _get_lut_rand_range(80.0, 110.0)
+	npc["team"] = -1
+	npc["hp"] = npc["max_hp"]
 	npc["morale_broken"] = false
 	npc["is_fleeing"] = false
 	npc["social_timer"] = 0.0
@@ -11946,19 +11952,22 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 			door_registry[idx] = true
 		elif mid == 92:
 			phase_block_registry[idx] = true
-		elif mid == 95:
+		elif mid == 95 or mid == 195 or mid == 295 or mid == 395 or mid == 495:
 			var px = idx % grid_width
 			var py = idx / grid_width
-			var gx = int(floor(float(px) / 4.0) * 4.0)
-			var gy = int(floor(float(py) / 4.0) * 4.0)
+			var val = cells[idx]
+			var variant = (val >> 24) & 0xFF
+			var local_x = variant & 0x0F
+			var local_y = variant >> 4
+			var gx = px - local_x + 3
+			var gy = py - local_y + 3
 			var already_registered = false
 			for c in active_cannons:
 				if c.pos.x == gx and c.pos.y == gy:
 					already_registered = true
 					break
 			if not already_registered:
-				var variant = (cells[idx] >> 24) & 0xFF
-				var orient = clampi(variant - 1, 0, 3)
+				var orient = (mid - 95) / 100
 				var new_c = {
 					"pos": Vector2i(gx, gy),
 					"orientation": orient,
@@ -12345,9 +12354,73 @@ func _place_piston(gx: int, gy: int):
 		"orientation": 0
 	}
 	active_pistons.append(new_p)
+func _get_cannon_active_cells(orient: int) -> Array:
+	var list = []
+	# 1. Base (always active)
+	list.append(Vector2i(3, 7))
+	list.append(Vector2i(4, 7))
+	list.append(Vector2i(5, 7))
+	list.append(Vector2i(6, 7))
+	list.append(Vector2i(3, 8))
+	list.append(Vector2i(6, 8))
+	list.append(Vector2i(3, 9))
+	list.append(Vector2i(6, 9))
+	list.append(Vector2i(3, 10))
+	list.append(Vector2i(6, 10))
+	
+	# 2. Main Body (always active)
+	for py in range(3, 7):
+		for px in range(3, 7):
+			list.append(Vector2i(px, py))
+			
+	# 3. Pivot & Barrel (depends on orientation)
+	if orient == 0: # 0 deg (Right)
+		list.append(Vector2i(7, 4))
+		list.append(Vector2i(7, 5))
+		list.append(Vector2i(8, 4))
+		list.append(Vector2i(8, 5))
+	elif orient == 1: # 45 deg (Top-Right)
+		# Pivot
+		list.append(Vector2i(6, 3))
+		list.append(Vector2i(7, 4))
+		# Barrel
+		list.append(Vector2i(7, 1))
+		list.append(Vector2i(7, 2))
+		list.append(Vector2i(8, 2))
+		list.append(Vector2i(8, 3))
+	elif orient == 2: # 90 deg (Up)
+		# Pivot
+		list.append(Vector2i(4, 2))
+		list.append(Vector2i(5, 2))
+		# Barrel
+		list.append(Vector2i(4, 0))
+		list.append(Vector2i(5, 0))
+		list.append(Vector2i(4, 1))
+		list.append(Vector2i(5, 1))
+	elif orient == 3: # 135 deg (Top-Left)
+		# Pivot
+		list.append(Vector2i(3, 3))
+		list.append(Vector2i(2, 4))
+		# Barrel
+		list.append(Vector2i(2, 1))
+		list.append(Vector2i(2, 2))
+		list.append(Vector2i(1, 2))
+		list.append(Vector2i(1, 3))
+	elif orient == 4: # 180 deg (Left)
+		# Pivot
+		list.append(Vector2i(2, 4))
+		list.append(Vector2i(2, 5))
+		# Barrel
+		list.append(Vector2i(1, 4))
+		list.append(Vector2i(1, 5))
+		
+	return list
 
 func _place_cannon(gx: int, gy: int):
-	if gx < 0 or gx + 3 >= grid_width or gy < 0 or gy + 3 >= grid_height:
+	# The 10x11 bounds are: tx = gx + px - 3, ty = gy + py - 3
+	# So tx ranges from gx-3 to gx+6, ty ranges from gy-3 to gy+7.
+	# We must make sure that gx-3 >= 0 and gx+6 < grid_width and gy-3 >= 0 and gy+7 < grid_height.
+	if gx - 3 < 0 or gx + 6 >= grid_width or gy - 3 < 0 or gy + 7 >= grid_height:
 		return
 		
 	# Check if there is an existing cannon at this exact snapping coordinate gx, gy
@@ -12358,42 +12431,70 @@ func _place_cannon(gx: int, gy: int):
 			break
 			
 	if existing_idx != -1:
-		# Rotate existing cannon!
+		# Rotate existing cannon! (5 orientations: 0 to 4)
 		var c = active_cannons[existing_idx]
-		c.orientation = (c.orientation + 1) % 4
+		c.orientation = (c.orientation + 1) % 5
 		
-		# Set the cells again with the new variant/orientation encoded
-		# variant = orientation + 1 (1: UP, 2: RIGHT, 3: DOWN, 4: LEFT)
-		var val_encoded = 95 | ((c.orientation + 1) << 24)
-		for oy in range(4):
-			for ox in range(4):
-				_set_cell(gx + ox, gy + oy, val_encoded)
+		# Clear the 10x11 area first so no legacy/orphan barrel cells remain
+		for py in range(11):
+			for px in range(10):
+				var tx = gx + px - 3
+				var ty = gy + py - 3
+				_set_cell(tx, ty, 0)
 				
+		# Write the new cells for the new orientation
+		var active_cells = _get_cannon_active_cells(c.orientation)
+		var mat_id = 95 + c.orientation * 100
+		for pt in active_cells:
+			var tx = gx + pt.x - 3
+			var ty = gy + pt.y - 3
+			var variant = pt.x | (pt.y << 4)
+			var val_encoded = mat_id | (variant << 24)
+			_set_cell(tx, ty, val_encoded)
+			
 		_play_action_sound("ui_click")
 		return
 		
-	# Remove any overlapping cannons
+	# Remove any overlapping cannons (anchors within 6 cells)
 	var i = active_cannons.size() - 1
 	while i >= 0:
 		var c = active_cannons[i]
-		if abs(c.pos.x - gx) < 4 and abs(c.pos.y - gy) < 4:
-			for oy in range(4):
-				for ox in range(4):
-					_set_cell(c.pos.x + ox, c.pos.y + oy, 0)
+		if abs(c.pos.x - gx) < 6 and abs(c.pos.y - gy) < 6:
+			# Clear their 10x11 area
+			for py in range(11):
+				for px in range(10):
+					var tx = c.pos.x + px - 3
+					var ty = c.pos.y + py - 3
+					if tx >= 0 and tx < grid_width and ty >= 0 and ty < grid_height:
+						_set_cell(tx, ty, 0)
 			active_cannons.remove_at(i)
 		i -= 1
 		
-	# Place new cannon (initial orientation 0: UP)
+	# Place new cannon (initial orientation 0: Right)
 	var new_c = {
 		"pos": Vector2i(gx, gy),
 		"orientation": 0,
 		"cooldown": 0.0
 	}
 	active_cannons.append(new_c)
-	var val_encoded = 95 | ((0 + 1) << 24)
-	for oy in range(4):
-		for ox in range(4):
-			_set_cell(gx + ox, gy + oy, val_encoded)
+	
+	# Clear the 10x11 area
+	for py in range(11):
+		for px in range(10):
+			var tx = gx + px - 3
+			var ty = gy + py - 3
+			_set_cell(tx, ty, 0)
+			
+	# Write active cells for orientation 0
+	var active_cells = _get_cannon_active_cells(0)
+	var mat_id = 95
+	for pt in active_cells:
+		var tx = gx + pt.x - 3
+		var ty = gy + pt.y - 3
+		var variant = pt.x | (pt.y << 4)
+		var val_encoded = mat_id | (variant << 24)
+		_set_cell(tx, ty, val_encoded)
+		
 	_play_action_sound("ui_click")
 
 func _place_pipe(gx: int, gy: int):
@@ -15730,10 +15831,13 @@ func _find_connected_pipe_and_endpoint(c) -> Dictionary:
 
 func _find_connected_cannon(pt: Vector2i) -> Dictionary:
 	for c in active_cannons:
-		if abs(pt.x - c.pos.x) <= 4 and abs(pt.y - c.pos.y) <= 4:
-			if abs(pt.x - c.pos.x) < 4 or abs(pt.y - c.pos.y) < 4:
+		if abs(pt.x - c.pos.x) <= 4 and abs(pt.y - c.pos.y) <= 8:
+			if abs(pt.x - c.pos.x) < 4 or abs(pt.y - c.pos.y) < 8:
 				return { "cannon": c }
 	return {}
+
+func _is_cannon_base_material(mat: int) -> bool:
+	return mat == 95 or mat == 195 or mat == 295 or mat == 395 or mat == 495
 
 func _fire_cannon(c, loaded_mat: int = 0):
 	var orient = c.get("orientation", 0)
@@ -15742,22 +15846,31 @@ func _fire_cannon(c, loaded_mat: int = 0):
 	var vx = 0.0
 	var vy = 0.0
 	
-	if orient == 0: # UP
-		start_x += 2.0
-		start_y -= 1.0
-		vy = -180.0
-	elif orient == 1: # RIGHT
-		start_x += 5.0
-		start_y += 2.0
+	if orient == 0: # 0 deg (Right)
+		start_x += 5.5
+		start_y += 1.5
 		vx = 180.0
-	elif orient == 2: # DOWN
-		start_x += 2.0
-		start_y += 5.0
-		vy = 180.0
-	elif orient == 3: # LEFT
-		start_x -= 1.0
-		start_y += 2.0
+		vy = 0.0
+	elif orient == 1: # 45 deg (Top-Right)
+		start_x += 5.0
+		start_y -= 2.0
+		vx = 127.28
+		vy = -127.28
+	elif orient == 2: # 90 deg (Up)
+		start_x += 1.5
+		start_y -= 3.0
+		vx = 0.0
+		vy = -180.0
+	elif orient == 3: # 135 deg (Top-Left)
+		start_x -= 2.0
+		start_y -= 2.0
+		vx = -127.28
+		vy = -127.28
+	elif orient == 4: # 180 deg (Left)
+		start_x -= 2.0
+		start_y += 1.5
 		vx = -180.0
+		vy = 0.0
 		
 	_play_action_sound("explosion", 0.05, -5.0, 1.8)
 	
@@ -15792,23 +15905,30 @@ func _find_cannon_inlet_material(c) -> int:
 	var orient = c.get("orientation", 0)
 	
 	var check_cells = []
-	if orient == 0: # UP (inlet at Bottom)
-		for ox in range(4):
-			check_cells.append(Vector2i(cx + ox, cy + 4))
-	elif orient == 1: # RIGHT (inlet at Left)
+	if orient == 0: # Right (inlet at Left)
 		for oy in range(4):
 			check_cells.append(Vector2i(cx - 1, cy + oy))
-	elif orient == 2: # DOWN (inlet at Top)
+	elif orient == 1: # Top-Right (inlet at Left or Bottom)
+		for oy in range(4):
+			check_cells.append(Vector2i(cx - 1, cy + oy))
 		for ox in range(4):
-			check_cells.append(Vector2i(cx + ox, cy - 1))
-	elif orient == 3: # LEFT (inlet at Right)
+			check_cells.append(Vector2i(cx + ox, cy + 8))
+	elif orient == 2: # Up (inlet at Bottom)
+		for ox in range(4):
+			check_cells.append(Vector2i(cx + ox, cy + 8))
+	elif orient == 3: # Top-Left (inlet at Right or Bottom)
+		for oy in range(4):
+			check_cells.append(Vector2i(cx + 4, cy + oy))
+		for ox in range(4):
+			check_cells.append(Vector2i(cx + ox, cy + 8))
+	elif orient == 4: # Left (inlet at Right)
 		for oy in range(4):
 			check_cells.append(Vector2i(cx + 4, cy + oy))
 			
 	for pt in check_cells:
 		if pt.x >= 0 and pt.x < grid_width and pt.y >= 0 and pt.y < dynamic_grid_height:
 			var mat = _get_cell(pt.x, pt.y)
-			if mat > 0 and mat != 95 and mat != 96:
+			if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
 				var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 				if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 					# Absorb the cell
@@ -15832,7 +15952,17 @@ func _simulate_cannons(delta: float):
 			active_cannons.remove_at(idx)
 			idx -= 1
 			continue
-		if (cells[base_cy * grid_width + base_cx] & 0xFFFF) != 95:
+		var base_mat = cells[base_cy * grid_width + base_cx] & 0xFFFF
+		if not _is_cannon_base_material(base_mat):
+			# Clear all parts of this cannon structure to avoid orphaned pieces
+			for py in range(10):
+				for px in range(10):
+					var tx = c.pos.x + px - 3
+					var ty = c.pos.y + py - 3
+					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+						var m = cells[ty * grid_width + tx] & 0xFFFF
+						if _is_cannon_base_material(m):
+							_set_cell(tx, ty, 0)
 			active_cannons.remove_at(idx)
 			idx -= 1
 			continue
@@ -16376,7 +16506,7 @@ func _find_pipe_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 			var ty = gy + oy
 			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 				var mat = _get_cell(tx, ty)
-				if mat > 0 and mat != 95 and mat != 96:
+				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
 					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 						return Vector2i(tx, ty)
@@ -16386,7 +16516,7 @@ func _find_pipe_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 			var ty = gy + oy
 			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 				var mat = _get_cell(tx, ty)
-				if mat > 0 and mat != 95 and mat != 96:
+				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
 					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 						return Vector2i(tx, ty)
@@ -16396,7 +16526,7 @@ func _find_pipe_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 			var ty = gy - 1
 			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 				var mat = _get_cell(tx, ty)
-				if mat > 0 and mat != 95 and mat != 96:
+				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
 					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 						return Vector2i(tx, ty)
@@ -16406,7 +16536,7 @@ func _find_pipe_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 			var ty = gy + 4
 			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 				var mat = _get_cell(tx, ty)
-				if mat > 0 and mat != 95 and mat != 96:
+				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
 					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 						return Vector2i(tx, ty)
@@ -16464,7 +16594,7 @@ func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i
 			var ty = gy + oy
 			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 				var mat = _get_cell(tx, ty)
-				if mat > 0 and mat != 95 and mat != 96 and mat != 97:
+				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
 					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 						return Vector2i(tx, ty)
@@ -16474,7 +16604,7 @@ func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i
 			var ty = gy + oy
 			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 				var mat = _get_cell(tx, ty)
-				if mat > 0 and mat != 95 and mat != 96 and mat != 97:
+				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
 					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 						return Vector2i(tx, ty)
@@ -16484,7 +16614,7 @@ func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i
 			var ty = gy - 1
 			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 				var mat = _get_cell(tx, ty)
-				if mat > 0 and mat != 95 and mat != 96 and mat != 97:
+				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
 					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 						return Vector2i(tx, ty)
@@ -16494,7 +16624,7 @@ func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i
 			var ty = gy + 8
 			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 				var mat = _get_cell(tx, ty)
-				if mat > 0 and mat != 95 and mat != 96 and mat != 97:
+				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
 					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 						return Vector2i(tx, ty)
