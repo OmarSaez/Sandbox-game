@@ -15939,10 +15939,6 @@ func _update_pipe_visuals(p):
 func _update_pipe_x2_visuals(p):
 	var path = p.path
 	var L = path.size()
-	var core_coords = [
-		Vector2i(2, 2), Vector2i(3, 2), Vector2i(4, 2), Vector2i(5, 2),
-		Vector2i(2, 5), Vector2i(3, 5), Vector2i(4, 5), Vector2i(5, 5)
-	]
 	
 	for i in range(L):
 		var pt = path[i]
@@ -16017,27 +16013,56 @@ func _update_pipe_x2_visuals(p):
 				for dy in range(2, 6):
 					_set_cell(gx + dx, gy + dy, 0)
 					
+		# Determine orientation for layout spacing
+		var is_horizontal = has_left_conn or has_right_conn or (not has_top_conn and not has_bottom_conn)
+		
 		# Draw elements and their trails into active openings
-		for k in range(min(block_elems.size(), 8)):
-			var elem = block_elems[k]
+		var lane_counts = {}
+		var active_flow_dir = p.get("flow_dir", 0)
+		if active_flow_dir == 0:
+			active_flow_dir = 1
+			
+		for elem in block_elems:
 			var mat = elem.mat
 			if mat > 0:
-				var pos = core_coords[k]
-				_set_cell(gx + pos.x, gy + pos.y, mat)
+				var lane = elem.get("lane", 2)
+				if not (lane in [2, 3, 4, 5]):
+					lane = 2
+					
+				var count = lane_counts.get(lane, 0)
+				lane_counts[lane] = count + 1
+				
+				var px = 2
+				var py = 2
+				
+				if is_horizontal:
+					py = lane
+					if active_flow_dir == -1:
+						px = clamp(2 + count, 2, 5)
+					else:
+						px = clamp(5 - count, 2, 5)
+				else:
+					px = lane
+					if active_flow_dir == -1:
+						py = clamp(2 + count, 2, 5)
+					else:
+						py = clamp(5 - count, 2, 5)
+						
+				_set_cell(gx + px, gy + py, mat)
 				
 				# If that opening is open, draw the trail
-				if is_top_open and pos.y == 2:
-					_set_cell(gx + pos.x, gy + 1, mat)
-					_set_cell(gx + pos.x, gy + 0, mat)
-				if is_bottom_open and pos.y == 5:
-					_set_cell(gx + pos.x, gy + 6, mat)
-					_set_cell(gx + pos.x, gy + 7, mat)
-				if is_left_open and pos.x == 2:
-					_set_cell(gx + 1, gy + pos.y, mat)
-					_set_cell(gx + 0, gy + pos.y, mat)
-				if is_right_open and pos.x == 5:
-					_set_cell(gx + 6, gy + pos.y, mat)
-					_set_cell(gx + 7, gy + pos.y, mat)
+				if is_top_open and py == 2:
+					_set_cell(gx + px, gy + 1, mat)
+					_set_cell(gx + px, gy + 0, mat)
+				if is_bottom_open and py == 5:
+					_set_cell(gx + px, gy + 6, mat)
+					_set_cell(gx + px, gy + 7, mat)
+				if is_left_open and px == 2:
+					_set_cell(gx + 1, gy + py, mat)
+					_set_cell(gx + 0, gy + py, mat)
+				if is_right_open and px == 5:
+					_set_cell(gx + 6, gy + py, mat)
+					_set_cell(gx + 7, gy + py, mat)
 
 func _find_pipe_x2_endpoint_opening_side(p, endpoint_idx: int) -> String:
 	var path = p.path
@@ -16208,15 +16233,18 @@ func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i
 						return Vector2i(tx, ty)
 	return Vector2i(-1, -1)
 
-func _find_pipe_x2_ejection_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
+func _find_pipe_x2_ejection_cell_at_endpoint(p, endpoint_idx: int, preferred_lane: int = 2) -> Vector2i:
 	var path = p.path
 	var pt = path[endpoint_idx]
 	var gx = pt.x
 	var gy = pt.y
 	var side = _find_pipe_x2_endpoint_opening_side(p, endpoint_idx)
 	
-	var offsets = [2, 3, 4, 5]
-	
+	var offsets = [preferred_lane]
+	for o in [2, 3, 4, 5]:
+		if o != preferred_lane:
+			offsets.append(o)
+			
 	if side == "bottom" or side == "horizontal":
 		for ox in offsets:
 			var tx = gx + ox
@@ -16387,7 +16415,8 @@ func _simulate_pipes(delta: float):
 			var end_elems = p.elements[end_idx]
 			var next_end_elems = []
 			for elem in end_elems:
-				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, end_idx)
+				var preferred_lane = elem.get("lane", 2)
+				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, end_idx, preferred_lane)
 				if empty_pos.x != -1:
 					_set_cell(empty_pos.x, empty_pos.y, elem.mat)
 				else:
@@ -16406,12 +16435,17 @@ func _simulate_pipes(delta: float):
 				p.elements[i] = next_cur
 				
 			# Absorb at start (0)
-			if p.elements[0].size() < 8:
+			while p.elements[0].size() < 8:
 				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0)
 				if absorb_pos.x != -1:
 					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
 					_set_cell(absorb_pos.x, absorb_pos.y, 0)
-					p.elements[0].append({ "mat": mat, "dir": 1 })
+					var side = _find_pipe_x2_endpoint_opening_side(p, 0)
+					var pt = path[0]
+					var lane = (absorb_pos.y - pt.y) if (side == "left" or side == "right") else (absorb_pos.x - pt.x)
+					p.elements[0].append({ "mat": mat, "dir": 1, "lane": lane })
+				else:
+					break
 					
 		elif flow_dir == -1:
 			# --- BACKWARD SIMULATION (end_idx -> 0) ---
@@ -16419,7 +16453,8 @@ func _simulate_pipes(delta: float):
 			var start_elems = p.elements[0]
 			var next_start_elems = []
 			for elem in start_elems:
-				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, 0)
+				var preferred_lane = elem.get("lane", 2)
+				var empty_pos = _find_pipe_x2_ejection_cell_at_endpoint(p, 0, preferred_lane)
 				if empty_pos.x != -1:
 					_set_cell(empty_pos.x, empty_pos.y, elem.mat)
 				else:
@@ -16438,11 +16473,16 @@ func _simulate_pipes(delta: float):
 				p.elements[i] = next_cur
 				
 			# Absorb at end
-			if p.elements[end_idx].size() < 8:
+			while p.elements[end_idx].size() < 8:
 				var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx)
 				if absorb_pos.x != -1:
 					var mat = _get_cell(absorb_pos.x, absorb_pos.y)
 					_set_cell(absorb_pos.x, absorb_pos.y, 0)
-					p.elements[end_idx].append({ "mat": mat, "dir": -1 })
+					var side = _find_pipe_x2_endpoint_opening_side(p, end_idx)
+					var pt = path[end_idx]
+					var lane = (absorb_pos.y - pt.y) if (side == "left" or side == "right") else (absorb_pos.x - pt.x)
+					p.elements[end_idx].append({ "mat": mat, "dir": -1, "lane": lane })
+				else:
+					break
 					
 		_update_pipe_x2_visuals(p)
