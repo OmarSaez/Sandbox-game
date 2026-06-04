@@ -532,6 +532,8 @@ var is_zoom_tutorial_done: bool = false
 var zoom_tutorial_bubble: PanelContainer = null
 var is_cannon_tutorial_done: bool = false
 var cannon_tutorial_bubble: PanelContainer = null
+var is_piston_tutorial_done: bool = false
+var piston_tutorial_bubble: PanelContainer = null
 const CANNON_POWER_MIN = 0.4
 const CANNON_POWER_MED = 0.7
 const CANNON_POWER_MAX = 1.25
@@ -881,7 +883,8 @@ func _save_tool_settings():
 		"is_logic_gate_tutorial_done": is_logic_gate_tutorial_done,
 		"is_phase_block_tutorial_done": is_phase_block_tutorial_done,
 		"is_zoom_tutorial_done": is_zoom_tutorial_done,
-		"is_cannon_tutorial_done": is_cannon_tutorial_done
+		"is_cannon_tutorial_done": is_cannon_tutorial_done,
+		"is_piston_tutorial_done": is_piston_tutorial_done
 	}
 	var f = FileAccess.open("user://tools_settings.json", FileAccess.WRITE)
 	if f:
@@ -910,6 +913,8 @@ func _load_tool_settings():
 					is_zoom_tutorial_done = dict["is_zoom_tutorial_done"]
 				if dict.has("is_cannon_tutorial_done"):
 					is_cannon_tutorial_done = dict["is_cannon_tutorial_done"]
+				if dict.has("is_piston_tutorial_done"):
+					is_piston_tutorial_done = dict["is_piston_tutorial_done"]
 
 func _ready():
 	_load_global_achievements() # Load global state once at startup
@@ -5362,7 +5367,7 @@ func _is_position_over_ui(pos: Vector2) -> bool:
 	if is_instance_valid(action_vbox) and action_vbox.get_global_rect().has_point(pos):
 		return true
 
-	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble, zoom_tutorial_bubble, active_tooltip_panel, cannon_settings_panel, phase_block_tutorial_bubble, cannon_tutorial_bubble]:
+	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble, zoom_tutorial_bubble, active_tooltip_panel, cannon_settings_panel, phase_block_tutorial_bubble, cannon_tutorial_bubble, piston_tutorial_bubble]:
 		if is_instance_valid(panel) and panel.visible and panel.get_global_rect().has_point(pos):
 			return true
 	return false
@@ -5376,6 +5381,7 @@ func _is_any_ui_blocking() -> bool:
 	if is_instance_valid(logic_gate_tutorial_bubble): return true
 	if is_instance_valid(zoom_tutorial_bubble): return true
 	if is_instance_valid(cannon_tutorial_bubble): return true
+	if is_instance_valid(piston_tutorial_bubble): return true
 	
 	# 1. SMART HUD BLOCKING (Precise Rect Check)
 	# Use Viewport coordinates (Pixels) for UI intersection to avoid zoom interference.
@@ -5420,6 +5426,9 @@ func _is_any_ui_blocking() -> bool:
 		return true
 		
 	if is_instance_valid(cannon_tutorial_bubble) and cannon_tutorial_bubble.visible and cannon_tutorial_bubble.get_global_rect().has_point(m_pos):
+		return true
+		
+	if is_instance_valid(piston_tutorial_bubble) and piston_tutorial_bubble.visible and piston_tutorial_bubble.get_global_rect().has_point(m_pos):
 		return true
 		
 	if is_instance_valid(active_tooltip_panel) and active_tooltip_panel.visible and active_tooltip_panel.get_global_rect().has_point(m_pos):
@@ -12406,6 +12415,9 @@ func _place_piston(gx: int, gy: int):
 		"orientation": 0
 	}
 	active_pistons.append(new_p)
+	
+	if not is_piston_tutorial_done:
+		_show_piston_tutorial_bubble(Vector2i(gx, gy))
 func _get_cannon_active_cells(orient: int, inlet_side: String = "") -> Array:
 	if inlet_side == "":
 		if orient == 0: inlet_side = "left"
@@ -13113,6 +13125,17 @@ func _show_cannon_tutorial_bubble(grid_pos: Vector2i):
 			_save_tool_settings(),
 		Color(0.25, 0.45, 0.85, 0.95),
 		330.0
+	)
+
+func _show_piston_tutorial_bubble(grid_pos: Vector2i):
+	piston_tutorial_bubble = _show_unified_tutorial_bubble(
+		grid_pos,
+		"tut_piston",
+		func():
+			is_piston_tutorial_done = true
+			_save_tool_settings(),
+		Color(0.25, 0.45, 0.85, 0.95),
+		230.0
 	)
 
 func _update_phase_blocks():
