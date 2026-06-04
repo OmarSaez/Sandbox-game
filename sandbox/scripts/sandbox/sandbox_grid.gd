@@ -667,6 +667,7 @@ var action_sfx = {
 	"npc_place": "spawn",         # Al colocar un NPC en el mapa
 	"explosion": "explode",       # Detonación de TNT o Volcán
 	"lightning": "lightning",     # Impacto de rayo (clima)
+	"lightning_user": "lightning_user", # Rayo manual del usuario (volumen reducido)
 	"earthquake": "quake",        # Inicio de Terremoto
 	"tornado": "tornado",         # Inicio de Tornado
 	"tsunami": "tsunami",         # Inicio de Tsunami
@@ -2021,17 +2022,16 @@ func _setup_materials_within_grid():
 	_add_button("cement", 26)
 	_add_button("volcan", 27)
 	_add_button("ice", 70)
+	_add_button("lightning_tool", -3)
 	
 	# --- SECCIÓN PROXIMAMENTE ---
 	_add_ui_header(material_grid, "coming_soon")
 	_add_button("toxic_gas", 0, true)
 	_add_button("void", 0, true)
-	_add_button("battery", 0, true)
 	_add_button("flam_gas", 0, true)
 	_add_button("coal_item", 0, true)
 	_add_button("bacteria", 0, true)
 	_add_button("cure", 0, true)
-	_add_button("lightning", 0, true)
 	_add_button("and_more", 0, true)
 	
 	# FIND the scroll vbox to add the final spacer
@@ -5085,6 +5085,8 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 			final_color = Color("#A61266")
 		elif mat_id == 600:
 			final_color = Color("#FFD700")
+		elif mat_id == -3: # Lightning tool
+			final_color = Color("#FFE600")
 		elif mat_id >= 0:
 			final_color = mat_colors_1[mat_id]
 		else:
@@ -5850,6 +5852,10 @@ func _process(delta):
 							_play_music_note(inst, note, true)
 					
 				_manage_brush_sound(-1)
+			elif selected_material == -3:
+				if not mouse_was_pressed:
+					_strike_lightning_at(gx)
+				_manage_brush_sound(-1)
 			else:
 				_manage_brush_sound(selected_material)
 				_draw_circle(gx, gy, brush_radius, selected_material)
@@ -6555,6 +6561,17 @@ func _strike_lightning():
 		_set_cell(lx, ly, 9) # Deploy Electricity!
 		# If we hit something non-empty, stop bolt and create small explosion
 		# NEW: Ignore rain (2) so it hits the ground
+		if target_id > 0 and target_id != 17 and target_id != 15 and target_id != 2:
+			_explode(lx, ly, 5) # Small localized explosion
+			break
+
+func _strike_lightning_at(lx: int):
+	_play_action_sound("lightning_user")
+	# Trace a bolt straight down from the top at the given column
+	for ly in range(0, grid_height):
+		var target_id = _get_cell(lx, ly)
+		_set_cell(lx, ly, 9) # Deploy Electricity!
+		# Stop bolt at first solid/liquid (ignore rain=2, steam=17, snow=15)
 		if target_id > 0 and target_id != 17 and target_id != 15 and target_id != 2:
 			_explode(lx, ly, 5) # Small localized explosion
 			break
