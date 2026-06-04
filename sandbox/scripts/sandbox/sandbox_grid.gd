@@ -530,6 +530,8 @@ var is_logic_gate_tutorial_done: bool = false
 var logic_gate_tutorial_bubble: PanelContainer = null
 var is_zoom_tutorial_done: bool = false
 var zoom_tutorial_bubble: PanelContainer = null
+var is_cannon_tutorial_done: bool = false
+var cannon_tutorial_bubble: PanelContainer = null
 var active_tooltip_panel: PanelContainer = null
 var draw_start_gx: int = 0
 var draw_start_gy: int = 0
@@ -875,7 +877,8 @@ func _save_tool_settings():
 		"current_language": current_language,
 		"is_logic_gate_tutorial_done": is_logic_gate_tutorial_done,
 		"is_phase_block_tutorial_done": is_phase_block_tutorial_done,
-		"is_zoom_tutorial_done": is_zoom_tutorial_done
+		"is_zoom_tutorial_done": is_zoom_tutorial_done,
+		"is_cannon_tutorial_done": is_cannon_tutorial_done
 	}
 	var f = FileAccess.open("user://tools_settings.json", FileAccess.WRITE)
 	if f:
@@ -902,6 +905,8 @@ func _load_tool_settings():
 					is_phase_block_tutorial_done = dict["is_phase_block_tutorial_done"]
 				if dict.has("is_zoom_tutorial_done"):
 					is_zoom_tutorial_done = dict["is_zoom_tutorial_done"]
+				if dict.has("is_cannon_tutorial_done"):
+					is_cannon_tutorial_done = dict["is_cannon_tutorial_done"]
 
 func _ready():
 	_load_global_achievements() # Load global state once at startup
@@ -5354,7 +5359,7 @@ func _is_position_over_ui(pos: Vector2) -> bool:
 	if is_instance_valid(action_vbox) and action_vbox.get_global_rect().has_point(pos):
 		return true
 
-	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble, zoom_tutorial_bubble, active_tooltip_panel, cannon_settings_panel]:
+	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble, zoom_tutorial_bubble, active_tooltip_panel, cannon_settings_panel, phase_block_tutorial_bubble, cannon_tutorial_bubble]:
 		if is_instance_valid(panel) and panel.visible and panel.get_global_rect().has_point(pos):
 			return true
 	return false
@@ -5367,6 +5372,7 @@ func _is_any_ui_blocking() -> bool:
 	if is_instance_valid(phase_block_tutorial_bubble): return true
 	if is_instance_valid(logic_gate_tutorial_bubble): return true
 	if is_instance_valid(zoom_tutorial_bubble): return true
+	if is_instance_valid(cannon_tutorial_bubble): return true
 	
 	# 1. SMART HUD BLOCKING (Precise Rect Check)
 	# Use Viewport coordinates (Pixels) for UI intersection to avoid zoom interference.
@@ -5408,6 +5414,9 @@ func _is_any_ui_blocking() -> bool:
 		return true
 		
 	if is_instance_valid(zoom_tutorial_bubble) and zoom_tutorial_bubble.visible and zoom_tutorial_bubble.get_global_rect().has_point(m_pos):
+		return true
+		
+	if is_instance_valid(cannon_tutorial_bubble) and cannon_tutorial_bubble.visible and cannon_tutorial_bubble.get_global_rect().has_point(m_pos):
 		return true
 		
 	if is_instance_valid(active_tooltip_panel) and active_tooltip_panel.visible and active_tooltip_panel.get_global_rect().has_point(m_pos):
@@ -12582,6 +12591,9 @@ func _place_cannon(gx: int, gy: int):
 		_set_cell(tx, ty, val_encoded)
 		
 	_play_action_sound("ui_click")
+	
+	if not is_cannon_tutorial_done:
+		_show_cannon_tutorial_bubble(Vector2i(gx, gy))
 
 func _place_pipe(gx: int, gy: int):
 	if gx < 0 or gx + 3 >= grid_width or gy < 0 or gy + 3 >= grid_height:
@@ -12972,10 +12984,11 @@ func _show_logic_gate_tutorial_bubble(grid_pos: Vector2i):
 		func():
 			is_logic_gate_tutorial_done = true
 			_save_tool_settings(),
-		Color(0.25, 0.45, 0.85, 0.95)
+		Color(0.25, 0.45, 0.85, 0.95),
+		200.0
 	)
 
-func _show_unified_tutorial_bubble(grid_pos: Vector2i, text_key: String, on_got_it: Callable, border_color: Color) -> PanelContainer:
+func _show_unified_tutorial_bubble(grid_pos: Vector2i, text_key: String, on_got_it: Callable, border_color: Color, bubble_h_unscaled: float) -> PanelContainer:
 	if is_instance_valid(logic_gate_tutorial_bubble):
 		logic_gate_tutorial_bubble.queue_free()
 	if is_instance_valid(phase_block_tutorial_bubble):
@@ -13054,11 +13067,10 @@ func _show_unified_tutorial_bubble(grid_pos: Vector2i, text_key: String, on_got_
 	
 	ui_root.add_child(bubble)
 	
-	var world_pos = Vector2(grid_pos.x * grid_scale, grid_pos.y * grid_scale)
-	var screen_pos = get_global_transform_with_canvas() * world_pos
+	var screen_pos = get_viewport().get_mouse_position()
 	
 	var bubble_w = 320 * s
-	var bubble_h = 240 * s
+	var bubble_h = bubble_h_unscaled * s
 	var margin_y = 20 * s
 	
 	var target_y = screen_pos.y - bubble_h - margin_y
@@ -13079,89 +13091,26 @@ func _check_phase_block_tutorial(grid_pos: Vector2i):
 		_show_phase_block_tutorial_bubble(grid_pos)
 
 func _show_phase_block_tutorial_bubble(grid_pos: Vector2i):
-	if is_instance_valid(phase_block_tutorial_bubble):
-		phase_block_tutorial_bubble.queue_free()
-	
-	if not is_instance_valid(ui_root):
-		ui_root = get_parent().get_node_or_null("UI")
-		if not ui_root: return
-	
-	var s = _get_ui_scale()
-	
-	# Create panel container
-	var bubble = PanelContainer.new()
-	phase_block_tutorial_bubble = bubble
-	bubble.mouse_filter = Control.MOUSE_FILTER_STOP
-	
-	# Styling: Glassmorphism look matching the other tutorials
-	var p_style = StyleBoxFlat.new()
-	p_style.bg_color = Color(0.08, 0.08, 0.12, 0.96) # Dark slate semi-transparent
-	p_style.set_corner_radius_all(18 * s)
-	p_style.border_width_left = 3; p_style.border_width_top = 3
-	p_style.border_width_right = 3; p_style.border_width_bottom = 3
-	p_style.border_color = Color(0.0, 0.94, 1.0, 0.95) # Vibrant electric cyan to match phase blocks!
-	p_style.shadow_color = Color(0, 0, 0, 0.45)
-	p_style.shadow_size = 10
-	bubble.add_theme_stylebox_override("panel", p_style)
-	
-	var margin = MarginContainer.new()
-	margin.mouse_filter = Control.MOUSE_FILTER_STOP
-	margin.add_theme_constant_override("margin_left", 20 * s)
-	margin.add_theme_constant_override("margin_top", 16 * s)
-	margin.add_theme_constant_override("margin_right", 20 * s)
-	margin.add_theme_constant_override("margin_bottom", 16 * s)
-	bubble.add_child(margin)
-	
-	var vbox = VBoxContainer.new()
-	vbox.mouse_filter = Control.MOUSE_FILTER_STOP
-	vbox.add_theme_constant_override("separation", 10 * s)
-	margin.add_child(vbox)
-	
-	var lbl = Label.new()
-	lbl.mouse_filter = Control.MOUSE_FILTER_STOP
-	lbl.text = "💡 Bloque de fase: ¡Si le das electricidad se vuelve invisible y los materiales o NPCs pueden pasar!" if OS.get_locale_language() == "es" else "💡 Phase Block: If you power it with electricity, it becomes invisible and materials or NPCs can pass through!"
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lbl.custom_minimum_size = Vector2(280 * s, 0)
-	lbl.add_theme_font_override("font", _get_safe_font())
-	lbl.add_theme_font_size_override("font_size", 18 * s)
-	lbl.add_theme_color_override("font_color", Color.WHITE)
-	vbox.add_child(lbl)
-	
-	var btn = Button.new()
-	btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	btn.text = "Entiendo" if OS.get_locale_language() == "es" else "Got it"
-	btn.custom_minimum_size = Vector2(130 * s, 46 * s)
-	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	btn.add_theme_font_override("font", _get_safe_font())
-	btn.add_theme_font_size_override("font_size", 17 * s)
-	
-	var btn_style_norm = StyleBoxFlat.new()
-	btn_style_norm.bg_color = Color(0.0, 0.7, 0.8, 1.0)
-	btn_style_norm.set_corner_radius_all(10 * s)
-	
-	var btn_style_hover = btn_style_norm.duplicate()
-	btn_style_hover.bg_color = Color(0.0, 0.85, 0.95, 1.0)
-	
-	btn.add_theme_stylebox_override("normal", btn_style_norm)
-	btn.add_theme_stylebox_override("hover", btn_style_hover)
-	btn.add_theme_stylebox_override("pressed", btn_style_norm)
-	btn.add_theme_color_override("font_color", Color.WHITE)
-	
-	btn.pressed.connect(func():
-		_play_action_sound("ui_click")
-		is_phase_block_tutorial_done = true
-		_save_tool_settings()
-		bubble.queue_free()
+	phase_block_tutorial_bubble = _show_unified_tutorial_bubble(
+		grid_pos,
+		"tut_phase_block",
+		func():
+			is_phase_block_tutorial_done = true
+			_save_tool_settings(),
+		Color(0.25, 0.45, 0.85, 0.95),
+		230.0
 	)
-	vbox.add_child(btn)
-	
-	ui_root.add_child(bubble)
-	
-	# Center horizontally and position near the top of the screen (e.g. y = 120 * s) to avoid covering the finger/drawing area
-	var screen_size = get_viewport_rect().size
-	bubble.position.x = (screen_size.x - 320 * s) / 2
-	bubble.position.y = 120 * s
+
+func _show_cannon_tutorial_bubble(grid_pos: Vector2i):
+	cannon_tutorial_bubble = _show_unified_tutorial_bubble(
+		grid_pos,
+		"tut_cannon",
+		func():
+			is_cannon_tutorial_done = true
+			_save_tool_settings(),
+		Color(0.25, 0.45, 0.85, 0.95),
+		330.0
+	)
 
 func _update_phase_blocks():
 	if phase_block_registry.size() == 0: return
