@@ -511,6 +511,7 @@ var selected_circuit_tool: String = ""
 var active_logic_gates: Array = []
 var active_pistons: Array = []
 var selected_piston_length: int = 10
+var selected_led_color: int = 0 # 0=Red, 1=Blue, 2=Green, 3=Yellow, 4=White, 5=Pink, 6=Celeste, 7=Rainbow
 var active_pipes: Array = []
 var active_pipes_x2: Array = []
 var prev_pipe_gx: int = -1
@@ -534,6 +535,7 @@ var is_cannon_tutorial_done: bool = false
 var cannon_tutorial_bubble: PanelContainer = null
 var is_piston_tutorial_done: bool = false
 var piston_tutorial_bubble: PanelContainer = null
+var led_color_panel: PanelContainer = null
 const CANNON_POWER_MIN = 0.4
 const CANNON_POWER_MED = 0.7
 const CANNON_POWER_MAX = 1.25
@@ -5367,7 +5369,7 @@ func _is_position_over_ui(pos: Vector2) -> bool:
 	if is_instance_valid(action_vbox) and action_vbox.get_global_rect().has_point(pos):
 		return true
 
-	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble, zoom_tutorial_bubble, active_tooltip_panel, cannon_settings_panel, phase_block_tutorial_bubble, cannon_tutorial_bubble, piston_tutorial_bubble]:
+	for panel in [tools_panel, lab_panel, disaster_panel, npc_panel, paint_panel, music_panel, save_panel, achievement_panel, logic_gate_tutorial_bubble, zoom_tutorial_bubble, active_tooltip_panel, cannon_settings_panel, phase_block_tutorial_bubble, cannon_tutorial_bubble, piston_tutorial_bubble, led_color_panel]:
 		if is_instance_valid(panel) and panel.visible and panel.get_global_rect().has_point(pos):
 			return true
 	return false
@@ -5382,6 +5384,7 @@ func _is_any_ui_blocking() -> bool:
 	if is_instance_valid(zoom_tutorial_bubble): return true
 	if is_instance_valid(cannon_tutorial_bubble): return true
 	if is_instance_valid(piston_tutorial_bubble): return true
+	if is_instance_valid(led_color_panel): return true
 	
 	# 1. SMART HUD BLOCKING (Precise Rect Check)
 	# Use Viewport coordinates (Pixels) for UI intersection to avoid zoom interference.
@@ -5429,6 +5432,9 @@ func _is_any_ui_blocking() -> bool:
 		return true
 		
 	if is_instance_valid(piston_tutorial_bubble) and piston_tutorial_bubble.visible and piston_tutorial_bubble.get_global_rect().has_point(m_pos):
+		return true
+		
+	if is_instance_valid(led_color_panel) and led_color_panel.visible and led_color_panel.get_global_rect().has_point(m_pos):
 		return true
 		
 	if is_instance_valid(active_tooltip_panel) and active_tooltip_panel.visible and active_tooltip_panel.get_global_rect().has_point(m_pos):
@@ -5532,6 +5538,27 @@ func _play_action_sound(action: String, min_interval: float = 0.08, volume_boost
 
 func _process(delta):
 	if not is_grid_ready: return
+	
+	# Animate Rainbow LED Button color in LED selection panel
+	if is_instance_valid(led_color_panel):
+		for child in led_color_panel.find_children("", "Button", true, false):
+			if child.has_meta("is_rainbow_btn"):
+				var colors = [
+					Color(1.0, 0.1, 0.1),
+					Color(0.15, 0.45, 1.0),
+					Color(0.15, 1.0, 0.15),
+					Color(1.0, 0.85, 0.05),
+					Color(1.0, 1.0, 1.0),
+					Color(1.0, 0.25, 0.75),
+					Color(0.2, 0.8, 1.0)
+				]
+				var c_idx = (Engine.get_frames_drawn() / 15) % colors.size()
+				var b_style = child.get_theme_stylebox("normal").duplicate()
+				b_style.bg_color = colors[c_idx]
+				child.add_theme_stylebox_override("normal", b_style)
+				child.add_theme_stylebox_override("hover", b_style)
+				child.add_theme_stylebox_override("pressed", b_style)
+				break
 	
 	# Update cached zombie state once per frame for O(1) performance in nested loops
 	_cached_has_zombies = false
@@ -6670,6 +6697,8 @@ func _set_cell(x, y, mat_id):
 		
 		# Scalable Texturing Variant calculation
 		var variant = (mat_id >> 24) & 0xFF
+		if pure_id == 89 and variant == 0:
+			variant = 8 if selected_led_color == 7 else selected_led_color
 		if variant == 0 and (tags & (SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.TEXTURE_TRIPLE)):
 			var mix_prob = 0.35 # Medium default
 			if (tags & SandboxMaterial.Tags.MIX_LOW): mix_prob = 0.15
@@ -6923,7 +6952,9 @@ func _process_electricity():
 	
 	# 1. Store previous frame active music charges in a set for edge-triggering music blocks
 	var prev_active_music_charges = {}
+	var prev_charges = {}
 	for idx in active_charge_indices:
+		prev_charges[idx] = true
 		var mid = cells[idx] & 0xFFFF
 		if material_tags_raw[mid] & SandboxMaterial.Tags.MUSIC:
 			prev_active_music_charges[idx] = true
@@ -7103,6 +7134,24 @@ func _process_electricity():
 				if c_idx >= 0 and c_idx < next_chunks_active.size() and next_chunks_active[c_idx] < 60:
 					_activate_chunk(gx, gy)
 				
+	# Update LED rainbow colors
+	for idx in new_active_charges:
+		var raw_val = cells[idx]
+		var mid = raw_val & 0xFFFF
+		if mid == 89:
+			var variant = (raw_val >> 24) & 0xFF
+			if (variant & 8) != 0:
+				var is_new_pulse = not prev_charges.has(idx)
+				var is_30_frames = (frame % 30 == 0)
+				if is_new_pulse or is_30_frames:
+					var current_color_idx = variant & 7
+					var next_color_idx = (current_color_idx + 1) % 7
+					var new_variant = 8 | next_color_idx
+					cells[idx] = 89 | (new_variant << 24)
+					var gy = idx / grid_width
+					var gx = idx - gy * grid_width
+					_activate_chunk(gx, gy)
+
 	# Update charge visual buffers
 	for idx in new_active_charges:
 		charge_visual_buffer[idx] = clampi(charge_array[idx], 0, 255)
@@ -13440,6 +13489,40 @@ func _setup_music_ui(force_refresh: bool = false):
 				
 				hbox.add_child(val_btn)
 				container = hbox
+			elif item_key == "led":
+				var hbox = HBoxContainer.new()
+				hbox.add_theme_constant_override("separation", 4 * s)
+				hbox.mouse_filter = Control.MOUSE_FILTER_PASS
+				hbox.custom_minimum_size = Vector2(210 * s, 70 * s)
+				
+				btn.custom_minimum_size = Vector2(146 * s, 70 * s)
+				btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				hbox.add_child(btn)
+				
+				var color_btn = Button.new()
+				color_btn.name = "LEDColorBtn"
+				
+				var led_emojis = ["🔴", "🔵", "🟢", "🟡", "⚪", "💗", "💠", "🌈"]
+				color_btn.text = led_emojis[selected_led_color]
+				color_btn.custom_minimum_size = Vector2(60 * s, 70 * s)
+				color_btn.add_theme_font_override("font", _get_safe_font())
+				color_btn.add_theme_font_size_override("font_size", 22 * s)
+				color_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+				
+				var v_style = StyleBoxFlat.new()
+				v_style.bg_color = Color("#4169E1").darkened(0.5)
+				v_style.set_corner_radius_all(10 * s)
+				color_btn.add_theme_stylebox_override("normal", v_style)
+				color_btn.add_theme_stylebox_override("hover", v_style)
+				color_btn.add_theme_stylebox_override("pressed", v_style)
+				
+				color_btn.pressed.connect(func():
+					_play_action_sound("ui_click")
+					_open_led_color_panel(color_btn)
+				)
+				
+				hbox.add_child(color_btn)
+				container = hbox
 			else:
 				btn.custom_minimum_size = Vector2(210 * s, 70 * s)
 			
@@ -17528,3 +17611,145 @@ func _open_cannon_settings_panel(c):
 		_play_action_sound("ui_click")
 	)
 	slider_hbox.add_child(power_slider)
+
+func _open_led_color_panel(color_btn_ref):
+	if is_instance_valid(led_color_panel):
+		led_color_panel.queue_free()
+		led_color_panel = null
+		return
+		
+	# Close other settings panels if open to prevent overlap
+	if is_instance_valid(cannon_settings_panel):
+		cannon_settings_panel.queue_free()
+		cannon_settings_panel = null
+		
+	var s = _get_ui_scale()
+	led_color_panel = PanelContainer.new()
+	led_color_panel.name = "LEDColorPanel"
+	ui_root.add_child(led_color_panel)
+	
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.08, 0.08, 0.12, 0.95) # Dark premium slate
+	panel_style.border_width_left = 3
+	panel_style.border_width_top = 3
+	panel_style.border_width_right = 3
+	panel_style.border_width_bottom = 3
+	panel_style.border_color = Color(0.25, 0.45, 0.85) # Blue theme border
+	panel_style.corner_radius_top_left = 20 * s
+	panel_style.corner_radius_top_right = 20 * s
+	panel_style.corner_radius_bottom_left = 20 * s
+	panel_style.corner_radius_bottom_right = 20 * s
+	led_color_panel.add_theme_stylebox_override("panel", panel_style)
+	led_color_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	
+	_align_panel_to_hud(led_color_panel, 280 * s, 190 * s)
+	
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 10 * s)
+	led_color_panel.add_child(main_vbox)
+	
+	# Header
+	var header_hbox = HBoxContainer.new()
+	main_vbox.add_child(header_hbox)
+	
+	var spacer_left = Control.new()
+	spacer_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_hbox.add_child(spacer_left)
+	
+	var title = Label.new()
+	title.text = tr("led_color_title")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", _get_safe_font())
+	title.add_theme_font_size_override("font_size", 20 * s)
+	title.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
+	header_hbox.add_child(title)
+	
+	var spacer_right = Control.new()
+	spacer_right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header_hbox.add_child(spacer_right)
+	
+	var close_btn = Button.new()
+	close_btn.text = "X"
+	close_btn.custom_minimum_size = Vector2(30 * s, 30 * s)
+	close_btn.add_theme_font_override("font", _get_safe_font())
+	close_btn.add_theme_font_size_override("font_size", 14 * s)
+	var close_style = StyleBoxFlat.new()
+	close_style.bg_color = Color(0.35, 0.15, 0.15, 0.8)
+	close_style.set_corner_radius_all(15 * s)
+	close_btn.add_theme_stylebox_override("normal", close_style)
+	close_btn.add_theme_stylebox_override("hover", close_style)
+	close_btn.add_theme_stylebox_override("pressed", close_style)
+	close_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		led_color_panel.queue_free()
+		led_color_panel = null
+	)
+	header_hbox.add_child(close_btn)
+	
+	# Grid of colors
+	var grid = GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 8 * s)
+	grid.add_theme_constant_override("v_separation", 8 * s)
+	grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	main_vbox.add_child(grid)
+	
+	var colors = [
+		Color(1.0, 0.1, 0.1),      # Red
+		Color(0.15, 0.45, 1.0),    # Blue
+		Color(0.15, 1.0, 0.15),    # Green
+		Color(1.0, 0.85, 0.05),    # Yellow
+		Color(1.0, 1.0, 1.0),      # White
+		Color(1.0, 0.25, 0.75),    # Pink
+		Color(0.2, 0.8, 1.0),      # Celeste
+		Color(0.5, 0.5, 0.5)       # Rainbow placeholder (animated stylebox)
+	]
+	
+	var led_emojis = ["🔴", "🔵", "🟢", "🟡", "⚪", "💗", "💠", "🌈"]
+	
+	for idx in range(8):
+		var btn = Button.new()
+		btn.custom_minimum_size = Vector2(50 * s, 50 * s)
+		btn.mouse_filter = Control.MOUSE_FILTER_PASS
+		
+		if idx == 7:
+			btn.text = "🌈"
+			btn.add_theme_font_override("font", _get_safe_font())
+			btn.add_theme_font_size_override("font_size", 20 * s)
+		
+		var b_style = StyleBoxFlat.new()
+		b_style.bg_color = colors[idx]
+		b_style.set_corner_radius_all(10 * s)
+		if idx == selected_led_color:
+			b_style.border_width_left = 2
+			b_style.border_width_top = 2
+			b_style.border_width_right = 2
+			b_style.border_width_bottom = 2
+			b_style.border_color = Color(1.0, 1.0, 0.0) # Highlight yellow
+			
+		btn.add_theme_stylebox_override("normal", b_style)
+		btn.add_theme_stylebox_override("hover", b_style)
+		btn.add_theme_stylebox_override("pressed", b_style)
+		
+		btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			selected_led_color = idx
+			if is_instance_valid(color_btn_ref):
+				color_btn_ref.text = led_emojis[selected_led_color]
+			
+			# Select LED tool automatically
+			selected_material = 89
+			selected_circuit_tool = ""
+			is_mechanism_mode_active = true
+			_close_music_menu()
+			
+			# Close panel
+			led_color_panel.queue_free()
+			led_color_panel = null
+		)
+		
+		# Tag the rainbow button so we can animate it
+		if idx == 7:
+			btn.set_meta("is_rainbow_btn", true)
+			
+		grid.add_child(btn)

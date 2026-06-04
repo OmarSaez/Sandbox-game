@@ -230,6 +230,19 @@ void fragment() {
                 color.rgb = vec3(0.35, 0.46, 0.57); // Safe fallback
             }
         }
+        
+        // Dimmed inactive LED color override based on variant
+        if (id == 89) {
+            int color_idx = variant & 7;
+            vec3 inactive_color = vec3(0.33, 0.07, 0.07); // Default Dark Red
+            if (color_idx == 1) inactive_color = vec3(0.07, 0.15, 0.33); // Dark Blue
+            else if (color_idx == 2) inactive_color = vec3(0.07, 0.33, 0.07); // Dark Green
+            else if (color_idx == 3) inactive_color = vec3(0.33, 0.28, 0.05); // Dark Yellow
+            else if (color_idx == 4) inactive_color = vec3(0.35, 0.35, 0.35); // Dark White
+            else if (color_idx == 5) inactive_color = vec3(0.33, 0.07, 0.25); // Dark Pink
+            else if (color_idx == 6) inactive_color = vec3(0.05, 0.25, 0.33); // Dark Sky Blue
+            color.rgb = inactive_color;
+        }
 
 
         // 5. ELECTRIC GLOW (High Intensity Sparks with Amber Contrast)
@@ -238,11 +251,33 @@ void fragment() {
             vec4 electric_color = vec4(1.0, 0.7, 0.0, 1.0); // Amber/Orange-Yellow default
             
             if (id == 89) {
-                // LED glows bright crimson red with high bloom core
-                electric_color = vec4(1.0, 0.1, 0.1, 1.0);
+                int color_idx = variant & 7;
+                vec4 led_color = vec4(1.0, 0.1, 0.1, 1.0); // Default Red
+                vec3 glow_color = vec3(0.8, 0.0, 0.0);
+                
+                if (color_idx == 1) { // Blue
+                    led_color = vec4(0.15, 0.45, 1.0, 1.0);
+                    glow_color = vec3(0.0, 0.3, 0.8);
+                } else if (color_idx == 2) { // Green
+                    led_color = vec4(0.15, 1.0, 0.15, 1.0);
+                    glow_color = vec3(0.0, 0.8, 0.0);
+                } else if (color_idx == 3) { // Yellow
+                    led_color = vec4(1.0, 0.85, 0.05, 1.0);
+                    glow_color = vec3(0.8, 0.65, 0.0);
+                } else if (color_idx == 4) { // White
+                    led_color = vec4(1.0, 1.0, 1.0, 1.0);
+                    glow_color = vec3(0.7, 0.7, 0.7);
+                } else if (color_idx == 5) { // Pink
+                    led_color = vec4(1.0, 0.25, 0.75, 1.0);
+                    glow_color = vec3(0.8, 0.0, 0.55);
+                } else if (color_idx == 6) { // Sky Blue / Celeste
+                    led_color = vec4(0.2, 0.8, 1.0, 1.0);
+                    glow_color = vec3(0.0, 0.55, 0.8);
+                }
+                
                 color.rgb = mix(color.rgb, color.rgb * 0.3, spark_intensity * 0.5);
-                color = mix(color, electric_color, spark_intensity * 0.95);
-                color.rgb += vec3(0.8, 0.0, 0.0) * (charge * 2.5); // Rich red core glow
+                color = mix(color, led_color, spark_intensity * 0.95);
+                color.rgb += glow_color * (charge * 2.5);
             } else {
                 // Darken the background slightly under the spark to make it pop on white metal
                 color.rgb = mix(color.rgb, color.rgb * 0.5, spark_intensity * 0.7);
