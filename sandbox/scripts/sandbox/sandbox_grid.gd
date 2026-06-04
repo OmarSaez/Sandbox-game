@@ -17292,20 +17292,20 @@ func _open_cannon_settings_panel(c):
 				
 	btn_left.pressed.connect(func():
 		_play_action_sound("ui_click")
-		var prev_orient = (c.orientation + 7) % 8
-		while not _is_orientation_allowed(prev_orient, c.get("inlet_side", "left")):
-			prev_orient = (prev_orient + 7) % 8
-		c.orientation = prev_orient
+		var next_orient = (c.orientation + 1) % 8
+		while not _is_orientation_allowed(next_orient, c.get("inlet_side", "left")):
+			next_orient = (next_orient + 1) % 8
+		c.orientation = next_orient
 		update_cannon_in_grid.call()
 		redraw_preview.call()
 	)
 	
 	btn_right.pressed.connect(func():
 		_play_action_sound("ui_click")
-		var next_orient = (c.orientation + 1) % 8
-		while not _is_orientation_allowed(next_orient, c.get("inlet_side", "left")):
-			next_orient = (next_orient + 1) % 8
-		c.orientation = next_orient
+		var prev_orient = (c.orientation + 7) % 8
+		while not _is_orientation_allowed(prev_orient, c.get("inlet_side", "left")):
+			prev_orient = (prev_orient + 7) % 8
+		c.orientation = prev_orient
 		update_cannon_in_grid.call()
 		redraw_preview.call()
 	)
