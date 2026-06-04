@@ -532,6 +532,9 @@ var is_zoom_tutorial_done: bool = false
 var zoom_tutorial_bubble: PanelContainer = null
 var is_cannon_tutorial_done: bool = false
 var cannon_tutorial_bubble: PanelContainer = null
+const CANNON_POWER_MIN = 0.4
+const CANNON_POWER_MED = 0.7
+const CANNON_POWER_MAX = 1.25
 var active_tooltip_panel: PanelContainer = null
 var draw_start_gx: int = 0
 var draw_start_gy: int = 0
@@ -16028,6 +16031,10 @@ func _fire_cannon(c, loaded_mat1: int = 0, loaded_mat2: int = 0, is_stream: bool
 		px = 0.707
 		py = -0.707
 		
+	var power = c.get("shoot_power", CANNON_POWER_MED)
+	vx *= power
+	vy *= power
+	
 	var vol_boost = -18.0 if is_stream else -5.0
 	_play_action_sound("explosion", 0.05, vol_boost, 1.8)
 	
@@ -17444,3 +17451,57 @@ func _open_cannon_settings_panel(c):
 				update_cannon_in_grid.call()
 				redraw_preview.call()
 	)
+	
+	# Power Slider
+	var power_vbox = VBoxContainer.new()
+	power_vbox.add_theme_constant_override("separation", 6 * s)
+	main_vbox.add_child(power_vbox)
+	
+	var power_label = Label.new()
+	power_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	power_label.add_theme_font_override("font", _get_safe_font())
+	power_label.add_theme_font_size_override("font_size", 18 * s)
+	power_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
+	power_vbox.add_child(power_label)
+	
+	var slider_hbox = HBoxContainer.new()
+	slider_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	power_vbox.add_child(slider_hbox)
+	
+	var power_slider = HSlider.new()
+	power_slider.custom_minimum_size = Vector2(220 * s, 0)
+	power_slider.min_value = 0
+	power_slider.max_value = 2
+	power_slider.step = 1
+	power_slider.tick_count = 3
+	power_slider.ticks_on_borders = true
+	
+	var curr_p = c.get("shoot_power", CANNON_POWER_MED)
+	if curr_p <= CANNON_POWER_MIN + 0.05:
+		power_slider.value = 0
+	elif curr_p >= CANNON_POWER_MAX - 0.05:
+		power_slider.value = 2
+	else:
+		power_slider.value = 1
+		
+	var update_power_label = func(val):
+		var tr_key = "cannon_power_med"
+		if val == 0:
+			tr_key = "cannon_power_min"
+		elif val == 2:
+			tr_key = "cannon_power_max"
+		power_label.text = tr("cannon_power_label") % tr(tr_key)
+		
+	update_power_label.call(power_slider.value)
+	
+	power_slider.value_changed.connect(func(val):
+		var p = CANNON_POWER_MED
+		if val == 0:
+			p = CANNON_POWER_MIN
+		elif val == 2:
+			p = CANNON_POWER_MAX
+		c["shoot_power"] = p
+		update_power_label.call(val)
+		_play_action_sound("ui_click")
+	)
+	slider_hbox.add_child(power_slider)
