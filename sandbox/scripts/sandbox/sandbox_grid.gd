@@ -5733,7 +5733,7 @@ func _process(delta):
 			var gx = int(m_pos.x / grid_scale)
 			var gy = int(m_pos.y / grid_scale)
 			
-			var is_mechanism = is_mechanism_mode_active and (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92 or selected_material == 93 or selected_material == 95 or selected_material == 96 or selected_material == 97)
+			var is_mechanism = (is_mechanism_mode_active and (selected_material == 8 or selected_material == 5)) or (selected_material == 93 or selected_material == 95 or selected_material == 96 or selected_material == 97)
 			
 			if is_mechanism:
 				# snap exactly to grid cells boundaries
@@ -5978,8 +5978,8 @@ func _draw():
 	
 	# MUSICAL RHYTHM GRID / MECHANISM GRID
 	var music_menu_node = get_parent().get_node_or_null("UI/MusicPanel")
-	var is_mechanism = selected_material == 96 or selected_material == 97 or selected_material == 95 or selected_material == 93 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92
-	if (music_menu_node and music_menu_node.visible) or _is_music_active() or is_mechanism_mode_active or is_mechanism:
+	var is_mechanism = selected_material == 96 or selected_material == 97 or selected_material == 95 or selected_material == 93
+	if (music_menu_node and music_menu_node.visible) or _is_music_active() or (is_mechanism_mode_active and (selected_material == 8 or selected_material == 5)) or is_mechanism:
 		var grid_col = Color("#4D4D4D") # Muy visible
 		var thickness = 2.0
 		# Vertical lines - Safety margin for virtual/scaled resolutions
