@@ -5733,7 +5733,7 @@ func _process(delta):
 			var gx = int(m_pos.x / grid_scale)
 			var gy = int(m_pos.y / grid_scale)
 			
-			var is_mechanism = (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92 or selected_material == 93 or selected_material == 95 or selected_material == 96 or selected_material == 97)
+			var is_mechanism = is_mechanism_mode_active and (selected_material == 8 or selected_material == 5 or selected_material == 88 or selected_material == 89 or selected_material == 90 or selected_material == 91 or selected_material == 92 or selected_material == 93 or selected_material == 95 or selected_material == 96 or selected_material == 97)
 			
 			if is_mechanism:
 				# snap exactly to grid cells boundaries
