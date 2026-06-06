@@ -6975,27 +6975,6 @@ func _thread_pass3(i: int, process_evens: bool):
 							
 							if should_move:
 								pass
-								# === COMENTADO FASE 2: GRAVEDAD EN C++ ===
-								# var ny = y + 1
-								# if ny < dynamic_grid_height:
-								# 	var n_idx = row_idx + grid_width + x
-								# 	if n_idx < cells.size() and (cells[n_idx] & 0xFFFF) == 0: # Down
-								# 		_swap_cells(x, y, x, ny)
-								# 	elif (tags & SandboxMaterial.Tags.LIQUID):
-								# 		if _get_lut_rand() > 0.45: 
-								# 			var side = 1 if _get_lut_rand() > 0.5 else -1
-								# 			var side_idx = idx + side
-								# 			if x + side >= 0 and x + side < grid_width and side_idx < cells.size() and (cells[side_idx] & 0xFFFF) == 0:
-								# 				_swap_cells(x, y, x + side, y)
-								# 			elif x - side >= 0 and x - side < grid_width and (idx - side) < cells.size() and (cells[idx - side] & 0xFFFF) == 0:
-								# 				_swap_cells(x, y, x - side, y)
-								# 	elif (tags & SandboxMaterial.Tags.POWDER):
-								# 		var dx = 1 if _get_lut_rand() > 0.5 else -1
-								# 		var nx = x + dx
-								# 		if nx >= 0 and nx < grid_width:
-								# 			var ni = row_idx + grid_width + nx
-								# 			if ni < cells.size() and (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
-								# =========================================
 
 func _process_electricity():
 	var frame = _frame_count
@@ -7403,10 +7382,6 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		elif _frame_count % 4 == 2: _set_cell(x, y, 19)
 		if charge_array[idx] <= 0: _launch_firework(x, y)
 
-	# EXPLOSIVE TIMER (TNT/Gunpowder) - Movido a C++ (Fase 3)
-	elif pure_id == 7 or pure_id == 77 or pure_id == 71 or pure_id == 72:
-		pass
-
 	# --- CRYOGENICS ---
 	if pure_id == 60:
 		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY):
@@ -7451,30 +7426,12 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 						_set_cell(nx, ny, 70) # FREEZE!
 						return
 
-	# VOLATILE INERTIA (Projectiles like Sparks)
-	# MOVIDO A C++ FASE 3
-	pass
-
 	# ELECTRIC SEEDING (Pure Static Electricity)
 	if (tags & SandboxMaterial.Tags.ELECTRICITY):
 		if not (tags & (SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.VOLATILE)):
 			if _get_lut_rand() < 0.7: _set_cell(x, y, 0)
 
-	# --- CORROSION (ACID) ---
-	# MOVIDO A C++ FASE 3
-	pass
-	# if (tags & SandboxMaterial.Tags.ACID):
-	# 	if _get_lut_rand() < 0.2: # Reaction Speed (Lowered for natural feel)
-	# 		for ny in range(y - 1, y + 2):
-	# 			for nx in range(x - 1, x + 2):
-	# 				if nx == x and ny == y: continue
-	# 				var nid = _get_cell(nx, ny)
-	# 				if nid > 0 and nid != pure_id:
-	# 					var n_tags = material_tags_raw[nid]
-	# 					if not (n_tags & (SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.INVINCIBLE)):
-	# 						_set_cell(nx, ny, 44) 
-	# 						if _get_lut_rand() < 0.3: _set_cell(x, y, 0); return
-	# 						if (n_tags & SandboxMaterial.Tags.SOLID) and _get_lut_rand() < 0.1: _set_cell(x, y, 0); return
+
 
 	# --- BIOLOGICAL INTERACTIONS (PLANTS & SEEDS) ---
 	if _get_lut_rand() < 0.02:
