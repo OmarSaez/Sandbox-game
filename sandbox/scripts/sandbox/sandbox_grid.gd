@@ -6685,6 +6685,7 @@ func _set_cell(x, y, mat_id):
 		# CRITICAL PERFORMANCE OPTIMIZATION: Early Exit for Air
 		if mat_id == 0:
 			if cells[idx] == 0: return # Already air, no work needed
+			@warning_ignore("confusable_local_declaration")
 			var _old_id_c = cells[idx] & 0xFFFF
 			if _old_id_c == 600: active_metronome_indices.erase(idx)
 			elif _old_id_c == 88: active_battery_indices.erase(idx)
@@ -6730,6 +6731,7 @@ func _set_cell(x, y, mat_id):
 					variant = 2
 		
 		# TRACK METRONOME, BATTERY, AND ELECTRICITY REGISTRIES
+		@warning_ignore("confusable_local_declaration")
 		var _old_id_c = cells[idx] & 0xFFFF
 		if _old_id_c == 600: active_metronome_indices.erase(idx)
 		elif _old_id_c == 88: active_battery_indices.erase(idx)
@@ -10574,7 +10576,7 @@ func _trigger_rock_impact(gx, gy, p):
 	else:
 		# 1. Destroy cells in a radius of 3
 		var rad = 3
-		var mat_color = mat_colors_1[mat] if mat < mat_colors_1.size() else Color("#717E80")
+		var _mat_color = mat_colors_1[mat] if mat < mat_colors_1.size() else Color("#717E80")
 		for dy in range(-rad, rad + 1):
 			for dx in range(-rad, rad + 1):
 				if dx*dx + dy*dy <= rad*rad:
@@ -11076,7 +11078,7 @@ var _explosion_queue = [] # Queue of [x, y, radius, sfx, flags]
 var explosions_sfx_budget = 0
 var explosions_sfx_timer = 0.0
 
-func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0, ignore_budget = false, volume_boost: float = 0.0):
+func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0, ___ignore_budget = false, volume_boost: float = 0.0):
 	sim_mutex.lock()
 	explosions_this_frame += 1
 	var is_heavy_load = explosions_this_frame > 10
@@ -11683,8 +11685,8 @@ func _simulate_logic_gates():
 		var by_A = (cy + pin_A_r) * 4
 		var bx_B = (cx + pin_B_c) * 4
 		var by_B = (cy + pin_B_r) * 4
-		var bx_out = (cx + pin_out_c) * 4
-		var by_out = (cy + pin_out_r) * 4
+		var _bx_out = (cx + pin_out_c) * 4
+		var _by_out = (cy + pin_out_r) * 4
 		
 		var val_A = _is_cell_charged(bx_A, by_A)
 		var val_B = _is_cell_charged(bx_B, by_B)
@@ -12167,6 +12169,7 @@ func _place_piston(gx: int, gy: int):
 				_set_cell(gx + ox, gy + oy, 0)
 		var ext_limit = int(p.current_ext)
 		for ext_val in range(ext_limit + 1):
+			@warning_ignore("confusable_local_declaration")
 			var head_pix = _get_piston_head_pixels(p, ext_val)
 			for pix in head_pix:
 				_set_cell(pix.x, pix.y, 0)
@@ -12180,6 +12183,7 @@ func _place_piston(gx: int, gy: int):
 		var base_pix = _get_piston_base_pixels(p)
 		for pix in base_pix:
 			_set_cell(pix.x, pix.y, 93)
+		@warning_ignore("confusable_local_declaration")
 		var head_pix = _get_piston_head_pixels(p, 0)
 		for pix in head_pix:
 			_set_cell(pix.x, pix.y, 94)
@@ -12198,6 +12202,7 @@ func _place_piston(gx: int, gy: int):
 					_set_cell(p.pos.x + ox, p.pos.y + oy, 0)
 			var ext_limit = int(p.current_ext)
 			for ext_val in range(ext_limit + 1):
+				@warning_ignore("confusable_local_declaration")
 				var head_pix = _get_piston_head_pixels(p, ext_val)
 				for pix in head_pix:
 					_set_cell(pix.x, pix.y, 0)
@@ -12807,7 +12812,7 @@ func _show_logic_gate_tutorial_bubble(grid_pos: Vector2i):
 		200.0
 	)
 
-func _show_unified_tutorial_bubble(grid_pos: Vector2i, text_key: String, on_got_it: Callable, border_color: Color, bubble_h_unscaled: float) -> PanelContainer:
+func _show_unified_tutorial_bubble(_grid_pos: Vector2i, text_key: String, on_got_it: Callable, border_color: Color, bubble_h_unscaled: float) -> PanelContainer:
 	if is_instance_valid(logic_gate_tutorial_bubble):
 		logic_gate_tutorial_bubble.queue_free()
 	if is_instance_valid(phase_block_tutorial_bubble):
@@ -16751,7 +16756,7 @@ func _find_pipe_x2_ejection_cell_at_endpoint(p, endpoint_idx: int, preferred_lan
 					return Vector2i(tx, ty)
 	return Vector2i(-1, -1)
 
-func _simulate_pipes(delta: float):
+func _simulate_pipes(_delta: float):
 	if active_pipes.size() == 0 and active_pipes_x2.size() == 0: return
 	
 	if _frame_count % 4 == 0:
