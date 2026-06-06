@@ -1,0 +1,50 @@
+#!/usr/bin/env python
+import os
+import sys
+
+env = Environment(ENV=os.environ)
+
+# Call godot-cpp's SConstruct
+godot_cpp_dir = "godot-cpp"
+SConscript(godot_cpp_dir + "/SConstruct")
+
+# Get godot-cpp's exported environment
+env = env.Clone()
+env.Append(CPPPATH=["src", godot_cpp_dir + "/gdextension", godot_cpp_dir + "/include", godot_cpp_dir + "/gen/include"])
+
+# Force MSVC flags since we are using vcvars64.bat
+env.Append(CXXFLAGS=["/std:c++17", "/EHsc", "/wd4251", "/wd4275", "/vmg"])
+
+# Link with godot-cpp
+platform = ARGUMENTS.get("platform", "windows")
+target = ARGUMENTS.get("target", "template_debug")
+arch = ARGUMENTS.get("arch", "x86_64")
+
+if platform == "windows":
+    env.Append(LIBPATH=[godot_cpp_dir + "/bin"])
+    env.Append(LIBS=["libgodot-cpp.{}.{}.{}".format(platform, target, arch)])
+else:
+    env.Append(LIBPATH=[godot_cpp_dir + "/bin"])
+    env.Append(LIBS=["godot-cpp.{}.{}.{}".format(platform, target, arch)])
+
+sources = Glob("src/*.cpp")
+
+if platform == "windows":
+    library = env.SharedLibrary(
+        "../bin/sandbox_core.{}.{}.{}.dll".format(platform, target, arch),
+        source=sources
+    )
+elif platform == "macos":
+    library = env.SharedLibrary(
+        "../bin/sandbox_core.{}.{}.{}.framework/sandbox_core.{}.{}.{}".format(
+            platform, target, arch, platform, target, arch
+        ),
+        source=sources
+    )
+else:
+    library = env.SharedLibrary(
+        "../bin/libsandbox_core.{}.{}.{}.so".format(platform, target, arch),
+        source=sources
+    )
+
+Default(library)

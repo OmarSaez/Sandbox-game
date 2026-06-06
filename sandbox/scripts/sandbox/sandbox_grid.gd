@@ -1,4 +1,4 @@
-extends Node2D
+extends SandboxGridNode
 class_name SandboxGrid
 
 # Grid config
@@ -6849,6 +6849,14 @@ func _step_simulation():
 	WorkerThreadPool.wait_for_group_task_completion(g2)
 
 	# Pass 3: FALLING/STATIC particles (Bottom-to-Top by Active Chunks)
+	
+	# === MIGRACION FASE 2: C++ GRAVITY ENGINE ===
+	var cpp_state = { "cells": cells, "tags_array": tags_array }
+	cpp_state = process_physics(cpp_state, grid_width, dynamic_grid_height, _frame_count)
+	cells = cpp_state["cells"]
+	tags_array = cpp_state["tags_array"]
+	# ============================================
+
 	var g3 = WorkerThreadPool.add_group_task(_thread_pass3.bind(is_even_frame), pass_groups, -1, false, "SimP3E")
 	WorkerThreadPool.wait_for_group_task_completion(g3)
 	
@@ -6944,25 +6952,28 @@ func _thread_pass3(i: int, process_evens: bool):
 								should_move = false
 							
 							if should_move:
-								var ny = y + 1
-								if ny < dynamic_grid_height:
-									var n_idx = row_idx + grid_width + x
-									if n_idx < cells.size() and (cells[n_idx] & 0xFFFF) == 0: # Down
-										_swap_cells(x, y, x, ny)
-									elif (tags & SandboxMaterial.Tags.LIQUID):
-										if _get_lut_rand() > 0.45: 
-											var side = 1 if _get_lut_rand() > 0.5 else -1
-											var side_idx = idx + side
-											if x + side >= 0 and x + side < grid_width and side_idx < cells.size() and (cells[side_idx] & 0xFFFF) == 0:
-												_swap_cells(x, y, x + side, y)
-											elif x - side >= 0 and x - side < grid_width and (idx - side) < cells.size() and (cells[idx - side] & 0xFFFF) == 0:
-												_swap_cells(x, y, x - side, y)
-									elif (tags & SandboxMaterial.Tags.POWDER):
-										var dx = 1 if _get_lut_rand() > 0.5 else -1
-										var nx = x + dx
-										if nx >= 0 and nx < grid_width:
-											var ni = row_idx + grid_width + nx
-											if ni < cells.size() and (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
+								pass
+								# === COMENTADO FASE 2: GRAVEDAD EN C++ ===
+								# var ny = y + 1
+								# if ny < dynamic_grid_height:
+								# 	var n_idx = row_idx + grid_width + x
+								# 	if n_idx < cells.size() and (cells[n_idx] & 0xFFFF) == 0: # Down
+								# 		_swap_cells(x, y, x, ny)
+								# 	elif (tags & SandboxMaterial.Tags.LIQUID):
+								# 		if _get_lut_rand() > 0.45: 
+								# 			var side = 1 if _get_lut_rand() > 0.5 else -1
+								# 			var side_idx = idx + side
+								# 			if x + side >= 0 and x + side < grid_width and side_idx < cells.size() and (cells[side_idx] & 0xFFFF) == 0:
+								# 				_swap_cells(x, y, x + side, y)
+								# 			elif x - side >= 0 and x - side < grid_width and (idx - side) < cells.size() and (cells[idx - side] & 0xFFFF) == 0:
+								# 				_swap_cells(x, y, x - side, y)
+								# 	elif (tags & SandboxMaterial.Tags.POWDER):
+								# 		var dx = 1 if _get_lut_rand() > 0.5 else -1
+								# 		var nx = x + dx
+								# 		if nx >= 0 and nx < grid_width:
+								# 			var ni = row_idx + grid_width + nx
+								# 			if ni < cells.size() and (cells[ni] & 0xFFFF) == 0: _swap_cells(x, y, nx, ny)
+								# =========================================
 
 func _process_electricity():
 	var frame = _frame_count
