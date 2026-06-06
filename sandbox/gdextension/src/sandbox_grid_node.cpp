@@ -6,6 +6,8 @@ using namespace godot;
 void SandboxGridNode::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("process_physics", "state", "width", "height", "frame_count"), &SandboxGridNode::process_physics);
 	ClassDB::bind_method(D_METHOD("process_electricity", "state", "width", "height", "frame_count"), &SandboxGridNode::process_electricity);
+	ClassDB::bind_method(D_METHOD("map_grid_data", "state", "dict", "grid_width", "grid_height"), &SandboxGridNode::map_grid_data);
+	ClassDB::bind_method(D_METHOD("get_special_source_indices", "cells"), &SandboxGridNode::get_special_source_indices);
 }
 
 SandboxGridNode::SandboxGridNode() {
@@ -792,4 +794,134 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 	state["out_sparks"] = out_sparks;
 	state["out_music_notes"] = out_music_notes;
 	return state;
+}
+
+Dictionary SandboxGridNode::map_grid_data(Dictionary state, Dictionary dict, int grid_width, int grid_height) {
+	PackedInt32Array cells = state["cells"];
+	PackedInt64Array tags_array = state["tags_array"];
+	PackedInt32Array charge_array = state["charge_array"];
+	PackedInt32Array cell_paint_colors = state["cell_paint_colors"];
+	PackedByteArray charge_visual_buffer = state["charge_visual_buffer"];
+	PackedByteArray chunks_active = state["chunks_active"];
+	int chunks_x = state["chunks_x"];
+	int chunks_y = state["chunks_y"];
+	
+	int32_t* cells_ptr = cells.ptrw();
+	int64_t* tags_ptr = tags_array.ptrw();
+	int32_t* charge_ptr = charge_array.ptrw();
+	int32_t* cell_paint_ptr = cell_paint_colors.ptrw();
+	uint8_t* charge_visual_ptr = charge_visual_buffer.ptrw();
+	uint8_t* chunks_active_ptr = chunks_active.ptrw();
+	
+	int old_w = dict["width"];
+	int old_h = dict["height"];
+	int y_offset = old_h - grid_height;
+	int x_offset = (old_w - grid_width) / 2;
+	
+	PackedInt32Array old_cells = dict["grid"];
+	PackedInt32Array old_charge = dict["charge"];
+	PackedInt64Array old_tags = dict["tags"];
+	PackedInt32Array old_paint = dict["cell_paint"];
+	
+	const int32_t* old_cells_ptr = old_cells.ptr();
+	const int32_t* old_charge_ptr = old_charge.ptr();
+	const int64_t* old_tags_ptr = old_tags.ptr();
+	const int32_t* old_paint_ptr = old_paint.ptr();
+	
+	std::vector<int> next_charge_indices;
+	std::vector<int> active_metronome_indices;
+	
+	auto activate_chunk = [&](int x, int y) {
+		int cx = x / 8;
+		int cy = y / 8;
+		if (cx >= 0 && cx < chunks_x && cy >= 0 && cy < chunks_y) {
+			chunks_active_ptr[cy * chunks_x + cx] = 60;
+		}
+	};
+	
+	for (int new_y = 0; new_y < grid_height; ++new_y) {
+		int old_y = new_y + y_offset;
+		if (old_y < 0 || old_y >= old_h) continue;
+		
+		for (int new_x = 0; new_x < grid_width; ++new_x) {
+			int old_x = new_x + x_offset;
+			if (old_x < 0 || old_x >= old_w) continue;
+			
+			int old_idx = old_y * old_w + old_x;
+			int new_idx = new_y * grid_width + new_x;
+			
+			int32_t c_val = old_cells_ptr[old_idx];
+			int32_t charge_val = old_charge_ptr[old_idx];
+			uint64_t tags = old_tags_ptr[old_idx];
+			
+			cells_ptr[new_idx] = c_val;
+			charge_ptr[new_idx] = charge_val;
+			tags_ptr[new_idx] = tags;
+			cell_paint_ptr[new_idx] = old_paint_ptr[old_idx];
+			
+			if (charge_val > 0) {
+				next_charge_indices.push_back(new_idx);
+				charge_visual_ptr[new_idx] = (charge_val > 255) ? 255 : charge_val;
+			}
+			
+			if (c_val != 0) {
+				int32_t pure_id = c_val & 0xFFFF;
+				if (pure_id == 600) {
+					active_metronome_indices.push_back(new_idx);
+				}
+				
+				// Smart chunk activation: only activate if it's dynamic
+				if (charge_val > 0 || pure_id == 600 || pure_id == 27 || pure_id == 28 || pure_id == 29 ||
+					(tags & (LIQUID | GAS | POWDER | ELECTRICITY | VOLATILE | BURN_SMOKE | BURN_COAL | VIRUS | RADIOACTIVE | VORTEX | EXP_ACID | EXP_WATER | EXP_LAVA | EXP_GAS | EXP_PINATA))) {
+					activate_chunk(new_x, new_y);
+				}
+			}
+		}
+	}
+	
+	PackedInt32Array out_next_charge;
+	out_next_charge.resize(next_charge_indices.size());
+	int32_t* next_ptr = out_next_charge.ptrw();
+	for (size_t i = 0; i < next_charge_indices.size(); ++i) {
+		next_ptr[i] = next_charge_indices[i];
+	}
+	
+	PackedInt32Array out_metronomes;
+	out_metronomes.resize(active_metronome_indices.size());
+	int32_t* metro_ptr = out_metronomes.ptrw();
+	for (size_t i = 0; i < active_metronome_indices.size(); ++i) {
+		metro_ptr[i] = active_metronome_indices[i];
+	}
+	
+	state["cells"] = cells;
+	state["charge_array"] = charge_array;
+	state["tags_array"] = tags_array;
+	state["cell_paint_colors"] = cell_paint_colors;
+	state["charge_visual_buffer"] = charge_visual_buffer;
+	state["chunks_active"] = chunks_active;
+	state["next_charge_indices"] = out_next_charge;
+	state["active_metronome_indices"] = out_metronomes;
+	
+	return state;
+}
+
+PackedInt32Array SandboxGridNode::get_special_source_indices(PackedInt32Array cells) {
+	std::vector<int> special_indices;
+	int size = cells.size();
+	const int32_t* ptr = cells.ptr();
+	for (int i = 0; i < size; ++i) {
+		int32_t mid = ptr[i] & 0xFFFF;
+		if (mid == 88 || mid == 9 || mid == 600 || mid == 91 || mid == 92 || 
+		    mid == 93 || mid == 94 || mid == 194 || mid == 294 || mid == 394 ||
+		    mid == 95 || mid == 195 || mid == 295 || mid == 395 || mid == 495 || mid == 595 || mid == 695 || mid == 795) {
+			special_indices.push_back(i);
+		}
+	}
+	PackedInt32Array out;
+	out.resize(special_indices.size());
+	int32_t* out_ptr = out.ptrw();
+	for (size_t i = 0; i < special_indices.size(); ++i) {
+		out_ptr[i] = special_indices[i];
+	}
+	return out;
 }

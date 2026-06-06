@@ -71,6 +71,8 @@ public:
 
 	Dictionary process_physics(Dictionary state, int width, int height, int frame_count);
 	Dictionary process_electricity(Dictionary state, int width, int height, int frame_count);
+	Dictionary map_grid_data(Dictionary state, Dictionary dict, int grid_width, int grid_height);
+	PackedInt32Array get_special_source_indices(PackedInt32Array cells);
 };
 
 }

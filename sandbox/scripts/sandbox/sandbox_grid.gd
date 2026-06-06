@@ -1106,9 +1106,9 @@ func _ready():
 	chunks_x = ceil(float(grid_width) / CHUNK_SIZE)
 	chunks_y = ceil(float(grid_height) / CHUNK_SIZE)
 	chunks_active.resize(chunks_x * chunks_y)
-	chunks_active.fill(60) # 1s settle for absolute visual stability
+	chunks_active.fill(0) 
 	next_chunks_active.resize(chunks_x * chunks_y)
-	next_chunks_active.fill(60)
+	next_chunks_active.fill(0)
 	
 	tags_array.resize(grid_width * grid_height)
 	charge_array.resize(grid_width * grid_height)
@@ -4383,33 +4383,34 @@ func _map_grid_data(dict: Dictionary):
 		var old_tags = dict["tags"]
 		var old_paint = dict["cell_paint"]
 		
-		for new_y in range(grid_height):
-			var old_y = new_y + y_offset
-			if old_y < 0 or old_y >= old_h: continue
+		var cpp_state = {
+			"cells": cells,
+			"tags_array": tags_array,
+			"charge_array": charge_array,
+			"cell_paint_colors": cell_paint_colors,
+			"charge_visual_buffer": charge_visual_buffer,
+			"chunks_active": chunks_active,
+			"chunks_x": chunks_x,
+			"chunks_y": chunks_y
+		}
+		
+		cpp_state = map_grid_data(cpp_state, dict, grid_width, grid_height)
+		
+		cells = cpp_state["cells"]
+		tags_array = cpp_state["tags_array"]
+		charge_array = cpp_state["charge_array"]
+		cell_paint_colors = cpp_state["cell_paint_colors"]
+		charge_visual_buffer = cpp_state["charge_visual_buffer"]
+		chunks_active = cpp_state["chunks_active"]
+		
+		var out_next = cpp_state["next_charge_indices"]
+		if out_next.size() > 0:
+			next_charge_indices.append_array(out_next)
+			charge_dirty = true
 			
-			for new_x in range(grid_width):
-				var old_x = new_x + x_offset
-				if old_x < 0 or old_x >= old_w: continue
-				
-				var old_idx = old_y * old_w + old_x
-				var new_idx = new_y * grid_width + new_x
-				
-				cells[new_idx] = int(old_cells[old_idx])
-				var charge_val = int(old_charge[old_idx])
-				charge_array[new_idx] = charge_val
-				tags_array[new_idx] = int(old_tags[old_idx])
-				cell_paint_colors[new_idx] = int(old_paint[old_idx])
-				
-				if charge_val > 0:
-					next_charge_indices.append(new_idx)
-					charge_visual_buffer[new_idx] = clampi(charge_val, 0, 255)
-					charge_dirty = true
-				
-				if cells[new_idx] != 0:
-					var pure_id = cells[new_idx] & 0xFFFF
-					if pure_id == 600:
-						active_metronome_indices[new_idx] = true
-					_activate_chunk(new_x, new_y)
+		var out_metro = cpp_state["active_metronome_indices"]
+		for idx in out_metro:
+			active_metronome_indices[idx] = true
 		
 		if dict.has("bg_paint"):
 			var bg_data = dict["bg_paint"]
@@ -11844,7 +11845,8 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 			
 	# 2. Loop over cells to reconstruct batteries, electricity source blocks, metronomes, and solid doors/phase blocks
 	if cells.size() == 0: return
-	for idx in range(cells.size()):
+	var special_indices = get_special_source_indices(cells)
+	for idx in special_indices:
 		var mid = cells[idx] & 0xFFFF
 		if mid == 88:
 			active_battery_indices[idx] = true
