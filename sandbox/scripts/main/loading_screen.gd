@@ -7,7 +7,7 @@ func _ready() -> void:
 	# Empezar a cargar la escena principal en segundo plano
 	ResourceLoader.load_threaded_request(next_scene_path)
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	var progress = []
 	var status = ResourceLoader.load_threaded_get_status(next_scene_path, progress)
 	

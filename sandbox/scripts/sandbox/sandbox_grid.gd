@@ -509,7 +509,9 @@ var selected_mechanism_tab: int = 0 # 0: Circuits, 1: Music
 var circuit_panel: PanelContainer
 var cannon_settings_panel: PanelContainer
 var is_mechanism_mode_active: bool = false
-var selected_circuit_tool: String = ""
+var selected_circuit_tool: String = "wire"
+
+var is_hollowing_pipe: bool = false
 var active_logic_gates: Array = []
 var active_pistons: Array = []
 var selected_piston_length: int = 10
@@ -6701,8 +6703,26 @@ func _set_cell(x, y, mat_id):
 				door_registry.erase(idx)
 			if _old_id_c == 92 and not is_phase_block_updating:
 				phase_block_registry.erase(idx)
-			if _old_id_c == 96 or _old_id_c == 97:
+			if _old_id_c == 96 and not is_hollowing_pipe:
 				is_pipe_dirty = true
+				var bx = int(floor(float(x) / 4.0)) * 4
+				var by = int(floor(float(y) / 4.0)) * 4
+				for oy in range(4):
+					for ox in range(4):
+						var tidx = (by + oy) * grid_width + (bx + ox)
+						if tidx >= 0 and tidx < cells.size() and (cells[tidx] & 0xFFFF) == 96:
+							cells[tidx] = 0
+							cell_paint_colors[tidx] = 0
+			elif _old_id_c == 97 and not is_hollowing_pipe:
+				is_pipe_dirty = true
+				var bx = int(floor(float(x) / 8.0)) * 8
+				var by = int(floor(float(y) / 8.0)) * 8
+				for oy in range(8):
+					for ox in range(8):
+						var tidx = (by + oy) * grid_width + (bx + ox)
+						if tidx >= 0 and tidx < cells.size() and (cells[tidx] & 0xFFFF) == 97:
+							cells[tidx] = 0
+							cell_paint_colors[tidx] = 0
 			
 			cells[idx] = 0
 			if cell_paint_colors[idx] != 0:
@@ -16083,6 +16103,8 @@ func _update_pipe_visuals(p):
 	var phase = _frame_count % 4
 	var flow_dir = p.get("flow_dir", 0)
 	
+	is_hollowing_pipe = true
+	
 	# First pass: static pipe structure (walls + air core 0)
 	for i in range(L):
 		var pt = path[i]
@@ -16165,6 +16187,8 @@ func _update_pipe_visuals(p):
 		_set_cell(gx + 2, gy + 1, 0)
 		_set_cell(gx + 1, gy + 2, 0)
 		_set_cell(gx + 2, gy + 2, 0)
+
+	is_hollowing_pipe = false
 
 	# Second pass: draw traveling elements at interpolated position
 	for i in range(L):
