@@ -86,6 +86,7 @@ func _update_zoom_ui():
 		# Set comfortable spacing between the magnifier icon and the percentage text
 		vbox.add_theme_constant_override("separation", int(2 * s))
 		
+		@warning_ignore("confusable_local_declaration")
 		var lbl_icon = Label.new()
 		lbl_icon.name = "IconLabel"
 		lbl_icon.text = "🔍"
@@ -95,6 +96,7 @@ func _update_zoom_ui():
 		lbl_icon.add_theme_font_override("font", _get_safe_font())
 		vbox.add_child(lbl_icon)
 		
+		@warning_ignore("confusable_local_declaration")
 		var lbl_pct = Label.new()
 		lbl_pct.name = "PctLabel"
 		lbl_pct.text = ""
@@ -4378,10 +4380,10 @@ func _map_grid_data(dict: Dictionary):
 		var y_offset = old_h - grid_height
 		var x_offset = int((old_w - grid_width) / 2.0)
 		
-		var old_cells = dict["grid"]
-		var old_charge = dict["charge"]
-		var old_tags = dict["tags"]
-		var old_paint = dict["cell_paint"]
+		var _old_cells = dict["grid"]
+		var _old_charge = dict["charge"]
+		var _old_tags = dict["tags"]
+		var _old_paint = dict["cell_paint"]
 		
 		var cpp_state = {
 			"cells": cells,
@@ -5555,7 +5557,7 @@ func _process(delta):
 					Color(1.0, 0.25, 0.75),
 					Color(0.2, 0.8, 1.0)
 				]
-				var c_idx = (Engine.get_frames_drawn() / 15) % colors.size()
+				var c_idx = int(Engine.get_frames_drawn() / 15.0) % colors.size()
 				var b_style = child.get_theme_stylebox("normal").duplicate()
 				b_style.bg_color = colors[c_idx]
 				child.add_theme_stylebox_override("normal", b_style)
@@ -5760,10 +5762,10 @@ func _process(delta):
 				else:
 					# Draw continuous cell staircase from prev_snapped to current gx, gy
 					if gx != prev_snapped_gx or gy != prev_snapped_gy:
-						var cx = prev_snapped_gx / snap
-						var cy = prev_snapped_gy / snap
-						var target_cx = gx / snap
-						var target_cy = gy / snap
+						var cx = int(prev_snapped_gx / float(snap))
+						var cy = int(prev_snapped_gy / float(snap))
+						var target_cx = int(gx / float(snap))
+						var target_cy = int(gy / float(snap))
 						
 						while cx != target_cx or cy != target_cy:
 							var dcx = target_cx - cx
@@ -5808,8 +5810,8 @@ func _process(delta):
 					gx = int(floor(float(gx) / snap) * snap)
 					gy = int(floor(float(gy) / snap) * snap)
 					
-					var cx = gx / snap
-					var cy = gy / snap
+					var cx = int(gx / float(snap))
+					var cy = int(gy / float(snap))
 					
 					var clicked_gate = null
 					for gate in active_logic_gates:
@@ -6683,13 +6685,13 @@ func _set_cell(x, y, mat_id):
 		# CRITICAL PERFORMANCE OPTIMIZATION: Early Exit for Air
 		if mat_id == 0:
 			if cells[idx] == 0: return # Already air, no work needed
-			var old_id = cells[idx] & 0xFFFF
-			if old_id == 600: active_metronome_indices.erase(idx)
-			elif old_id == 88: active_battery_indices.erase(idx)
-			elif old_id == 9: active_electricity_source_indices.erase(idx)
-			if old_id == 91 and not is_npc_door_updating:
+			var _old_id_c = cells[idx] & 0xFFFF
+			if _old_id_c == 600: active_metronome_indices.erase(idx)
+			elif _old_id_c == 88: active_battery_indices.erase(idx)
+			elif _old_id_c == 9: active_electricity_source_indices.erase(idx)
+			if _old_id_c == 91 and not is_npc_door_updating:
 				door_registry.erase(idx)
-			if old_id == 92 and not is_phase_block_updating:
+			if _old_id_c == 92 and not is_phase_block_updating:
 				phase_block_registry.erase(idx)
 			
 			cells[idx] = 0
@@ -6728,13 +6730,13 @@ func _set_cell(x, y, mat_id):
 					variant = 2
 		
 		# TRACK METRONOME, BATTERY, AND ELECTRICITY REGISTRIES
-		var old_id = cells[idx] & 0xFFFF
-		if old_id == 600: active_metronome_indices.erase(idx)
-		elif old_id == 88: active_battery_indices.erase(idx)
-		elif old_id == 9: active_electricity_source_indices.erase(idx)
-		if old_id == 91 and not is_npc_door_updating:
+		var _old_id_c = cells[idx] & 0xFFFF
+		if _old_id_c == 600: active_metronome_indices.erase(idx)
+		elif _old_id_c == 88: active_battery_indices.erase(idx)
+		elif _old_id_c == 9: active_electricity_source_indices.erase(idx)
+		if _old_id_c == 91 and not is_npc_door_updating:
 			door_registry.erase(idx)
-		if old_id == 92 and not is_phase_block_updating:
+		if _old_id_c == 92 and not is_phase_block_updating:
 			phase_block_registry.erase(idx)
 		
 		if pure_id == 600: active_metronome_indices[idx] = true
@@ -10205,7 +10207,7 @@ func _process_mage_rescue(npc):
 		_play_action_sound("mage_rescue", 0.5)
 		
 		# Alternate emojis
-		var alt_emoji = "✨" if (_ai_tick_count / 10) % 2 == 0 else "⬆️"
+		var alt_emoji = "✨" if int(_ai_tick_count / 10.0) % 2 == 0 else "⬆️"
 		_set_npc_emoji(npc, alt_emoji, 0.6)
 		
 		# Magic lifting
@@ -10734,7 +10736,7 @@ func _check_npc_environment_damage(npc) -> bool:
 		var idx = row_off + col_x
 		if charge_array[idx] > 0: return true
 		var px2 = idx % grid_width
-		var py2 = idx / grid_width
+		var py2 = int(idx / float(grid_width))
 		if px2 > 0 and (charge_array[idx - 1] > 0 or active_battery_indices.has(idx - 1)): return true
 		if px2 < grid_width - 1 and (charge_array[idx + 1] > 0 or active_battery_indices.has(idx + 1)): return true
 		if py2 > 0 and (charge_array[idx - grid_width] > 0 or active_battery_indices.has(idx - grid_width)): return true
@@ -10826,7 +10828,7 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 					var idx = row_offset + gx + ox
 					var is_pb_powered = false
 					var px = idx % grid_width
-					var py = idx / grid_width
+					var py = int(idx / float(grid_width))
 					if charge_array[idx] > 0:
 						is_pb_powered = true
 					else:
@@ -11718,8 +11720,8 @@ func _load_active_logic_gates(dict: Dictionary):
 		var x_offset = int((old_w - grid_width) / 2.0)
 		var offset_logic_x = int(x_offset / 4.0)
 		var offset_logic_y = int(y_offset / 4.0)
-		var max_tx = grid_width / 4
-		var max_ty = grid_height / 4
+		var max_tx = int(grid_width / 4.0)
+		var max_ty = int(grid_height / 4.0)
 
 		for gate_data in dict["active_logic_gates"]:
 			var gate = gate_data.duplicate(true)
@@ -11773,7 +11775,7 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 			return old_idx
 		var old_w = int(dict["width"])
 		var old_h = int(dict["height"])
-		var old_y = old_idx / old_w
+		var old_y = int(old_idx / float(old_w))
 		var old_x = old_idx % old_w
 		var y_offset = old_h - grid_height
 		var x_offset = int((old_w - grid_width) / 2.0)
@@ -11817,7 +11819,7 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 			phase_block_registry[idx] = true
 		elif mid == 95 or mid == 195 or mid == 295 or mid == 395 or mid == 495 or mid == 595 or mid == 695 or mid == 795:
 			var px = idx % grid_width
-			var py = idx / grid_width
+			var py = int(idx / float(grid_width))
 			var val = cells[idx]
 			var variant = (val >> 24) & 0xFF
 			var local_x = variant & 0x0F
@@ -11830,7 +11832,7 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 					already_registered = true
 					break
 			if not already_registered:
-				var orient = (mid - 95) / 100
+				var orient = int((mid - 95) / 100.0)
 				var new_c = {
 					"pos": Vector2i(gx, gy),
 					"orientation": orient,
@@ -11839,7 +11841,7 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 				active_cannons.append(new_c)
 		elif mid == 93:
 			var px = idx % grid_width
-			var py = idx / grid_width
+			var py = int(idx / float(grid_width))
 			var already_registered = false
 			for p in active_pistons:
 				var orient = p.get("orientation", 0)
@@ -11916,7 +11918,7 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 	for idx_pt in range(cells.size()):
 		if (cells[idx_pt] & 0xFFFF) == 96:
 			var px = idx_pt % grid_width
-			var py = idx_pt / grid_width
+			var py = int(idx_pt / float(grid_width))
 			var gx = int(floor(float(px) / 4.0) * 4.0)
 			var gy = int(floor(float(py) / 4.0) * 4.0)
 			pipe_blocks[Vector2i(gx, gy)] = true
@@ -11977,7 +11979,7 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 	for idx_pt in range(cells.size()):
 		if (cells[idx_pt] & 0xFFFF) == 97:
 			var px = idx_pt % grid_width
-			var py = idx_pt / grid_width
+			var py = int(idx_pt / float(grid_width))
 			var gx = int(floor(float(px) / 8.0) * 8.0)
 			var gy = int(floor(float(py) / 8.0) * 8.0)
 			pipe_x2_blocks[Vector2i(gx, gy)] = true
@@ -12497,10 +12499,10 @@ func _is_piston_base_powered(p) -> bool:
 	return false
 
 func _activate_piston_chunks(px: int, gy: int):
-	var start_cx = px / 4
-	var end_cx = (px + 4) / 4
-	var start_cy = clamp((gy - 64) / 4, 0, grid_height / 4)
-	var end_cy = clamp((gy + 16) / 4, 0, grid_height / 4)
+	var start_cx = int(px / 4.0)
+	var end_cx = int((px + 4) / 4.0)
+	var start_cy = clamp(int((gy - 64) / 4.0), 0, int(grid_height / 4.0))
+	var end_cy = clamp(int((gy + 16) / 4.0), 0, int(grid_height / 4.0))
 	for cy in range(start_cy, end_cy + 1):
 		for cx in range(start_cx, end_cx + 1):
 			_activate_chunk(cx, cy)
@@ -13162,6 +13164,7 @@ func _setup_music_ui(force_refresh: bool = false):
 		
 		_show_menu_reminder("circuits", circ_vbox, "REMINDER_CIRCUITS")
 		
+		@warning_ignore("confusable_local_declaration")
 		var title = Label.new()
 		title.text = tr("circuits_tab")
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -16500,15 +16503,15 @@ func _eject_npc_from_pipe(p, endpoint_idx: int, npc_id: int) -> bool:
 	
 	if side == "left":
 		ej_x = pt.x - 2
-		ej_y = pt.y + int(block_size / 2)
+		ej_y = pt.y + int(block_size / 2.0)
 	elif side == "right":
 		ej_x = pt.x + block_size
-		ej_y = pt.y + int(block_size / 2)
+		ej_y = pt.y + int(block_size / 2.0)
 	elif side == "top" or side == "horizontal":
-		ej_x = pt.x + int(block_size / 2)
+		ej_x = pt.x + int(block_size / 2.0)
 		ej_y = pt.y - 6
 	elif side == "bottom":
-		ej_x = pt.x + int(block_size / 2)
+		ej_x = pt.x + int(block_size / 2.0)
 		ej_y = pt.y + block_size
 		
 	var found_spot = false

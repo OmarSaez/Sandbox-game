@@ -28,7 +28,7 @@ func _ready() -> void:
 	if error != OK:
 		print("VERSION_MANAGER: Error al iniciar la petición HTTP: ", error)
 
-func _on_request_completed(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	if result != HTTPRequest.RESULT_SUCCESS:
 		print("VERSION_MANAGER: Fallo al descargar el archivo de versión. Código de resultado: ", result)
 		return

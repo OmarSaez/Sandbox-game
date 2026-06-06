@@ -29,7 +29,7 @@ var first_reset_used : bool = false
 var first_share_used : bool = false
 
 var _app_is_paused : bool = false
-var _banner_needs_to_show_on_resume : bool = false
+# var _banner_needs_to_show_on_resume : bool = false
 
 func _process(delta: float) -> void:
 	if ad_free_time > 0:

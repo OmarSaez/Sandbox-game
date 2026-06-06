@@ -7,7 +7,7 @@ const CHANNEL_ID = "reminders"
 const NOTIFICATION_ID_1 = 1001
 const NOTIFICATION_ID_2 = 1002
 
-var _is_scheduled: bool = false
+# var _is_scheduled: bool = false
 
 func _ready() -> void:
 	# Solo proceder si estamos en Android
