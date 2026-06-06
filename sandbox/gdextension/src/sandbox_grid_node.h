@@ -70,6 +70,7 @@ public:
 	~SandboxGridNode();
 
 	Dictionary process_physics(Dictionary state, int width, int height, int frame_count);
+	Dictionary process_electricity(Dictionary state, int width, int height, int frame_count);
 };
 
 }

@@ -6832,8 +6832,8 @@ func _step_simulation():
 	_process_electricity()
 	
 	# Transition Active Charges to Next Frame
-	active_charge_indices = next_charge_indices
-	next_charge_indices = PackedInt32Array()
+	active_charge_indices.append_array(next_charge_indices)
+	next_charge_indices.clear()
 	
 	# Pass 2 & 3: Movement and Interactions (Calculated)
 	# ... after main loops conclude, manage the persistent sounds once ...
@@ -7066,174 +7066,47 @@ func _process_electricity():
 		charge_visual_buffer[idx] = 100
 		_register_charge(idx)
 		
-	# 3. BFS from constant sources to find all actively "powered" cells
-	var queue_x = []
-	var queue_y = []
-	for idx in sources:
-		var gy = idx / grid_width
-		queue_x.append(idx - gy * grid_width)
-		queue_y.append(gy)
-		powered_frame[idx] = frame
-		
-	var head = 0
-	while head < queue_x.size():
-		var cx = queue_x[head]
-		var cy = queue_y[head]
-		head += 1
-		
-		for dy in range(-1, 2):
-			var ny = cy + dy
-			if ny < 0 or ny >= grid_height: continue
-			var row_offset = ny * grid_width
-			for dx in range(-1, 2):
-				if dx == 0 and dy == 0: continue
-				var nx = cx + dx
-				if nx < 0 or nx >= grid_width: continue
-				
-				var n_idx = row_offset + nx
-				if powered_frame[n_idx] == frame: continue
-				
-				var n_pid = cells[n_idx] & 0xFFFF
-				if n_pid <= 0 and not phase_block_registry.has(n_idx): continue
-				
-				# Skip logic gate body cells
-				if n_pid >= 81 and n_pid <= 87:
-					var n_var = (cells[n_idx] >> 24) & 0xFF
-					if n_var < 10:
-						continue
-						
-				if charge_array[n_idx] > 0:
-					powered_frame[n_idx] = frame
-					queue_x.append(nx)
-					queue_y.append(ny)
-					
-	# 4. Perform propagation wave: cells at 100 charge charge their 0-charge neighbors for next frame
-	var new_active_charges = []
-	var wave_fronts = []
-	for idx in active_charge_indices:
-		if charge_array[idx] == 100:
-			wave_fronts.append(idx)
-			
-	for idx in wave_fronts:
-		var y = idx / grid_width
-		var x = idx - y * grid_width
-		for dy in range(-1, 2):
-			var ny = y + dy
-			if ny < 0 or ny >= grid_height: continue
-			var row_offset = ny * grid_width
-			for dx in range(-1, 2):
-				if dx == 0 and dy == 0: continue
-				var nx = x + dx
-				if nx < 0 or nx >= grid_width: continue
-				
-				var n_idx = row_offset + nx
-				if charge_array[n_idx] == 0:
-					var n_pid = cells[n_idx] & 0xFFFF
-					var is_pb = phase_block_registry.has(n_idx)
-					if n_pid <= 0 and not is_pb: continue
-					
-					# Skip logic gate body cells
-					if n_pid >= 81 and n_pid <= 87:
-						var n_var = (cells[n_idx] >> 24) & 0xFF
-						if n_var < 10:
-							continue
-							
-					var n_tags = tags_array[n_idx]
-					if (n_tags & SandboxMaterial.Tags.EXPLOSIVE) and (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
-						_prime_explosive(nx, ny, n_pid, 128) # 128 = EXP_ELECTRIC
-					elif is_pb or (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
-						charge_array[n_idx] = 100
-						new_active_charges.append(n_idx)
-						
-						# Fast inline chunk activation
-						var ncx = nx >> 4
-						var ncy = ny >> 4
-						var c_idx = ncy * chunks_x + ncx
-						if c_idx >= 0 and c_idx < next_chunks_active.size() and next_chunks_active[c_idx] < 60:
-							_activate_chunk(nx, ny)
-						
-						# Spawn subtle visual micro-sparks on active wavefront propagation
-						if _get_lut_rand() < 0.01:
-							_add_spark(float(nx), float(ny), _get_lut_rand_range(-10, 10), _get_lut_rand_range(-10, 10), Color("#FFC107"), 0.3)
-							
-	# 5. Apply decay directly in charge_array
-	var decay_rate = 20
-	for idx in active_charge_indices:
-		# Primed explosives and fuses decay on cell updates, so we preserve their countdowns
-		var mid = cells[idx] & 0xFFFF
-		if mid == 7 or mid == 77 or mid == 71 or mid == 72 or mid == 19 or mid == 5 or mid == 20:
-			new_active_charges.append(idx)
-			continue
-			
-		if powered_frame[idx] == frame:
-			charge_array[idx] = 100
-			new_active_charges.append(idx)
-		else:
-			# Cell is decaying
-			var old_val = charge_array[idx]
-			var next_val = max(0, old_val - decay_rate)
-			charge_array[idx] = next_val
-			if next_val > 0:
-				new_active_charges.append(idx)
-				var gy = idx / grid_width
-				var gx = idx - gy * grid_width
-				var cx = gx >> 4
-				var cy = gy >> 4
-				var c_idx = cy * chunks_x + cx
-				if c_idx >= 0 and c_idx < next_chunks_active.size() and next_chunks_active[c_idx] < 60:
-					_activate_chunk(gx, gy)
-				
-	# Update LED rainbow colors
-	for idx in new_active_charges:
-		var raw_val = cells[idx]
-		var mid = raw_val & 0xFFFF
-		if mid == 89:
-			var variant = (raw_val >> 24) & 0xFF
-			if (variant & 8) != 0:
-				var is_new_pulse = not prev_charges.has(idx)
-				var is_30_frames = (frame % 30 == 0)
-				if is_new_pulse or is_30_frames:
-					var current_color_idx = variant & 7
-					var next_color_idx = (current_color_idx + 1) % 7
-					var new_variant = 8 | next_color_idx
-					cells[idx] = 89 | (new_variant << 24)
-					var gy = idx / grid_width
-					var gx = idx - gy * grid_width
-					_activate_chunk(gx, gy)
-
-	# Update charge visual buffers
-	for idx in new_active_charges:
-		charge_visual_buffer[idx] = clampi(charge_array[idx], 0, 255)
+	# Pack the state and sources
+	var state = {
+		"cells": cells,
+		"tags_array": tags_array,
+		"charge_array": charge_array,
+		"charge_visual_buffer": charge_visual_buffer,
+		"powered_frame": powered_frame,
+		"next_chunks_active": next_chunks_active,
+		"active_charge_indices": active_charge_indices,
+		"sources_indices": sources,
+		"phase_blocks_indices": phase_block_registry.keys(),
+		"prev_charges": prev_charges.keys(),
+		"prev_active_music_charges": prev_active_music_charges.keys()
+	}
 	
-	# Clear visual buffer of completely discharged cells
-	for idx in active_charge_indices:
-		if charge_array[idx] == 0:
-			charge_visual_buffer[idx] = 0
-			
-	active_charge_indices = new_active_charges
+	# Execute native physics for electricity
+	var new_state = process_electricity(state, grid_width, grid_height, frame)
+	
+	# Recover updated state
+	charge_array = new_state["charge_array"]
+	charge_visual_buffer = new_state["charge_visual_buffer"]
+	active_charge_indices = new_state["active_charge_indices"]
+	powered_frame = new_state["powered_frame"]
+	next_chunks_active = new_state["next_chunks_active"]
+	
+	# Spawn sparks from BFS
+	var out_sparks = new_state["out_sparks"]
+	for spark_pos in out_sparks:
+		_add_spark(spark_pos.x, spark_pos.y, _get_lut_rand_range(-10, 10), _get_lut_rand_range(-10, 10), Color("#FFC107"), 0.3)
+		
+	# Trigger music notes
+	var out_music_notes = new_state["out_music_notes"]
+	for note_data in out_music_notes:
+		var inst = int(note_data.x)
+		var note = int(note_data.y)
+		_play_music_note(inst, note)
+		
 	charge_dirty = true
 	
 	# 6. Simulate logic gates to prepare outputs for next frame
 	_simulate_logic_gates()
-	
-	# 7. Trigger music blocks on rising edge
-	for idx in active_charge_indices:
-		var mid = cells[idx] & 0xFFFF
-		if material_tags_raw[mid] & SandboxMaterial.Tags.MUSIC:
-			var gy = idx / grid_width
-			var gx = idx - gy * grid_width
-			if gx % 2 == 0 and gy % 2 == 0:
-				if not prev_active_music_charges.has(idx):
-					if mid == 600:
-						_play_music_note(5, 0)
-					else:
-						var inst = int((mid - MUSIC_ID_START) / 16.0)
-						var note = (mid - MUSIC_ID_START) % 16
-						_play_music_note(inst, note)
-						
-	# 8. Register all active charges for the next frame
-	for idx in active_charge_indices:
-		_register_charge(idx)
 
 
 

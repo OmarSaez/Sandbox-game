@@ -5,6 +5,7 @@ using namespace godot;
 
 void SandboxGridNode::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("process_physics", "state", "width", "height", "frame_count"), &SandboxGridNode::process_physics);
+	ClassDB::bind_method(D_METHOD("process_electricity", "state", "width", "height", "frame_count"), &SandboxGridNode::process_electricity);
 }
 
 SandboxGridNode::SandboxGridNode() {
@@ -485,5 +486,292 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 	state["charge_array"] = charge_array;
 	state["charge_visual_buffer"] = charge_visual_buffer;
 	state["explosions"] = explosions_queue;
+	return state;
+}
+
+
+Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int height, int frame_count) {
+	PackedInt32Array cells = state["cells"];
+	PackedInt64Array tags_array = state["tags_array"];
+	PackedInt32Array charge_array = state["charge_array"];
+	PackedByteArray charge_visual_buffer = state["charge_visual_buffer"];
+	PackedInt32Array powered_frame = state["powered_frame"];
+	PackedByteArray next_chunks_active = state["next_chunks_active"];
+	
+	Array active_charge_indices = state["active_charge_indices"];
+	Array sources_indices = state["sources_indices"]; 
+	Array phase_blocks_indices = state["phase_blocks_indices"];
+	Array prev_charges_arr = state["prev_charges"];
+	Array prev_active_music_charges_arr = state["prev_active_music_charges"];
+	
+	int32_t* cells_ptr = cells.ptrw();
+	int64_t* tags_ptr = tags_array.ptrw();
+	int32_t* charge_ptr = charge_array.ptrw();
+	uint8_t* charge_visual_ptr = charge_visual_buffer.ptrw();
+	int32_t* powered_frame_ptr = powered_frame.ptrw();
+	uint8_t* chunks_active_ptr = next_chunks_active.ptrw();
+	
+	int chunks_x = width / 16;
+	if (width % 16 != 0) chunks_x++;
+	
+	auto activate_chunk = [&](int cx, int cy) {
+		int chunk_x = cx / 16;
+		int chunk_y = cy / 16;
+		int c_idx = chunk_y * chunks_x + chunk_x;
+		if (c_idx >= 0 && c_idx < next_chunks_active.size() && chunks_active_ptr[c_idx] < 60) {
+			chunks_active_ptr[c_idx] = 60;
+		}
+	};
+	
+	// Phase Blocks fast lookup
+	std::vector<bool> is_pb(width * height, false);
+	for (int i = 0; i < phase_blocks_indices.size(); ++i) {
+		is_pb[int(phase_blocks_indices[i])] = true;
+	}
+	
+	// Prev charges fast lookup (for LED rainbow pulsing)
+	std::vector<bool> prev_charges(width * height, false);
+	for (int i = 0; i < prev_charges_arr.size(); ++i) {
+		prev_charges[int(prev_charges_arr[i])] = true;
+	}
+	
+	std::vector<bool> prev_music(width * height, false);
+	for (int i = 0; i < prev_active_music_charges_arr.size(); ++i) {
+		prev_music[int(prev_active_music_charges_arr[i])] = true;
+	}
+	
+	// Fast lookup to prevent duplicates
+	std::vector<bool> in_active(width * height, false);
+	for (int i = 0; i < active_charge_indices.size(); ++i) {
+		in_active[int(active_charge_indices[i])] = true;
+	}
+
+	// Initialize sources to 100
+	for (int i = 0; i < sources_indices.size(); ++i) {
+		int idx = sources_indices[i];
+		charge_ptr[idx] = 100;
+		charge_visual_ptr[idx] = 100;
+		if (!in_active[idx]) {
+			active_charge_indices.append(idx);
+			in_active[idx] = true;
+		}
+	}
+	
+	// BFS Queue
+	std::vector<int> queue_x;
+	std::vector<int> queue_y;
+	queue_x.reserve(2000);
+	queue_y.reserve(2000);
+	
+	for (int i = 0; i < sources_indices.size(); ++i) {
+		int idx = sources_indices[i];
+		int gy = idx / width;
+		int gx = idx % width;
+		queue_x.push_back(gx);
+		queue_y.push_back(gy);
+		powered_frame_ptr[idx] = frame_count;
+	}
+	
+	// 3. BFS from constant sources
+	int head = 0;
+	while (head < queue_x.size()) {
+		int cx = queue_x[head];
+		int cy = queue_y[head];
+		head++;
+		
+		for (int dy = -1; dy <= 1; ++dy) {
+			int ny = cy + dy;
+			if (ny < 0 || ny >= height) continue;
+			int row_offset = ny * width;
+			for (int dx = -1; dx <= 1; ++dx) {
+				if (dx == 0 && dy == 0) continue;
+				int nx = cx + dx;
+				if (nx < 0 || nx >= width) continue;
+				
+				int n_idx = row_offset + nx;
+				if (powered_frame_ptr[n_idx] == frame_count) continue;
+				
+				int32_t n_pid = cells_ptr[n_idx] & 0xFFFF;
+				if (n_pid <= 0 && !is_pb[n_idx]) continue;
+				
+				if (n_pid >= 81 && n_pid <= 87) {
+					int n_var = (cells_ptr[n_idx] >> 24) & 0xFF;
+					if (n_var < 10) continue;
+				}
+				
+				if (charge_ptr[n_idx] > 0) {
+					powered_frame_ptr[n_idx] = frame_count;
+					queue_x.push_back(nx);
+					queue_y.push_back(ny);
+				}
+			}
+		}
+	}
+	
+	// 4. Perform propagation wave
+	std::vector<int> new_active_charges;
+	new_active_charges.reserve(active_charge_indices.size() + 1000);
+	std::vector<int> wave_fronts;
+	
+	for (int i = 0; i < active_charge_indices.size(); ++i) {
+		int idx = active_charge_indices[i];
+		if (charge_ptr[idx] == 100) {
+			wave_fronts.push_back(idx);
+		}
+	}
+	
+	static uint32_t rng_state = 123456789;
+	auto fast_rand = [&]() -> uint32_t {
+		rng_state ^= rng_state << 13;
+		rng_state ^= rng_state >> 17;
+		rng_state ^= rng_state << 5;
+		return rng_state;
+	};
+	
+	Array out_sparks;
+	
+	for (int i = 0; i < wave_fronts.size(); ++i) {
+		int idx = wave_fronts[i];
+		int y = idx / width;
+		int x = idx % width;
+		
+		for (int dy = -1; dy <= 1; ++dy) {
+			int ny = y + dy;
+			if (ny < 0 || ny >= height) continue;
+			int row_offset = ny * width;
+			for (int dx = -1; dx <= 1; ++dx) {
+				if (dx == 0 && dy == 0) continue;
+				int nx = x + dx;
+				if (nx < 0 || nx >= width) continue;
+				
+				int n_idx = row_offset + nx;
+				if (charge_ptr[n_idx] == 0) {
+					int32_t n_pid = cells_ptr[n_idx] & 0xFFFF;
+					bool pb = is_pb[n_idx];
+					if (n_pid <= 0 && !pb) continue;
+					
+					if (n_pid >= 81 && n_pid <= 87) {
+						int n_var = (cells_ptr[n_idx] >> 24) & 0xFF;
+						if (n_var < 10) continue;
+					}
+					
+					uint64_t n_tags = tags_ptr[n_idx];
+					if ((n_tags & EXPLOSIVE) && (n_tags & ELECTRIC_ACTIVATED)) {
+						if (charge_ptr[n_idx] == 0) {
+							charge_ptr[n_idx] = 40 | 128; // EXP_ELECTRIC
+							charge_visual_ptr[n_idx] = 160;
+						}
+					} else if (pb || (n_tags & (CONDUCTOR | ELECTRIC_ACTIVATED))) {
+						charge_ptr[n_idx] = 100;
+						new_active_charges.push_back(n_idx);
+						activate_chunk(nx, ny);
+						
+						if ((fast_rand() % 1000) < 10) { 
+							out_sparks.append(Vector2(nx, ny));
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// 5. Apply decay
+	int decay_rate = 20;
+	for (int i = 0; i < active_charge_indices.size(); ++i) {
+		int idx = active_charge_indices[i];
+		int32_t mid = cells_ptr[idx] & 0xFFFF;
+		
+		if (mid == 7 || mid == 77 || mid == 71 || mid == 72 || mid == 19 || mid == 5 || mid == 20) {
+			new_active_charges.push_back(idx);
+			continue;
+		}
+		
+		if (powered_frame_ptr[idx] == frame_count) {
+			charge_ptr[idx] = 100;
+			new_active_charges.push_back(idx);
+		} else {
+			int old_val = charge_ptr[idx];
+			int next_val = (old_val - decay_rate > 0) ? (old_val - decay_rate) : 0;
+			charge_ptr[idx] = next_val;
+			if (next_val > 0) {
+				new_active_charges.push_back(idx);
+				int gy = idx / width;
+				int gx = idx % width;
+				activate_chunk(gx, gy);
+			}
+		}
+	}
+	
+	// LED Rainbow & Visual Buffer
+	Array out_music_notes;
+	
+	for (int i = 0; i < new_active_charges.size(); ++i) {
+		int idx = new_active_charges[i];
+		int32_t raw_val = cells_ptr[idx];
+		int32_t mid = raw_val & 0xFFFF;
+		
+		// Visual buffer
+		int c = charge_ptr[idx];
+		charge_visual_ptr[idx] = (c < 0) ? 0 : (c > 255 ? 255 : c);
+		
+		// LED
+		if (mid == 89) {
+			int variant = (raw_val >> 24) & 0xFF;
+			if ((variant & 8) != 0) {
+				bool is_new_pulse = !prev_charges[idx];
+				bool is_30_frames = (frame_count % 30 == 0);
+				if (is_new_pulse || is_30_frames) {
+					int current_color_idx = variant & 7;
+					int next_color_idx = (current_color_idx + 1) % 7;
+					int new_variant = 8 | next_color_idx;
+					cells_ptr[idx] = 89 | (new_variant << 24);
+					int gy = idx / width;
+					int gx = idx % width;
+					activate_chunk(gx, gy);
+				}
+			}
+		}
+		
+		// Music
+		uint64_t m_tags = tags_ptr[idx];
+		if (m_tags & MUSIC) {
+			int gy = idx / width;
+			int gx = idx % width;
+			if (gx % 2 == 0 && gy % 2 == 0) {
+				if (!prev_music[idx]) {
+					if (mid == 600) {
+						out_music_notes.append(Vector2(5, 0));
+					} else {
+						int inst = (mid - 500) / 16;
+						int note = (mid - 500) % 16;
+						out_music_notes.append(Vector2(inst, note));
+					}
+				}
+			}
+		}
+	}
+	
+	for (int i = 0; i < active_charge_indices.size(); ++i) {
+		int idx = active_charge_indices[i];
+		if (charge_ptr[idx] == 0) {
+			charge_visual_ptr[idx] = 0;
+		}
+	}
+	
+	// Create GDScript-friendly array
+	Array out_active_charges;
+	for (int i = 0; i < new_active_charges.size(); ++i) {
+		out_active_charges.append(new_active_charges[i]);
+	}
+	
+	state["cells"] = cells;
+	state["charge_array"] = charge_array;
+	state["charge_visual_buffer"] = charge_visual_buffer;
+	state["powered_frame"] = powered_frame;
+	state["next_chunks_active"] = next_chunks_active;
+	
+	state["active_charge_indices"] = out_active_charges;
+	state["out_sparks"] = out_sparks;
+	state["out_music_notes"] = out_music_notes;
 	return state;
 }
