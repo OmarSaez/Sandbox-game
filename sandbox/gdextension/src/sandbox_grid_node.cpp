@@ -494,9 +494,11 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 	state["charge_visual_buffer"] = charge_visual_buffer;
 	state["explosions"] = explosions_queue;
 	
-	Array out_moved_charges;
+	PackedInt32Array out_moved_charges;
+	out_moved_charges.resize(moved_charges.size());
+	int32_t* moved_ptr = out_moved_charges.ptrw();
 	for (int i = 0; i < moved_charges.size(); ++i) {
-		out_moved_charges.append(moved_charges[i]);
+		moved_ptr[i] = moved_charges[i];
 	}
 	state["moved_charges"] = out_moved_charges;
 	
@@ -574,8 +576,8 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 	// BFS Queue
 	std::vector<int> queue_x;
 	std::vector<int> queue_y;
-	queue_x.reserve(2000);
-	queue_y.reserve(2000);
+	queue_x.reserve(32768);
+	queue_y.reserve(32768);
 	
 	for (int i = 0; i < sources_indices.size(); ++i) {
 		int idx = sources_indices[i];
@@ -773,9 +775,11 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 	}
 	
 	// Create GDScript-friendly array
-	Array out_active_charges;
+	PackedInt32Array out_active_charges;
+	out_active_charges.resize(new_active_charges.size());
+	int32_t* out_ptr = out_active_charges.ptrw();
 	for (int i = 0; i < new_active_charges.size(); ++i) {
-		out_active_charges.append(new_active_charges[i]);
+		out_ptr[i] = new_active_charges[i];
 	}
 	
 	state["cells"] = cells;
