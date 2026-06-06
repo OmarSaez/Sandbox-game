@@ -14657,7 +14657,19 @@ func _save_to_slot(idx, custom_name: String = ""):
 	var time = Time.get_datetime_dict_from_system()
 	var date_str = "{0}/{1}/{2} {3}:{4}".format([time.day, time.month, time.year, time.hour, time.minute])
 	var save_name = custom_name if custom_name != "" else ("Save " + str(idx))
-	
+	# CLEAN CIRCULAR REFERENCES BEFORE SAVING
+	# NPCs often point to each other (social_target, cached_target), which causes infinite recursion in store_var
+	var clean_npcs = []
+	var keys_to_nullify = ["social_target", "cached_target", "cached_closest_enemy", "cached_closest_ally", "social_partner"]
+	for npc in active_npcs:
+		var c = {}
+		for key in npc:
+			if key in keys_to_nullify:
+				c[key] = null
+			else:
+				c[key] = npc[key]
+		clean_npcs.append(c)
+
 	var save_dict = {
 		"name": save_name,
 		"date": date_str,
@@ -14669,7 +14681,7 @@ func _save_to_slot(idx, custom_name: String = ""):
 		"cell_paint": cell_paint_colors,
 		"bg_paint": background_img.get_data().to_int32_array(),
 		"lab_data": _get_cleaned_lab_data(),
-		"npcs": active_npcs,
+		"npcs": clean_npcs,
 		"ach_unlocked": is_achievement_menu_unlocked,
 		"door_registry": door_registry.keys(),
 		"door_close_timers": door_close_timers,
