@@ -37,13 +37,14 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 	int32_t* charge_ptr = charge_array.ptrw();
 	uint8_t* charge_visual_ptr = charge_visual_buffer.ptrw();
 	const int64_t* mat_tags = material_tags_raw.ptr();
+	int mat_tags_size = material_tags_raw.size();
 	
 	Array explosions_queue;
 	
 	// Helper lambda for setting cells
 	auto set_cell = [&](int cx, int cy, int32_t cid) {
 		int t_idx = cy * width + cx;
-		uint64_t m_tags = (cid == 0) ? 0 : mat_tags[cid];
+		uint64_t m_tags = (cid == 0 || cid >= mat_tags_size) ? 0 : mat_tags[cid];
 		
 		int variant = 0;
 		if (cid > 0 && (m_tags & ((1ULL << 25) | (1ULL << 26)))) { // TEXTURE_DOUBLE | TEXTURE_TRIPLE
@@ -102,7 +103,7 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 				if (nx == cx && ny == cy) continue;
 				if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
 				int32_t nid = cells_ptr[ny * width + nx] & 0xFFFF;
-				if (nid > 0 && (mat_tags[nid] & check_tag)) return true;
+				if (nid > 0 && nid < mat_tags_size && (mat_tags[nid] & check_tag)) return true;
 			}
 		}
 		return false;
@@ -142,7 +143,7 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 							charge_ptr[t_idx] = (20 + (fast_rand() % 30)) | flags;
 							charge_visual_ptr[t_idx] = 160;
 						} else {
-							uint64_t m_tags = mat_tags[t_id];
+							uint64_t m_tags = (t_id < mat_tags_size) ? mat_tags[t_id] : 0;
 							int ign_flags = 0;
 							if (t_id == 5 || t_id == 20) {
 								ign_flags = flags;
@@ -285,7 +286,7 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 							if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
 							int32_t nid = cells_ptr[ny * width + nx] & 0xFFFF;
 							if (nid > 0 && nid != pure_id) {
-								uint64_t n_tags = mat_tags[nid];
+								uint64_t n_tags = (nid < mat_tags_size) ? mat_tags[nid] : 0;
 								if (!(n_tags & (ANTI_ACID | INVINCIBLE))) {
 									set_cell(nx, ny, 44);
 									if ((fast_rand() % 100) < 30) { set_cell(x, y, 0); destroyed = true; goto interaction_done; }
@@ -323,7 +324,7 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 								if ((pure_id == 11 && nid == 2) || (pure_id == 2 && nid == 11)) {
 									set_cell(x, y, 12); set_cell(nx, ny, 12); destroyed = true; goto interaction_done; // Obsidian
 								}
-								uint64_t n_tags = mat_tags[nid];
+								uint64_t n_tags = (nid < mat_tags_size) ? mat_tags[nid] : 0;
 								if ((n_tags & FLAMMABLE) && nid != 14) {
 									if ((fast_rand() % 100) < 80) {
 										if (nid == 18) { // TNT -> Primed TNT
@@ -544,29 +545,34 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 	// Phase Blocks fast lookup
 	std::vector<bool> is_pb(width * height, false);
 	for (int i = 0; i < phase_blocks_indices.size(); ++i) {
-		is_pb[int(phase_blocks_indices[i])] = true;
+		int idx = int(phase_blocks_indices[i]);
+		if (idx >= 0 && idx < width * height) is_pb[idx] = true;
 	}
 	
 	// Prev charges fast lookup (for LED rainbow pulsing)
 	std::vector<bool> prev_charges(width * height, false);
 	for (int i = 0; i < prev_charges_arr.size(); ++i) {
-		prev_charges[int(prev_charges_arr[i])] = true;
+		int idx = int(prev_charges_arr[i]);
+		if (idx >= 0 && idx < width * height) prev_charges[idx] = true;
 	}
 	
 	std::vector<bool> prev_music(width * height, false);
 	for (int i = 0; i < prev_active_music_charges_arr.size(); ++i) {
-		prev_music[int(prev_active_music_charges_arr[i])] = true;
+		int idx = int(prev_active_music_charges_arr[i]);
+		if (idx >= 0 && idx < width * height) prev_music[idx] = true;
 	}
 	
 	// Fast lookup to prevent duplicates
 	std::vector<bool> in_active(width * height, false);
 	for (int i = 0; i < active_charge_indices.size(); ++i) {
-		in_active[int(active_charge_indices[i])] = true;
+		int idx = int(active_charge_indices[i]);
+		if (idx >= 0 && idx < width * height) in_active[idx] = true;
 	}
 
 	// Initialize sources to 100
 	for (int i = 0; i < sources_indices.size(); ++i) {
 		int idx = sources_indices[i];
+		if (idx < 0 || idx >= width * height) continue;
 		charge_ptr[idx] = 100;
 		charge_visual_ptr[idx] = 100;
 		if (!in_active[idx]) {
@@ -633,6 +639,7 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 	
 	for (int i = 0; i < active_charge_indices.size(); ++i) {
 		int idx = active_charge_indices[i];
+		if (idx < 0 || idx >= width * height) continue;
 		if (charge_ptr[idx] == 100) {
 			wave_fronts.push_back(idx);
 		}
@@ -697,6 +704,7 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 	int decay_rate = 20;
 	for (int i = 0; i < active_charge_indices.size(); ++i) {
 		int idx = active_charge_indices[i];
+		if (idx < 0 || idx >= width * height) continue;
 		int32_t mid = cells_ptr[idx] & 0xFFFF;
 		
 		if (mid == 7 || mid == 77 || mid == 71 || mid == 72 || mid == 19 || mid == 5 || mid == 20) {
@@ -771,6 +779,7 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 	
 	for (int i = 0; i < active_charge_indices.size(); ++i) {
 		int idx = active_charge_indices[i];
+		if (idx < 0 || idx >= width * height) continue;
 		if (charge_ptr[idx] == 0) {
 			charge_visual_ptr[idx] = 0;
 		}
