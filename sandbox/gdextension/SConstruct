@@ -6,14 +6,15 @@ env = Environment(ENV=os.environ)
 
 # Call godot-cpp's SConstruct
 godot_cpp_dir = "godot-cpp"
-SConscript(godot_cpp_dir + "/SConstruct")
+env = SConscript(godot_cpp_dir + "/SConstruct")
 
-# Get godot-cpp's exported environment
-env = env.Clone()
 env.Append(CPPPATH=["src", godot_cpp_dir + "/gdextension", godot_cpp_dir + "/include", godot_cpp_dir + "/gen/include"])
 
-# Force MSVC flags since we are using vcvars64.bat
-env.Append(CXXFLAGS=["/std:c++17", "/EHsc", "/wd4251", "/wd4275", "/vmg"])
+platform = ARGUMENTS.get("platform", "windows")
+
+if platform == "windows":
+    # Force MSVC flags since we are using vcvars64.bat
+    env.Append(CXXFLAGS=["/std:c++17", "/EHsc", "/wd4251", "/wd4275", "/vmg"])
 
 # Link with godot-cpp
 platform = ARGUMENTS.get("platform", "windows")
