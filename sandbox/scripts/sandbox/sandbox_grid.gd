@@ -6863,6 +6863,8 @@ func _step_simulation():
 	tags_array = cpp_state["tags_array"]
 	charge_array = cpp_state["charge_array"]
 	charge_visual_buffer = cpp_state["charge_visual_buffer"]
+	if cpp_state.has("moved_charges"):
+		active_charge_indices.append_array(cpp_state["moved_charges"])
 	
 	var cpp_explosions = cpp_state.get("explosions", [])
 	if cpp_explosions.size() > 0:

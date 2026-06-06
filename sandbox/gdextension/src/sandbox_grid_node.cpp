@@ -65,6 +65,10 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 		}
 	};
 	
+	// Vector to track charged cells that moved during physics
+	std::vector<int> moved_charges;
+	moved_charges.reserve(100);
+
 	// Helper lambda for swapping cells
 	auto swap_cells = [&](int cx1, int cy1, int cx2, int cy2) {
 		int idx1 = cy1 * width + cx1;
@@ -84,6 +88,9 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 		tags_ptr[idx2] = temp_t;
 		charge_ptr[idx2] = temp_charge;
 		charge_visual_ptr[idx2] = temp_cv;
+		
+		if (temp_charge > 0) moved_charges.push_back(idx2);
+		if (charge_ptr[idx1] > 0) moved_charges.push_back(idx1);
 	};
 	
 	// Helper lambda for checking tag neighbors
@@ -486,6 +493,13 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 	state["charge_array"] = charge_array;
 	state["charge_visual_buffer"] = charge_visual_buffer;
 	state["explosions"] = explosions_queue;
+	
+	Array out_moved_charges;
+	for (int i = 0; i < moved_charges.size(); ++i) {
+		out_moved_charges.append(moved_charges[i]);
+	}
+	state["moved_charges"] = out_moved_charges;
+	
 	return state;
 }
 
