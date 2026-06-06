@@ -6855,12 +6855,25 @@ func _step_simulation():
 		"cells": cells, 
 		"tags_array": tags_array,
 		"charge_array": charge_array,
-		"material_tags_raw": material_tags_raw
+		"material_tags_raw": material_tags_raw,
+		"charge_visual_buffer": charge_visual_buffer
 	}
 	cpp_state = process_physics(cpp_state, grid_width, dynamic_grid_height, _frame_count)
 	cells = cpp_state["cells"]
 	tags_array = cpp_state["tags_array"]
 	charge_array = cpp_state["charge_array"]
+	charge_visual_buffer = cpp_state["charge_visual_buffer"]
+	
+	var cpp_explosions = cpp_state.get("explosions", [])
+	if cpp_explosions.size() > 0:
+		for expl in cpp_explosions:
+			_explode(expl[0], expl[1], expl[2], expl[3], expl[4])
+			var b_idx = (expl[1] / 8) * 1000 + (expl[0] / 8)
+			if not _tnt_buckets_this_frame.has(b_idx):
+				_tnt_buckets_this_frame[b_idx] = true
+				_tnt_chain_count += 1
+				_tnt_chain_flags |= expl[4]
+				_tnt_chain_timer = 0.6
 	# ============================================
 
 	var g3 = WorkerThreadPool.add_group_task(_thread_pass3.bind(is_even_frame), pass_groups, -1, false, "SimP3E")
@@ -7126,7 +7139,9 @@ func _process_electricity():
 							continue
 							
 					var n_tags = tags_array[n_idx]
-					if is_pb or (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
+					if (n_tags & SandboxMaterial.Tags.EXPLOSIVE) and (n_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
+						_prime_explosive(nx, ny, n_pid, 128) # 128 = EXP_ELECTRIC
+					elif is_pb or (n_tags & (SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED)):
 						charge_array[n_idx] = 100
 						new_active_charges.append(n_idx)
 						
@@ -7146,7 +7161,7 @@ func _process_electricity():
 	for idx in active_charge_indices:
 		# Primed explosives and fuses decay on cell updates, so we preserve their countdowns
 		var mid = cells[idx] & 0xFFFF
-		if mid == 7 or mid == 77 or mid == 71 or mid == 72 or mid == 19:
+		if mid == 7 or mid == 77 or mid == 71 or mid == 72 or mid == 19 or mid == 5 or mid == 20:
 			new_active_charges.append(idx)
 			continue
 			
@@ -7512,33 +7527,9 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		elif _frame_count % 4 == 2: _set_cell(x, y, 19)
 		if charge_array[idx] <= 0: _launch_firework(x, y)
 
-	elif pure_id == 7 or pure_id == 77 or pure_id == 71 or pure_id == 72: 
-		var charge = charge_array[idx]
-		var timer = charge & 63
-		var flags = charge & 0xFFFFFFC0 # Use all high bits for stackable flags
-		var is_gunpowder = (pure_id == 71 or pure_id == 72)
-		var base_id = 77 if not is_gunpowder else 72
-		var prime_id = 7 if not is_gunpowder else 71
-		
-		timer -= 1
-		if timer <= 0:
-			_explode(x, y, 12 if not is_gunpowder else 8, "explosion", flags)
-			
-			# LOGRO: TNT Chain tracking (Bucket-based to count clusters, not pixels)
-			var b_idx = (y / 8) * 1000 + (x / 8)
-			if not _tnt_buckets_this_frame.has(b_idx):
-				_tnt_buckets_this_frame[b_idx] = true
-				_tnt_chain_count += 1
-				_tnt_chain_flags |= flags
-				_tnt_chain_timer = 0.6 # 0.6s to continue chain
-			return
-		
-		charge_array[idx] = flags | timer
-		charge_visual_buffer[idx] = clampi(timer * 4, 0, 255) # Prime glow
-		_register_charge(idx)
-		if _frame_count % 10 < 5: cells[idx] = (cells[idx] & 0xFFFF0000) | prime_id
-		else: cells[idx] = (cells[idx] & 0xFFFF0000) | base_id
-		_activate_chunk(x, y)
+	# EXPLOSIVE TIMER (TNT/Gunpowder) - Movido a C++ (Fase 3)
+	elif pure_id == 7 or pure_id == 77 or pure_id == 71 or pure_id == 72:
+		pass
 
 	# --- CRYOGENICS ---
 	if pure_id == 60:
@@ -7585,37 +7576,8 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 						return
 
 	# VOLATILE INERTIA (Projectiles like Sparks)
-	if (tags & SandboxMaterial.Tags.VOLATILE):
-		var charge = charge_array[idx]
-		var energy = charge >> 3
-		var dir_idx = charge & 7
-		
-		if energy <= 0:
-			_set_cell(x, y, 0); return
-			
-		# Pre-calculated coordinate arrays for 8 directions
-		var dxs = [0, 1, 1, 1, 0, -1, -1, -1]
-		var dys = [-1, -1, 0, 1, 1, 1, 0, -1]
-		
-		var dx = dxs[dir_idx]
-		var dy = dys[dir_idx]
-		
-		var nx = x + dx; var ny = y + dy
-		if nx < 0 or nx >= grid_width or ny < 0 or ny >= dynamic_grid_height:
-			_set_cell(x, y, 0); return
-			
-		if _get_cell(nx, ny) == 0:
-			# Advance with inertia
-			var new_energy = energy
-			if _frame_count % 2 == 0: new_energy -= 1
-			charge_array[idx] = (new_energy << 3) | dir_idx
-			_register_charge(idx)
-			_swap_cells(x, y, nx, ny)
-		else:
-			# IMPACT: Turn into real liquid acid if it's an acid spark, otherwise vanish
-			if pure_id == 44: _set_cell(x, y, 13)
-			else: _set_cell(x, y, 0)
-		return
+	# MOVIDO A C++ FASE 3
+	pass
 
 	# ELECTRIC SEEDING (Pure Static Electricity)
 	if (tags & SandboxMaterial.Tags.ELECTRICITY):
@@ -11172,7 +11134,10 @@ func _prime_explosive(x, y, id, manual_flags = -1):
 	if x < 0 or x >= grid_width or y < 0 or y >= grid_height: return
 	var idx = y * grid_width + x; var current_id = cells[idx] & 0xFFFF
 	
-	# Handle already primed cells or Volcano states (Volcanos handle their own activation)
+	# Prevent resetting the timer if it's already primed
+	if charge_array[idx] > 0: return
+	
+	# Handle legacy already primed cells or Volcano states (Volcanos handle their own activation)
 	if current_id == 7 or current_id == 77 or current_id == 71 or current_id == 72: return 
 	if id == 27 or id == 28 or id == 29: return
 	
@@ -11207,7 +11172,6 @@ func _prime_explosive(x, y, id, manual_flags = -1):
 		# Separate bit for mixed mode
 		if (m_tags & SandboxMaterial.Tags.EXP_TEAM_MIXED): ignition_flags |= 65536
 	
-	_set_cell(x, y, 7 if id == 5 else 71) 
 	charge_array[idx] = 40 | ignition_flags
 	charge_visual_buffer[idx] = 160 # Bright priming glow
 
@@ -11279,22 +11243,27 @@ var explosions_sfx_timer = 0.0
 
 func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0, ignore_budget = false, volume_boost: float = 0.0):
 	sim_mutex.lock()
-	# BUDGET CHECK: If we exceed limit, queue for next frame
-	if not ignore_budget and explosions_this_frame >= MAX_EXPLOSIONS_PER_FRAME:
-		_explosion_queue.append([x, y, radius, sfx_action, ignition_flags])
-		_set_cell(x, y, 0) # Clear the trigger pixel immediately to prevent double-triggering
-		sim_mutex.unlock()
-		return
-		
 	explosions_this_frame += 1
 	var is_heavy_load = explosions_this_frame > 10
 	sim_mutex.unlock()
-	
 	# CLEAR the trigger cell immediately
 	_set_cell(x, y, 0)
 	
-	# Limit sound spam: Only play sound if budget allows (max 30 per second)
-	if explosions_sfx_budget < 30:
+	# Wake up chunks around explosion for C++ particles (Sparks, Drops, etc)
+	var effect_radius = int(radius) + 15
+	var start_cy = max(0, (y - effect_radius) / 8)
+	var end_cy = min(chunks_y - 1, (y + effect_radius) / 8)
+	var start_cx = max(0, (x - effect_radius) / 8)
+	var end_cx = min(chunks_x - 1, (x + effect_radius) / 8)
+	for cy in range(start_cy, end_cy + 1):
+		for cx in range(start_cx, end_cx + 1):
+			var c_idx = cy * chunks_x + cx
+			if c_idx >= 0 and c_idx < next_chunks_active.size():
+				next_chunks_active[c_idx] = 60
+				chunks_active[c_idx] = 60
+	
+	# Limit sound spam: Only play sound if budget allows and ONCE per frame for chain reactions
+	if explosions_this_frame == 1 and explosions_sfx_budget < 30:
 		_play_action_sound(sfx_action, 0.08, volume_boost)
 		explosions_sfx_budget += 1
 	var center = Vector2i(x, y)
@@ -11311,74 +11280,7 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 			if blast_dir.length() < 0.1: blast_dir = Vector2.UP
 			npc.vx = blast_dir.x * ratio * 15.0; npc.vy = blast_dir.y * ratio * 15.0 - 6.0
 			for _s in range(5): _add_spark(float(npc.pos.x),float(npc.pos.y),_get_lut_rand_range(-50,50),_get_lut_rand_range(-80,0),Color.DARK_GRAY,0.6)
-	var radius_sq = radius * radius
-	for ry in range(-radius, radius):
-		for rx in range(-radius, radius):
-			var dist_sq = rx*rx + ry*ry
-			if dist_sq <= radius_sq:
-				var tx = x + rx; var ty = y + ry; var t_id = _get_cell(tx, ty)
-				if t_id <= 0: continue
-				var t_idx = ty * grid_width + tx; var t_tags = tags_array[t_idx]
-				if (t_tags & SandboxMaterial.Tags.INVINCIBLE): continue
-				if (t_tags & SandboxMaterial.Tags.EXPLOSIVE):
-					if t_id == 27 or t_id == 28 or t_id == 29: 
-						if t_id == 27: # Only activate if static
-							_set_cell(tx, ty, 29)
-							var ci = tx + ty * grid_width
-							charge_array[ci] = int(_get_lut_rand_range(80, 150))
-							_register_charge(ci)
-					else: _prime_explosive(tx, ty, t_id, ignition_flags)
-					continue
-				if (t_tags & SandboxMaterial.Tags.ANTI_EXPLOSIVE): continue
-				if dist_sq < (radius * 0.4) ** 2: _set_cell(tx, ty, 0) 
-				else:
-					var prob = 0.5 - (dist_sq / float(radius_sq)) * 0.5
-					if _get_lut_rand() < prob: _push_particle(tx, ty, rx, ry)
-	# 1. ELECTRIC SPARK EFFECT (Bit 128)
-	if ignition_flags & 128:
-		for i in range(15 if is_heavy_load else 30):
-			var dist = _get_lut_rand_range(2, 6); var ang = _get_lut_rand() * TAU; var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
-			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
-				if _get_cell(sx, sy) == 0:
-					_set_cell(sx, sy, 43); # Real Lightning Pixel
-					var deg = rad_to_deg(ang); if deg < 0: deg += 360
-					var dir_idx = int((deg + 22.5 + 90) / 45) % 8
-					var c_idx = sy * grid_width + sx
-					# Launch with high energy
-					charge_array[c_idx] = (int(_get_lut_rand_range(60, 100)) << 3) | dir_idx
-					_register_charge(c_idx)
-	
-	# 2. CORROSIVE DROPS EFFECT (Bit 64)
-	if ignition_flags & 64:
-		var drop_count = 20 if is_heavy_load else 45
-		for i in range(drop_count):
-			var dist = int(_get_lut_rand_range(2, 8)); var ang = _get_lut_rand() * TAU
-			var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
-			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
-				if _get_cell(sx, sy) == 0: 
-					_set_cell(sx, sy, 44); # Real Corrosive Projectile
-					var deg = rad_to_deg(ang); if deg < 0: deg += 360
-					var dir_idx = int((deg + 22.5 + 90) / 45) % 8
-					charge_array[sy * grid_width + sx] = (int(_get_lut_rand_range(30, 60)) << 3) | dir_idx
-					_register_charge(sy * grid_width + sx)
-	
-	# 3. WATER DROPS EFFECT (Bit 256)
-	if ignition_flags & 256:
-		var drop_count = 50 if is_heavy_load else 120 # Much more water!
-		for i in range(drop_count):
-			var dist = _get_lut_rand_range(radius * 0.45, radius + 2); var ang = _get_lut_rand() * TAU
-			var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
-			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
-				if _get_cell(sx, sy) == 0: _set_cell(sx, sy, 2); _activate_chunk(sx, sy)
-
-	# 4. LAVA DROPS EFFECT (Bit 512)
-	if ignition_flags & 512:
-		var drop_count = 35 if is_heavy_load else 80 # Much more lava!
-		for i in range(drop_count):
-			var dist = _get_lut_rand_range(radius * 0.45, radius + 3); var ang = _get_lut_rand() * TAU
-			var sx = x + int(cos(ang) * dist); var sy = y + int(sin(ang) * dist)
-			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
-				if _get_cell(sx, sy) == 0: _set_cell(sx, sy, 11); _activate_chunk(sx, sy)
+	# Pixel clearance, physics push, and standard drops (acid/water/lava/sparks) MOVED TO C++ (Fase 3)!
 				
 		# Add burning smoke for Lava explosions
 		for i in range(15):

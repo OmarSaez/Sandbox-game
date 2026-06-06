@@ -245,8 +245,14 @@ void fragment() {
         }
 
 
+        // EXPLOSIVE PRE-FLASH
+        if (charge > 0.05 && (id == 5 || id == 7 || id == 18 || id == 19 || id == 20 || id == 71 || id == 72 || id == 77)) {
+            // Flash pure white depending on charge intensity
+            color = mix(color, vec4(1.0, 1.0, 1.0, 1.0), charge);
+        }
+
         // 5. ELECTRIC GLOW (High Intensity Sparks with Amber Contrast)
-        if (charge > 0.05 && id > 0 && id != 13 && id != 25 && id != 5 && id != 7 && id != 20 && id != 71 && id != 72 && id != 77 && id != 90 && id != 91 && id != 95 && id != 195 && id != 295 && id != 395 && id != 495 && id != 595 && id != 695 && id != 795 && id != 96) {
+        if (charge > 0.05 && id > 0 && id != 13 && id != 25 && id != 5 && id != 7 && id != 18 && id != 19 && id != 20 && id != 71 && id != 72 && id != 77 && id != 90 && id != 91 && id != 95 && id != 195 && id != 295 && id != 395 && id != 495 && id != 595 && id != 695 && id != 795 && id != 96) {
             float spark_intensity = smoothstep(0.12, 1.0, charge);
             vec4 electric_color = vec4(1.0, 0.7, 0.0, 1.0); // Amber/Orange-Yellow default
             

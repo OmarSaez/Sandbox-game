@@ -27,17 +27,62 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 	PackedInt64Array tags_array = state["tags_array"];
 	PackedInt32Array charge_array = state["charge_array"];
 	PackedInt64Array material_tags_raw = state["material_tags_raw"];
+	PackedByteArray charge_visual_buffer = state["charge_visual_buffer"];
 	
 	int32_t* cells_ptr = cells.ptrw();
 	int64_t* tags_ptr = tags_array.ptrw();
 	int32_t* charge_ptr = charge_array.ptrw();
+	uint8_t* charge_visual_ptr = charge_visual_buffer.ptrw();
 	const int64_t* mat_tags = material_tags_raw.ptr();
 	
+	Array explosions_queue;
+	
 	// Helper lambda for setting cells
-	auto set_cell = [&](int cx, int cy, int32_t id) {
-		int c_idx = cy * width + cx;
-		cells_ptr[c_idx] = id;
-		tags_ptr[c_idx] = (id == 0) ? 0 : mat_tags[id];
+	auto set_cell = [&](int cx, int cy, int32_t cid) {
+		int t_idx = cy * width + cx;
+		uint64_t m_tags = (cid == 0) ? 0 : mat_tags[cid];
+		
+		int variant = 0;
+		if (cid > 0 && (m_tags & ((1ULL << 25) | (1ULL << 26)))) { // TEXTURE_DOUBLE | TEXTURE_TRIPLE
+			int mix_prob = 35; // Default MIX_MEDIUM
+			if (m_tags & (1ULL << 27)) mix_prob = 15; // MIX_LOW
+			else if (m_tags & (1ULL << 29)) mix_prob = 55; // MIX_HIGH
+			
+			if ((fast_rand() % 100) < mix_prob) {
+				variant = 1;
+				if ((m_tags & (1ULL << 26)) && (fast_rand() % 100) < 35) {
+					variant = 2;
+				}
+			}
+		}
+		
+		cells_ptr[t_idx] = (cid == 0) ? 0 : (cid | (variant << 24));
+		tags_ptr[t_idx] = m_tags;
+		if (cid == 0) {
+			charge_ptr[t_idx] = 0;
+			charge_visual_ptr[t_idx] = 0;
+		}
+	};
+	
+	// Helper lambda for swapping cells
+	auto swap_cells = [&](int cx1, int cy1, int cx2, int cy2) {
+		int idx1 = cy1 * width + cx1;
+		int idx2 = cy2 * width + cx2;
+		
+		int32_t temp_c = cells_ptr[idx1];
+		uint64_t temp_t = tags_ptr[idx1];
+		int32_t temp_charge = charge_ptr[idx1];
+		uint8_t temp_cv = charge_visual_ptr[idx1];
+		
+		cells_ptr[idx1] = cells_ptr[idx2];
+		tags_ptr[idx1] = tags_ptr[idx2];
+		charge_ptr[idx1] = charge_ptr[idx2];
+		charge_visual_ptr[idx1] = charge_visual_ptr[idx2];
+		
+		cells_ptr[idx2] = temp_c;
+		tags_ptr[idx2] = temp_t;
+		charge_ptr[idx2] = temp_charge;
+		charge_visual_ptr[idx2] = temp_cv;
 	};
 	
 	// Helper lambda for checking tag neighbors
@@ -51,6 +96,153 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 			}
 		}
 		return false;
+	};
+
+	// Helper lambda for explosions
+	auto execute_explosion = [&](int ex, int ey, int radius, int flags) {
+		bool is_heavy_load = explosions_queue.size() > 10;
+		int radius_sq = radius * radius;
+		for (int ry = -radius; ry <= radius; ry++) {
+			for (int rx = -radius; rx <= radius; rx++) {
+				int dist_sq = rx * rx + ry * ry;
+				if (dist_sq <= radius_sq) {
+					int tx = ex + rx;
+					int ty = ey + ry;
+					if (tx < 0 || tx >= width || ty < 0 || ty >= height) continue;
+					
+					int t_idx = ty * width + tx;
+					int32_t raw_id = cells_ptr[t_idx];
+					int32_t t_id = raw_id & 0xFFFF;
+					if (t_id <= 0) continue;
+					
+					uint64_t t_tags = tags_ptr[t_idx];
+					if (t_tags & INVINCIBLE) continue;
+					
+					if (t_tags & EXPLOSIVE) {
+						if (t_id == 7 || t_id == 71 || t_id == 72 || t_id == 77 || t_id == 19) continue;
+						
+						if (t_id == 27 || t_id == 28 || t_id == 29) {
+							if (t_id == 27) {
+								set_cell(tx, ty, 29);
+								charge_ptr[t_idx] = 80 + (fast_rand() % 70);
+								charge_visual_ptr[t_idx] = 160;
+							}
+						} else if (t_id == 18) {
+							set_cell(tx, ty, 19);
+							charge_ptr[t_idx] = (20 + (fast_rand() % 30)) | flags;
+							charge_visual_ptr[t_idx] = 160;
+						} else {
+							uint64_t m_tags = mat_tags[t_id];
+							int ign_flags = 0;
+							if (t_id == 5 || t_id == 20) {
+								ign_flags = flags;
+							} else {
+								if (m_tags & (1ULL << 31)) ign_flags |= 64;
+								if (m_tags & (1ULL << 21)) ign_flags |= 128;
+								if (m_tags & (1ULL << 32)) ign_flags |= 256;
+								if (m_tags & (1ULL << 33)) ign_flags |= 512;
+								if (m_tags & (1ULL << 34)) ign_flags |= 1024;
+								if (m_tags & (1ULL << 35)) ign_flags |= 2048;
+								if (m_tags & (1ULL << 36)) ign_flags |= 4096;
+								if (m_tags & (1ULL << 37)) ign_flags |= 8192;
+								if (m_tags & (1ULL << 38)) ign_flags |= 16384;
+								if (m_tags & (1ULL << 39)) ign_flags |= 32768;
+								if (m_tags & (1ULL << 40)) ign_flags |= 65536;
+								if (m_tags & (1ULL << 45)) ign_flags |= 131072;
+								if (m_tags & (1ULL << 46)) ign_flags |= 262144;
+								if (m_tags & (1ULL << 47)) ign_flags |= 524288;
+							}
+							set_cell(tx, ty, (t_id == 5) ? 7 : 71);
+							charge_ptr[t_idx] = (25 + (fast_rand() % 20)) | ign_flags;
+							charge_visual_ptr[t_idx] = 160;
+						}
+						continue;
+					}
+					
+					if (t_tags & ANTI_EXPLOSIVE) continue;
+					
+					if (dist_sq < (radius * 0.4f) * (radius * 0.4f)) {
+						set_cell(tx, ty, 0);
+					} else {
+						float prob = 0.5f - ((float)dist_sq / (float)radius_sq) * 0.5f;
+						if ((fast_rand() % 100) < (prob * 100.0f)) {
+							float push_dist = 1.0f + (fast_rand() % 400) / 100.0f;
+							float len = sqrt((float)rx*rx + (float)ry*ry);
+							if (len == 0) len = 1;
+							int nx = tx + (int)(rx * push_dist / len);
+							int ny = ty + (int)(ry * push_dist / len);
+							if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+								if ((cells_ptr[ny * width + nx] & 0xFFFF) == 0) swap_cells(tx, ty, nx, ny);
+								else set_cell(tx, ty, 0);
+							} else {
+								set_cell(tx, ty, 0);
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		if (flags & 128) {
+			int count = is_heavy_load ? 15 : 30;
+			for(int i=0; i<count; i++) {
+				int dist = 2 + (fast_rand() % 5);
+				float ang = (fast_rand() % 6283) / 1000.0f;
+				int sx = ex + (int)(cos(ang) * dist);
+				int sy = ey + (int)(sin(ang) * dist);
+				if (sx >= 0 && sx < width && sy >= 0 && sy < height) {
+					if ((cells_ptr[sy * width + sx] & 0xFFFF) == 0) {
+						set_cell(sx, sy, 43);
+						int deg = (int)(ang * 180.0f / 3.14159f);
+						if (deg < 0) deg += 360;
+						int dir_idx = (int)((deg + 112.5f) / 45.0f) % 8;
+						charge_ptr[sy * width + sx] = ((60 + (fast_rand() % 40)) << 3) | dir_idx;
+					}
+				}
+			}
+		}
+		if (flags & 64) {
+			int count = is_heavy_load ? 20 : 45;
+			for(int i=0; i<count; i++) {
+				int dist = 2 + (fast_rand() % 7);
+				float ang = (fast_rand() % 6283) / 1000.0f;
+				int sx = ex + (int)(cos(ang) * dist);
+				int sy = ey + (int)(sin(ang) * dist);
+				if (sx >= 0 && sx < width && sy >= 0 && sy < height) {
+					if ((cells_ptr[sy * width + sx] & 0xFFFF) == 0) {
+						set_cell(sx, sy, 44);
+						int deg = (int)(ang * 180.0f / 3.14159f);
+						if (deg < 0) deg += 360;
+						int dir_idx = (int)((deg + 112.5f) / 45.0f) % 8;
+						charge_ptr[sy * width + sx] = ((30 + (fast_rand() % 30)) << 3) | dir_idx;
+					}
+				}
+			}
+		}
+		if (flags & 256) {
+			int count = is_heavy_load ? 50 : 120;
+			for(int i=0; i<count; i++) {
+				float dist = radius * 0.45f + (fast_rand() % 200) / 100.0f;
+				float ang = (fast_rand() % 6283) / 1000.0f;
+				int sx = ex + (int)(cos(ang) * dist);
+				int sy = ey + (int)(sin(ang) * dist);
+				if (sx >= 0 && sx < width && sy >= 0 && sy < height) {
+					if ((cells_ptr[sy * width + sx] & 0xFFFF) == 0) set_cell(sx, sy, 2);
+				}
+			}
+		}
+		if (flags & 512) {
+			int count = is_heavy_load ? 35 : 80;
+			for(int i=0; i<count; i++) {
+				float dist = radius * 0.45f + (fast_rand() % 300) / 100.0f;
+				float ang = (fast_rand() % 6283) / 1000.0f;
+				int sx = ex + (int)(cos(ang) * dist);
+				int sy = ey + (int)(sin(ang) * dist);
+				if (sx >= 0 && sx < width && sy >= 0 && sy < height) {
+					if ((cells_ptr[sy * width + sx] & 0xFFFF) == 0) set_cell(sx, sy, 11);
+				}
+			}
+		}
 	};
 
 	bool sweep_reverse_base = (frame_count % 2 == 0);
@@ -146,6 +338,84 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 					}
 				}
 			}
+
+			// EXPLOSIVE IGNITION (Fire, Acid)
+			if ((t & EXPLOSIVE) && charge_ptr[idx] == 0) {
+				if (has_tag_neighbor(x, y, INCENDIARY) || has_tag_neighbor(x, y, ACID)) {
+					int32_t flags = 0;
+					if (has_tag_neighbor(x, y, ACID)) flags |= 64; // EXP_ACID
+					// Normal fire/incendiary just gets 0 flags (normal explosion)
+					charge_ptr[idx] = (25 + (fast_rand() % 20)) | flags;
+					charge_visual_ptr[idx] = 160;
+				}
+			}
+			
+			// EXPLOSIVE TIMER (Any Primed Explosive)
+			if ((t & EXPLOSIVE) && charge_ptr[idx] > 0) {
+				int32_t charge = charge_ptr[idx];
+				int32_t timer = charge & 63;
+				int32_t flags = charge & 0xFFFFFFC0;
+				bool is_gunpowder = (pure_id == 20 || pure_id == 71 || pure_id == 72);
+				
+				timer -= 1;
+				if (timer <= 0) {
+					Array expl;
+					expl.push_back(x);
+					expl.push_back(y);
+					int radius = is_gunpowder ? 8 : 12;
+					expl.push_back(radius);
+					expl.push_back(String("explosion"));
+					expl.push_back(flags);
+					expl.push_back(is_gunpowder);
+					explosions_queue.push_back(expl);
+					set_cell(x, y, 0); // Clear pixel
+					execute_explosion(x, y, radius, flags);
+					destroyed = true;
+					goto interaction_done;
+				}
+				
+				charge_ptr[idx] = flags | timer;
+				if (frame_count % 10 < 5) {
+					charge_visual_ptr[idx] = 255;
+				} else {
+					charge_visual_ptr[idx] = (timer * 4 > 255) ? 255 : (timer * 4);
+				}
+			}
+
+			// VOLATILE INERTIA (Sparks, projectiles)
+			if ((t & VOLATILE)) {
+				int32_t charge = charge_ptr[idx];
+				int32_t energy = charge >> 3;
+				int32_t dir_idx = charge & 7;
+				
+				if (energy <= 0) {
+					set_cell(x, y, 0); destroyed = true; goto interaction_done;
+				}
+				
+				int dxs[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+				int dys[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+				int dx = dxs[dir_idx];
+				int dy = dys[dir_idx];
+				
+				int nx = x + dx;
+				int ny = y + dy;
+				if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+					set_cell(x, y, 0); destroyed = true; goto interaction_done;
+				}
+				
+				if ((cells_ptr[ny * width + nx] & 0xFFFF) == 0) {
+					int new_energy = energy;
+					if (frame_count % 2 == 0) new_energy -= 1;
+					charge_ptr[idx] = (new_energy << 3) | dir_idx;
+					swap_cells(x, y, nx, ny);
+					destroyed = true; // Moved, don't process gravity this frame for this empty slot
+					goto interaction_done;
+				} else {
+					if (pure_id == 44) set_cell(x, y, 13); // Acid projectile to liquid acid
+					else set_cell(x, y, 0); // Vanish
+					destroyed = true; goto interaction_done;
+				}
+			}
 			
 			// FLAMMABLE
 			if ((t & FLAMMABLE)) {
@@ -177,10 +447,7 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 					int n_idx = row_idx + width + x;
 					if ((cells_ptr[n_idx] & 0xFFFF) == 0) {
 						// Fall down
-						cells_ptr[idx] = 0;
-						tags_ptr[idx] = 0;
-						cells_ptr[n_idx] = raw_id;
-						tags_ptr[n_idx] = t;
+						swap_cells(x, y, x, ny);
 					}
 					else if (t & LIQUID) {
 						if ((fast_rand() % 100) > 75) { // Slower spread (25% chance) to reduce high-speed flickering/jitter
@@ -188,18 +455,12 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 							int side = (fast_rand() % 2 == 0) ? 1 : -1;
 							int side_idx = idx + side;
 							if (x + side >= 0 && x + side < width && (cells_ptr[side_idx] & 0xFFFF) == 0) {
-								cells_ptr[idx] = 0;
-								tags_ptr[idx] = 0;
-								cells_ptr[side_idx] = raw_id;
-								tags_ptr[side_idx] = t;
+								swap_cells(x, y, x + side, y);
 								// Prevent horizontal teleportation
 								if (!sweep_reverse && side == 1) xi++;
 								else if (sweep_reverse && side == -1) xi++;
 							} else if (x - side >= 0 && x - side < width && (cells_ptr[idx - side] & 0xFFFF) == 0) {
-								cells_ptr[idx] = 0;
-								tags_ptr[idx] = 0;
-								cells_ptr[idx - side] = raw_id;
-								tags_ptr[idx - side] = t;
+								swap_cells(x, y, x - side, y);
 								// Prevent horizontal teleportation
 								if (!sweep_reverse && side == -1) xi++;
 								else if (sweep_reverse && side == 1) xi++;
@@ -209,12 +470,9 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 					else if (t & POWDER) {
 						// Diagonal fall (only check ONE random side per frame to create organic ruggedness)
 						int side = (fast_rand() % 2 == 0) ? 1 : -1;
-						int side_idx = n_idx + side;
+						int side_idx = (ny * width) + (x + side);
 						if (x + side >= 0 && x + side < width && (cells_ptr[side_idx] & 0xFFFF) == 0) {
-							cells_ptr[idx] = 0;
-							tags_ptr[idx] = 0;
-							cells_ptr[side_idx] = raw_id;
-							tags_ptr[side_idx] = t;
+							swap_cells(x, y, x + side, ny);
 						}
 					}
 				}
@@ -225,5 +483,7 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 	state["cells"] = cells;
 	state["tags_array"] = tags_array;
 	state["charge_array"] = charge_array;
+	state["charge_visual_buffer"] = charge_visual_buffer;
+	state["explosions"] = explosions_queue;
 	return state;
 }
