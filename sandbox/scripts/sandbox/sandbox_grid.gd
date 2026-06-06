@@ -5882,6 +5882,10 @@ func _process(delta):
 		touch_started_on_ui = false
 		_manage_brush_sound(-1) # Stop sound when finger lifted
 
+	if is_pipe_dirty:
+		_reconstruct_sources_from_cells()
+		is_pipe_dirty = false
+
 	# Simulation
 	if not is_paused:
 		_handle_controlled_npc_input(delta) # Handle player control
@@ -5924,10 +5928,6 @@ func _process(delta):
 		_update_active_fireworks(delta)
 		_update_visual_sparks(delta)
 	
-	if is_pipe_dirty:
-		_reconstruct_sources_from_cells()
-		is_pipe_dirty = false
-		
 	# Render
 	_update_texture()
 	queue_redraw()
