@@ -525,6 +525,7 @@ var active_electricity_source_indices = {} # Set of cell indices containing elec
 var door_registry = {} # Set of cell indices where NPC Door (91) is placed
 var door_close_timers = {} # cell_idx -> float close delay timer
 var is_npc_door_updating: bool = false
+var is_pipe_dirty: bool = false
 var phase_block_registry = {} # Set of cell indices where Phase Block (92) is placed
 var is_phase_block_updating: bool = false
 var is_phase_block_tutorial_done: bool = false
@@ -4378,7 +4379,9 @@ func _map_grid_data(dict: Dictionary):
 		var old_w = int(dict["width"])
 		var old_h = int(dict["height"])
 		var y_offset = old_h - grid_height
+		y_offset = int(floor(float(y_offset) / 4.0)) * 4
 		var x_offset = int((old_w - grid_width) / 2.0)
+		x_offset = int(floor(float(x_offset) / 4.0)) * 4
 		
 		var _old_cells = dict["grid"]
 		var _old_charge = dict["charge"]
@@ -5919,6 +5922,10 @@ func _process(delta):
 		_update_active_fireworks(delta)
 		_update_visual_sparks(delta)
 	
+	if is_pipe_dirty:
+		_reconstruct_sources_from_cells()
+		is_pipe_dirty = false
+		
 	# Render
 	_update_texture()
 	queue_redraw()
@@ -6694,6 +6701,8 @@ func _set_cell(x, y, mat_id):
 				door_registry.erase(idx)
 			if _old_id_c == 92 and not is_phase_block_updating:
 				phase_block_registry.erase(idx)
+			if _old_id_c == 96 or _old_id_c == 97:
+				is_pipe_dirty = true
 			
 			cells[idx] = 0
 			if cell_paint_colors[idx] != 0:

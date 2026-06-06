@@ -825,7 +825,9 @@ Dictionary SandboxGridNode::map_grid_data(Dictionary state, Dictionary dict, int
 	int old_w = dict["width"];
 	int old_h = dict["height"];
 	int y_offset = old_h - grid_height;
+	y_offset = (int)floor((float)y_offset / 4.0f) * 4;
 	int x_offset = (old_w - grid_width) / 2;
+	x_offset = (int)floor((float)x_offset / 4.0f) * 4;
 	
 	PackedInt32Array old_cells = dict["grid"];
 	PackedInt32Array old_charge = dict["charge"];
