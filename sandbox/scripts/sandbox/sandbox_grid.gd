@@ -6850,11 +6850,17 @@ func _step_simulation():
 
 	# Pass 3: FALLING/STATIC particles (Bottom-to-Top by Active Chunks)
 	
-	# === MIGRACION FASE 2: C++ GRAVITY ENGINE ===
-	var cpp_state = { "cells": cells, "tags_array": tags_array }
+	# === MIGRACION FASE 2 & 3: C++ ENGINE ===
+	var cpp_state = { 
+		"cells": cells, 
+		"tags_array": tags_array,
+		"charge_array": charge_array,
+		"material_tags_raw": material_tags_raw
+	}
 	cpp_state = process_physics(cpp_state, grid_width, dynamic_grid_height, _frame_count)
 	cells = cpp_state["cells"]
 	tags_array = cpp_state["tags_array"]
+	charge_array = cpp_state["charge_array"]
 	# ============================================
 
 	var g3 = WorkerThreadPool.add_group_task(_thread_pass3.bind(is_even_frame), pass_groups, -1, false, "SimP3E")
@@ -7447,54 +7453,35 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					npc.vy += (dy_n * d_inv * force) - 3.5 
 					if _get_lut_rand() < 0.05: npc.hp -= 1.0 
 		
-	# FIRE AND HEAT REACTIONS
+	# FIRE AND HEAT REACTIONS (Lógica térmica movida a C++ Fase 3)
 	if (tags & SandboxMaterial.Tags.INCENDIARY):
-		if pure_id == 3: is_fire_active = true 
-		if pure_id == 3:
-			if _get_lut_rand() < 0.1: _set_cell(x, y, 0)
-		elif pure_id == 14: # Coal burnout
-			is_fire_active = true
-			if _get_lut_rand() < 0.002: 
-				_set_cell(x, y, 0)
-				if _get_cell(x, y - 1) == 0: _set_cell(x, y - 1, 15)
-			if _get_lut_rand() < 0.1 and _get_cell(x, y-1) == 0:
-				_set_cell(x, y - 1, 3)
-		
-		# SPARSE SAMPLING: Only check reactions for Fire/Heat in 50% of frames (Huge CPU save for big fires)
-		if _get_lut_rand() < 0.5:
-			_check_neighbors_for_reaction(x, y, true)
+		if pure_id == 3 or pure_id == 14: is_fire_active = true
 
-	# FLAMMABLE / REACTIVE MATERIALS
-	if (tags & SandboxMaterial.Tags.FLAMMABLE) or (tags & SandboxMaterial.Tags.EXPLOSIVE):
+	# REACTIVE MATERIALS (Explosives) - Flammable logic moved to C++
+	if (tags & SandboxMaterial.Tags.EXPLOSIVE):
 		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY) or charge_array[idx] > 50:
-			if pure_id == 16: # Wood
-				if _get_lut_rand() < 0.5: 
-					_set_cell(x, y, 14 if _get_lut_rand() < 0.5 else 3)
-			elif pure_id == 4: # Petro
-				if _get_lut_rand() < 0.1: _set_cell(x, y, 3)
-			elif (tags & SandboxMaterial.Tags.EXPLOSIVE):
-				# Only explosive materials with ELECTRIC_ACTIVATED can be primed by electricity
-				# We check for both charge (pulses) OR direct contact with Electric pixels (ID 9)
-				var has_elec_contact = _count_neighbor_id(x, y, 9) > 0
-				var can_elec_prime = (tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED) and (charge_array[idx] > 50 or has_elec_contact)
-				
-				# Fire/Heat ignition: Now ignores electricity pixels (ID 9) to respect the ELECTRIC_ACTIVATED requirement
-				var can_fire_prime = false
-				for ny in range(y - 1, y + 2):
-					for nx in range(x - 1, x + 2):
-						if nx == x and ny == y: continue
-						var nid = _get_cell(nx, ny)
-						if nid > 0 and nid != 9: # Ignore Electricity ID 9 here
-							if (material_tags_raw[nid] & SandboxMaterial.Tags.INCENDIARY):
-								can_fire_prime = true; break
-				
-				var can_acid_prime = _has_tag_neighbor(x, y, SandboxMaterial.Tags.ACID)
-				
-				if can_fire_prime or can_elec_prime or can_acid_prime:
-					var trigger_type = 0 # Default (Heat)
-					if can_acid_prime: trigger_type = 64
-					elif can_elec_prime: trigger_type = 128
-					_prime_explosive(x, y, pure_id, trigger_type)
+			# Only explosive materials with ELECTRIC_ACTIVATED can be primed by electricity
+			# We check for both charge (pulses) OR direct contact with Electric pixels (ID 9)
+			var has_elec_contact = _count_neighbor_id(x, y, 9) > 0
+			var can_elec_prime = (tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED) and (charge_array[idx] > 50 or has_elec_contact)
+			
+			# Fire/Heat ignition: Now ignores electricity pixels (ID 9) to respect the ELECTRIC_ACTIVATED requirement
+			var can_fire_prime = false
+			for ny in range(y - 1, y + 2):
+				for nx in range(x - 1, x + 2):
+					if nx == x and ny == y: continue
+					var nid = _get_cell(nx, ny)
+					if nid > 0 and nid != 9: # Ignore Electricity ID 9 here
+						if (material_tags_raw[nid] & SandboxMaterial.Tags.INCENDIARY):
+							can_fire_prime = true; break
+			
+			var can_acid_prime = _has_tag_neighbor(x, y, SandboxMaterial.Tags.ACID)
+			
+			if can_fire_prime or can_elec_prime or can_acid_prime:
+				var trigger_type = 0 # Default (Heat)
+				if can_acid_prime: trigger_type = 64
+				elif can_elec_prime: trigger_type = 128
+				_prime_explosive(x, y, pure_id, trigger_type)
 			elif pure_id == 18:
 				_set_cell(x, y, 19)
 				charge_array[idx] = int(_get_lut_rand_range(20, 70))
@@ -7636,18 +7623,20 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			if _get_lut_rand() < 0.7: _set_cell(x, y, 0)
 
 	# --- CORROSION (ACID) ---
-	if (tags & SandboxMaterial.Tags.ACID):
-		if _get_lut_rand() < 0.2: # Reaction Speed (Lowered for natural feel)
-			for ny in range(y - 1, y + 2):
-				for nx in range(x - 1, x + 2):
-					if nx == x and ny == y: continue
-					var nid = _get_cell(nx, ny)
-					if nid > 0 and nid != pure_id:
-						var n_tags = material_tags_raw[nid]
-						if not (n_tags & (SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.INVINCIBLE)):
-							_set_cell(nx, ny, 44) 
-							if _get_lut_rand() < 0.3: _set_cell(x, y, 0); return
-							if (n_tags & SandboxMaterial.Tags.SOLID) and _get_lut_rand() < 0.1: _set_cell(x, y, 0); return
+	# MOVIDO A C++ FASE 3
+	pass
+	# if (tags & SandboxMaterial.Tags.ACID):
+	# 	if _get_lut_rand() < 0.2: # Reaction Speed (Lowered for natural feel)
+	# 		for ny in range(y - 1, y + 2):
+	# 			for nx in range(x - 1, x + 2):
+	# 				if nx == x and ny == y: continue
+	# 				var nid = _get_cell(nx, ny)
+	# 				if nid > 0 and nid != pure_id:
+	# 					var n_tags = material_tags_raw[nid]
+	# 					if not (n_tags & (SandboxMaterial.Tags.ANTI_ACID | SandboxMaterial.Tags.INVINCIBLE)):
+	# 						_set_cell(nx, ny, 44) 
+	# 						if _get_lut_rand() < 0.3: _set_cell(x, y, 0); return
+	# 						if (n_tags & SandboxMaterial.Tags.SOLID) and _get_lut_rand() < 0.1: _set_cell(x, y, 0); return
 
 	# --- BIOLOGICAL INTERACTIONS (PLANTS & SEEDS) ---
 	if _get_lut_rand() < 0.02:
