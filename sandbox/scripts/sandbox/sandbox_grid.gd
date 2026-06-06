@@ -11146,13 +11146,69 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 			if blast_dir.length() < 0.1: blast_dir = Vector2.UP
 			npc.vx = blast_dir.x * ratio * 15.0; npc.vy = blast_dir.y * ratio * 15.0 - 6.0
 			for _s in range(5): _add_spark(float(npc.pos.x),float(npc.pos.y),_get_lut_rand_range(-50,50),_get_lut_rand_range(-80,0),Color.DARK_GRAY,0.6)
-	# Pixel clearance, physics push, and standard drops (acid/water/lava/sparks) MOVED TO C++ (Fase 3)!
+	# Pixel clearance, physics push, and standard drops (Restored for dynamic projectiles like Bombs)
+	var r2 = radius * radius
+	for ry in range(-radius, radius + 1):
+		for rx in range(-radius, radius + 1):
+			var dist_sq = rx * rx + ry * ry
+			if dist_sq <= r2:
+				var tx = x + rx
+				var ty = y + ry
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					var raw_id = cells[ty * grid_width + tx]
+					var tid = raw_id & 0xFFFF
+					if tid > 0:
+						var t_tags = 0 if tid >= material_tags_raw.size() else material_tags_raw[tid]
+						if t_tags & SandboxMaterial.Tags.INVINCIBLE: continue
+						
+						if t_tags & SandboxMaterial.Tags.EXPLOSIVE:
+							if tid == 7 or tid == 71 or tid == 72 or tid == 77 or tid == 19: continue
+							if tid == 18:
+								_set_cell(tx, ty, 19)
+								charge_array[ty * grid_width + tx] = (20 + int(_get_lut_rand() * 30)) | ignition_flags
+							else:
+								_set_cell(tx, ty, 7 if tid == 5 else 71)
+								charge_array[ty * grid_width + tx] = (25 + int(_get_lut_rand() * 20)) | ignition_flags
+							continue
+							
+						if dist_sq < (r2 * 0.16):
+							_set_cell(tx, ty, 0)
+						else:
+							var prob = 0.5 - (float(dist_sq) / float(r2)) * 0.5
+							if _get_lut_rand() < prob:
+								var push_dist = 1.0 + _get_lut_rand() * 4.0
+								var len_f = sqrt(float(dist_sq))
+								if len_f == 0.0: len_f = 1.0
+								var nx = tx + int(float(rx) * push_dist / len_f)
+								var ny = ty + int(float(ry) * push_dist / len_f)
+								if nx >= 0 and nx < grid_width and ny >= 0 and ny < dynamic_grid_height:
+									if _get_cell(nx, ny) == 0:
+										_swap_cells(tx, ty, nx, ny)
+									else:
+										_set_cell(tx, ty, 0)
+								else:
+									_set_cell(tx, ty, 0)
+									
+	# Standard sparks for visual satisfaction
+	var spark_count = 15 if is_heavy_load else 30
+	for _i in range(spark_count):
+		var ang = _get_lut_rand() * TAU
+		var s_dist = 2.0 + _get_lut_rand() * 5.0
+		var sx = x + int(cos(ang) * s_dist)
+		var sy = y + int(sin(ang) * s_dist)
+		if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
+			if _get_cell(sx, sy) == 0:
+				_set_cell(sx, sy, 43)
+				var deg = int(ang * 180.0 / PI)
+				if deg < 0: deg += 360
+				var dir_idx = int((deg + 112.5) / 45.0) % 8
+				charge_array[sy * grid_width + sx] = ((60 + int(_get_lut_rand() * 40)) << 3) | dir_idx
 				
-		# Add burning smoke for Lava explosions
-		for i in range(15):
-			var sx = x + int(_get_lut_rand_range(-radius, radius)); var sy = y + int(_get_lut_rand_range(-radius, radius))
-			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
-				if _get_cell(sx, sy) == 0: _set_cell(sx, sy, 15)
+	# Add burning smoke for Lava explosions
+	for i in range(15):
+		var smx = x + int(_get_lut_rand_range(-radius, radius)); var smy = y + int(_get_lut_rand_range(-radius, radius))
+		if smx >= 0 and smx < grid_width and smy >= 0 and smy < dynamic_grid_height:
+			if _get_cell(smx, smy) == 0: _set_cell(smx, smy, 15)
 				
 	# 5. NPC SPASH (Bit 1024)
 	if ignition_flags & 1024:
