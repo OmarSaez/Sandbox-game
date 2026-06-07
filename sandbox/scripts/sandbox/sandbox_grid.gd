@@ -5933,6 +5933,19 @@ func _process(delta):
 	queue_redraw()
 
 # --- HISTORY SYSTEM ---
+func _deep_copy_npcs() -> Array:
+	var result = []
+	for npc in active_npcs:
+		var copy = npc.duplicate()
+		copy["pos"] = Vector2i(npc.pos.x, npc.pos.y)
+		# Clear volatile references that shouldn't persist across undo
+		copy["social_target"] = null
+		copy["cached_target"] = null
+		copy["cached_closest_enemy"] = null
+		copy["cached_closest_ally"] = null
+		result.append(copy)
+	return result
+
 func save_history_state():
 	# If we're not at the head of the buffer (we undid something), clear the "future"
 	if history_current_index < history_buffer.size() - 1:
@@ -5944,7 +5957,8 @@ func save_history_state():
 		"charge": charge_array.duplicate(),
 		"tags": tags_array.duplicate(),
 		"chunks": chunks_active.duplicate(),
-		"next_chunks": next_chunks_active.duplicate()
+		"next_chunks": next_chunks_active.duplicate(),
+		"npcs": _deep_copy_npcs()
 	}
 	
 	if history_buffer.size() > 0:
@@ -5961,15 +5975,52 @@ func save_history_state():
 	
 	history_current_index = history_buffer.size() - 1
 
+func _restore_npcs_from_snapshot(snapshot):
+	# 1. Clear current NPC pixels from the grid
+	for npc in active_npcs:
+		_draw_npc_pixels(npc, 0)
+	active_npcs.clear()
+	controlled_npc = null
+	active_projectiles.clear()
+	
+	# 2. Restore NPCs from snapshot
+	if snapshot.has("npcs"):
+		for npc in snapshot.npcs:
+			var copy = npc.duplicate()
+			copy["pos"] = Vector2i(npc.pos.x, npc.pos.y)
+			copy["social_target"] = null
+			copy["cached_target"] = null
+			copy["cached_closest_enemy"] = null
+			copy["cached_closest_ally"] = null
+			copy["stuck_timer"] = 0.0
+			active_npcs.append(copy)
+
 func undo_history():
 	if history_current_index > 0:
 		history_current_index -= 1
 		var snapshot = history_buffer[history_current_index]
+		_restore_npcs_from_snapshot(snapshot)
 		cells = snapshot.cells.duplicate()
 		charge_array = snapshot.charge.duplicate()
 		tags_array = snapshot.tags.duplicate()
 		chunks_active = snapshot.chunks.duplicate()
 		next_chunks_active = snapshot.next_chunks.duplicate()
+		# Reset electricity state so BFS rebuilds from scratch
+		# Zero out stale conductor charges but preserve explosive timers
+		for ci in range(charge_array.size()):
+			var cid = cells[ci] & 0xFFFF
+			if cid > 0 and cid < material_tags_raw.size():
+				if not (material_tags_raw[cid] & SandboxMaterial.Tags.EXPLOSIVE):
+					charge_array[ci] = 0
+			elif cid == 0:
+				charge_array[ci] = 0
+		charge_visual_buffer.fill(0)
+		active_charge_indices.clear()
+		powered_frame.fill(0)
+		charge_dirty = true
+		# Wake all chunks so electricity can re-propagate
+		for i in range(next_chunks_active.size()):
+			next_chunks_active[i] = 60
 		_reconstruct_sources_from_cells()
 		_update_texture()
 		queue_redraw()
@@ -5978,11 +6029,28 @@ func redo_history():
 	if history_current_index < history_buffer.size() - 1:
 		history_current_index += 1
 		var snapshot = history_buffer[history_current_index]
+		_restore_npcs_from_snapshot(snapshot)
 		cells = snapshot.cells.duplicate()
 		charge_array = snapshot.charge.duplicate()
 		tags_array = snapshot.tags.duplicate()
 		chunks_active = snapshot.chunks.duplicate()
 		next_chunks_active = snapshot.next_chunks.duplicate()
+		# Reset electricity state so BFS rebuilds from scratch
+		# Zero out stale conductor charges but preserve explosive timers
+		for ci in range(charge_array.size()):
+			var cid = cells[ci] & 0xFFFF
+			if cid > 0 and cid < material_tags_raw.size():
+				if not (material_tags_raw[cid] & SandboxMaterial.Tags.EXPLOSIVE):
+					charge_array[ci] = 0
+			elif cid == 0:
+				charge_array[ci] = 0
+		charge_visual_buffer.fill(0)
+		active_charge_indices.clear()
+		powered_frame.fill(0)
+		charge_dirty = true
+		# Wake all chunks so electricity can re-propagate
+		for i in range(next_chunks_active.size()):
+			next_chunks_active[i] = 60
 		_reconstruct_sources_from_cells()
 		_update_texture()
 		queue_redraw()
@@ -16307,6 +16375,7 @@ func _update_pipe_x2_visuals(p):
 	var flow_dir = p.get("flow_dir", 0)
 	
 	# First pass: draw static structures (walls and cores set to 0)
+	is_hollowing_pipe = true
 	for i in range(L):
 		var pt = path[i]
 		var gx = pt.x
@@ -16376,6 +16445,8 @@ func _update_pipe_x2_visuals(p):
 			for dx in range(6, 8):
 				for dy in range(2, 6):
 					_set_cell(gx + dx, gy + dy, 0)
+
+	is_hollowing_pipe = false
 
 	# Second pass: draw elements at their interpolated positions
 	for i in range(L):
