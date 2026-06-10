@@ -527,6 +527,7 @@ var is_hollowing_pipe: bool = false
 var active_logic_gates: Array = []
 var active_pistons: Array = []
 var selected_piston_length: int = 10
+var is_piston_insulated: bool = false
 var selected_led_color: int = 0 # 0=Red, 1=Blue, 2=Green, 3=Yellow, 4=White, 5=Pink, 6=Celeste, 7=Rainbow
 var active_pipes: Array = []
 var active_pipes_x2: Array = []
@@ -1229,6 +1230,8 @@ func _ready():
 	_register_material(92, Color("#00F0FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Phase Block
 	_register_material(93, Color("#466282"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR) # Piston Base
 	_register_material(94, Color("#8CAEC4"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR) # Piston Head/Shaft
+	_register_material(193, Color("#466282"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Insulated Piston Base
+	_register_material(194, Color("#A185FF"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Insulated Piston Head/Shaft
 	_register_material(95, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 0
 	_register_material(195, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 45
 	_register_material(295, Color("#2B2E33"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED) # Cannon Base 90
@@ -9115,6 +9118,9 @@ func _process_npcs(delta):
 		if npc.get("hp", 0.0) > 99999.0:
 			npc.hp = npc.get("max_hp", 100.0)
 			
+		# --- ANTI-STUCK ---
+		_resolve_npc_overlap(npc)
+		
 		var profile = NPC_PROFILES.get(npc.type, {})
 		
 		# Decrement invulnerability protection timer
@@ -10216,6 +10222,36 @@ func _shoot_fireball(npc, target):
 
 func _is_npc_suffocating(npc) -> bool:
 	return npc.hp > 0 and npc.suffocation_timer > 0.0
+
+func _resolve_npc_overlap(npc):
+	# Anti-Stuck / Piston Push Resolution
+	# If the NPC is embedded inside a solid block (e.g. pushed by piston or falling sand)
+	if not _can_npc_fit(npc.pos.x, npc.pos.y, npc):
+		var resolved = false
+		# Try moving UP (up to 15 pixels for fast moving pistons or multiple blocks)
+		for push in range(1, 15):
+			if _can_npc_fit(npc.pos.x, npc.pos.y - float(push), npc):
+				npc.pos.y -= float(push)
+				resolved = true
+				break
+		# Try moving sideways
+		if not resolved:
+			for push in range(1, 6):
+				if _can_npc_fit(npc.pos.x + float(push), npc.pos.y, npc):
+					npc.pos.x += float(push)
+					resolved = true
+					break
+				elif _can_npc_fit(npc.pos.x - float(push), npc.pos.y, npc):
+					npc.pos.x -= float(push)
+					resolved = true
+					break
+		# Try moving DOWN
+		if not resolved:
+			for push in range(1, 6):
+				if _can_npc_fit(npc.pos.x, npc.pos.y + float(push), npc):
+					npc.pos.y += float(push)
+					resolved = true
+					break
 
 func _launch_flying_block(tx: int, ty: int, vx: float, vy: float, team: int = 0, lifetime: float = 2.5, gravity: float = 200.0) -> bool:
 	if tx < 0 or tx >= grid_width or ty < 0 or ty >= dynamic_grid_height:
@@ -12082,7 +12118,8 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 					"current_ext": float(ext),
 					"target_ext": selected_piston_length,
 					"is_active": false,
-					"orientation": detected_orient
+					"orientation": detected_orient,
+					"is_insulated": (mid == 193)
 				}
 				active_pistons.append(new_p)
 
@@ -12335,9 +12372,11 @@ func _place_piston(gx: int, gy: int):
 		var p = active_pistons[existing_idx]
 		
 		# 1. Erase old piston shape (base + head + any extension)
-		for oy in range(4):
-			for ox in range(4):
-				_set_cell(gx + ox, gy + oy, 0)
+		var base_mat_to_erase = 193 if p.get("is_insulated", false) else 93
+		var base_pix_erase = _get_piston_base_pixels(p)
+		for pix in base_pix_erase:
+			_set_cell(pix.x, pix.y, 0)
+			
 		var ext_limit = int(p.current_ext)
 		for ext_val in range(ext_limit + 1):
 			@warning_ignore("confusable_local_declaration")
@@ -12351,13 +12390,15 @@ func _place_piston(gx: int, gy: int):
 		# Removed p.target_ext = selected_piston_length to preserve original custom length
 		
 		# 3. Draw new piston shape
+		var base_mat_new = 193 if p.get("is_insulated", false) else 93
+		var head_mat_new = 194 if p.get("is_insulated", false) else 94
 		var base_pix = _get_piston_base_pixels(p)
 		for pix in base_pix:
-			_set_cell(pix.x, pix.y, 93)
+			_set_cell(pix.x, pix.y, base_mat_new)
 		@warning_ignore("confusable_local_declaration")
 		var head_pix = _get_piston_head_pixels(p, 0)
 		for pix in head_pix:
-			_set_cell(pix.x, pix.y, 94)
+			_set_cell(pix.x, pix.y, head_mat_new)
 			
 		_play_action_sound("ui_click")
 		return
@@ -12380,19 +12421,22 @@ func _place_piston(gx: int, gy: int):
 			active_pistons.remove_at(i)
 		i -= 1
 
+	var base_mat_new = 193 if is_piston_insulated else 93
+	var head_mat_new = 194 if is_piston_insulated else 94
 	for oy in range(1, 4):
 		for ox in range(4):
-			_set_cell(gx + ox, gy + oy, 93)
+			_set_cell(gx + ox, gy + oy, base_mat_new)
 			
 	for ox in range(4):
-		_set_cell(gx + ox, gy, 94)
+		_set_cell(gx + ox, gy, head_mat_new)
 			
 	var new_p = {
 		"pos": Vector2i(gx, gy),
 		"current_ext": 0.0,
 		"target_ext": selected_piston_length,
 		"is_active": false,
-		"orientation": 0
+		"orientation": 0,
+		"is_insulated": is_piston_insulated
 	}
 	active_pistons.append(new_p)
 	
@@ -12695,13 +12739,14 @@ func _pack_state_for_cpp() -> Dictionary:
 func _simulate_pistons():
 	if active_pistons.size() == 0: return
 	
+	var old_exts = []
+	for p in active_pistons:
+		old_exts.append(p.current_ext)
+	
 	# Piston processing in C++ (Extremely fast, handles all block pushes directly)
 	var state = _pack_state_for_cpp()
 	state = process_pistons(active_pistons, state, grid_width, dynamic_grid_height, 0.0)
 	var new_pistons = state["new_pistons"]
-	
-	if active_pistons.size() > 0:
-		print("DEBUG PISTONS: Old ext: ", active_pistons[0].current_ext, " New ext: ", new_pistons[0].current_ext)
 	
 	cells = state["cells"]
 	tags_array = state["tags_array"]
@@ -12715,12 +12760,14 @@ func _simulate_pistons():
 		if i >= new_pistons.size(): break # In case it was deleted
 		var p_new = new_pistons[i]
 		
+		var p_old_ext = old_exts[i]
+		
 		# If piston extended, push NPCs
-		if p_new.current_ext > p_old.current_ext:
+		if p_new.current_ext > p_old_ext:
 			var px = p_new.pos.x
 			var gy = p_new.pos.y
 			var orient = p_new.get("orientation", 0)
-			var ext = int(p_old.current_ext)
+			var ext = int(p_old_ext)
 			# Find push_height by checking how many blocks are in front
 			var push_height = 0
 			var step_idx = 1
@@ -13254,12 +13301,14 @@ func _setup_music_ui(force_refresh: bool = false):
 		circ_vbox.add_child(circ_grid)
 		
 		# Circuits elements: Metal, TNT, NPC Trigger, Door, Phase Block, Battery, LED, Logic Gates (NOT, AND, OR, NAND, NOR, XOR, XNOR), Piston, Cannon
-		var circuit_items = ["metal", "tnt", "npc_act", "door", "phase_block", "battery", "led", "not", "and", "or", "nand", "nor", "xor", "xnor", "piston", "cannon", "pipe", "pipe_x2"]
-		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🌀", "🔋", "💡", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "⚙️", "💣", "🔵", "🔵"]
+		var circuit_items = ["metal", "tnt", "npc_act", "door", "phase_block", "battery", "led", "not", "and", "or", "nand", "nor", "xor", "xnor", "piston", "piston_ins", "cannon", "pipe", "pipe_x2"]
+		var circuit_emojis = ["🔩", "🧨", "🔌", "🚪", "🌀", "🔋", "💡", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "🔀", "⚙️", "🚫", "💣", "🔵", "🔵"]
 		for i in range(circuit_items.size()):
 			var item_key = circuit_items[i]
 			var btn = Button.new()
-			btn.text = circuit_emojis[i] + " " + tr(item_key)
+			var btn_text = tr(item_key)
+			if item_key == "piston_ins": btn_text = "Pist. Aislado"
+			btn.text = circuit_emojis[i] + " " + btn_text
 			btn.add_theme_font_override("font", _get_safe_font())
 			btn.add_theme_font_size_override("font_size", 18 * s)
 			btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
@@ -13272,7 +13321,7 @@ func _setup_music_ui(force_refresh: bool = false):
 			btn.add_theme_stylebox_override("pressed", b_style)
 			
 			var container: Control = btn
-			if item_key == "piston":
+			if item_key == "piston" or item_key == "piston_ins":
 				var hbox = HBoxContainer.new()
 				hbox.add_theme_constant_override("separation", 4 * s)
 				hbox.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -13453,6 +13502,13 @@ func _setup_music_ui(force_refresh: bool = false):
 				elif item_key == "piston":
 					selected_material = 93
 					selected_circuit_tool = "piston"
+					is_piston_insulated = false
+					is_mechanism_mode_active = true
+					_close_music_menu()
+				elif item_key == "piston_ins":
+					selected_material = 93
+					selected_circuit_tool = "piston"
+					is_piston_insulated = true
 					is_mechanism_mode_active = true
 					_close_music_menu()
 				elif item_key == "cannon":
@@ -17165,6 +17221,7 @@ func _is_orientation_allowed(orient: int, inlet_side: String) -> bool:
 	elif inlet_side == "bottom":
 		return orient != 5 and orient != 6 and orient != 7
 	return true
+
 
 func _open_cannon_settings_panel(c):
 	if is_instance_valid(cannon_settings_panel):

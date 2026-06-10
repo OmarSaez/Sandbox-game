@@ -1182,10 +1182,8 @@ Dictionary SandboxGridNode::process_pistons(Array active_pistons, Dictionary sta
 		charge_ptr[dst_idx] = charge_ptr[src_idx];
 		paint_ptr[dst_idx] = paint_ptr[src_idx];
 		
-		cells_ptr[src_idx] = 0;
-		tags_ptr[src_idx] = 0;
-		charge_ptr[src_idx] = 0;
-		paint_ptr[src_idx] = Color(0, 0, 0, 0);
+		// DO NOT clear src_idx. This allows the piston to leave a solid trail of piston arms
+		// and prevents falling-through bugs. Retraction handles cleanup explicitly.
 		
 		int chunk_x = dst_x / 16;
 		int chunk_y = dst_y / 16;
@@ -1195,11 +1193,15 @@ Dictionary SandboxGridNode::process_pistons(Array active_pistons, Dictionary sta
 		}
 	};
 	
-	auto set_piston_head = [&](int x, int y) {
+	auto set_piston_head = [&](int x, int y, bool insulated) {
 		int idx = y * width + x;
-		cells_ptr[idx] = 94;
-		// SOLID | GRAV_STATIC | CONDUCTOR
-		tags_ptr[idx] = (1ULL << 0) | (1ULL << 13) | (1ULL << 8);
+		if (insulated) {
+			cells_ptr[idx] = 194;
+			tags_ptr[idx] = (1ULL << 0) | (1ULL << 13); // SOLID | GRAV_STATIC
+		} else {
+			cells_ptr[idx] = 94;
+			tags_ptr[idx] = (1ULL << 0) | (1ULL << 13) | (1ULL << 8); // SOLID | GRAV_STATIC | CONDUCTOR
+		}
 		
 		int chunk_x = x / 16;
 		int chunk_y = y / 16;
@@ -1222,7 +1224,10 @@ Dictionary SandboxGridNode::process_pistons(Array active_pistons, Dictionary sta
 		if (base_cx < 0 || base_cx >= width || base_cy < 0 || base_cy >= height) continue;
 		
 		int base_idx = base_cy * width + base_cx;
-		if ((cells_ptr[base_idx] & 0xFFFF) != 93) continue;
+		int base_mat = cells_ptr[base_idx] & 0xFFFF;
+		if (base_mat != 93 && base_mat != 193) continue;
+		
+		bool is_insulated = p.get("is_insulated", false);
 		
 		bool powered = false;
 		for (int dy = -3; dy <= 3; ++dy) {
@@ -1284,7 +1289,7 @@ Dictionary SandboxGridNode::process_pistons(Array active_pistons, Dictionary sta
 					}
 					
 					auto is_solid_block = [](int m) {
-						return m == 93 || m == 94 || (m >= 81 && m <= 87) || m == 600;
+						return m == 93 || m == 94 || m == 193 || m == 194 || (m >= 81 && m <= 87) || m == 600;
 					};
 					if (is_solid_block(m0) || is_solid_block(m1) || is_solid_block(m2) || is_solid_block(m3)) {
 						blocked = true; break;
@@ -1308,7 +1313,7 @@ Dictionary SandboxGridNode::process_pistons(Array active_pistons, Dictionary sta
 								if ((cells_ptr[ty * width + tx] & 0xFFFF) != 0) move_cell(tx, ty, tx, dest_y);
 							}
 						}
-						for (int ox = 0; ox < 4; ox++) set_piston_head(px + ox, gy - ext - 1);
+						for (int ox = 0; ox < 4; ox++) set_piston_head(px + ox, gy - ext - 1, is_insulated);
 					} else if (orient == 1) {
 						for (int s = push_height; s >= 1; s--) {
 							int tx = px + 3 + ext + s;
@@ -1318,7 +1323,7 @@ Dictionary SandboxGridNode::process_pistons(Array active_pistons, Dictionary sta
 								if ((cells_ptr[ty * width + tx] & 0xFFFF) != 0) move_cell(tx, ty, dest_x, ty);
 							}
 						}
-						for (int oy = 0; oy < 4; oy++) set_piston_head(px + 3 + ext + 1, gy + oy);
+						for (int oy = 0; oy < 4; oy++) set_piston_head(px + 3 + ext + 1, gy + oy, is_insulated);
 					} else if (orient == 2) {
 						for (int s = push_height; s >= 1; s--) {
 							int ty = gy + 3 + ext + s;
@@ -1328,7 +1333,7 @@ Dictionary SandboxGridNode::process_pistons(Array active_pistons, Dictionary sta
 								if ((cells_ptr[ty * width + tx] & 0xFFFF) != 0) move_cell(tx, ty, tx, dest_y);
 							}
 						}
-						for (int ox = 0; ox < 4; ox++) set_piston_head(px + ox, gy + 3 + ext + 1);
+						for (int ox = 0; ox < 4; ox++) set_piston_head(px + ox, gy + 3 + ext + 1, is_insulated);
 					} else if (orient == 3) {
 						for (int s = push_height; s >= 1; s--) {
 							int tx = px - ext - s;
@@ -1338,7 +1343,7 @@ Dictionary SandboxGridNode::process_pistons(Array active_pistons, Dictionary sta
 								if ((cells_ptr[ty * width + tx] & 0xFFFF) != 0) move_cell(tx, ty, dest_x, ty);
 							}
 						}
-						for (int oy = 0; oy < 4; oy++) set_piston_head(px - ext - 1, gy + oy);
+						for (int oy = 0; oy < 4; oy++) set_piston_head(px - ext - 1, gy + oy, is_insulated);
 					}
 					
 					p["current_ext"] = current_ext + 1.0f;
@@ -1395,7 +1400,7 @@ PackedInt32Array SandboxGridNode::get_special_source_indices(PackedInt32Array ce
 	for (int i = 0; i < size; ++i) {
 		int32_t mid = ptr[i] & 0xFFFF;
 		if (mid == 88 || mid == 9 || mid == 600 || mid == 91 || mid == 92 || 
-		    mid == 93 || mid == 94 || mid == 194 || mid == 294 || mid == 394 ||
+		    mid == 93 || mid == 94 || mid == 193 || mid == 194 || mid == 194 || mid == 294 || mid == 394 ||
 		    mid == 95 || mid == 195 || mid == 295 || mid == 395 || mid == 495 || mid == 595 || mid == 695 || mid == 795) {
 			special_indices.push_back(i);
 		}
