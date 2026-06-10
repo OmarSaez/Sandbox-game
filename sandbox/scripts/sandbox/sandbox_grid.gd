@@ -5946,6 +5946,15 @@ func _deep_copy_npcs() -> Array:
 		result.append(copy)
 	return result
 
+func _deep_copy_logic_gates() -> Array:
+	var result = []
+	for gate in active_logic_gates:
+		var copy = gate.duplicate()
+		if copy.has("grid_pos"):
+			copy["grid_pos"] = Vector2i(copy.grid_pos.x, copy.grid_pos.y)
+		result.append(copy)
+	return result
+
 func save_history_state():
 	# If we're not at the head of the buffer (we undid something), clear the "future"
 	if history_current_index < history_buffer.size() - 1:
@@ -5958,7 +5967,8 @@ func save_history_state():
 		"tags": tags_array.duplicate(),
 		"chunks": chunks_active.duplicate(),
 		"next_chunks": next_chunks_active.duplicate(),
-		"npcs": _deep_copy_npcs()
+		"npcs": _deep_copy_npcs(),
+		"logic_gates": _deep_copy_logic_gates()
 	}
 	
 	if history_buffer.size() > 0:
@@ -5995,11 +6005,21 @@ func _restore_npcs_from_snapshot(snapshot):
 			copy["stuck_timer"] = 0.0
 			active_npcs.append(copy)
 
+func _restore_logic_gates_from_snapshot(snapshot):
+	active_logic_gates.clear()
+	if snapshot.has("logic_gates"):
+		for gate in snapshot.logic_gates:
+			var copy = gate.duplicate()
+			if copy.has("grid_pos"):
+				copy["grid_pos"] = Vector2i(copy.grid_pos.x, copy.grid_pos.y)
+			active_logic_gates.append(copy)
+
 func undo_history():
 	if history_current_index > 0:
 		history_current_index -= 1
 		var snapshot = history_buffer[history_current_index]
 		_restore_npcs_from_snapshot(snapshot)
+		_restore_logic_gates_from_snapshot(snapshot)
 		cells = snapshot.cells.duplicate()
 		charge_array = snapshot.charge.duplicate()
 		tags_array = snapshot.tags.duplicate()
@@ -6030,6 +6050,7 @@ func redo_history():
 		history_current_index += 1
 		var snapshot = history_buffer[history_current_index]
 		_restore_npcs_from_snapshot(snapshot)
+		_restore_logic_gates_from_snapshot(snapshot)
 		cells = snapshot.cells.duplicate()
 		charge_array = snapshot.charge.duplicate()
 		tags_array = snapshot.tags.duplicate()
