@@ -925,6 +925,14 @@ func _load_tool_settings():
 					is_piston_tutorial_done = dict["is_piston_tutorial_done"]
 
 func _ready():
+	# Session count tracking for rating and analytics
+	var app_config = ConfigFile.new()
+	app_config.load("user://achievements.cfg")
+	_current_session_count = app_config.get_value("app", "session_count", 0)
+	_current_session_count += 1
+	app_config.set_value("app", "session_count", _current_session_count)
+	app_config.save("user://achievements.cfg")
+
 	_load_global_achievements() # Load global state once at startup
 	
 	if FileAccess.file_exists("user://rating_popup_shown.save"):
@@ -1564,6 +1572,7 @@ var main_tutorial_overlay: Control = null
 
 var play_time_for_rating: float = 0.0
 var rating_popup_shown: bool = false
+var _current_session_count: int = 1
 
 func _show_rating_popup():
 	var s = _get_ui_scale()
@@ -2544,6 +2553,21 @@ func _unlock_achievement(id: String):
 	
 	# Log to Firebase Analytics
 	AnalyticsManager.log_event("achievement_unlocked", {"id": id, "title": achievements[id].get("title", "")})
+	
+	# Check if all achievements are unlocked
+	var all_unlocked = true
+	for ach_id in achievements:
+		if not achievements[ach_id].unlocked:
+			all_unlocked = false
+			break
+			
+	if all_unlocked:
+		var config = ConfigFile.new()
+		config.load("user://achievements.cfg")
+		if not config.get_value("progression", "all_achievements_logged", false):
+			AnalyticsManager.log_event("all_achievements_unlocked", {})
+			config.set_value("progression", "all_achievements_logged", true)
+			config.save("user://achievements.cfg")
 	
 	# Sync unlock with Google Play Games Services if available on Android
 	if play_games_achievements_client and GOOGLE_PLAY_ACHIEVEMENTS.has(id):
@@ -5585,10 +5609,15 @@ func _process(delta):
 	
 	# --- Rating popup timer ---
 	if not rating_popup_shown:
-		play_time_for_rating += delta
-		if play_time_for_rating >= 600.0:
-			rating_popup_shown = true
-			call_deferred("_show_rating_popup")
+		# Show only after 15 minutes of the second session (or later)
+		if _current_session_count >= 2:
+			play_time_for_rating += delta
+			if play_time_for_rating >= 900.0:
+				var current_time = Time.get_unix_time_from_system()
+				# Wait at least 3 minutes since the last ad interaction
+				if current_time - AdMobManager.last_ad_interaction_time >= 180.0:
+					rating_popup_shown = true
+					call_deferred("_show_rating_popup")
 	
 	# Update camera bounds for virtual physical walls
 	if is_instance_valid(sim_camera) and view_zoom > 1.0:
@@ -14704,6 +14733,7 @@ func _on_share_pressed(slot_idx: int, slot_name: String):
 			if sbu_file:
 				sbu_file.store_var(sbu_dict, true)
 				sbu_file.close()
+				AnalyticsManager.log_event("world_exported", {})
 				_show_modal_message(
 					tr("share_btn_ui"),
 					tr("export_success").format([export_filename])
@@ -14880,6 +14910,7 @@ func _execute_import_data(sbu_dict: Dictionary, file_path: String, slot_idx: int
 		if FileAccess.file_exists(target_png_path):
 			DirAccess.remove_absolute(target_png_path)
 			
+	AnalyticsManager.log_event("world_imported", {})
 	_show_modal_message(
 		tr("import_btn_ui"),
 		tr("import_success").format([file_path.get_file().left(file_path.get_file().length() - 4)])

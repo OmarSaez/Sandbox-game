@@ -27,6 +27,7 @@ var ad_free_time : float = 0.0 # Segundos restantes sin anuncios
 var first_pause_used : bool = false
 var first_reset_used : bool = false
 var first_share_used : bool = false
+var last_ad_interaction_time : float = 0.0
 
 var _app_is_paused : bool = false
 # var _banner_needs_to_show_on_resume : bool = false
@@ -396,6 +397,7 @@ func _load_rewarded():
 
 	load_callback.on_ad_loaded = func(ad : RewardedAd):
 		print("ADMOB: Rewarded CARGADO.")
+		last_ad_interaction_time = Time.get_unix_time_from_system()
 		if _app_is_paused:
 			print("ADMOB: App pausada, descartando rewarded cargado por seguridad.")
 			ad.destroy()
@@ -423,6 +425,7 @@ func show_rewarded() -> bool:
 		var callback := FullScreenContentCallback.new()
 		callback.on_ad_dismissed_full_screen_content = func():
 			print("ADMOB: Rewarded cerrado.")
+			last_ad_interaction_time = Time.get_unix_time_from_system()
 			_active_ad = null
 			ad_dismissed.emit()
 		
@@ -454,6 +457,7 @@ func show_rewarded() -> bool:
 			var callback := FullScreenContentCallback.new()
 			callback.on_ad_dismissed_full_screen_content = func():
 				print("ADMOB: Rewarded cerrado.")
+				last_ad_interaction_time = Time.get_unix_time_from_system()
 				_active_ad = null
 				ad_dismissed.emit()
 			
@@ -501,6 +505,7 @@ func _load_lab_rewarded():
 
 	load_callback.on_ad_loaded = func(ad : RewardedAd):
 		print("ADMOB: Lab Rewarded CARGADO.")
+		last_ad_interaction_time = Time.get_unix_time_from_system()
 		if _app_is_paused:
 			print("ADMOB: App pausada, descartando lab rewarded cargado por seguridad.")
 			ad.destroy()
@@ -537,6 +542,7 @@ func show_lab_rewarded() -> bool:
 		var callback := FullScreenContentCallback.new()
 		callback.on_ad_dismissed_full_screen_content = func():
 			print("ADMOB: Lab Rewarded cerrado.")
+			last_ad_interaction_time = Time.get_unix_time_from_system()
 			_active_ad = null
 			ad_dismissed.emit()
 		
@@ -568,6 +574,7 @@ func show_lab_rewarded() -> bool:
 			var callback := FullScreenContentCallback.new()
 			callback.on_ad_dismissed_full_screen_content = func():
 				print("ADMOB: Lab Rewarded cerrado.")
+				last_ad_interaction_time = Time.get_unix_time_from_system()
 				_active_ad = null
 				ad_dismissed.emit()
 			
@@ -618,6 +625,7 @@ func _load_interstitial():
 
 	load_callback.on_ad_loaded = func(ad : InterstitialAd):
 		print("ADMOB: Intersticial CARGADO.")
+		last_ad_interaction_time = Time.get_unix_time_from_system()
 		if _app_is_paused:
 			print("ADMOB: App pausada, descartando intersticial cargado por seguridad.")
 			ad.destroy()
@@ -643,6 +651,7 @@ func show_interstitial() -> bool:
 		var callback := FullScreenContentCallback.new()
 		callback.on_ad_dismissed_full_screen_content = func():
 			print("ADMOB: Intersticial cerrado.")
+			last_ad_interaction_time = Time.get_unix_time_from_system()
 			_active_ad = null
 			ad_dismissed.emit()
 		
