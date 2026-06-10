@@ -1162,13 +1162,13 @@ Dictionary SandboxGridNode::process_pistons(Array active_pistons, Dictionary sta
 	PackedInt64Array tags_array = state["tags_array"];
 	PackedInt32Array charge_array = state["charge_array"];
 	PackedByteArray next_chunks_active = state["next_chunks_active"];
-	PackedColorArray cell_paint_colors = state["cell_paint_colors"];
+	PackedInt32Array cell_paint_colors = state["cell_paint_colors"];
 	
 	int32_t* cells_ptr = cells.ptrw();
 	int64_t* tags_ptr = tags_array.ptrw();
 	int32_t* charge_ptr = charge_array.ptrw();
 	uint8_t* chunks_ptr = next_chunks_active.ptrw();
-	Color* paint_ptr = cell_paint_colors.ptrw();
+	int32_t* paint_ptr = cell_paint_colors.ptrw();
 	
 	int chunks_x = width / 16;
 	if (width % 16 != 0) chunks_x++;
@@ -1357,7 +1357,7 @@ Dictionary SandboxGridNode::process_pistons(Array active_pistons, Dictionary sta
 				
 				auto clear_head = [&](int tx, int ty) {
 					int idx = ty * width + tx;
-					cells_ptr[idx] = 0; tags_ptr[idx] = 0; charge_ptr[idx] = 0; paint_ptr[idx] = Color(0,0,0,0);
+					cells_ptr[idx] = 0; tags_ptr[idx] = 0; charge_ptr[idx] = 0; paint_ptr[idx] = 0;
 					int chunk_x = tx / 16; int chunk_y = ty / 16;
 					int c_idx = chunk_y * chunks_x + chunk_x;
 					if (c_idx >= 0 && c_idx < next_chunks_active.size() && chunks_ptr[c_idx] < 60) chunks_ptr[c_idx] = 60;
