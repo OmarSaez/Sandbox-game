@@ -62,6 +62,12 @@ private:
 		REPEL = 1ULL << 48
 	};
 
+	// Electricity optimization (Pre-allocated buffers to prevent allocation per-frame)
+	std::vector<int> elec_queue_x;
+	std::vector<int> elec_queue_y;
+	std::vector<uint32_t> elec_lookup;
+	uint32_t elec_lookup_counter = 0;
+
 protected:
 	static void _bind_methods();
 
@@ -71,6 +77,7 @@ public:
 
 	Dictionary process_physics(Dictionary state, int width, int height, int frame_count);
 	Dictionary process_electricity(Dictionary state, int width, int height, int frame_count);
+	Dictionary process_pistons(Array active_pistons, Dictionary state, int width, int height, float delta);
 	Dictionary map_grid_data(Dictionary state, Dictionary dict, int grid_width, int grid_height);
 	PackedInt32Array get_special_source_indices(PackedInt32Array cells);
 };

@@ -6,6 +6,7 @@ using namespace godot;
 void SandboxGridNode::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("process_physics", "state", "width", "height", "frame_count"), &SandboxGridNode::process_physics);
 	ClassDB::bind_method(D_METHOD("process_electricity", "state", "width", "height", "frame_count"), &SandboxGridNode::process_electricity);
+	ClassDB::bind_method(D_METHOD("process_pistons", "active_pistons", "state", "width", "height", "delta"), &SandboxGridNode::process_pistons);
 	ClassDB::bind_method(D_METHOD("map_grid_data", "state", "dict", "grid_width", "grid_height"), &SandboxGridNode::map_grid_data);
 	ClassDB::bind_method(D_METHOD("get_special_source_indices", "cells"), &SandboxGridNode::get_special_source_indices);
 }
@@ -765,31 +766,46 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 		}
 	};
 	
+	// Pre-allocate optimization
+	if (elec_lookup.size() < width * height) {
+		elec_lookup.resize(width * height, 0);
+	}
+	
+	// We use bits of the counter for different lookups to avoid allocating multiple vectors
+	// bits 0-7: counter frame (increments)
+	// We just increment counter by 4 each frame to give us 4 "flags"
+	elec_lookup_counter += 4;
+	if (elec_lookup_counter > 4000000000U) {
+		std::fill(elec_lookup.begin(), elec_lookup.end(), 0);
+		elec_lookup_counter = 4;
+	}
+	
+	uint32_t FLAG_PB = elec_lookup_counter;
+	uint32_t FLAG_PREV = elec_lookup_counter + 1;
+	uint32_t FLAG_MUSIC = elec_lookup_counter + 2;
+	uint32_t FLAG_INACTIVE = elec_lookup_counter + 3;
+	
 	// Phase Blocks fast lookup
-	std::vector<bool> is_pb(width * height, false);
 	for (int i = 0; i < phase_blocks_indices.size(); ++i) {
 		int idx = int(phase_blocks_indices[i]);
-		if (idx >= 0 && idx < width * height) is_pb[idx] = true;
+		if (idx >= 0 && idx < width * height) elec_lookup[idx] = FLAG_PB;
 	}
 	
 	// Prev charges fast lookup (for LED rainbow pulsing)
-	std::vector<bool> prev_charges(width * height, false);
 	for (int i = 0; i < prev_charges_arr.size(); ++i) {
 		int idx = int(prev_charges_arr[i]);
-		if (idx >= 0 && idx < width * height) prev_charges[idx] = true;
+		if (idx >= 0 && idx < width * height) elec_lookup[idx] = FLAG_PREV;
 	}
 	
-	std::vector<bool> prev_music(width * height, false);
 	for (int i = 0; i < prev_active_music_charges_arr.size(); ++i) {
 		int idx = int(prev_active_music_charges_arr[i]);
-		if (idx >= 0 && idx < width * height) prev_music[idx] = true;
+		if (idx >= 0 && idx < width * height) elec_lookup[idx] = FLAG_MUSIC;
 	}
 	
 	// Fast lookup to prevent duplicates
-	std::vector<bool> in_active(width * height, false);
 	for (int i = 0; i < active_charge_indices.size(); ++i) {
 		int idx = int(active_charge_indices[i]);
-		if (idx >= 0 && idx < width * height) in_active[idx] = true;
+		if (idx >= 0 && idx < width * height) elec_lookup[idx] = FLAG_INACTIVE;
 	}
 
 	// Initialize sources to 100
@@ -798,32 +814,30 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 		if (idx < 0 || idx >= width * height) continue;
 		charge_ptr[idx] = 100;
 		charge_visual_ptr[idx] = 100;
-		if (!in_active[idx]) {
+		if (elec_lookup[idx] != FLAG_INACTIVE) {
 			active_charge_indices.append(idx);
-			in_active[idx] = true;
+			elec_lookup[idx] = FLAG_INACTIVE;
 		}
 	}
 	
 	// BFS Queue
-	std::vector<int> queue_x;
-	std::vector<int> queue_y;
-	queue_x.reserve(32768);
-	queue_y.reserve(32768);
+	elec_queue_x.clear();
+	elec_queue_y.clear();
 	
 	for (int i = 0; i < sources_indices.size(); ++i) {
 		int idx = sources_indices[i];
 		int gy = idx / width;
 		int gx = idx % width;
-		queue_x.push_back(gx);
-		queue_y.push_back(gy);
+		elec_queue_x.push_back(gx);
+		elec_queue_y.push_back(gy);
 		powered_frame_ptr[idx] = frame_count;
 	}
 	
 	// 3. BFS from constant sources
 	int head = 0;
-	while (head < queue_x.size()) {
-		int cx = queue_x[head];
-		int cy = queue_y[head];
+	while (head < elec_queue_x.size()) {
+		int cx = elec_queue_x[head];
+		int cy = elec_queue_y[head];
 		head++;
 		
 		for (int dy = -1; dy <= 1; ++dy) {
@@ -839,7 +853,7 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 				if (powered_frame_ptr[n_idx] == frame_count) continue;
 				
 				int32_t n_pid = cells_ptr[n_idx] & 0xFFFF;
-				if (n_pid <= 0 && !is_pb[n_idx]) continue;
+				if (n_pid <= 0 && elec_lookup[n_idx] != FLAG_PB) continue;
 				
 				if (n_pid >= 81 && n_pid <= 87) {
 					int n_var = (cells_ptr[n_idx] >> 24) & 0xFF;
@@ -848,8 +862,8 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 				
 				if (charge_ptr[n_idx] > 0) {
 					powered_frame_ptr[n_idx] = frame_count;
-					queue_x.push_back(nx);
-					queue_y.push_back(ny);
+					elec_queue_x.push_back(nx);
+					elec_queue_y.push_back(ny);
 				}
 			}
 		}
@@ -895,7 +909,7 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 				int n_idx = row_offset + nx;
 				if (charge_ptr[n_idx] == 0) {
 					int32_t n_pid = cells_ptr[n_idx] & 0xFFFF;
-					bool pb = is_pb[n_idx];
+					bool pb = (elec_lookup[n_idx] == FLAG_PB);
 					if (n_pid <= 0 && !pb) continue;
 					
 					if (n_pid >= 81 && n_pid <= 87) {
@@ -911,7 +925,11 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 						}
 					} else if (pb || (n_tags & (CONDUCTOR | ELECTRIC_ACTIVATED))) {
 						charge_ptr[n_idx] = 100;
-						new_active_charges.push_back(n_idx);
+						
+						if (elec_lookup[n_idx] != FLAG_INACTIVE) {
+							new_active_charges.push_back(n_idx);
+							elec_lookup[n_idx] = FLAG_INACTIVE;
+						}
 						activate_chunk(nx, ny);
 						
 						if ((fast_rand() % 1000) < 10) { 
@@ -967,7 +985,7 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 		if (mid == 89) {
 			int variant = (raw_val >> 24) & 0xFF;
 			if ((variant & 8) != 0) {
-				bool is_new_pulse = !prev_charges[idx];
+				bool is_new_pulse = (elec_lookup[idx] != FLAG_PREV);
 				bool is_30_frames = (frame_count % 30 == 0);
 				if (is_new_pulse || is_30_frames) {
 					int current_color_idx = variant & 7;
@@ -987,7 +1005,7 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 			int gy = idx / width;
 			int gx = idx % width;
 			if (gx % 2 == 0 && gy % 2 == 0) {
-				if (!prev_music[idx]) {
+				if (elec_lookup[idx] != FLAG_MUSIC) {
 					if (mid == 600) {
 						out_music_notes.append(Vector2(5, 0));
 					} else {
@@ -1136,6 +1154,237 @@ Dictionary SandboxGridNode::map_grid_data(Dictionary state, Dictionary dict, int
 	state["next_charge_indices"] = out_next_charge;
 	state["active_metronome_indices"] = out_metronomes;
 	
+	return state;
+}
+
+Dictionary SandboxGridNode::process_pistons(Array active_pistons, Dictionary state, int width, int height, float delta) {
+	PackedInt32Array cells = state["cells"];
+	PackedInt64Array tags_array = state["tags_array"];
+	PackedInt32Array charge_array = state["charge_array"];
+	PackedByteArray next_chunks_active = state["next_chunks_active"];
+	PackedColorArray cell_paint_colors = state["cell_paint_colors"];
+	
+	int32_t* cells_ptr = cells.ptrw();
+	int64_t* tags_ptr = tags_array.ptrw();
+	int32_t* charge_ptr = charge_array.ptrw();
+	uint8_t* chunks_ptr = next_chunks_active.ptrw();
+	Color* paint_ptr = cell_paint_colors.ptrw();
+	
+	int chunks_x = width / 16;
+	if (width % 16 != 0) chunks_x++;
+	
+	auto move_cell = [&](int src_x, int src_y, int dst_x, int dst_y) {
+		int src_idx = src_y * width + src_x;
+		int dst_idx = dst_y * width + dst_x;
+		
+		cells_ptr[dst_idx] = cells_ptr[src_idx];
+		tags_ptr[dst_idx] = tags_ptr[src_idx];
+		charge_ptr[dst_idx] = charge_ptr[src_idx];
+		paint_ptr[dst_idx] = paint_ptr[src_idx];
+		
+		cells_ptr[src_idx] = 0;
+		tags_ptr[src_idx] = 0;
+		charge_ptr[src_idx] = 0;
+		paint_ptr[src_idx] = Color(0, 0, 0, 0);
+		
+		int chunk_x = dst_x / 16;
+		int chunk_y = dst_y / 16;
+		int c_idx = chunk_y * chunks_x + chunk_x;
+		if (c_idx >= 0 && c_idx < next_chunks_active.size() && chunks_ptr[c_idx] < 60) {
+			chunks_ptr[c_idx] = 60;
+		}
+	};
+	
+	auto set_piston_head = [&](int x, int y) {
+		int idx = y * width + x;
+		cells_ptr[idx] = 94;
+		// SOLID | GRAV_STATIC | CONDUCTOR
+		tags_ptr[idx] = (1ULL << 0) | (1ULL << 13) | (1ULL << 8);
+		
+		int chunk_x = x / 16;
+		int chunk_y = y / 16;
+		int c_idx = chunk_y * chunks_x + chunk_x;
+		if (c_idx >= 0 && c_idx < next_chunks_active.size() && chunks_ptr[c_idx] < 60) {
+			chunks_ptr[c_idx] = 60;
+		}
+	};
+	
+	Array new_active;
+	for (int i = 0; i < active_pistons.size(); ++i) {
+		Dictionary p = active_pistons[i];
+		Vector2i pos = p["pos"];
+		int orient = p["orientation"];
+		int target_ext = p["target_ext"];
+		float current_ext = p["current_ext"];
+		
+		int base_cx = pos.x + 2;
+		int base_cy = pos.y + 2;
+		if (base_cx < 0 || base_cx >= width || base_cy < 0 || base_cy >= height) continue;
+		
+		int base_idx = base_cy * width + base_cx;
+		if ((cells_ptr[base_idx] & 0xFFFF) != 93) continue;
+		
+		bool powered = false;
+		for (int dy = -3; dy <= 3; ++dy) {
+			for (int dx = -3; dx <= 3; ++dx) {
+				int cx = base_cx + dx;
+				int cy = base_cy + dy;
+				if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+					if (charge_ptr[cy * width + cx] > 0) {
+						powered = true;
+						break;
+					}
+				}
+			}
+			if (powered) break;
+		}
+		
+		if (powered) {
+			int target_px = target_ext * 4;
+			if (target_px > 160) target_px = 160;
+			
+			if (current_ext < target_px) {
+				int px = pos.x;
+				int gy = pos.y;
+				int ext = (int)current_ext;
+				
+				int push_height = 0;
+				int step_idx = 1;
+				bool blocked = false;
+				
+				while (true) {
+					Vector2i p0, p1, p2, p3;
+					if (orient == 0) {
+						int ty = gy - ext - step_idx;
+						p0 = Vector2i(px, ty); p1 = Vector2i(px + 1, ty); p2 = Vector2i(px + 2, ty); p3 = Vector2i(px + 3, ty);
+					} else if (orient == 1) {
+						int tx = px + 3 + ext + step_idx;
+						p0 = Vector2i(tx, gy); p1 = Vector2i(tx, gy + 1); p2 = Vector2i(tx, gy + 2); p3 = Vector2i(tx, gy + 3);
+					} else if (orient == 2) {
+						int ty = gy + 3 + ext + step_idx;
+						p0 = Vector2i(px, ty); p1 = Vector2i(px + 1, ty); p2 = Vector2i(px + 2, ty); p3 = Vector2i(px + 3, ty);
+					} else if (orient == 3) {
+						int tx = px - ext - step_idx;
+						p0 = Vector2i(tx, gy); p1 = Vector2i(tx, gy + 1); p2 = Vector2i(tx, gy + 2); p3 = Vector2i(tx, gy + 3);
+					}
+					
+					if (p0.x < 0 || p0.x >= width || p0.y < 0 || p0.y >= height || p3.x < 0 || p3.x >= width || p3.y < 0 || p3.y >= height) {
+						blocked = true; break;
+					}
+					
+					bool row_has_blocks = false;
+					int m0, m1, m2, m3;
+					if (orient == 0 || orient == 2) {
+						int ro = p0.y * width;
+						m0 = cells_ptr[ro + p0.x] & 0xFFFF; m1 = cells_ptr[ro + p1.x] & 0xFFFF;
+						m2 = cells_ptr[ro + p2.x] & 0xFFFF; m3 = cells_ptr[ro + p3.x] & 0xFFFF;
+					} else {
+						m0 = cells_ptr[p0.y * width + p0.x] & 0xFFFF; m1 = cells_ptr[p1.y * width + p1.x] & 0xFFFF;
+						m2 = cells_ptr[p2.y * width + p2.x] & 0xFFFF; m3 = cells_ptr[p3.y * width + p3.x] & 0xFFFF;
+					}
+					
+					auto is_solid_block = [](int m) {
+						return m == 93 || m == 94 || (m >= 81 && m <= 87) || m == 600;
+					};
+					if (is_solid_block(m0) || is_solid_block(m1) || is_solid_block(m2) || is_solid_block(m3)) {
+						blocked = true; break;
+					}
+					
+					if (m0 != 0 || m1 != 0 || m2 != 0 || m3 != 0) row_has_blocks = true;
+					if (!row_has_blocks) break;
+					
+					push_height++;
+					if (push_height > 120) { blocked = true; break; }
+					step_idx++;
+				}
+				
+				if (!blocked) {
+					if (orient == 0) {
+						for (int s = push_height; s >= 1; s--) {
+							int ty = gy - ext - s;
+							int dest_y = ty - 1;
+							for (int ox = 0; ox < 4; ox++) {
+								int tx = px + ox;
+								if ((cells_ptr[ty * width + tx] & 0xFFFF) != 0) move_cell(tx, ty, tx, dest_y);
+							}
+						}
+						for (int ox = 0; ox < 4; ox++) set_piston_head(px + ox, gy - ext - 1);
+					} else if (orient == 1) {
+						for (int s = push_height; s >= 1; s--) {
+							int tx = px + 3 + ext + s;
+							int dest_x = tx + 1;
+							for (int oy = 0; oy < 4; oy++) {
+								int ty = gy + oy;
+								if ((cells_ptr[ty * width + tx] & 0xFFFF) != 0) move_cell(tx, ty, dest_x, ty);
+							}
+						}
+						for (int oy = 0; oy < 4; oy++) set_piston_head(px + 3 + ext + 1, gy + oy);
+					} else if (orient == 2) {
+						for (int s = push_height; s >= 1; s--) {
+							int ty = gy + 3 + ext + s;
+							int dest_y = ty + 1;
+							for (int ox = 0; ox < 4; ox++) {
+								int tx = px + ox;
+								if ((cells_ptr[ty * width + tx] & 0xFFFF) != 0) move_cell(tx, ty, tx, dest_y);
+							}
+						}
+						for (int ox = 0; ox < 4; ox++) set_piston_head(px + ox, gy + 3 + ext + 1);
+					} else if (orient == 3) {
+						for (int s = push_height; s >= 1; s--) {
+							int tx = px - ext - s;
+							int dest_x = tx - 1;
+							for (int oy = 0; oy < 4; oy++) {
+								int ty = gy + oy;
+								if ((cells_ptr[ty * width + tx] & 0xFFFF) != 0) move_cell(tx, ty, dest_x, ty);
+							}
+						}
+						for (int oy = 0; oy < 4; oy++) set_piston_head(px - ext - 1, gy + oy);
+					}
+					
+					p["current_ext"] = current_ext + 1.0f;
+				}
+			}
+		} else {
+			if (current_ext > 0) {
+				int ext = (int)current_ext;
+				int px = pos.x;
+				int gy = pos.y;
+				
+				auto clear_head = [&](int tx, int ty) {
+					int idx = ty * width + tx;
+					cells_ptr[idx] = 0; tags_ptr[idx] = 0; charge_ptr[idx] = 0; paint_ptr[idx] = Color(0,0,0,0);
+					int chunk_x = tx / 16; int chunk_y = ty / 16;
+					int c_idx = chunk_y * chunks_x + chunk_x;
+					if (c_idx >= 0 && c_idx < next_chunks_active.size() && chunks_ptr[c_idx] < 60) chunks_ptr[c_idx] = 60;
+				};
+				
+				if (orient == 0) {
+					int ty = gy - ext;
+					for (int ox = 0; ox < 4; ox++) clear_head(px + ox, ty);
+				} else if (orient == 1) {
+					int tx = px + 3 + ext;
+					for (int oy = 0; oy < 4; oy++) clear_head(tx, gy + oy);
+				} else if (orient == 2) {
+					int ty = gy + 3 + ext;
+					for (int ox = 0; ox < 4; ox++) clear_head(px + ox, ty);
+				} else if (orient == 3) {
+					int tx = px - ext;
+					for (int oy = 0; oy < 4; oy++) clear_head(tx, gy + oy);
+				}
+				
+				p["current_ext"] = current_ext - 1.0f;
+			}
+		}
+		new_active.append(p);
+	}
+	
+	state["cells"] = cells;
+	state["tags_array"] = tags_array;
+	state["charge_array"] = charge_array;
+	state["next_chunks_active"] = next_chunks_active;
+	state["cell_paint_colors"] = cell_paint_colors;
+	
+	state["new_pistons"] = new_active;
 	return state;
 }
 

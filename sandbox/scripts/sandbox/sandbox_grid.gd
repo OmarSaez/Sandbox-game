@@ -6156,7 +6156,7 @@ func _draw():
 	var f = _get_safe_font()
 	if not f: return
 	var s = _get_ui_scale()
-	var g_scale = float(grid_scale)
+	g_scale = float(grid_scale)
 	
 	# MUSICAL RHYTHM GRID / MECHANISM GRID
 	var music_menu_node = get_parent().get_node_or_null("UI/MusicPanel")
@@ -12683,225 +12683,113 @@ func _activate_piston_chunks(px: int, gy: int):
 		for cx in range(start_cx, end_cx + 1):
 			_activate_chunk(cx, cy)
 
+func _pack_state_for_cpp() -> Dictionary:
+	return {
+		"cells": cells,
+		"tags_array": tags_array,
+		"charge_array": charge_array,
+		"next_chunks_active": next_chunks_active,
+		"cell_paint_colors": cell_paint_colors
+	}
+
 func _simulate_pistons():
-	if cells.size() == 0: return
-	var idx = active_pistons.size() - 1
-	while idx >= 0:
-		if idx >= active_pistons.size():
-			idx -= 1
-			continue
-		var p = active_pistons[idx]
+	if active_pistons.size() == 0: return
+	
+	# Piston processing in C++ (Extremely fast, handles all block pushes directly)
+	var state = _pack_state_for_cpp()
+	state = process_pistons(active_pistons, state, grid_width, dynamic_grid_height, 0.0)
+	var new_pistons = state["new_pistons"]
+	
+	if active_pistons.size() > 0:
+		print("DEBUG PISTONS: Old ext: ", active_pistons[0].current_ext, " New ext: ", new_pistons[0].current_ext)
+	
+	cells = state["cells"]
+	tags_array = state["tags_array"]
+	charge_array = state["charge_array"]
+	next_chunks_active = state["next_chunks_active"]
+	cell_paint_colors = state["cell_paint_colors"]
+	
+	# NPC Push logic (Needs to be done in GDScript since NPCs are nodes/complex objects)
+	for i in range(active_pistons.size()):
+		var p_old = active_pistons[i]
+		if i >= new_pistons.size(): break # In case it was deleted
+		var p_new = new_pistons[i]
 		
-		var base_cx = p.pos.x + 2
-		var base_cy = p.pos.y + 2
-		if base_cx < 0 or base_cx >= grid_width or base_cy < 0 or base_cy >= grid_height:
-			active_pistons.remove_at(idx)
-			idx -= 1
-			continue
-		if cells[base_cy * grid_width + base_cx] & 0xFFFF != 93:
-			active_pistons.remove_at(idx)
-			idx -= 1
-			continue
-			
-		var powered = _is_piston_base_powered(p)
-		
-		if powered:
-			var target_px = p.target_ext * 4
-			if target_px > 160: target_px = 160
-			
-			if p.current_ext < target_px:
-				var px = p.pos.x
-				var gy = p.pos.y
-				var ext = int(p.current_ext)
-				var orient = p.get("orientation", 0)
+		# If piston extended, push NPCs
+		if p_new.current_ext > p_old.current_ext:
+			var px = p_new.pos.x
+			var gy = p_new.pos.y
+			var orient = p_new.get("orientation", 0)
+			var ext = int(p_old.current_ext)
+			# Find push_height by checking how many blocks are in front
+			var push_height = 0
+			var step_idx = 1
+			while true:
+				var p0: Vector2i; var p3: Vector2i
+				if orient == 0:
+					var ty = gy - ext - step_idx
+					p0 = Vector2i(px, ty); p3 = Vector2i(px + 3, ty)
+				elif orient == 1:
+					var tx = px + 3 + ext + step_idx
+					p0 = Vector2i(tx, gy); p3 = Vector2i(tx, gy + 3)
+				elif orient == 2:
+					var ty = gy + 3 + ext + step_idx
+					p0 = Vector2i(px, ty); p3 = Vector2i(px + 3, ty)
+				elif orient == 3:
+					var tx = px - ext - step_idx
+					p0 = Vector2i(tx, gy); p3 = Vector2i(tx, gy + 3)
+					
+				if p0.x < 0 or p0.x >= grid_width or p0.y < 0 or p0.y >= dynamic_grid_height or p3.x < 0 or p3.x >= grid_width or p3.y < 0 or p3.y >= dynamic_grid_height: break
 				
-				var push_height = 0
-				var step_idx = 1
-				var blocked = false
-				
-				while true:
-					var p0: Vector2i
-					var p1: Vector2i
-					var p2: Vector2i
-					var p3: Vector2i
-					
-					if orient == 0: # UP
-						var ty = gy - ext - step_idx
-						p0 = Vector2i(px, ty)
-						p1 = Vector2i(px + 1, ty)
-						p2 = Vector2i(px + 2, ty)
-						p3 = Vector2i(px + 3, ty)
-					elif orient == 1: # RIGHT
-						var tx = px + 3 + ext + step_idx
-						p0 = Vector2i(tx, gy)
-						p1 = Vector2i(tx, gy + 1)
-						p2 = Vector2i(tx, gy + 2)
-						p3 = Vector2i(tx, gy + 3)
-					elif orient == 2: # DOWN
-						var ty = gy + 3 + ext + step_idx
-						p0 = Vector2i(px, ty)
-						p1 = Vector2i(px + 1, ty)
-						p2 = Vector2i(px + 2, ty)
-						p3 = Vector2i(px + 3, ty)
-					elif orient == 3: # LEFT
-						var tx = px - ext - step_idx
-						p0 = Vector2i(tx, gy)
-						p1 = Vector2i(tx, gy + 1)
-						p2 = Vector2i(tx, gy + 2)
-						p3 = Vector2i(tx, gy + 3)
-						
-					if p0.x < 0 or p0.x >= grid_width or p0.y < 0 or p0.y >= grid_height or \
-					   p3.x < 0 or p3.x >= grid_width or p3.y < 0 or p3.y >= grid_height:
-						blocked = true
-						break
-						
-					var row_has_blocks = false
-					var m0: int
-					var m1: int
-					var m2: int
-					var m3: int
-					
-					if orient == 0 or orient == 2:
-						var row_offset = p0.y * grid_width
-						m0 = cells[row_offset + p0.x] & 0xFFFF
-						m1 = cells[row_offset + p1.x] & 0xFFFF
-						m2 = cells[row_offset + p2.x] & 0xFFFF
-						m3 = cells[row_offset + p3.x] & 0xFFFF
-					else:
-						m0 = cells[p0.y * grid_width + p0.x] & 0xFFFF
-						m1 = cells[p1.y * grid_width + p1.x] & 0xFFFF
-						m2 = cells[p2.y * grid_width + p2.x] & 0xFFFF
-						m3 = cells[p3.y * grid_width + p3.x] & 0xFFFF
-					
-					if (m0 == 93 or m0 == 94 or (m0 >= 81 and m0 <= 87) or m0 == 600) or \
-					   (m1 == 93 or m1 == 94 or (m1 >= 81 and m1 <= 87) or m1 == 600) or \
-					   (m2 == 93 or m2 == 94 or (m2 >= 81 and m2 <= 87) or m2 == 600) or \
-					   (m3 == 93 or m3 == 94 or (m3 >= 81 and m3 <= 87) or m3 == 600):
-						blocked = true
-						break
-						
-					if m0 != 0 or m1 != 0 or m2 != 0 or m3 != 0:
-						row_has_blocks = true
-						
-					if not row_has_blocks:
-						break
-						
-					push_height += 1
-					if push_height > 120:
-						blocked = true
-						break
-						
-					step_idx += 1
-					
-				if not blocked:
-					if orient == 0: # UP
-						for s in range(push_height, 0, -1):
-							var ty = gy - ext - s
-							var dest_y = ty - 1
-							for ox in range(4):
-								var tx = px + ox
-								var mid = cells[ty * grid_width + tx] & 0xFFFF
-								_set_cell(tx, dest_y, mid)
-						for ox in range(4):
-							_set_cell(px + ox, gy - ext - 1, 94)
-							
-					elif orient == 1: # RIGHT
-						for s in range(push_height, 0, -1):
-							var tx = px + 3 + ext + s
-							var dest_x = tx + 1
-							for oy in range(4):
-								var ty = gy + oy
-								var mid = cells[ty * grid_width + tx] & 0xFFFF
-								_set_cell(dest_x, ty, mid)
-						for oy in range(4):
-							_set_cell(px + 3 + ext + 1, gy + oy, 94)
-							
-					elif orient == 2: # DOWN
-						for s in range(push_height, 0, -1):
-							var ty = gy + 3 + ext + s
-							var dest_y = ty + 1
-							for ox in range(4):
-								var tx = px + ox
-								var mid = cells[ty * grid_width + tx] & 0xFFFF
-								_set_cell(tx, dest_y, mid)
-						for ox in range(4):
-							_set_cell(px + ox, gy + 3 + ext + 1, 94)
-							
-					elif orient == 3: # LEFT
-						for s in range(push_height, 0, -1):
-							var tx = px - ext - s
-							var dest_x = tx - 1
-							for oy in range(4):
-								var ty = gy + oy
-								var mid = cells[ty * grid_width + tx] & 0xFFFF
-								_set_cell(dest_x, ty, mid)
-						for oy in range(4):
-							_set_cell(px - ext - 1, gy + oy, 94)
-							
-					var col_left = px
-					var col_right = px + 4
-					if orient == 0: # UP
-						var col_bottom = gy - ext + 1
-						var col_top = gy - ext - push_height
-						for npc in active_npcs:
-							if npc.pos.x >= col_left - 10 and npc.pos.x <= col_right + 10:
-								if npc.pos.y >= col_top - 4 and npc.pos.y <= col_bottom + 2:
-									npc.pos.y -= 1.0
-					elif orient == 1: # RIGHT
-						var col_start = gy
-						var col_end = gy + 4
-						var ext_start = px + 3 + ext
-						var ext_end = px + 3 + ext + push_height
-						for npc in active_npcs:
-							if npc.pos.y >= col_start - 10 and npc.pos.y <= col_end + 10:
-								if npc.pos.x >= ext_start - 2 and npc.pos.x <= ext_end + 4:
-									npc.pos.x += 1.0
-					elif orient == 2: # DOWN
-						var col_top = gy + 3 + ext
-						var col_bottom = gy + 3 + ext + push_height
-						for npc in active_npcs:
-							if npc.pos.x >= col_left - 10 and npc.pos.x <= col_right + 10:
-								if npc.pos.y >= col_top - 2 and npc.pos.y <= col_bottom + 4:
-									npc.pos.y += 1.0
-					elif orient == 3: # LEFT
-						var col_start = gy
-						var col_end = gy + 4
-						var ext_start = px - ext - push_height
-						var ext_end = px - ext
-						for npc in active_npcs:
-							if npc.pos.y >= col_start - 10 and npc.pos.y <= col_end + 10:
-								if npc.pos.x >= ext_start - 4 and npc.pos.x <= ext_end + 2:
-									npc.pos.x -= 1.0
-									
-					p.current_ext += 1.0
-					_activate_piston_chunks(px, gy)
-		else:
-			if p.current_ext > 0:
-				var ext = int(p.current_ext)
-				var px = p.pos.x
-				var gy = p.pos.y
-				var orient = p.get("orientation", 0)
-				if orient == 0: # UP
-					var ty = gy - ext
+				var has_blocks = false
+				if orient == 0 or orient == 2:
 					for ox in range(4):
-						_set_cell(px + ox, ty, 0)
-				elif orient == 1: # RIGHT
-					var tx = px + 3 + ext
+						if _get_cell(p0.x + ox, p0.y) != 0: has_blocks = true; break
+				else:
 					for oy in range(4):
-						_set_cell(tx, gy + oy, 0)
-				elif orient == 2: # DOWN
-					var ty = gy + 3 + ext
-					for ox in range(4):
-						_set_cell(px + ox, ty, 0)
-				elif orient == 3: # LEFT
-					var tx = px - ext
-					for oy in range(4):
-						_set_cell(tx, gy + oy, 0)
+						if _get_cell(p0.x, p0.y + oy) != 0: has_blocks = true; break
 						
-				p.current_ext -= 1.0
-				_activate_piston_chunks(p.pos.x, p.pos.y)
+				if not has_blocks: break
+				push_height += 1
+				if push_height > 120: break
+				step_idx += 1
 				
-		idx -= 1
+			var col_left = px
+			var col_right = px + 4
+			if orient == 0: # UP
+				var col_bottom = gy - ext + 1
+				var col_top = gy - ext - push_height
+				for npc in active_npcs:
+					if npc.pos.x >= col_left - 10 and npc.pos.x <= col_right + 10:
+						if npc.pos.y >= col_top - 4 and npc.pos.y <= col_bottom + 2:
+							npc.pos.y -= 1.0
+			elif orient == 1: # RIGHT
+				var col_start = gy
+				var col_end = gy + 4
+				var ext_start = px + 3 + ext
+				var ext_end = px + 3 + ext + push_height
+				for npc in active_npcs:
+					if npc.pos.y >= col_start - 10 and npc.pos.y <= col_end + 10:
+						if npc.pos.x >= ext_start - 2 and npc.pos.x <= ext_end + 4:
+							npc.pos.x += 1.0
+			elif orient == 2: # DOWN
+				var col_top = gy + 3 + ext
+				var col_bottom = gy + 3 + ext + push_height
+				for npc in active_npcs:
+					if npc.pos.x >= col_left - 10 and npc.pos.x <= col_right + 10:
+						if npc.pos.y >= col_top - 2 and npc.pos.y <= col_bottom + 4:
+							npc.pos.y += 1.0
+			elif orient == 3: # LEFT
+				var col_start = gy
+				var col_end = gy + 4
+				var ext_start = px - ext - push_height
+				var ext_end = px - ext
+				for npc in active_npcs:
+					if npc.pos.y >= col_start - 10 and npc.pos.y <= col_end + 10:
+						if npc.pos.x >= ext_start - 4 and npc.pos.x <= ext_end + 2:
+							npc.pos.x -= 1.0
+
+	active_pistons = new_pistons
 
 const LOGIC_GATE_SHAPES = {
 	0: [ # UP
