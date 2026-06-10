@@ -11316,7 +11316,8 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 
 	# Add burning smoke for Lava/Normal explosions
 	var smoke_count = 15
-	if ignition_flags & (128 | 64): smoke_count = 25 # More smoke for electric/acid
+	if ignition_flags & 128: smoke_count = 12 # 50% less smoke for electric explosion
+	elif ignition_flags & 64: smoke_count = 25 # Acid smoke
 	elif ignition_flags == 0: smoke_count = 8 # Less smoke for normal fire explosion
 	for i in range(smoke_count):
 		var smx = x + int(_get_lut_rand_range(-radius, radius)); var smy = y + int(_get_lut_rand_range(-radius, radius))
