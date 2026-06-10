@@ -8880,20 +8880,30 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	var is_lying = npc.get("is_lying", false)
 	
 	if override_mat == 0:
-		# DUAL-ZONE CLEANUP: Wipe both current physics pos AND the last jittered render pos
+		# CONTINUOUS ZONE CLEANUP: Wipe everything between the current physics pos AND the last render pos
+		var last_x = int(npc.get("last_render_x", npc.pos.x))
+		var last_y = int(npc.get("last_render_y", npc.pos.y))
+		
 		var was_lying = npc.get("last_render_lying", false)
 		var is_tank = (npc.type == "zombie_tank")
 		var is_mage = (npc.type == "mage")
-		var zones = [npc.pos, Vector2i(int(npc.get("last_render_x", npc.pos.x)), int(npc.get("last_render_y", npc.pos.y)))]
-		for p in zones:
-			var xr = range(-7, 8) if was_lying else (range(-1, 4) if is_tank else range(-1, 3))
-			var yr_max = 7 if (is_tank or is_mage) else 6
-			for oy in range(-1, yr_max):
-				for ox in xr:
-					var tx = p.x + ox; var ty = p.y + oy
-					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-						var tid = cells[ty * grid_width + tx] & 0xFFFF
-						if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC): _set_cell(tx, ty, 0)
+		
+		var pad_left = 7 if was_lying else (1 if is_tank else 1)
+		var pad_right = 7 if was_lying else (3 if is_tank else 2)
+		var pad_top = 1
+		var pad_bottom = 7 if (is_tank or is_mage) else 6
+		
+		var min_x = min(npc.pos.x, last_x) - pad_left - 1
+		var max_x = max(npc.pos.x, last_x) + pad_right + 1
+		var min_y = min(npc.pos.y, last_y) - pad_top - 1
+		var max_y = max(npc.pos.y, last_y) + pad_bottom + 1
+		
+		for cy in range(min_y, max_y + 1):
+			for cx in range(min_x, max_x + 1):
+				if cx >= 0 and cx < grid_width and cy >= 0 and cy < dynamic_grid_height:
+					var tid = cells[cy * grid_width + cx] & 0xFFFF
+					if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC): 
+						_set_cell(cx, cy, 0)
 		return
 		
 	var sx = int(npc.pos.x); var sy = int(npc.pos.y)
