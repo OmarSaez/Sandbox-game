@@ -485,6 +485,7 @@ var ui_root: CanvasLayer
 var mouse_was_pressed: bool = false
 var music_tempo_frames: int = 30
 var is_blocking: bool = false
+var force_grid_visible: bool = false
 
 # History / Undo System
 var history_buffer = [] # Array of PackedInt32Array
@@ -3184,6 +3185,15 @@ func _setup_tools_ui():
 			else: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
 	)
 
+	# GRID SNAP ROW
+	var grid_options = [tr("active"), tr("inactive")]
+	create_row.call("GRID_SNAP_LBL", grid_options, func(l):
+		force_grid_visible = (l == 0)
+		_save_tool_settings()
+		_update_menu_highlights()
+		queue_redraw()
+	)
+
 
 	# BRUSH SIZE ROW (Now 3rd)
 	var brush_sizes = [0, 1, 2, 5, 7, 12]
@@ -5328,6 +5338,9 @@ func _update_menu_highlights():
 			elif key.begins_with("ui_size_btn_"):
 				var idx = int(key.split("_")[-1])
 				if idx == ui_scale_level: is_active = true
+			elif key.begins_with("GRID_SNAP_LBL_btn_"):
+				var idx = int(key.split("_")[-1])
+				if (idx == 0 and force_grid_visible) or (idx == 1 and not force_grid_visible): is_active = true
 			elif key.begins_with("weather_btn_"):
 				if int(key.split("_")[-1]) == current_weather and not is_selecting_npc_to_control: is_active = true
 			elif key.begins_with("acid_rain_btn_"):
@@ -5775,11 +5788,23 @@ func _process(delta):
 			
 			var is_mechanism = (is_mechanism_mode_active and (selected_material == 8 or selected_material == 5)) or (selected_material == 93 or selected_material == 95 or selected_material == 96 or selected_material == 97)
 			
-			if is_mechanism:
+			var is_npc = selected_material >= 0 and selected_material < material_tags_raw.size() and (material_tags_raw[selected_material] & SandboxMaterial.Tags.NPC)
+			var is_music = selected_material >= 0 and selected_material < material_tags_raw.size() and (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC)
+			var is_logic_gate = is_mechanism_mode_active and (selected_circuit_tool == "not" or selected_circuit_tool == "and" or selected_circuit_tool == "or" or selected_circuit_tool == "nand" or selected_circuit_tool == "nor" or selected_circuit_tool == "xor" or selected_circuit_tool == "xnor")
+			
+			var should_act_like_mechanism = is_mechanism or (force_grid_visible and not is_npc and not is_music and not is_paint_tool_active and selected_material != -3 and not is_logic_gate)
+			
+			if force_grid_visible and not is_mechanism:
+				var snap_base = 4
+				gx = int(floor(float(gx) / snap_base) * snap_base)
+				gy = int(floor(float(gy) / snap_base) * snap_base)
+			
+			if should_act_like_mechanism:
 				# snap exactly to grid cells boundaries
 				var snap = 8 if selected_material == 97 else 4
-				gx = int(floor(float(gx) / snap) * snap)
-				gy = int(floor(float(gy) / snap) * snap)
+				if is_mechanism: # Only force specific snap if it's naturally a mechanism
+					gx = int(floor(float(gx) / snap) * snap)
+					gy = int(floor(float(gy) / snap) * snap)
 				
 				if not mouse_was_pressed:
 					prev_snapped_gx = gx
@@ -5834,12 +5859,12 @@ func _process(delta):
 					# Pintar elementos
 					var p_diameters = [1, 3, 5, 10, 15, 25]
 					_paint_elements_circle(gx, gy, p_diameters[paint_brush_radius_idx], selected_paint_color)
-			elif selected_material >= 0 and selected_material < material_tags_raw.size() and (material_tags_raw[selected_material] & SandboxMaterial.Tags.NPC):
+			elif is_npc:
 				if not mouse_was_pressed:
 					_place_npc(gx, gy)
 					_play_action_sound("npc_place")
 				_manage_brush_sound(-1) # Stop brush if switching to NPC
-			elif is_mechanism_mode_active and (selected_circuit_tool == "not" or selected_circuit_tool == "and" or selected_circuit_tool == "or" or selected_circuit_tool == "nand" or selected_circuit_tool == "nor" or selected_circuit_tool == "xor" or selected_circuit_tool == "xnor"):
+			elif is_logic_gate:
 				if not mouse_was_pressed:
 					var snap = 4
 					gx = int(floor(float(gx) / snap) * snap)
@@ -6125,7 +6150,7 @@ func _draw():
 	# MUSICAL RHYTHM GRID / MECHANISM GRID
 	var music_menu_node = get_parent().get_node_or_null("UI/MusicPanel")
 	var is_mechanism = selected_material == 96 or selected_material == 97 or selected_material == 95 or selected_material == 93
-	if (music_menu_node and music_menu_node.visible) or _is_music_active() or (is_mechanism_mode_active and (selected_material == 8 or selected_material == 5)) or is_mechanism:
+	if (music_menu_node and music_menu_node.visible) or _is_music_active() or (is_mechanism_mode_active and (selected_material == 8 or selected_material == 5)) or is_mechanism or force_grid_visible:
 		var grid_col = Color("#4D4D4D") # Muy visible
 		var thickness = 2.0
 		# Vertical lines - Safety margin for virtual/scaled resolutions
