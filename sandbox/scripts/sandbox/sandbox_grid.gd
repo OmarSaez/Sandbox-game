@@ -4364,6 +4364,7 @@ func _save_rotation_cache():
 		"npcs": clean_npcs,
 		"npc_id_counter": _npc_id_counter,
 		"active_logic_gates": active_logic_gates,
+		"active_pistons": active_pistons,
 		"door_registry": door_registry.keys(),
 		"door_close_timers": door_close_timers,
 		"phase_block_registry": phase_block_registry.keys()
@@ -5955,6 +5956,14 @@ func _deep_copy_logic_gates() -> Array:
 		result.append(copy)
 	return result
 
+func _deep_copy_pistons() -> Array:
+	var result = []
+	for p in active_pistons:
+		var copy = p.duplicate()
+		copy["pos"] = Vector2i(p.pos.x, p.pos.y)
+		result.append(copy)
+	return result
+
 func save_history_state():
 	# If we're not at the head of the buffer (we undid something), clear the "future"
 	if history_current_index < history_buffer.size() - 1:
@@ -5968,7 +5977,8 @@ func save_history_state():
 		"chunks": chunks_active.duplicate(),
 		"next_chunks": next_chunks_active.duplicate(),
 		"npcs": _deep_copy_npcs(),
-		"logic_gates": _deep_copy_logic_gates()
+		"logic_gates": _deep_copy_logic_gates(),
+		"active_pistons": _deep_copy_pistons()
 	}
 	
 	if history_buffer.size() > 0:
@@ -6041,7 +6051,7 @@ func undo_history():
 		# Wake all chunks so electricity can re-propagate
 		for i in range(next_chunks_active.size()):
 			next_chunks_active[i] = 60
-		_reconstruct_sources_from_cells()
+		_reconstruct_sources_from_cells(snapshot)
 		_update_texture()
 		queue_redraw()
 
@@ -6072,7 +6082,7 @@ func redo_history():
 		# Wake all chunks so electricity can re-propagate
 		for i in range(next_chunks_active.size()):
 			next_chunks_active[i] = 60
-		_reconstruct_sources_from_cells()
+		_reconstruct_sources_from_cells(snapshot)
 		_update_texture()
 		queue_redraw()
 
@@ -11941,6 +11951,25 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 	phase_block_registry.clear()
 	active_metronome_indices.clear()
 	active_pistons.clear()
+	
+	if dict.has("active_pistons"):
+		var p_y_offset = 0
+		var p_x_offset = 0
+		if dict.has("width") and dict.has("height"):
+			var old_w = int(dict["width"])
+			var old_h = int(dict["height"])
+			p_y_offset = old_h - grid_height
+			p_x_offset = int((old_w - grid_width) / 2.0)
+		for p_data in dict["active_pistons"]:
+			var p = p_data.duplicate(true)
+			if p.has("pos"):
+				var px = p["pos"].x
+				var py = p["pos"].y
+				if px is float: px = int(px)
+				if py is float: py = int(py)
+				p["pos"] = Vector2i(px - p_x_offset, py - p_y_offset)
+			active_pistons.append(p)
+			
 	active_cannons.clear()
 	active_pipes.clear()
 	active_pipes_x2.clear()
@@ -12351,7 +12380,7 @@ func _place_piston(gx: int, gy: int):
 		# 2. Update orientation
 		p.orientation = (p.get("orientation", 0) + 1) % 4
 		p.current_ext = 0.0
-		p.target_ext = selected_piston_length
+		# Removed p.target_ext = selected_piston_length to preserve original custom length
 		
 		# 3. Draw new piston shape
 		var base_pix = _get_piston_base_pixels(p)
@@ -14827,7 +14856,8 @@ func _save_to_slot(idx, custom_name: String = ""):
 		"phase_block_registry": phase_block_registry.keys(),
 		"frame_count": _frame_count,
 		"music_tempo_frames": music_tempo_frames,
-		"active_logic_gates": active_logic_gates
+		"active_logic_gates": active_logic_gates,
+		"active_pistons": active_pistons
 	}
 	
 	var file = FileAccess.open_compressed(path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
