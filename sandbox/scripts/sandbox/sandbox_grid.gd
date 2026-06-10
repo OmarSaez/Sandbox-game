@@ -13444,11 +13444,78 @@ func _setup_music_ui(force_refresh: bool = false):
 				val_btn.pressed.connect(func():
 					_play_action_sound("ui_click")
 					var vals = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 35, 40]
-					var cur_idx = vals.find(selected_piston_length)
-					if cur_idx == -1: cur_idx = 5 # Default to index of 10 if not found
-					var next_idx = (cur_idx + 1) % vals.size()
-					selected_piston_length = vals[next_idx]
-					val_btn.text = str(selected_piston_length)
+					
+					var popup = PopupPanel.new()
+					var p_style = StyleBoxFlat.new()
+					p_style.bg_color = Color("#2A2A35")
+					p_style.set_corner_radius_all(15 * s)
+					popup.add_theme_stylebox_override("panel", p_style)
+					
+					var vbox = VBoxContainer.new()
+					vbox.add_theme_constant_override("separation", 20 * s)
+					
+					var title_lbl = Label.new()
+					title_lbl.text = tr("PISTON_LENGTH")
+					title_lbl.add_theme_font_override("font", _get_safe_font())
+					title_lbl.add_theme_font_size_override("font_size", 32 * s)
+					title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+					vbox.add_child(title_lbl)
+					
+					var grid = GridContainer.new()
+					grid.columns = 3
+					grid.add_theme_constant_override("h_separation", 15 * s)
+					grid.add_theme_constant_override("v_separation", 15 * s)
+					
+					for val in vals:
+						var opt_btn = Button.new()
+						opt_btn.text = str(val)
+						opt_btn.custom_minimum_size = Vector2(90 * s, 90 * s)
+						opt_btn.add_theme_font_override("font", _get_safe_font())
+						opt_btn.add_theme_font_size_override("font_size", 36 * s)
+						
+						var opt_style = StyleBoxFlat.new()
+						if val == selected_piston_length:
+							opt_style.bg_color = Color("#32CD32").darkened(0.2) # Highlight current
+						else:
+							opt_style.bg_color = Color("#4169E1").darkened(0.5)
+						opt_style.set_corner_radius_all(12 * s)
+						
+						var hover_style = opt_style.duplicate()
+						hover_style.bg_color = opt_style.bg_color.lightened(0.2)
+						
+						var pressed_style = opt_style.duplicate()
+						pressed_style.bg_color = opt_style.bg_color.darkened(0.2)
+						
+						opt_btn.add_theme_stylebox_override("normal", opt_style)
+						opt_btn.add_theme_stylebox_override("hover", hover_style)
+						opt_btn.add_theme_stylebox_override("pressed", pressed_style)
+						
+						opt_btn.pressed.connect(func():
+							_play_action_sound("ui_click")
+							selected_piston_length = val
+							val_btn.text = str(val)
+							popup.hide()
+						)
+						grid.add_child(opt_btn)
+					
+					vbox.add_child(grid)
+						
+					var margin = MarginContainer.new()
+					margin.add_theme_constant_override("margin_top", 20 * s)
+					margin.add_theme_constant_override("margin_bottom", 20 * s)
+					margin.add_theme_constant_override("margin_left", 20 * s)
+					margin.add_theme_constant_override("margin_right", 20 * s)
+					margin.add_child(vbox)
+					
+					popup.add_child(margin)
+					get_tree().current_scene.add_child(popup)
+					
+					# Clean up when closed
+					popup.popup_hide.connect(func(): popup.queue_free())
+					
+					# Position popup near the button but adjusted for larger size
+					var btn_rect = val_btn.get_global_rect()
+					popup.popup(Rect2(btn_rect.position.x - (120 * s), btn_rect.position.y - (450 * s), 0, 0))
 				)
 				
 				hbox.add_child(val_btn)
