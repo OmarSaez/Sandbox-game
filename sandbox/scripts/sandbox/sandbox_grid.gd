@@ -37,6 +37,17 @@ var charge_img: Image
 
 # Simulation Chunking
 const CHUNK_SIZE = 16
+const MAX_PIXELS_PER_FRAME = 300000 
+const BASE_FRAME_RATE = 60
+const LIQUID_SPREAD_LIMIT = 5
+const UPDATE_CHUNK_SIZE = 16
+const UPDATE_CHUNK_SIZE_SQ = 256
+const SIMULATION_STEP = 1.0 / 60.0
+
+const EXP_VOLCANO = 1048576
+
+# UI AND RENDERING
+var g_scale: float = 8.0
 var chunks_active: PackedByteArray 
 var next_chunks_active: PackedByteArray
 var chunks_x: int
@@ -6727,7 +6738,7 @@ func _strike_lightning():
 		# If we hit something non-empty, stop bolt and create small explosion
 		# NEW: Ignore rain (2) so it hits the ground
 		if target_id > 0 and target_id != 17 and target_id != 15 and target_id != 2:
-			_explode(lx, ly, 5) # Small localized explosion
+			_explode(lx, ly, 5, "explosion", EXP_VOLCANO | 128) # Small localized explosion
 			break
 
 func _strike_lightning_at(lx: int):
@@ -6738,7 +6749,7 @@ func _strike_lightning_at(lx: int):
 		_set_cell(lx, ly, 9) # Deploy Electricity!
 		# Stop bolt at first solid/liquid (ignore rain=2, steam=17, snow=15)
 		if target_id > 0 and target_id != 17 and target_id != 15 and target_id != 2:
-			_explode(lx, ly, 5) # Small localized explosion
+			_explode(lx, ly, 5, "explosion", EXP_VOLCANO | 128) # Small localized explosion
 			break
 
 func _paint_background_circle(cx: int, cy: int, diameter: int, color: Color):
@@ -7056,7 +7067,8 @@ func _step_simulation():
 	var cpp_explosions = cpp_state.get("explosions", [])
 	if cpp_explosions.size() > 0:
 		for expl in cpp_explosions:
-			_explode(expl[0], expl[1], expl[2], expl[3], expl[4])
+			var ign_flags = expl[4] if expl.size() > 4 else 0
+			_explode(expl[0], expl[1], expl[2], expl[3], ign_flags, true, 0.0, true)
 			var b_idx = (expl[1] / 8) * 1000 + (expl[0] / 8)
 			if not _tnt_buckets_this_frame.has(b_idx):
 				_tnt_buckets_this_frame[b_idx] = true
@@ -7672,123 +7684,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 							charge_array[idx - grid_width] = h_left - 1
 							charge_array[idx] = 0
 		
-	# 6. VOLCANO LOGIC (pure_id 27, 28, 29)
-	if pure_id == 27: # Static block
-		# TRIGGER: Neighboring fire/lava OR being "pre-heated" by an active neighbor
-		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY) or charge_array[idx] > 10:
-			# Staggered activation: only 5% chance per frame to actually start erupting
-			if _get_lut_rand() < 0.05:
-				_set_cell(x, y, 29) # Transform to ACTIVE BASE
-				# Life duration for shots
-				charge_array[idx] = int(_get_lut_rand_range(80, 150))
-			else:
-				# Heat up neighbors slowly to propagate the "wave"
-				charge_array[idx] += 1 
-				if _get_lut_rand() < 0.1: # Spread heat to a random neighbor
-					var nx = x + int(_get_lut_rand_range(-1, 1))
-					var ny = y + int(_get_lut_rand_range(-1, 1))
-					if nx >= 0 and nx < grid_width and ny >= 0 and ny < dynamic_grid_height:
-						var nidx = ny * grid_width + nx
-						charge_array[nidx] += 10
-						_register_charge(nidx)
-	
-	elif pure_id == 29: # Erupting Base
-		is_volcano_active = true
-		charge_array[idx] -= 1
-		# Launch projectile every 25 frames
-		if charge_array[idx] % 25 == 0:
-			var tx = x + int(_get_lut_rand_range(-1, 1))
-			var n_id = _get_cell(tx, y-1)
-			# Launch if NOT a core solid
-			if n_id != 13 and n_id != 26 and n_id != 5 and n_id != 27:
-				# Alternate sound to reduce noise saturation (only odd shots sound)
-				var shot_count = int(float(charge_array[idx]) / 25)
-				var sfx = "volcan_burst" if (shot_count % 2 != 0) else ""
-				_explode(x, y-1, 2, sfx) # PUSH the plug out of the way!
-				_set_cell(tx, y-1, 28)
-				charge_array[(y-1) * grid_width + tx] = int(_get_lut_rand_range(80, 150)) 
-		
-		# Smoking Base + LAVA PUDDLES (Triple effect)
-		if _get_lut_rand() < 0.3: # Reduced from 0.6
-			var sx = x + int(_get_lut_rand_range(-2, 2))
-			if _get_cell(sx, y-1) == 0: _set_cell(sx, y-1, 15)
-		
-		if _get_lut_rand() < 0.15: # Leak real lava at base
-			var lx = x + int(_get_lut_rand_range(-2, 2))
-			if _get_cell(lx, y-1) == 0: _set_cell(lx, y-1, 11)
-			
-		if charge_array[idx] <= 0:
-			_draw_circle(x, y, 5, 11) # Burnout cluster (Slightly bigger)
-			_explode(x, y, 10, "volcan_burst") # Bigger final burnout
-			_play_action_sound("explosion", 0.08, -10.0) # Layered quiet TNT
 
-	elif pure_id == 28: # Ascending Core
-		is_volcano_active = true
-		var current_fuel = charge_array[idx]
-		
-		# OPTIMIZATION: Only 1 step per frame (already decided for 'struggle' feel)
-		if current_fuel <= 0:
-			_draw_circle(x, y, 6, 11); _draw_circle(x, y, 4, 15) 
-			_explode(x, y, 12, "volcan_burst")
-			_play_action_sound("explosion", 0.08, -8.0)
-			for _j in range(25): # Slightly reduced sparks
-				_add_spark(float(x), float(y), _get_lut_rand_range(-120, 120), _get_lut_rand_range(-150, 50), [Color.YELLOW, Color.WHITE, Color.ORANGE].pick_random(), 0.3)
-			return
-			
-		if y < 5: 
-			_set_cell(x, y, 11); _explode(x, y, 6, "volcan_burst"); return
-		
-		# MOVEMENT & PENETRATION LOGIC
-		var moved = false
-		# Up, Diagonals, Lateral
-		var dirs = [Vector2i(0, -1), Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 0), Vector2i(1, 0)]
-		
-		for d in dirs:
-			var tx = x + d.x; var ty = y + d.y
-			var tidx = ty * grid_width + tx
-			var nid = cells[tidx] & 0xFFFF
-			
-			if nid == 28: continue # Skip brothers
-			
-			var n_tags = material_tags_raw[nid]
-			if nid == 0 or not (n_tags & SandboxMaterial.Tags.INVINCIBLE):
-				if nid > 0 and nid != 11 and nid != 15 and nid != 3 and nid != 9:
-					# SOLID STRUGGLE
-					var break_prob = 0.02 if d.y < 0 else 0.01 
-					if _get_lut_rand() > break_prob:
-						current_fuel -= 2; charge_array[idx] = current_fuel
-						if _get_lut_rand() < 0.2: _add_spark(float(x), float(y), _get_lut_rand_range(-40, 40), _get_lut_rand_range(-30, 10), Color.ORANGE, 0.2)
-						continue 
-					
-					# BREAK SUCCESS
-					current_fuel -= 5
-					# Fast Chimney (3x3)
-					for dy in range(-1, 2):
-						for dx in range(-1, 2):
-							var cx = tx + dx; var cy = ty + dy
-							var cidx = cy * grid_width + cx
-							var cid = cells[cidx] & 0xFFFF
-							if cid > 0 and cid != 28 and not (tags_array[cidx] & SandboxMaterial.Tags.INVINCIBLE):
-								var r = _get_lut_rand()
-								if r < 0.3: cells[cidx] = (cells[cidx] & 0xFFFF0000) | 11
-								elif r < 0.5 and current_fuel < 60: cells[cidx] = (cells[cidx] & 0xFFFF0000) | 15
-								else: cells[cidx] = (cells[cidx] & 0xFFFF0000) | 0
-				
-				# EXECUTE MOVE
-				var trail = 15 if (current_fuel < 60 and _get_lut_rand() < 0.2) else 11
-				_set_cell(x, y, trail)
-				x = tx; y = ty; _set_cell(x, y, 28)
-				idx = tidx; current_fuel -= 1; charge_array[idx] = current_fuel
-				moved = true; break 
-		
-		if not moved:
-			current_fuel -= 2; charge_array[idx] = current_fuel
-			if current_fuel < 60 and current_fuel > 5 and (current_fuel % 20 == 0):
-				if _get_lut_rand() < 0.15:
-					_draw_circle(x, y, 10, 11)
-					_explode(x, y, 18, "volcan_burst")
-					_play_action_sound("explosion", 0.08, -6.0)
-					return
 	
 	# 7. FRESH CEMENT HARDENING 
 	if pure_id == 25:
@@ -10596,7 +10492,7 @@ func _process_projectiles(delta):
 			if p.type == "thrown_rock":
 				_trigger_rock_impact(gx, gy, p)
 			elif p.type == "bomber_bomb":
-				_explode(gx, gy, p.get("explosion_radius", 6))
+				_explode(gx, gy, p.get("explosion_radius", 6), "explosion", EXP_VOLCANO | 128)
 			elif p.type == "fireball":
 				var converted = false
 				if p.get("team", -1) >= 0 and hit_npc.team != -1 and hit_npc.team != p.team:
@@ -10678,7 +10574,7 @@ func _process_projectiles(delta):
 			if p.type == "thrown_rock":
 				_trigger_rock_impact(gx, gy, p)
 			elif p.type == "bomber_bomb":
-				_explode(gx, gy, p.get("explosion_radius", 6))
+				_explode(gx, gy, p.get("explosion_radius", 6), "explosion", EXP_VOLCANO | 128)
 			elif p.type == "magic_lifted":
 				var mat = p.get("block_material", 1)
 				var placed = false
@@ -11260,13 +11156,15 @@ var _explosion_queue = [] # Queue of [x, y, radius, sfx, flags]
 var explosions_sfx_budget = 0
 var explosions_sfx_timer = 0.0
 
-func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0, ___ignore_budget = false, volume_boost: float = 0.0):
+func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0, ___ignore_budget = false, volume_boost: float = 0.0, skip_physics: bool = false):
 	sim_mutex.lock()
 	explosions_this_frame += 1
 	var is_heavy_load = explosions_this_frame > 10
 	sim_mutex.unlock()
-	# CLEAR the trigger cell immediately
-	_set_cell(x, y, 0)
+	
+	if not skip_physics:
+		# CLEAR the trigger cell immediately
+		_set_cell(x, y, 0)
 	
 	# Wake up chunks around explosion for C++ particles (Sparks, Drops, etc)
 	var effect_radius = int(radius) + 15
@@ -11299,66 +11197,82 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 			if blast_dir.length() < 0.1: blast_dir = Vector2.UP
 			npc.vx = blast_dir.x * ratio * 15.0; npc.vy = blast_dir.y * ratio * 15.0 - 6.0
 			for _s in range(5): _add_spark(float(npc.pos.x),float(npc.pos.y),_get_lut_rand_range(-50,50),_get_lut_rand_range(-80,0),Color.DARK_GRAY,0.6)
-	# Pixel clearance, physics push, and standard drops (Restored for dynamic projectiles like Bombs)
-	var r2 = radius * radius
-	for ry in range(-radius, radius + 1):
-		for rx in range(-radius, radius + 1):
-			var dist_sq = rx * rx + ry * ry
-			if dist_sq <= r2:
-				var tx = x + rx
-				var ty = y + ry
-				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-					var raw_id = cells[ty * grid_width + tx]
-					var tid = raw_id & 0xFFFF
-					if tid > 0:
-						var t_tags = 0 if tid >= material_tags_raw.size() else material_tags_raw[tid]
-						if t_tags & SandboxMaterial.Tags.INVINCIBLE: continue
-						
-						if t_tags & SandboxMaterial.Tags.EXPLOSIVE:
-							if tid == 7 or tid == 71 or tid == 72 or tid == 77 or tid == 19: continue
-							if tid == 18:
-								_set_cell(tx, ty, 19)
-								charge_array[ty * grid_width + tx] = (20 + int(_get_lut_rand() * 30)) | ignition_flags
-							else:
-								_set_cell(tx, ty, 7 if tid == 5 else 71)
-								charge_array[ty * grid_width + tx] = (25 + int(_get_lut_rand() * 20)) | ignition_flags
-							continue
+	if not skip_physics:
+		# Pixel clearance, physics push, and standard drops (Restored for dynamic projectiles like Bombs)
+		var r2 = radius * radius
+		for ry in range(-radius, radius + 1):
+			for rx in range(-radius, radius + 1):
+				var dist_sq = rx * rx + ry * ry
+				if dist_sq <= r2:
+					var tx = x + rx
+					var ty = y + ry
+					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+						var raw_id = cells[ty * grid_width + tx]
+						var tid = raw_id & 0xFFFF
+						if tid > 0:
+							var t_tags = 0 if tid >= material_tags_raw.size() else material_tags_raw[tid]
+							if t_tags & SandboxMaterial.Tags.INVINCIBLE: continue
 							
-						if dist_sq < (r2 * 0.16):
-							_set_cell(tx, ty, 0)
-						else:
-							var prob = 0.5 - (float(dist_sq) / float(r2)) * 0.5
-							if _get_lut_rand() < prob:
-								var push_dist = 1.0 + _get_lut_rand() * 4.0
-								var len_f = sqrt(float(dist_sq))
-								if len_f == 0.0: len_f = 1.0
-								var nx = tx + int(float(rx) * push_dist / len_f)
-								var ny = ty + int(float(ry) * push_dist / len_f)
-								if nx >= 0 and nx < grid_width and ny >= 0 and ny < dynamic_grid_height:
-									if _get_cell(nx, ny) == 0:
-										_swap_cells(tx, ty, nx, ny)
-									else:
-										_set_cell(tx, ty, 0)
+							if t_tags & SandboxMaterial.Tags.EXPLOSIVE:
+								if tid == 7 or tid == 71 or tid == 72 or tid == 77 or tid == 19: continue
+								if tid == 18:
+									_set_cell(tx, ty, 19)
+									charge_array[ty * grid_width + tx] = (20 + int(_get_lut_rand() * 30)) | ignition_flags
 								else:
-									_set_cell(tx, ty, 0)
+									_set_cell(tx, ty, 7 if tid == 5 else 71)
+									charge_array[ty * grid_width + tx] = (25 + int(_get_lut_rand() * 20)) | ignition_flags
+								continue
+								
+							if dist_sq < (r2 * 0.16):
+								_set_cell(tx, ty, 0)
+							else:
+								if ignition_flags & (128 | EXP_VOLCANO):
+									# VOLCANO EFFECT
+									var prob = 0.5 - (float(dist_sq) / float(r2)) * 0.5
+									if _get_lut_rand() < prob:
+										var push_dist = 1.0 + _get_lut_rand() * 4.0
+										var len_f = sqrt(float(dist_sq))
+										if len_f == 0.0: len_f = 1.0
+										var nx = tx + int(float(rx) * push_dist / len_f)
+										var ny = ty + int(float(ry) * push_dist / len_f)
+										if nx >= 0 and nx < grid_width and ny >= 0 and ny < dynamic_grid_height:
+											if _get_cell(nx, ny) == 0:
+												_swap_cells(tx, ty, nx, ny)
+											else:
+												_set_cell(tx, ty, 0)
+										else:
+											_set_cell(tx, ty, 0)
+								else:
+									# CLASSIC EFFECT
+									var prob = 1.0 - (float(dist_sq) / float(r2))
+									if _get_lut_rand() < prob:
+										_set_cell(tx, ty, 0)
 									
-	# Standard sparks for visual satisfaction
-	var spark_count = 15 if is_heavy_load else 30
-	for _i in range(spark_count):
-		var ang = _get_lut_rand() * TAU
-		var s_dist = 2.0 + _get_lut_rand() * 5.0
-		var sx = x + int(cos(ang) * s_dist)
-		var sy = y + int(sin(ang) * s_dist)
-		if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
-			if _get_cell(sx, sy) == 0:
-				_set_cell(sx, sy, 43)
-				var deg = int(ang * 180.0 / PI)
-				if deg < 0: deg += 360
-				var dir_idx = int((deg + 112.5) / 45.0) % 8
-				charge_array[sy * grid_width + sx] = ((60 + int(_get_lut_rand() * 40)) << 3) | dir_idx
-				
-	# Add burning smoke for Lava explosions
-	for i in range(15):
+	# Dynamic sparks based on ignition_flags
+	var spark_id = -1
+	if ignition_flags & 128: spark_id = 43 # Electric sparks
+	elif ignition_flags & 64: spark_id = 44 # Acid splash
+	
+	if spark_id != -1:
+		var spark_count = 15 if is_heavy_load else 30
+		for _i in range(spark_count):
+			var ang = _get_lut_rand() * TAU
+			var s_dist = 2.0 + _get_lut_rand() * 5.0
+			var sx = x + int(cos(ang) * s_dist)
+			var sy = y + int(sin(ang) * s_dist)
+			if sx >= 0 and sx < grid_width and sy >= 0 and sy < dynamic_grid_height:
+				if _get_cell(sx, sy) == 0:
+					_set_cell(sx, sy, spark_id)
+					var deg = int(ang * 180.0 / PI)
+					if deg < 0: deg += 360
+					var dir_idx = int((deg + 112.5) / 45.0) % 8
+					charge_array[sy * grid_width + sx] = ((60 + int(_get_lut_rand() * 40)) << 3) | dir_idx
+
+	# Add burning smoke for Lava/Normal explosions
+	var smoke_count = 15
+	if ignition_flags & (128 | 64): smoke_count = 25 # More smoke for electric/acid
+	elif ignition_flags == 0: smoke_count = 8 # Less smoke for normal fire explosion
+	for i in range(smoke_count):
 		var smx = x + int(_get_lut_rand_range(-radius, radius)); var smy = y + int(_get_lut_rand_range(-radius, radius))
 		if smx >= 0 and smx < grid_width and smy >= 0 and smy < dynamic_grid_height:
 			if _get_cell(smx, smy) == 0: _set_cell(smx, smy, 15)

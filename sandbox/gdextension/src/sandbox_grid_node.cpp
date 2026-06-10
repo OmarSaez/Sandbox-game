@@ -133,11 +133,7 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 						if (t_id == 7 || t_id == 71 || t_id == 72 || t_id == 77 || t_id == 19) continue;
 						
 						if (t_id == 27 || t_id == 28 || t_id == 29) {
-							if (t_id == 27) {
-								set_cell(tx, ty, 29);
-								charge_ptr[t_idx] = 80 + (fast_rand() % 70);
-								charge_visual_ptr[t_idx] = 160;
-							}
+							// Do nothing to volcano elements directly in explosions
 						} else if (t_id == 18) {
 							set_cell(tx, ty, 19);
 							charge_ptr[t_idx] = (20 + (fast_rand() % 30)) | flags;
@@ -175,17 +171,26 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 					if (dist_sq < (radius * 0.4f) * (radius * 0.4f)) {
 						set_cell(tx, ty, 0);
 					} else {
-						float prob = 0.5f - ((float)dist_sq / (float)radius_sq) * 0.5f;
-						if ((fast_rand() % 100) < (prob * 100.0f)) {
-							float push_dist = 1.0f + (fast_rand() % 400) / 100.0f;
-							float len = sqrt((float)rx*rx + (float)ry*ry);
-							if (len == 0) len = 1;
-							int nx = tx + (int)(rx * push_dist / len);
-							int ny = ty + (int)(ry * push_dist / len);
-							if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-								if ((cells_ptr[ny * width + nx] & 0xFFFF) == 0) swap_cells(tx, ty, nx, ny);
-								else set_cell(tx, ty, 0);
-							} else {
+						if (flags & (128 | 1048576)) {
+							// VOLCANO EFFECT (Push out materials)
+							float prob = 0.5f - ((float)dist_sq / (float)radius_sq) * 0.5f;
+							if ((fast_rand() % 100) < (prob * 100.0f)) {
+								float push_dist = 1.0f + (fast_rand() % 400) / 100.0f;
+								float len = sqrt((float)rx*rx + (float)ry*ry);
+								if (len == 0) len = 1;
+								int nx = tx + (int)(rx * push_dist / len);
+								int ny = ty + (int)(ry * push_dist / len);
+								if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+									if ((cells_ptr[ny * width + nx] & 0xFFFF) == 0) swap_cells(tx, ty, nx, ny);
+									else set_cell(tx, ty, 0);
+								} else {
+									set_cell(tx, ty, 0);
+								}
+							}
+						} else {
+							// CLASSIC EFFECT (Just clear empty spaces organically)
+							float prob = 1.0f - ((float)dist_sq / (float)radius_sq);
+							if ((fast_rand() % 100) < (prob * 100.0f)) {
 								set_cell(tx, ty, 0);
 							}
 						}
@@ -350,7 +355,224 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 				}
 			}
 
-			// EXPLOSIVE IGNITION (Fire, Acid)
+			// VOLCANO LOGIC (pure_id 27, 28, 29)
+			if (pure_id == 27 || pure_id == 28 || pure_id == 29) {
+				if (pure_id == 27) { // Static block
+					if (has_tag_neighbor(x, y, INCENDIARY) || charge_ptr[idx] > 10) {
+						if ((fast_rand() % 100) < 5) {
+							set_cell(x, y, 29); // Transform to ACTIVE BASE
+							charge_ptr[idx] = 80 + (fast_rand() % 71); // 80 to 150
+						} else {
+							charge_ptr[idx] += 1;
+							if ((fast_rand() % 100) < 25) { // Spread heat (increased slightly)
+								int nx = x + (fast_rand() % 3) - 1;
+								int ny = y + (fast_rand() % 3) - 1;
+								if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+									if ((cells_ptr[ny * width + nx] & 0xFFFF) == 27) {
+										charge_ptr[ny * width + nx] += 10;
+									}
+								}
+							}
+						}
+					}
+				} else if (pure_id == 29) { // Erupting Base
+					charge_ptr[idx] -= 1;
+					int current_charge = charge_ptr[idx];
+					
+					if ((fast_rand() % 100) < 25) { // Spread heat while erupting so the chain doesn't stop
+						int nx = x + (fast_rand() % 3) - 1;
+						int ny = y + (fast_rand() % 3) - 1;
+						if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+							if ((cells_ptr[ny * width + nx] & 0xFFFF) == 27) {
+								charge_ptr[ny * width + nx] += 10;
+							}
+						}
+					}
+					
+					if (current_charge % 35 == 0 && current_charge > 0) { // Slightly fewer rockets to reduce congestion
+						int tx = x + (fast_rand() % 3) - 1;
+						int ny = y - 1;
+						if (tx >= 0 && tx < width && ny >= 0 && ny < height) {
+							int n_id = cells_ptr[ny * width + tx] & 0xFFFF;
+							if (n_id != 13 && n_id != 26 && n_id != 5) {
+								int shot_count = current_charge / 35;
+								String sfx = (shot_count % 2 != 0) ? String("volcan_burst") : String("");
+								
+								// Push plug explosion
+								Array expl; expl.push_back(x); expl.push_back(ny); expl.push_back(2);
+								expl.push_back(sfx); expl.push_back(1048576); expl.push_back(false);
+								explosions_queue.push_back(expl);
+								execute_explosion(x, ny, 2, 1048576); // Actually do it in C++
+								
+								set_cell(tx, ny, 28);
+								// More fuel for rockets so they break through the mountain
+								charge_ptr[ny * width + tx] = -(150 + (fast_rand() % 100));
+							}
+						}
+					}
+					
+					if ((fast_rand() % 100) < 30) { // Smoke
+						int sx = x + (fast_rand() % 5) - 2;
+						int sy = y - 1;
+						if (sx >= 0 && sx < width && sy >= 0 && sy < height) {
+							if ((cells_ptr[sy * width + sx] & 0xFFFF) == 0) set_cell(sx, sy, 15);
+						}
+					}
+					
+					if ((fast_rand() % 100) < 15) { // Lava leak
+						int lx = x + (fast_rand() % 5) - 2;
+						int ly = y - 1;
+						if (lx >= 0 && lx < width && ly >= 0 && ly < height) {
+							if ((cells_ptr[ly * width + lx] & 0xFFFF) == 0) set_cell(lx, ly, 11);
+						}
+					}
+					
+					if (current_charge <= 0) {
+						if ((fast_rand() % 100) < 20) {
+							Array expl; expl.push_back(x); expl.push_back(y); expl.push_back(10);
+							expl.push_back(String("volcan_burst")); expl.push_back(1048576); expl.push_back(false);
+							explosions_queue.push_back(expl);
+							set_cell(x, y, 0);
+							execute_explosion(x, y, 10, 1048576);
+						} else {
+							set_cell(x, y, 0); // Just vanish quietly
+						}
+						
+						// Burnout cluster (generate lava AFTER explosion so it survives)
+						for(int dy = -5; dy <= 5; dy++) {
+							for(int dx = -5; dx <= 5; dx++) {
+								if (dx*dx + dy*dy <= 25) {
+									int cx = x + dx; int cy = y + dy;
+									if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+										int cnid = cells_ptr[cy * width + cx] & 0xFFFF;
+										if (cnid == 0 || cnid == 27 || cnid == 29) {
+											set_cell(cx, cy, 11);
+										}
+									}
+								}
+							}
+						}
+						destroyed = true;
+					}
+				} else if (pure_id == 28) { // Ascending projectile
+					int current_fuel = charge_ptr[idx];
+					if (current_fuel < 0) { // Moved here this frame
+						charge_ptr[idx] = -current_fuel; // Make positive for next frame
+						goto interaction_done;
+					}
+					
+					if (current_fuel <= 0) {
+						for(int dy = -6; dy <= 6; dy++) {
+							for(int dx = -6; dx <= 6; dx++) {
+								int cx = x + dx; int cy = y + dy;
+								if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+									int cnid = cells_ptr[cy * width + cx] & 0xFFFF;
+									if (cnid == 0 || cnid == 27 || cnid == 29) {
+										if (dx*dx + dy*dy <= 16) set_cell(cx, cy, 15);
+										else if (dx*dx + dy*dy <= 36) set_cell(cx, cy, 11);
+									}
+								}
+							}
+						}
+						Array expl; expl.push_back(x); expl.push_back(y); expl.push_back(12);
+						expl.push_back(String("volcan_burst")); expl.push_back(1048576); expl.push_back(false);
+						explosions_queue.push_back(expl);
+						set_cell(x, y, 0);
+						execute_explosion(x, y, 12, 1048576);
+						destroyed = true; goto interaction_done;
+					}
+					
+					if (y < 5) {
+						set_cell(x, y, 11);
+						Array expl; expl.push_back(x); expl.push_back(y); expl.push_back(6);
+						expl.push_back(String("volcan_burst")); expl.push_back(1048576); expl.push_back(false);
+						explosions_queue.push_back(expl);
+						execute_explosion(x, y, 6, 1048576);
+						destroyed = true; goto interaction_done;
+					}
+					
+					int dxs[5] = {0, -1, 1, -1, 1};
+					int dys[5] = {-1, -1, -1, 0, 0};
+					bool moved = false;
+					
+					for(int d=0; d<5; d++) {
+						int tx = x + dxs[d];
+						int ty = y + dys[d];
+						if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
+							int nid = cells_ptr[ty * width + tx] & 0xFFFF;
+							if (nid == 28) continue;
+							
+							uint64_t n_tags = (nid > 0) ? mat_tags[nid] : 0;
+							if (nid == 0 || !(n_tags & (1ULL << 43))) { // INVINCIBLE
+								bool is_solid = (nid > 0 && nid != 11 && nid != 15 && nid != 3 && nid != 9 && nid != 27 && nid != 29);
+								if (is_solid) {
+									int break_chance = (dys[d] < 0) ? 2 : 1;
+									if ((fast_rand() % 100) >= break_chance) {
+										continue; // Just try next direction, don't lose fuel per bump!
+									}
+									current_fuel -= 5;
+									for(int cdy = -1; cdy <= 1; cdy++) {
+										for(int cdx = -1; cdx <= 1; cdx++) {
+											int cx = tx + cdx; int cy = ty + cdy;
+											if (cx >= 0 && cx < width && cy >= 0 && cy < height) {
+												int cid = cells_ptr[cy * width + cx] & 0xFFFF;
+												if (cid > 0 && cid != 28) {
+													uint64_t c_tags = mat_tags[cid];
+													if (!(c_tags & (1ULL << 43))) { // 1ULL << 43 is INVINCIBLE
+														int r = fast_rand() % 100;
+														if (r < 30) set_cell(cx, cy, 11);
+														else if (r < 50 && current_fuel < 60) set_cell(cx, cy, 15);
+														else set_cell(cx, cy, 0);
+													}
+												}
+											}
+										}
+									}
+								}
+								
+								int trail_id = 11;
+								if (current_fuel < 60 && (fast_rand() % 100) < 20) trail_id = 15;
+								set_cell(x, y, trail_id);
+								
+								set_cell(tx, ty, 28);
+								// Negative if moving up, so it doesn't get processed again this frame
+								int new_fuel = current_fuel - 1;
+								charge_ptr[ty * width + tx] = (ty < y) ? -new_fuel : new_fuel;
+								moved = true;
+								destroyed = true;
+								break;
+							}
+						}
+					}
+					
+					if (!moved) {
+						current_fuel -= 1;
+						charge_ptr[idx] = current_fuel;
+						if (current_fuel < 60 && current_fuel > 5 && (current_fuel % 20 == 0)) {
+							if ((fast_rand() % 100) < 15) {
+								for(int dy = -10; dy <= 10; dy++) {
+									for(int dx = -10; dx <= 10; dx++) {
+										int cx = x + dx; int cy = y + dy;
+										if (cx >= 0 && cx < width && cy >= 0 && cy < height && dx*dx + dy*dy <= 100) {
+											if ((cells_ptr[cy * width + cx] & 0xFFFF) == 0) set_cell(cx, cy, 11);
+										}
+									}
+								}
+								Array expl; expl.push_back(x); expl.push_back(y); expl.push_back(18);
+								expl.push_back(String("volcan_burst")); expl.push_back(1048576); expl.push_back(false);
+								explosions_queue.push_back(expl);
+								set_cell(x, y, 0);
+								execute_explosion(x, y, 18, 1048576);
+								destroyed = true; goto interaction_done;
+							}
+						}
+					}
+				}
+				
+				if (destroyed) goto interaction_done;
+				// Do not process generic explosive timer or flammable for Volcano blocks
+				goto interaction_done; 
+			}			// EXPLOSIVE IGNITION (Fire, Acid)
 			if ((t & EXPLOSIVE) && charge_ptr[idx] == 0) {
 				if (has_tag_neighbor(x, y, INCENDIARY) || has_tag_neighbor(x, y, ACID)) {
 					int32_t flags = 0;
@@ -374,6 +596,7 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 					expl.push_back(x);
 					expl.push_back(y);
 					int radius = is_gunpowder ? 8 : 12;
+					
 					expl.push_back(radius);
 					expl.push_back(String("explosion"));
 					expl.push_back(flags);
