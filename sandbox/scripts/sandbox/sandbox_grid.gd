@@ -14021,6 +14021,7 @@ func _add_save_slot_ui(container, slot_idx):
 	share_btn.add_theme_font_size_override("font_size", 20 * s)
 	share_btn.add_theme_font_override("font", _get_safe_font())
 	share_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	share_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	share_btn.disabled = not slot_data.has("name")
 	share_btn.pressed.connect(func(): _on_share_pressed(slot_idx, lbl_name.text))
 	share_hbox.add_child(share_btn)
@@ -14031,6 +14032,7 @@ func _add_save_slot_ui(container, slot_idx):
 	import_btn.add_theme_font_size_override("font_size", 20 * s)
 	import_btn.add_theme_font_override("font", _get_safe_font())
 	import_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	import_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	import_btn.pressed.connect(func(): _on_import_pressed(slot_idx))
 	share_hbox.add_child(import_btn)
 
@@ -14043,6 +14045,7 @@ func _add_save_slot_ui(container, slot_idx):
 	save_btn.add_theme_font_size_override("font_size", 20 * s)
 	save_btn.add_theme_font_override("font", _get_safe_font())
 	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	save_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	save_btn.pressed.connect(func(): _confirm_save(slot_idx, lbl_name.text))
 	btn_hbox.add_child(save_btn)
 	
@@ -14053,6 +14056,7 @@ func _add_save_slot_ui(container, slot_idx):
 		load_btn.add_theme_font_size_override("font_size", 20 * s)
 		load_btn.add_theme_font_override("font", _get_safe_font())
 		load_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		load_btn.mouse_filter = Control.MOUSE_FILTER_PASS
 		load_btn.pressed.connect(func(): _confirm_load(slot_idx, lbl_name.text))
 		btn_hbox.add_child(load_btn)
 
