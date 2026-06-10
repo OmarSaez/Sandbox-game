@@ -546,6 +546,7 @@ var is_phase_block_updating: bool = false
 var is_phase_block_tutorial_done: bool = false
 var phase_block_tutorial_bubble: PanelContainer = null
 var is_logic_gate_tutorial_done: bool = false
+var is_grid_tutorial_done: bool = false
 var logic_gate_tutorial_bubble: PanelContainer = null
 var is_zoom_tutorial_done: bool = false
 var zoom_tutorial_bubble: PanelContainer = null
@@ -902,6 +903,7 @@ func _save_tool_settings():
 		"is_muted": is_muted,
 		"current_language": current_language,
 		"is_logic_gate_tutorial_done": is_logic_gate_tutorial_done,
+		"is_grid_tutorial_done": is_grid_tutorial_done,
 		"is_phase_block_tutorial_done": is_phase_block_tutorial_done,
 		"is_zoom_tutorial_done": is_zoom_tutorial_done,
 		"is_cannon_tutorial_done": is_cannon_tutorial_done,
@@ -928,6 +930,8 @@ func _load_tool_settings():
 					TranslationServer.set_locale(current_language)
 				if dict.has("is_logic_gate_tutorial_done"):
 					is_logic_gate_tutorial_done = dict["is_logic_gate_tutorial_done"]
+				if dict.has("is_grid_tutorial_done"):
+					is_grid_tutorial_done = dict["is_grid_tutorial_done"]
 				if dict.has("is_phase_block_tutorial_done"):
 					is_phase_block_tutorial_done = dict["is_phase_block_tutorial_done"]
 				if dict.has("is_zoom_tutorial_done"):
@@ -3765,7 +3769,6 @@ func _setup_lab_ui():
 	lab_btn.pressed.connect(func(): 
 		_toggle_category_panel(lab_panel)
 		if is_instance_valid(lab_panel) and lab_panel.visible:
-			_show_menu_reminder("lab", lab_panel.get_child(0), "TUTORIAL_STEP_3")
 			if not is_lab_tutorial_done and is_lab_unlocked:
 				lab_tutorial_step = 1
 				lab_custom_data[0]["grav"] = -1
@@ -4217,6 +4220,20 @@ func _toggle_category_panel(target_panel: Control):
 			is_paint_tool_active = true
 	
 	_update_menu_highlights()
+	
+	var any_visible = false
+	if is_instance_valid(tools_panel) and tools_panel.visible: any_visible = true
+	if is_instance_valid(disaster_panel) and disaster_panel.visible: any_visible = true
+	if is_instance_valid(npc_panel) and npc_panel.visible: any_visible = true
+	if is_instance_valid(paint_panel) and paint_panel.visible: any_visible = true
+	if is_instance_valid(achievement_panel) and achievement_panel.visible: any_visible = true
+	if is_instance_valid(lab_panel) and lab_panel.visible: any_visible = true
+	if is_instance_valid(save_panel) and save_panel.visible: any_visible = true
+	
+	if not any_visible and force_grid_visible and not is_grid_tutorial_done:
+		_show_grid_tutorial_bubble()
+		is_grid_tutorial_done = true
+		_save_tool_settings()
 
 func _on_tools_btn_pressed():
 	_toggle_category_panel(tools_panel)
@@ -5788,6 +5805,11 @@ func _process(delta):
 				if is_instance_valid(achievement_panel) and achievement_panel.visible: achievement_panel.visible = false
 				if is_instance_valid(save_panel): save_panel.queue_free()
 				if is_instance_valid(cannon_settings_panel): cannon_settings_panel.queue_free()
+				
+				if force_grid_visible and not is_grid_tutorial_done:
+					_show_grid_tutorial_bubble()
+					is_grid_tutorial_done = true
+					_save_tool_settings()
 
 		# DRAW LOGIC (Only if touch session started on Sandbox, current position is Sandbox, and NOT in selection mode)
 		# 4. DRAWING & TOOLS BLOCK (If controlling an NPC or selecting one)
@@ -12383,7 +12405,7 @@ func _place_piston(gx: int, gy: int):
 		var p = active_pistons[existing_idx]
 		
 		# 1. Erase old piston shape (base + head + any extension)
-		var base_mat_to_erase = 193 if p.get("is_insulated", false) else 93
+		var _base_mat_to_erase = 193 if p.get("is_insulated", false) else 93
 		var base_pix_erase = _get_piston_base_pixels(p)
 		for pix in base_pix_erase:
 			_set_cell(pix.x, pix.y, 0)
@@ -12398,18 +12420,17 @@ func _place_piston(gx: int, gy: int):
 		# 2. Update orientation
 		p.orientation = (p.get("orientation", 0) + 1) % 4
 		p.current_ext = 0.0
-		# Removed p.target_ext = selected_piston_length to preserve original custom length
 		
 		# 3. Draw new piston shape
-		var base_mat_new = 193 if p.get("is_insulated", false) else 93
-		var head_mat_new = 194 if p.get("is_insulated", false) else 94
+		var b_mat_new = 193 if p.get("is_insulated", false) else 93
+		var h_mat_new = 194 if p.get("is_insulated", false) else 94
 		var base_pix = _get_piston_base_pixels(p)
 		for pix in base_pix:
-			_set_cell(pix.x, pix.y, base_mat_new)
+			_set_cell(pix.x, pix.y, b_mat_new)
 		@warning_ignore("confusable_local_declaration")
 		var head_pix = _get_piston_head_pixels(p, 0)
 		for pix in head_pix:
-			_set_cell(pix.x, pix.y, head_mat_new)
+			_set_cell(pix.x, pix.y, h_mat_new)
 			
 		_play_action_sound("ui_click")
 		return
@@ -12767,7 +12788,7 @@ func _simulate_pistons():
 	
 	# NPC Push logic (Needs to be done in GDScript since NPCs are nodes/complex objects)
 	for i in range(active_pistons.size()):
-		var p_old = active_pistons[i]
+		var _p_old = active_pistons[i]
 		if i >= new_pistons.size(): break # In case it was deleted
 		var p_new = new_pistons[i]
 		
@@ -12928,6 +12949,21 @@ func _show_logic_gate_tutorial_bubble(grid_pos: Vector2i):
 		Color(0.25, 0.45, 0.85, 0.95),
 		200.0
 	)
+
+func _show_grid_tutorial_bubble():
+	var bubble = _show_unified_tutorial_bubble(
+		Vector2i.ZERO,
+		"tut_grid",
+		func(): pass,
+		Color(0.25, 0.45, 0.85, 0.95),
+		200.0
+	)
+	if is_instance_valid(bubble):
+		var s = _get_ui_scale()
+		var screen_size = get_viewport_rect().size
+		# Force position to center of screen since it's a general tip
+		bubble.position = Vector2(screen_size.x / 2.0 - (160 * s), screen_size.y / 2.0 - (100 * s))
+
 
 func _show_unified_tutorial_bubble(_grid_pos: Vector2i, text_key: String, on_got_it: Callable, border_color: Color, bubble_h_unscaled: float) -> PanelContainer:
 	if is_instance_valid(logic_gate_tutorial_bubble):
