@@ -1,11 +1,11 @@
 {
-  "latest_version": "1.2.0",
+  "latest_version": "1.2.1",
   "min_version": "1.2.0",
   "update_url": "https://play.google.com/store/apps/details?id=com.sandbox.elexstudio",
-  "changelog_es": "¡Nuevas características! Añadidos: Magos, Mecanismos, Circuitos, Botones, Puertas, Pistones, Puertas lógicas, Nuevos materiales y optimización de rendimiento.",
-  "changelog_en": "New features! Added: Wizards, Mechanisms, Circuits, Buttons, Doors, Pistons, Logic Gates, New materials, and performance optimization.",
-  "changelog_it": "Nuove funzionalità! Aggiunti: Maghi, Meccanismi, Circuiti, Pulsanti, Porte, Pistoni, Porte logiche, Nuovi materiali e ottimizzazione delle prestazioni.",
-  "changelog_fr": "Nouvelles fonctionnalités ! Ajoutés : Magiciens, Mécanismes, Circuits, Boutons, Portes, Pistons, Portes logiques, Nouveaux matériaux et optimisation des performances.",
-  "changelog_de": "Neue Funktionen! Hinzugefügt: Magier, Mechanismen, Schaltkreise, Knöpfe, Türen, Kolben, Logikgatter, Neue Materialien und Leistungsoptimierung.",
-  "changelog_pt": "Novos recursos! Adicionados: Magos, Mecanismos, Circuitos, Botões, Portas, Pistões, Portas lógicas, Novos materiais e otimização de desempenho."
+  "changelog_es": "¡Nuevas características! Mejora brutal de rendimiento y agregadado de piston que no conduce electricidad.",
+  "changelog_en": "New features! Performance awesome improvements and added pistons that don't conduct electricity.",
+  "changelog_it": "Nuove funzionalità! Miglioramenti delle prestazioni e aggiunta di pistoni che non conducono elettricità.",
+  "changelog_fr": "Nouvelles fonctionnalités ! Améliorations des performances et ajout de pistons qui ne conduisent pas l'électricité.",
+  "changelog_de": "Neue Funktionen! Leistungsverbesserungen und hinzugefügte Kolben, die keine Elektrizität leiten.",
+  "changelog_pt": "Novos recursos! Melhorias incrível de desempenho e adição de pistões que não conduzem eletricidade."
 }
