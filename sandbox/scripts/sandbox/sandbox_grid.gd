@@ -16417,24 +16417,12 @@ func _update_pipe_visuals(p):
 			if i < L - 1:
 				next_pt = path[i + 1]
 			else:
-				var side = _find_pipe_endpoint_opening_side(p, i)
-				var ejection_dir = Vector2i(0, 0)
-				if side == "bottom" or side == "horizontal": ejection_dir = Vector2i(0, 1)
-				elif side == "top": ejection_dir = Vector2i(0, -1)
-				elif side == "left": ejection_dir = Vector2i(-1, 0)
-				elif side == "right": ejection_dir = Vector2i(1, 0)
-				next_pt = pt + ejection_dir * 4
+				next_pt = pt
 		elif flow_dir == -1:
 			if i > 0:
 				next_pt = path[i - 1]
 			else:
-				var side = _find_pipe_endpoint_opening_side(p, i)
-				var ejection_dir = Vector2i(0, 0)
-				if side == "bottom" or side == "horizontal": ejection_dir = Vector2i(0, 1)
-				elif side == "top": ejection_dir = Vector2i(0, -1)
-				elif side == "left": ejection_dir = Vector2i(-1, 0)
-				elif side == "right": ejection_dir = Vector2i(1, 0)
-				next_pt = pt + ejection_dir * 4
+				next_pt = pt
 				
 		var offset = Vector2i(0, 0)
 		if flow_dir != 0:
@@ -16562,7 +16550,7 @@ func _update_pipe_x2_visuals(p):
 				elif side == "top": ejection_dir = Vector2i(0, -1)
 				elif side == "left": ejection_dir = Vector2i(-1, 0)
 				elif side == "right": ejection_dir = Vector2i(1, 0)
-				next_pt = pt + ejection_dir * 8
+				next_pt = pt
 		elif flow_dir == -1:
 			if i > 0:
 				next_pt = path[i - 1]
@@ -16573,7 +16561,7 @@ func _update_pipe_x2_visuals(p):
 				elif side == "top": ejection_dir = Vector2i(0, -1)
 				elif side == "left": ejection_dir = Vector2i(-1, 0)
 				elif side == "right": ejection_dir = Vector2i(1, 0)
-				next_pt = pt + ejection_dir * 8
+				next_pt = pt
 				
 		var offset = Vector2i(0, 0)
 		if flow_dir != 0:
@@ -16915,45 +16903,49 @@ func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i
 	var offsets = [2, 3, 4, 5]
 	
 	if side == "left":
-		for oy in offsets:
-			var tx = gx - 1
-			var ty = gy + oy
-			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-				var mat = _get_cell(tx, ty)
-				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
-					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
-					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
-						return Vector2i(tx, ty)
+		for ox in [1, 2]:
+			for oy in offsets:
+				var tx = gx - ox
+				var ty = gy + oy
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					var mat = _get_cell(tx, ty)
+					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
+						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+							return Vector2i(tx, ty)
 	elif side == "right":
-		for oy in offsets:
-			var tx = gx + 8
-			var ty = gy + oy
-			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-				var mat = _get_cell(tx, ty)
-				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
-					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
-					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
-						return Vector2i(tx, ty)
+		for ox in [8, 9]:
+			for oy in offsets:
+				var tx = gx + ox
+				var ty = gy + oy
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					var mat = _get_cell(tx, ty)
+					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
+						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+							return Vector2i(tx, ty)
 	elif side == "top" or side == "horizontal":
-		for ox in offsets:
-			var tx = gx + ox
-			var ty = gy - 1
-			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-				var mat = _get_cell(tx, ty)
-				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
-					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
-					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
-						return Vector2i(tx, ty)
+		for oy in [1, 2]:
+			for ox in offsets:
+				var tx = gx + ox
+				var ty = gy - oy
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					var mat = _get_cell(tx, ty)
+					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
+						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+							return Vector2i(tx, ty)
 	elif side == "bottom":
-		for ox in offsets:
-			var tx = gx + ox
-			var ty = gy + 8
-			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-				var mat = _get_cell(tx, ty)
-				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
-					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
-					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
-						return Vector2i(tx, ty)
+		for oy in [8, 9]:
+			for ox in offsets:
+				var tx = gx + ox
+				var ty = gy + oy
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					var mat = _get_cell(tx, ty)
+					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
+						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+							return Vector2i(tx, ty)
 	return Vector2i(-1, -1)
 
 func _find_pipe_x2_ejection_cell_at_endpoint(p, endpoint_idx: int, preferred_lane: int = 2) -> Vector2i:
@@ -16970,33 +16962,37 @@ func _find_pipe_x2_ejection_cell_at_endpoint(p, endpoint_idx: int, preferred_lan
 		offsets = [4, 3, 5, 2]
 			
 	if side == "bottom" or side == "horizontal":
-		for ox in offsets:
-			var tx = gx + ox
-			var ty = gy + 8
-			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-				if _get_cell(tx, ty) == 0:
-					return Vector2i(tx, ty)
+		for dy in [8, 9]:
+			for ox in offsets:
+				var tx = gx + ox
+				var ty = gy + dy
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					if _get_cell(tx, ty) == 0:
+						return Vector2i(tx, ty)
 	if side == "top":
-		for ox in offsets:
-			var tx = gx + ox
-			var ty = gy - 1
-			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-				if _get_cell(tx, ty) == 0:
-					return Vector2i(tx, ty)
+		for dy in [1, 2]:
+			for ox in offsets:
+				var tx = gx + ox
+				var ty = gy - dy
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					if _get_cell(tx, ty) == 0:
+						return Vector2i(tx, ty)
 	if side == "left" or side == "horizontal":
-		for oy in offsets:
-			var tx = gx - 1
-			var ty = gy + oy
-			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-				if _get_cell(tx, ty) == 0:
-					return Vector2i(tx, ty)
+		for dx in [1, 2]:
+			for oy in offsets:
+				var tx = gx - dx
+				var ty = gy + oy
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					if _get_cell(tx, ty) == 0:
+						return Vector2i(tx, ty)
 	if side == "right" or side == "horizontal":
-		for oy in offsets:
-			var tx = gx + 8
-			var ty = gy + oy
-			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-				if _get_cell(tx, ty) == 0:
-					return Vector2i(tx, ty)
+		for dx in [8, 9]:
+			for oy in offsets:
+				var tx = gx + dx
+				var ty = gy + oy
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					if _get_cell(tx, ty) == 0:
+						return Vector2i(tx, ty)
 	return Vector2i(-1, -1)
 
 func _simulate_pipes(_delta: float):
