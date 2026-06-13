@@ -16449,13 +16449,19 @@ func _update_pipe_visuals(p):
 				var cx = count % 4
 				var cy = count / 4
 				if is_horizontal:
-					var tx = gx + cx + offset.x
-					var ty = gy + 1 + cy + offset.y
+					var raw_tx = gx + cx + offset.x
+					if flow_dir == -1: raw_tx = gx + 3 - cx + offset.x
+					var raw_ty = gy + 1 + cy + offset.y
+					var tx = clamp(raw_tx, gx + 1, gx + 2)
+					var ty = clamp(raw_ty, gy + 1, gy + 2)
 					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 						if _get_cell(tx, ty) != 96: _set_cell(tx, ty, mat)
 				else:
-					var tx = gx + 1 + cy + offset.x
-					var ty = gy + cx + offset.y
+					var raw_ty = gy + cx + offset.y
+					if flow_dir == -1: raw_ty = gy + 3 - cx + offset.y
+					var raw_tx = gx + 1 + cy + offset.x
+					var ty = clamp(raw_ty, gy + 1, gy + 2)
+					var tx = clamp(raw_tx, gx + 1, gx + 2)
 					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 						if _get_cell(tx, ty) != 96: _set_cell(tx, ty, mat)
 			count += 1
@@ -16594,37 +16600,33 @@ func _update_pipe_x2_visuals(p):
 				int(round(float(diff.y) / 10.0 * float(phase)))
 			)
 			
-		var lane_counts = {}
+		var count = 0
 		for elem in block_elems:
 			var mat = elem.mat
 			if mat > 0:
-				var lane = elem.get("lane", 2)
-				if not (lane in [2, 3, 4, 5]):
-					lane = 2
-					
-				var count = lane_counts.get(lane, 0)
-				lane_counts[lane] = count + 1
+				var cx = count % 8
+				var cy = count / 8
 				
-				var px = 2
-				var py = 2
+				var tx = gx
+				var ty = gy
 				
 				if is_horizontal:
-					py = lane
 					if flow_dir == -1:
-						px = count % 8
+						tx = clamp(tx + cx + offset.x, gx + 2, gx + 5)
 					else:
-						px = 7 - (count % 8)
+						tx = clamp(tx + 7 - cx + offset.x, gx + 2, gx + 5)
+					ty = clamp(ty + 2 + cy + offset.y, gy + 2, gy + 5)
 				else:
-					px = lane
 					if flow_dir == -1:
-						py = count % 8
+						ty = clamp(ty + cx + offset.y, gy + 2, gy + 5)
 					else:
-						py = 7 - (count % 8)
-						
-				var tx = gx + px + offset.x
-				var ty = gy + py + offset.y
+						ty = clamp(ty + 7 - cx + offset.y, gy + 2, gy + 5)
+					tx = clamp(tx + 2 + cy + offset.x, gx + 2, gx + 5)
+					
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					if _get_cell(tx, ty) != 97: _set_cell(tx, ty, mat)
+				
+				count += 1
 
 func _find_pipe_x2_endpoint_opening_side(p, endpoint_idx: int) -> String:
 	var path = p.path
