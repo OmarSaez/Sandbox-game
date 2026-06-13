@@ -16307,7 +16307,7 @@ func _update_pipe_visuals(p):
 	var path = p.path
 	var L = path.size()
 	
-	var phase = _frame_count % 4
+	var phase = _frame_count % 10
 	var flow_dir = p.get("flow_dir", 0)
 	
 	is_hollowing_pipe = true
@@ -16428,21 +16428,44 @@ func _update_pipe_visuals(p):
 		if flow_dir != 0:
 			var diff = next_pt - pt
 			offset = Vector2i(
-				int(round(float(diff.x) / 4.0 * float(phase))),
-				int(round(float(diff.y) / 4.0 * float(phase)))
+				int(round(float(diff.x) / 10.0 * float(phase))),
+				int(round(float(diff.y) / 10.0 * float(phase)))
 			)
 			
-		# Write material cells with offset
-		if c0 > 0: _set_cell(gx + 1 + offset.x, gy + 1 + offset.y, c0)
-		if c1 > 0: _set_cell(gx + 2 + offset.x, gy + 1 + offset.y, c1)
-		if c2 > 0: _set_cell(gx + 1 + offset.x, gy + 2 + offset.y, c2)
-		if c3 > 0: _set_cell(gx + 2 + offset.x, gy + 2 + offset.y, c3)
+		var is_horizontal = false
+		if i > 0:
+			var prev = path[i - 1]
+			if prev.x != pt.x: is_horizontal = true
+		elif i < L - 1:
+			var next = path[i + 1]
+			if next.x != pt.x: is_horizontal = true
+		else:
+			is_horizontal = true
+			
+		var count = 0
+		for elem in elems:
+			var mat = elem.mat
+			if mat > 0:
+				var cx = count % 4
+				var cy = count / 4
+				if is_horizontal:
+					var tx = gx + cx + offset.x
+					var ty = gy + 1 + cy + offset.y
+					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+						if _get_cell(tx, ty) != 96: _set_cell(tx, ty, mat)
+				else:
+					var tx = gx + 1 + cy + offset.x
+					var ty = gy + cx + offset.y
+					if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+						if _get_cell(tx, ty) != 96: _set_cell(tx, ty, mat)
+			count += 1
+
 
 func _update_pipe_x2_visuals(p):
 	var path = p.path
 	var L = path.size()
 	
-	var phase = _frame_count % 4
+	var phase = _frame_count % 10
 	var flow_dir = p.get("flow_dir", 0)
 	
 	# First pass: draw static structures (walls and cores set to 0)
@@ -16545,30 +16568,30 @@ func _update_pipe_x2_visuals(p):
 				next_pt = path[i + 1]
 			else:
 				var side = _find_pipe_x2_endpoint_opening_side(p, i)
-				var ejection_dir = Vector2i(0, 0)
-				if side == "bottom" or side == "horizontal": ejection_dir = Vector2i(0, 1)
-				elif side == "top": ejection_dir = Vector2i(0, -1)
-				elif side == "left": ejection_dir = Vector2i(-1, 0)
-				elif side == "right": ejection_dir = Vector2i(1, 0)
+				var _ejection_dir = Vector2i(0, 0)
+				if side == "bottom" or side == "horizontal": _ejection_dir = Vector2i(0, 1)
+				elif side == "top": _ejection_dir = Vector2i(0, -1)
+				elif side == "left": _ejection_dir = Vector2i(-1, 0)
+				elif side == "right": _ejection_dir = Vector2i(1, 0)
 				next_pt = pt
 		elif flow_dir == -1:
 			if i > 0:
 				next_pt = path[i - 1]
 			else:
 				var side = _find_pipe_x2_endpoint_opening_side(p, i)
-				var ejection_dir = Vector2i(0, 0)
-				if side == "bottom" or side == "horizontal": ejection_dir = Vector2i(0, 1)
-				elif side == "top": ejection_dir = Vector2i(0, -1)
-				elif side == "left": ejection_dir = Vector2i(-1, 0)
-				elif side == "right": ejection_dir = Vector2i(1, 0)
+				var _ejection_dir = Vector2i(0, 0)
+				if side == "bottom" or side == "horizontal": _ejection_dir = Vector2i(0, 1)
+				elif side == "top": _ejection_dir = Vector2i(0, -1)
+				elif side == "left": _ejection_dir = Vector2i(-1, 0)
+				elif side == "right": _ejection_dir = Vector2i(1, 0)
 				next_pt = pt
 				
 		var offset = Vector2i(0, 0)
 		if flow_dir != 0:
 			var diff = next_pt - pt
 			offset = Vector2i(
-				int(round(float(diff.x) / 4.0 * float(phase))),
-				int(round(float(diff.y) / 4.0 * float(phase)))
+				int(round(float(diff.x) / 10.0 * float(phase))),
+				int(round(float(diff.y) / 10.0 * float(phase)))
 			)
 			
 		var lane_counts = {}
@@ -16690,7 +16713,7 @@ func _try_absorb_npc_at_endpoint(p, endpoint_idx: int, dir: int, is_x2: bool) ->
 			var debris = [11, 14, 13] # Lava (Red), Carbon (Dark), Acid (Green)
 			for mat in debris:
 				if is_x2:
-					if p.elements[endpoint_idx].size() < 8:
+					if p.elements[endpoint_idx].size() < 32:
 						p.elements[endpoint_idx].append({ "mat": mat, "dir": dir, "lane": 2 })
 				else:
 					if p.elements[endpoint_idx].size() < 4:
@@ -16815,45 +16838,49 @@ func _find_pipe_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 	var side = _find_pipe_endpoint_opening_side(p, endpoint_idx)
 	
 	if side == "left":
-		for oy in range(4):
-			var tx = gx - 1
-			var ty = gy + oy
-			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-				var mat = _get_cell(tx, ty)
-				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
-					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
-					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
-						return Vector2i(tx, ty)
+		for d in range(1, 5):
+			for oy in range(4):
+				var tx = gx - d
+				var ty = gy + oy
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					var mat = _get_cell(tx, ty)
+					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
+						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+							return Vector2i(tx, ty)
 	elif side == "right":
-		for oy in range(4):
-			var tx = gx + 4
-			var ty = gy + oy
-			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-				var mat = _get_cell(tx, ty)
-				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
-					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
-					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
-						return Vector2i(tx, ty)
+		for d in range(0, 4):
+			for oy in range(4):
+				var tx = gx + 4 + d
+				var ty = gy + oy
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					var mat = _get_cell(tx, ty)
+					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
+						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+							return Vector2i(tx, ty)
 	elif side == "top" or side == "horizontal":
-		for ox in range(4):
-			var tx = gx + ox
-			var ty = gy - 1
-			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-				var mat = _get_cell(tx, ty)
-				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
-					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
-					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
-						return Vector2i(tx, ty)
+		for d in range(1, 5):
+			for ox in range(4):
+				var tx = gx + ox
+				var ty = gy - d
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					var mat = _get_cell(tx, ty)
+					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
+						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+							return Vector2i(tx, ty)
 	elif side == "bottom":
-		for ox in range(4):
-			var tx = gx + ox
-			var ty = gy + 4
-			if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-				var mat = _get_cell(tx, ty)
-				if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
-					var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
-					if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
-						return Vector2i(tx, ty)
+		for d in range(0, 4):
+			for ox in range(4):
+				var tx = gx + ox
+				var ty = gy + 4 + d
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					var mat = _get_cell(tx, ty)
+					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
+						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
+							return Vector2i(tx, ty)
 	return Vector2i(-1, -1)
 
 func _find_pipe_ejection_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
@@ -16903,46 +16930,46 @@ func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i
 	var offsets = [2, 3, 4, 5]
 	
 	if side == "left":
-		for ox in [1, 2]:
+		for ox in range(1, 9):
 			for oy in offsets:
 				var tx = gx - ox
 				var ty = gy + oy
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var mat = _get_cell(tx, ty)
-					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
+					if mat > 0 and not _is_cannon_base_material(mat) and mat != 97:
 						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 							return Vector2i(tx, ty)
 	elif side == "right":
-		for ox in [8, 9]:
+		for ox in range(8, 16):
 			for oy in offsets:
 				var tx = gx + ox
 				var ty = gy + oy
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var mat = _get_cell(tx, ty)
-					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
+					if mat > 0 and not _is_cannon_base_material(mat) and mat != 97:
 						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 							return Vector2i(tx, ty)
 	elif side == "top" or side == "horizontal":
-		for oy in [1, 2]:
+		for oy in range(1, 9):
 			for ox in offsets:
 				var tx = gx + ox
 				var ty = gy - oy
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var mat = _get_cell(tx, ty)
-					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
+					if mat > 0 and not _is_cannon_base_material(mat) and mat != 97:
 						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 							return Vector2i(tx, ty)
 	elif side == "bottom":
-		for oy in [8, 9]:
+		for oy in range(8, 16):
 			for ox in offsets:
 				var tx = gx + ox
 				var ty = gy + oy
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var mat = _get_cell(tx, ty)
-					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96 and mat != 97:
+					if mat > 0 and not _is_cannon_base_material(mat) and mat != 97:
 						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
 						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 							return Vector2i(tx, ty)
@@ -16996,9 +17023,10 @@ func _find_pipe_x2_ejection_cell_at_endpoint(p, endpoint_idx: int, preferred_lan
 	return Vector2i(-1, -1)
 
 func _simulate_pipes(_delta: float):
+	if _frame_count % 10 != 0: return
 	if active_pipes.size() == 0 and active_pipes_x2.size() == 0: return
 	
-	if _frame_count % 4 == 0:
+	if true:
 		for p in active_pipes:
 			var path = p.get("path", [])
 			var L = path.size()
@@ -17065,20 +17093,22 @@ func _simulate_pipes(_delta: float):
 					var cur_elems = p.elements[i]
 					var next_cur = []
 					for elem in cur_elems:
-						if p.elements[i+1].size() < 4:
+						if p.elements[i+1].size() < 8:
 							p.elements[i+1].append(elem)
 						else:
 							next_cur.append(elem)
 					p.elements[i] = next_cur
 					
 				# Absorb at start (0)
-				if p.elements[0].size() < 4:
+				while p.elements[0].size() < 8:
 					if not _try_absorb_npc_at_endpoint(p, 0, 1, false):
 						var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, 0)
 						if absorb_pos.x != -1:
 							var mat = _get_cell(absorb_pos.x, absorb_pos.y)
 							_set_cell(absorb_pos.x, absorb_pos.y, 0)
 							p.elements[0].append({ "mat": mat, "dir": 1 })
+						else:
+							break
 						
 			elif flow_dir == -1:
 				# --- BACKWARD SIMULATION (end_idx -> 0) ---
@@ -17110,20 +17140,22 @@ func _simulate_pipes(_delta: float):
 					var cur_elems = p.elements[i]
 					var next_cur = []
 					for elem in cur_elems:
-						if p.elements[i-1].size() < 4:
+						if p.elements[i-1].size() < 8:
 							p.elements[i-1].append(elem)
 						else:
 							next_cur.append(elem)
 					p.elements[i] = next_cur
 					
 				# Absorb at end
-				if p.elements[end_idx].size() < 4:
+				while p.elements[end_idx].size() < 8:
 					if not _try_absorb_npc_at_endpoint(p, end_idx, -1, false):
 						var absorb_pos = _find_pipe_absorbable_cell_at_endpoint(p, end_idx)
 						if absorb_pos.x != -1:
 							var mat = _get_cell(absorb_pos.x, absorb_pos.y)
 							_set_cell(absorb_pos.x, absorb_pos.y, 0)
 							p.elements[end_idx].append({ "mat": mat, "dir": -1 })
+						else:
+							break
 
 		for p in active_pipes_x2:
 			var path = p.get("path", [])
@@ -17183,14 +17215,14 @@ func _simulate_pipes(_delta: float):
 					var cur_elems = p.elements[i]
 					var next_cur = []
 					for elem in cur_elems:
-						if p.elements[i+1].size() < 8:
+						if p.elements[i+1].size() < 32:
 							p.elements[i+1].append(elem)
 						else:
 							next_cur.append(elem)
 					p.elements[i] = next_cur
 					
 				# Absorb at start (0)
-				while p.elements[0].size() < 8:
+				while p.elements[0].size() < 32:
 					if _try_absorb_npc_at_endpoint(p, 0, 1, true):
 						continue
 					var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, 0)
@@ -17227,14 +17259,14 @@ func _simulate_pipes(_delta: float):
 					var cur_elems = p.elements[i]
 					var next_cur = []
 					for elem in cur_elems:
-						if p.elements[i-1].size() < 8:
+						if p.elements[i-1].size() < 32:
 							p.elements[i-1].append(elem)
 						else:
 							next_cur.append(elem)
 					p.elements[i] = next_cur
 					
 				# Absorb at end
-				while p.elements[end_idx].size() < 8:
+				while p.elements[end_idx].size() < 32:
 					if _try_absorb_npc_at_endpoint(p, end_idx, -1, true):
 						continue
 					var absorb_pos = _find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx)
