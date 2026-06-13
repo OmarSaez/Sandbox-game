@@ -16611,17 +16611,20 @@ func _update_pipe_x2_visuals(p):
 				if is_horizontal:
 					py = lane
 					if flow_dir == -1:
-						px = clamp(2 + count, 2, 5)
+						px = count % 8
 					else:
-						px = clamp(5 - count, 2, 5)
+						px = 7 - (count % 8)
 				else:
 					px = lane
 					if flow_dir == -1:
-						py = clamp(2 + count, 2, 5)
+						py = count % 8
 					else:
-						py = clamp(5 - count, 2, 5)
+						py = 7 - (count % 8)
 						
-				_set_cell(gx + px + offset.x, gy + py + offset.y, mat)
+				var tx = gx + px + offset.x
+				var ty = gy + py + offset.y
+				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
+					if _get_cell(tx, ty) != 97: _set_cell(tx, ty, mat)
 
 func _find_pipe_x2_endpoint_opening_side(p, endpoint_idx: int) -> String:
 	var path = p.path
