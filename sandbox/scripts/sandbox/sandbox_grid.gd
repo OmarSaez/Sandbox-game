@@ -473,6 +473,7 @@ func _get_ui_scale() -> float:
 
 var ui_elements = {} # To track nodes for re-labeling
 var tools_panel: PanelContainer
+var workshop_panel: PanelContainer
 var lab_panel: PanelContainer
 var lab_selected_slot: int = 0
 var lab_custom_data = [
@@ -2818,12 +2819,15 @@ func _setup_main_ui_containers():
 
 	# 5. CONSTRUCT ALL SUB-UI
 	ui_root.set_meta("tools_v", tools_v)
+	var workshop_v = is_instance_valid(workshop_panel) and workshop_panel.visible
+	ui_root.set_meta("workshop_v", workshop_v)
 	ui_root.set_meta("lab_v", lab_v)
 	ui_root.set_meta("disaster_v", disaster_v)
 	ui_root.set_meta("npc_v", npc_v)
 	ui_root.set_meta("paint_v", is_instance_valid(paint_panel) and paint_panel.visible)
 	
 	_setup_tools_ui()
+	_setup_workshop_ui()
 	_setup_lab_ui()
 	_setup_disaster_ui()
 	_setup_npc_panel_node()
@@ -3233,6 +3237,55 @@ func _setup_tools_ui():
 	v_box.add_child(func_lbl)
 	ui_elements["func_lbl"] = func_lbl
 
+	var community_btn = Button.new()
+	community_btn.text = "🌐 " + tr("btn_comunidad")
+	community_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	community_btn.custom_minimum_size = Vector2(0, 60 * s)
+	community_btn.add_theme_font_override("font", _get_safe_font())
+	community_btn.add_theme_font_size_override("font_size", 21 * s)
+	community_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	
+	var c_style = StyleBoxFlat.new()
+	c_style.bg_color = Color(0.15, 0.15, 0.18, 0.9)
+	c_style.border_width_left = 2; c_style.border_width_top = 2
+	c_style.border_width_right = 2; c_style.border_width_bottom = 2
+	c_style.border_color = Color("#48dbfb").lerp(Color.BLACK, 0.3)
+	c_style.corner_radius_top_left = 12 * s
+	c_style.corner_radius_top_right = 12 * s
+	c_style.corner_radius_bottom_left = 12 * s
+	c_style.corner_radius_bottom_right = 12 * s
+	community_btn.add_theme_stylebox_override("normal", c_style)
+	
+	var c_hover = c_style.duplicate()
+	c_hover.bg_color = Color("#48dbfb").lerp(Color.BLACK, 0.7)
+	c_hover.border_color = Color("#48dbfb")
+	community_btn.add_theme_stylebox_override("hover", c_hover)
+	community_btn.add_theme_stylebox_override("pressed", c_hover)
+	
+	community_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		_toggle_category_panel(workshop_panel)
+	)
+	v_box.add_child(community_btn)
+	ui_elements["btn_comunidad"] = community_btn
+	
+	var rotate_timer = Timer.new()
+	rotate_timer.wait_time = 3.0
+	rotate_timer.autostart = true
+	rotate_timer.timeout.connect(func():
+		if not is_instance_valid(community_btn): return
+		var states = ["btn_comunidad", "btn_top_semanal", "btn_recien_subidos"]
+		var current_idx = community_btn.get_meta("state_idx", 0)
+		current_idx = (current_idx + 1) % states.size()
+		community_btn.set_meta("state_idx", current_idx)
+		community_btn.text = "🌐 " + tr(states[current_idx])
+	)
+	community_btn.add_child(rotate_timer)
+	
+	var c_spacer = Control.new()
+	c_spacer.custom_minimum_size = Vector2(0, 10 * s)
+	v_box.add_child(c_spacer)
+
 	var action_row = GridContainer.new()
 	action_row.columns = 2
 	action_row.add_theme_constant_override("h_separation", 10 * s)
@@ -3276,8 +3329,6 @@ func _setup_tools_ui():
 		ui_elements[text_key + "_btn"] = btn # Register for highlights
 		return btn
 
-	create_action_btn.call("undo", Color("#ff9f43"), func(): undo_history())
-	create_action_btn.call("redo", Color("#48dbfb"), func(): redo_history())
 	create_action_btn.call("eraser_tool", Color("#ff6b6b"), func(): 
 		selected_material = 0
 		brush_radius = 3 
@@ -3601,6 +3652,518 @@ func _update_game_volume(value: float):
 	AudioServer.set_bus_volume_db(0, db)
 	# Mute completely if 0 to save processing
 	AudioServer.set_bus_mute(0, value <= 0)
+
+func _setup_workshop_ui():
+	var s = _get_ui_scale()
+	ui_root = get_parent().get_node("UI")
+	
+	if is_instance_valid(workshop_panel):
+		workshop_panel.queue_free()
+	
+	workshop_panel = PanelContainer.new()
+	workshop_panel.name = "WorkshopPanel"
+	ui_root.add_child(workshop_panel)
+	
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.1, 0.1, 0.15, 0.98) # Dark elegant
+	panel_style.border_width_left = 3; panel_style.border_width_top = 3
+	panel_style.border_width_right = 3; panel_style.border_width_bottom = 3
+	panel_style.border_color = Color("#48dbfb") # Same as community button
+	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
+	workshop_panel.add_theme_stylebox_override("panel", panel_style)
+	workshop_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	
+	workshop_panel.visible = ui_root.get_meta("workshop_v", false)
+	_align_panel_to_hud(workshop_panel, 530 * s, 570 * s)
+	
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 10 * s)
+	workshop_panel.add_child(main_vbox)
+	
+	# TAB HEADER
+	var tab_hbox = HBoxContainer.new()
+	tab_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	tab_hbox.add_theme_constant_override("separation", 5 * s)
+	main_vbox.add_child(tab_hbox)
+	
+	var current_tab = ui_root.get_meta("workshop_current_tab", 0)
+	
+	var create_tab_btn = func(text_key: String, tab_idx: int):
+		var btn = Button.new()
+		btn.text = tr(text_key)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.custom_minimum_size = Vector2(0, 45 * s)
+		btn.add_theme_font_override("font", _get_safe_font())
+		btn.add_theme_font_size_override("font_size", 16 * s) # slightly smaller for fitting 3
+		btn.mouse_filter = Control.MOUSE_FILTER_PASS
+		
+		var t_style = StyleBoxFlat.new()
+		t_style.bg_color = Color(0.2, 0.2, 0.25, 1.0) if tab_idx == current_tab else Color(0.1, 0.1, 0.15, 1.0)
+		t_style.corner_radius_top_left = 10 * s; t_style.corner_radius_top_right = 10 * s
+		t_style.corner_radius_bottom_left = 10 * s; t_style.corner_radius_bottom_right = 10 * s
+		t_style.border_width_bottom = 3 if tab_idx == current_tab else 0
+		t_style.border_color = Color("#48dbfb")
+		
+		btn.add_theme_stylebox_override("normal", t_style)
+		btn.add_theme_stylebox_override("hover", t_style)
+		btn.add_theme_stylebox_override("pressed", t_style)
+		
+		btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			ui_root.set_meta("workshop_current_tab", tab_idx)
+			call_deferred("_setup_main_ui_containers") # Rebuild to show active tab
+		)
+		tab_hbox.add_child(btn)
+		return btn
+		
+	var btn_top = create_tab_btn.call("tab_top_semanal", 0)
+	var btn_rec = create_tab_btn.call("tab_recientes", 1)
+	var btn_mis = create_tab_btn.call("tab_mis_mundos", 2)
+	
+	# Rotate text on "Mis mundos"
+	var rotate_timer = Timer.new()
+	rotate_timer.wait_time = 3.0
+	rotate_timer.autostart = true
+	rotate_timer.timeout.connect(func():
+		if not is_instance_valid(btn_mis): return
+		var states = ["tab_mis_mundos", "tab_subir_mundo"]
+		var current_idx = btn_mis.get_meta("state_idx", 0)
+		current_idx = (current_idx + 1) % states.size()
+		btn_mis.set_meta("state_idx", current_idx)
+		btn_mis.text = tr(states[current_idx])
+	)
+	btn_mis.add_child(rotate_timer)
+	
+	# CONTENT AREA
+	var content_panel = PanelContainer.new()
+	content_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var c_style = StyleBoxFlat.new()
+	c_style.bg_color = Color(0.08, 0.08, 0.12, 1.0)
+	c_style.corner_radius_top_left = 10 * s; c_style.corner_radius_top_right = 10 * s
+	c_style.corner_radius_bottom_left = 10 * s; c_style.corner_radius_bottom_right = 10 * s
+	content_panel.add_theme_stylebox_override("panel", c_style)
+	main_vbox.add_child(content_panel)
+	
+	if current_tab == 2:
+		var mis_mundos_vbox = VBoxContainer.new()
+		# Change alignment to BEGIN so buttons stay at top
+		mis_mundos_vbox.alignment = BoxContainer.ALIGNMENT_BEGIN
+		mis_mundos_vbox.add_theme_constant_override("separation", 15 * s)
+		content_panel.add_child(mis_mundos_vbox)
+		
+		var top_buttons_hbox = HBoxContainer.new()
+		top_buttons_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		top_buttons_hbox.add_theme_constant_override("separation", 10 * s)
+		mis_mundos_vbox.add_child(top_buttons_hbox)
+		
+		var create_top_action_btn = func(text_key: String, btn_color: Color):
+			var btn = Button.new()
+			btn.text = tr(text_key)
+			btn.custom_minimum_size = Vector2(0, 50 * s)
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			btn.add_theme_font_override("font", _get_safe_font())
+			btn.add_theme_font_size_override("font_size", 18 * s)
+			
+			var b_style = StyleBoxFlat.new()
+			b_style.bg_color = btn_color.lerp(Color.BLACK, 0.6)
+			b_style.border_width_left = 2; b_style.border_width_top = 2
+			b_style.border_width_right = 2; b_style.border_width_bottom = 2
+			b_style.border_color = btn_color
+			b_style.corner_radius_top_left = 10 * s; b_style.corner_radius_top_right = 10 * s
+			b_style.corner_radius_bottom_left = 10 * s; b_style.corner_radius_bottom_right = 10 * s
+			btn.add_theme_stylebox_override("normal", b_style)
+			
+			var h_style = b_style.duplicate()
+			h_style.bg_color = btn_color.lerp(Color.BLACK, 0.4)
+			btn.add_theme_stylebox_override("hover", h_style)
+			btn.add_theme_stylebox_override("pressed", h_style)
+			
+			return btn
+			
+		var btn_subir = create_top_action_btn.call("tab_subir_mundo", Color("#00d2d3"))
+		btn_subir.pressed.connect(func():
+			_play_action_sound("ui_click")
+			_show_upload_world_dialog()
+		)
+		top_buttons_hbox.add_child(btn_subir)
+		
+		var btn_gestionar = create_top_action_btn.call("btn_gestionar_mundos", Color("#ff9f43"))
+		btn_gestionar.pressed.connect(func():
+			_play_action_sound("ui_click")
+			print("Gestionar mundos presionado")
+		)
+		top_buttons_hbox.add_child(btn_gestionar)
+		
+		var list_scroll = ScrollContainer.new()
+		list_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		list_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mis_mundos_vbox.add_child(list_scroll)
+		
+		var list_vbox = VBoxContainer.new()
+		list_scroll.add_child(list_vbox)
+		
+	workshop_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
+	workshop_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
+
+func _show_upload_slot_selector(on_selected: Callable):
+	var s = _get_ui_scale()
+	var overlay = PanelContainer.new()
+	var overlay_style = StyleBoxFlat.new()
+	overlay_style.bg_color = Color(0, 0, 0, 0.9)
+	overlay.add_theme_stylebox_override("panel", overlay_style)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(overlay)
+	
+	is_mouse_over_ui = true
+	overlay.tree_exiting.connect(func(): is_mouse_over_ui = false)
+	
+	var center = CenterContainer.new()
+	overlay.add_child(center)
+	
+	var panel = PanelContainer.new()
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.08, 0.08, 0.1, 0.98)
+	panel_style.border_width_left = 3; panel_style.border_width_top = 3
+	panel_style.border_width_right = 3; panel_style.border_width_bottom = 3
+	panel_style.border_color = Color(0.6, 0.5, 0.2)
+	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
+	panel.add_theme_stylebox_override("panel", panel_style)
+	
+	var is_landscape = get_viewport_rect().size.x > get_viewport_rect().size.y
+	var base_height = 530 * s if is_landscape else 650 * s
+	var m_height = min(base_height, get_viewport_rect().size.y * 0.8)
+	panel.custom_minimum_size = Vector2(530 * s, m_height)
+	center.add_child(panel)
+	
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 20 * s)
+	panel.add_child(main_vbox)
+	
+	var title = Label.new()
+	title.text = tr("upload_slot_label")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", _get_safe_font())
+	title.add_theme_font_size_override("font_size", 36 * s)
+	main_vbox.add_child(title)
+	
+	var scroll = ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_vbox.add_child(scroll)
+	
+	var grid_hbox = HBoxContainer.new()
+	grid_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	grid_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(grid_hbox)
+
+	var grid = GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 10 * s)
+	grid.add_theme_constant_override("v_separation", 15 * s)
+	grid_hbox.add_child(grid)
+	
+	for i in range(1, 11):
+		var slot_data = _get_slot_data(i)
+		
+		var slot_panel = PanelContainer.new()
+		slot_panel.custom_minimum_size = Vector2(235 * s, 0)
+		var style = StyleBoxFlat.new()
+		style.bg_color = Color(0.15, 0.15, 0.18)
+		style.set_corner_radius_all(10 * s)
+		style.border_width_left = 2; style.border_width_top = 2
+		style.border_width_right = 2; style.border_width_bottom = 2
+		style.border_color = Color(0.3, 0.3, 0.3)
+		slot_panel.add_theme_stylebox_override("panel", style)
+		grid.add_child(slot_panel)
+		
+		var vbox = VBoxContainer.new()
+		vbox.add_theme_constant_override("separation", 5 * s)
+		slot_panel.add_child(vbox)
+		
+		var header = HBoxContainer.new()
+		vbox.add_child(header)
+		
+		var lbl_idx = Label.new()
+		lbl_idx.text = "#" + str(i)
+		lbl_idx.add_theme_font_size_override("font_size", 26 * s)
+		header.add_child(lbl_idx)
+		
+		var lbl_name = Label.new()
+		lbl_name.text = slot_data.name if slot_data.has("name") else tr("empty")
+		lbl_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lbl_name.clip_text = true
+		lbl_name.add_theme_font_size_override("font_size", 24 * s)
+		header.add_child(lbl_name)
+		
+		var thumb_rect = TextureRect.new()
+		thumb_rect.custom_minimum_size = Vector2(215 * s, 150 * s) 
+		thumb_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		thumb_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		if slot_data.has("thumbnail"):
+			thumb_rect.texture = slot_data.thumbnail
+		else:
+			var empty_tex = GradientTexture2D.new()
+			empty_tex.gradient = Gradient.new()
+			empty_tex.gradient.set_color(0, Color(0.1, 0.1, 0.1))
+			empty_tex.gradient.set_color(1, Color(0.1, 0.1, 0.1))
+			thumb_rect.texture = empty_tex
+		vbox.add_child(thumb_rect)
+		
+		var btn_select = Button.new()
+		btn_select.text = tr("btn_select_slot")
+		btn_select.custom_minimum_size = Vector2(0, 50 * s)
+		btn_select.add_theme_font_override("font", _get_safe_font())
+		btn_select.add_theme_font_size_override("font_size", 20 * s)
+		var b_style = StyleBoxFlat.new()
+		b_style.bg_color = Color("#00d2d3").lerp(Color.BLACK, 0.5)
+		b_style.set_corner_radius_all(8 * s)
+		btn_select.add_theme_stylebox_override("normal", b_style)
+		var h_style = b_style.duplicate()
+		h_style.bg_color = Color("#00d2d3").lerp(Color.BLACK, 0.3)
+		btn_select.add_theme_stylebox_override("hover", h_style)
+		btn_select.add_theme_stylebox_override("pressed", h_style)
+		vbox.add_child(btn_select)
+		
+		var slot_id = i
+		btn_select.pressed.connect(func():
+			_play_action_sound("ui_click")
+			overlay.queue_free()
+			on_selected.call(slot_id)
+		)
+		
+	var spacer = Control.new()
+	spacer.custom_minimum_size = Vector2(0, 10 * s)
+	main_vbox.add_child(spacer)
+		
+	var btn_close = Button.new()
+	btn_close.text = tr("btn_cancel")
+	btn_close.custom_minimum_size = Vector2(200 * s, 50 * s)
+	btn_close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	btn_close.add_theme_font_override("font", _get_safe_font())
+	btn_close.add_theme_font_size_override("font_size", 20 * s)
+	main_vbox.add_child(btn_close)
+	btn_close.pressed.connect(func():
+		_play_action_sound("ui_click")
+		overlay.queue_free()
+	)
+
+func _show_upload_world_dialog():
+	var s = _get_ui_scale()
+	var selected_upload_slot_id = 1
+	
+	# We will read data dynamically using _get_slot_data
+	
+	var overlay = PanelContainer.new()
+	var overlay_style = StyleBoxFlat.new()
+	overlay_style.bg_color = Color(0, 0, 0, 0.8) # Dim background
+	overlay.add_theme_stylebox_override("panel", overlay_style)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(overlay)
+	
+	is_mouse_over_ui = true
+	overlay.tree_exiting.connect(func(): is_mouse_over_ui = false)
+	
+	var center = CenterContainer.new()
+	overlay.add_child(center)
+	
+	var popup = PanelContainer.new()
+	popup.custom_minimum_size = Vector2(450 * s, 600 * s)
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.12, 0.12, 0.16, 1.0)
+	p_style.border_width_left = 3; p_style.border_width_top = 3
+	p_style.border_width_right = 3; p_style.border_width_bottom = 3
+	p_style.border_color = Color("#00d2d3")
+	p_style.corner_radius_top_left = 20 * s; p_style.corner_radius_top_right = 20 * s
+	p_style.corner_radius_bottom_left = 20 * s; p_style.corner_radius_bottom_right = 20 * s
+	popup.add_theme_stylebox_override("panel", p_style)
+	center.add_child(popup)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 20 * s)
+	margin.add_theme_constant_override("margin_right", 20 * s)
+	margin.add_theme_constant_override("margin_top", 20 * s)
+	margin.add_theme_constant_override("margin_bottom", 20 * s)
+	popup.add_child(margin)
+	
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 15 * s)
+	margin.add_child(main_vbox)
+	
+	var title = Label.new()
+	title.text = tr("upload_title")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", _get_safe_font())
+	title.add_theme_font_size_override("font_size", 28 * s)
+	title.add_theme_color_override("font_color", Color("#00d2d3"))
+	main_vbox.add_child(title)
+	
+	var thumb_bg = PanelContainer.new()
+	thumb_bg.custom_minimum_size = Vector2(300 * s, 150 * s)
+	thumb_bg.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var bg_style = StyleBoxFlat.new()
+	bg_style.bg_color = Color(0, 0, 0, 1)
+	bg_style.border_width_left = 2; bg_style.border_width_top = 2
+	bg_style.border_width_right = 2; bg_style.border_width_bottom = 2
+	bg_style.border_color = Color("#555555")
+	thumb_bg.add_theme_stylebox_override("panel", bg_style)
+	main_vbox.add_child(thumb_bg)
+	
+	var thumb_rect = TextureRect.new()
+	thumb_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	thumb_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	thumb_bg.add_child(thumb_rect)
+	
+	var create_label = func(text_key: String):
+		var lbl = Label.new()
+		lbl.text = tr(text_key)
+		lbl.add_theme_font_override("font", _get_safe_font())
+		lbl.add_theme_font_size_override("font_size", 18 * s)
+		lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+		return lbl
+		
+	main_vbox.add_child(create_label.call("upload_slot_label"))
+	var btn_choose_slot = Button.new()
+	btn_choose_slot.text = tr("btn_select_slot")
+	btn_choose_slot.add_theme_font_override("font", _get_safe_font())
+	btn_choose_slot.add_theme_font_size_override("font_size", 20 * s)
+	btn_choose_slot.custom_minimum_size = Vector2(0, 45 * s)
+	
+	var c_style = StyleBoxFlat.new()
+	c_style.bg_color = Color(0.15, 0.15, 0.2)
+	c_style.border_width_left = 2; c_style.border_width_top = 2
+	c_style.border_width_right = 2; c_style.border_width_bottom = 2
+	c_style.border_color = Color(0.4, 0.4, 0.5)
+	c_style.set_corner_radius_all(10 * s)
+	btn_choose_slot.add_theme_stylebox_override("normal", c_style)
+	
+	var hc_style = c_style.duplicate()
+	hc_style.bg_color = Color(0.25, 0.25, 0.3)
+	btn_choose_slot.add_theme_stylebox_override("hover", hc_style)
+	btn_choose_slot.add_theme_stylebox_override("pressed", hc_style)
+	main_vbox.add_child(btn_choose_slot)
+	
+	var name_label_hbox = HBoxContainer.new()
+	main_vbox.add_child(name_label_hbox)
+	
+	var name_lbl = create_label.call("upload_name_label")
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label_hbox.add_child(name_lbl)
+	
+	var char_count_lbl = Label.new()
+	char_count_lbl.add_theme_font_override("font", _get_safe_font())
+	char_count_lbl.add_theme_font_size_override("font_size", 16 * s)
+	char_count_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	char_count_lbl.text = "0/30"
+	name_label_hbox.add_child(char_count_lbl)
+	
+	var name_input = LineEdit.new()
+	name_input.add_theme_font_override("font", _get_safe_font())
+	name_input.add_theme_font_size_override("font_size", 20 * s)
+	name_input.custom_minimum_size = Vector2(0, 45 * s)
+	name_input.max_length = 30
+	main_vbox.add_child(name_input)
+	
+	name_input.text_changed.connect(func(new_text: String):
+		char_count_lbl.text = str(new_text.length()) + "/30"
+	)
+	
+	main_vbox.add_child(create_label.call("upload_category_label"))
+	var cat_opt = OptionButton.new()
+	cat_opt.add_theme_font_override("font", _get_safe_font())
+	cat_opt.add_theme_font_size_override("font_size", 20 * s)
+	cat_opt.custom_minimum_size = Vector2(0, 40 * s)
+	main_vbox.add_child(cat_opt)
+	
+	# Populate Category Options
+	var categories = ["cat_none", "cat_circuits", "cat_npcs", "cat_art", "cat_music"]
+	for cat in categories:
+		cat_opt.add_item(tr(cat))
+		
+	var cat_popup = cat_opt.get_popup()
+	cat_popup.add_theme_font_override("font", _get_safe_font())
+	cat_popup.add_theme_font_size_override("font_size", 22 * s)
+	
+	var update_preview = func(slot_id: int):
+		selected_upload_slot_id = slot_id
+		var data = _get_slot_data(slot_id)
+		
+		if data.has("thumbnail"): thumb_rect.texture = data.thumbnail
+		else: thumb_rect.texture = null
+		
+		if data.has("name"): 
+			name_input.text = data.name
+			btn_choose_slot.text = data.name
+		else: 
+			name_input.text = ""
+			btn_choose_slot.text = "Slot " + str(slot_id) + " (" + tr("empty") + ")"
+			
+		char_count_lbl.text = str(name_input.text.length()) + "/30"
+			
+	btn_choose_slot.pressed.connect(func():
+		_play_action_sound("ui_click")
+		_show_upload_slot_selector(update_preview)
+	)
+	
+	var first_avail = 0
+	for i in range(1, 11):
+		if _get_slot_data(i).has("name"):
+			first_avail = i
+			break
+	if first_avail > 0:
+		update_preview.call(first_avail)
+	else:
+		update_preview.call(1)
+		
+	# Spacer
+	var spacer = Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_vbox.add_child(spacer)
+	
+	var btn_hbox = HBoxContainer.new()
+	btn_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_hbox.add_theme_constant_override("separation", 15 * s)
+	main_vbox.add_child(btn_hbox)
+	
+	var btn_cancel = Button.new()
+	btn_cancel.text = tr("btn_cancel")
+	btn_cancel.custom_minimum_size = Vector2(130 * s, 50 * s)
+	btn_cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_cancel.add_theme_font_override("font", _get_safe_font())
+	btn_cancel.add_theme_font_size_override("font_size", 18 * s)
+	var cancel_style = StyleBoxFlat.new()
+	cancel_style.bg_color = Color(0.2, 0.2, 0.25)
+	cancel_style.corner_radius_top_left = 10 * s; cancel_style.corner_radius_top_right = 10 * s
+	cancel_style.corner_radius_bottom_left = 10 * s; cancel_style.corner_radius_bottom_right = 10 * s
+	btn_cancel.add_theme_stylebox_override("normal", cancel_style)
+	btn_cancel.pressed.connect(func():
+		_play_action_sound("ui_click")
+		overlay.queue_free()
+	)
+	btn_hbox.add_child(btn_cancel)
+	
+	var btn_confirm = Button.new()
+	btn_confirm.text = tr("btn_upload_confirm")
+	btn_confirm.custom_minimum_size = Vector2(220 * s, 50 * s)
+	btn_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_confirm.add_theme_font_override("font", _get_safe_font())
+	btn_confirm.add_theme_font_size_override("font_size", 18 * s)
+	var conf_style = StyleBoxFlat.new()
+	conf_style.bg_color = Color("#00b894")
+	conf_style.corner_radius_top_left = 10 * s; conf_style.corner_radius_top_right = 10 * s
+	conf_style.corner_radius_bottom_left = 10 * s; conf_style.corner_radius_bottom_right = 10 * s
+	btn_confirm.add_theme_stylebox_override("normal", conf_style)
+	var h_conf = conf_style.duplicate()
+	h_conf.bg_color = Color("#55efc4")
+	btn_confirm.add_theme_stylebox_override("hover", h_conf)
+	btn_confirm.add_theme_stylebox_override("pressed", h_conf)
+	btn_confirm.pressed.connect(func():
+		_play_action_sound("ui_click")
+		print("Subir mundo a firebase - Slot: ", selected_upload_slot_id, " Nombre: ", name_input.text, " Categoria: ", cat_opt.selected)
+		# TODO: Lógica de subida real
+		overlay.queue_free()
+	)
+	btn_hbox.add_child(btn_confirm)
 
 func _setup_lab_ui():
 	var s = _get_ui_scale()
@@ -4223,6 +4786,7 @@ func _toggle_category_panel(target_panel: Control):
 	
 	var any_visible = false
 	if is_instance_valid(tools_panel) and tools_panel.visible: any_visible = true
+	if is_instance_valid(workshop_panel) and workshop_panel.visible: any_visible = true
 	if is_instance_valid(disaster_panel) and disaster_panel.visible: any_visible = true
 	if is_instance_valid(npc_panel) and npc_panel.visible: any_visible = true
 	if is_instance_valid(paint_panel) and paint_panel.visible: any_visible = true
@@ -5105,6 +5669,7 @@ func _setup_disaster_ui():
 
 func _close_all_popups():
 	if is_instance_valid(tools_panel): tools_panel.visible = false
+	if is_instance_valid(workshop_panel): workshop_panel.visible = false
 	if is_instance_valid(disaster_panel): disaster_panel.visible = false
 	if is_instance_valid(npc_panel): npc_panel.visible = false
 	if is_instance_valid(paint_panel): paint_panel.visible = false
@@ -5480,6 +6045,8 @@ func _is_any_ui_blocking() -> bool:
 	
 	if tools_panel and tools_panel.visible and tools_panel.get_global_rect().has_point(m_pos):
 		return true
+	if workshop_panel and workshop_panel.visible and workshop_panel.get_global_rect().has_point(m_pos):
+		return true
 	if lab_panel and lab_panel.visible and lab_panel.get_global_rect().has_point(m_pos):
 		return true
 	if disaster_panel and disaster_panel.visible and disaster_panel.get_global_rect().has_point(m_pos):
@@ -5798,6 +6365,7 @@ func _process(delta):
 			# 2. AUTOCLOSE MENUS ON WORKSPACE TAP (Only if didn't start on UI and NOT over UI)
 			if not touch_started_on_ui and not is_over_ui:
 				if is_instance_valid(tools_panel) and tools_panel.visible: tools_panel.visible = false
+				if is_instance_valid(workshop_panel) and workshop_panel.visible: workshop_panel.visible = false
 				if is_instance_valid(lab_panel) and lab_panel.visible: lab_panel.visible = false
 				if is_instance_valid(disaster_panel) and disaster_panel.visible: disaster_panel.visible = false
 				if is_instance_valid(npc_panel) and npc_panel.visible: npc_panel.visible = false
