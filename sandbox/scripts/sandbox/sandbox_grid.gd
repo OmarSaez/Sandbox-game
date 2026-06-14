@@ -3949,7 +3949,7 @@ func _show_upload_slot_selector(on_selected: Callable):
 
 func _show_upload_world_dialog():
 	var s = _get_ui_scale()
-	var selected_upload_slot_id = 1
+	var selected_upload_slot_id = [1]
 	
 	# We will read data dynamically using _get_slot_data
 	
@@ -4085,7 +4085,7 @@ func _show_upload_world_dialog():
 	cat_popup.add_theme_font_size_override("font_size", 22 * s)
 	
 	var update_preview = func(slot_id: int):
-		selected_upload_slot_id = slot_id
+		selected_upload_slot_id[0] = slot_id
 		var data = _get_slot_data(slot_id)
 		
 		if data.has("thumbnail"): thumb_rect.texture = data.thumbnail
@@ -4158,10 +4158,31 @@ func _show_upload_world_dialog():
 	btn_confirm.add_theme_stylebox_override("hover", h_conf)
 	btn_confirm.add_theme_stylebox_override("pressed", h_conf)
 	btn_confirm.pressed.connect(func():
+		if name_input.text.strip_edges() == "": return
 		_play_action_sound("ui_click")
-		print("Subir mundo a firebase - Slot: ", selected_upload_slot_id, " Nombre: ", name_input.text, " Categoria: ", cat_opt.selected)
-		# TODO: Lógica de subida real
-		overlay.queue_free()
+		
+		var loading_overlay = _show_processing_overlay(tr("uploading_world"))
+		var start_time = Time.get_ticks_msec()
+		var chosen_name = name_input.text
+		
+		var on_done = func(success: bool, msg: String):
+			var elapsed = Time.get_ticks_msec() - start_time
+			if elapsed < 2000:
+				await get_tree().create_timer((2000 - elapsed) / 1000.0).timeout
+				
+			if is_instance_valid(loading_overlay):
+				loading_overlay.queue_free()
+				
+			if success:
+				if is_instance_valid(overlay): overlay.queue_free()
+				_show_centered_bubble(tr("upload_success").replace("'{0}'", "\"" + chosen_name + "\"").replace("{0}", "\"" + chosen_name + "\""), Color("#00cec9"))
+			else:
+				_show_centered_bubble("Error: " + msg, Color(0.8, 0.2, 0.2))
+				
+		if not WorkshopManager.upload_completed.is_connected(on_done):
+			WorkshopManager.upload_completed.connect(on_done, CONNECT_ONE_SHOT)
+			
+		WorkshopManager.upload_world(selected_upload_slot_id[0], chosen_name, cat_opt.selected)
 	)
 	btn_hbox.add_child(btn_confirm)
 
@@ -18359,3 +18380,72 @@ func _open_led_color_panel(color_btn_ref):
 			btn.set_meta("is_rainbow_btn", true)
 			
 		grid.add_child(btn)
+
+
+func _show_centered_bubble(msg: String, border_color: Color):
+	var s = _get_ui_scale()
+	if not is_instance_valid(ui_root):
+		ui_root = get_parent().get_node_or_null("UI")
+		if not ui_root: return
+		
+	var bubble = PanelContainer.new()
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.08, 0.08, 0.12, 0.96)
+	p_style.set_corner_radius_all(18 * s)
+	p_style.border_width_left = 3 * s
+	p_style.border_width_top = 3 * s
+	p_style.border_width_right = 3 * s
+	p_style.border_width_bottom = 3 * s
+	p_style.border_color = border_color
+	p_style.shadow_color = Color(0, 0, 0, 0.45)
+	p_style.shadow_size = 10
+	bubble.add_theme_stylebox_override("panel", p_style)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 20 * s)
+	margin.add_theme_constant_override("margin_top", 16 * s)
+	margin.add_theme_constant_override("margin_right", 20 * s)
+	margin.add_theme_constant_override("margin_bottom", 16 * s)
+	bubble.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 15 * s)
+	margin.add_child(vbox)
+	
+	var lbl = Label.new()
+	lbl.text = msg
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.custom_minimum_size = Vector2(280 * s, 0)
+	lbl.add_theme_font_override("font", _get_safe_font())
+	lbl.add_theme_font_size_override("font_size", 20 * s)
+	lbl.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(lbl)
+	
+	var btn = Button.new()
+	btn.text = tr("GOT_IT")
+	btn.custom_minimum_size = Vector2(130 * s, 46 * s)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	btn.add_theme_font_override("font", _get_safe_font())
+	btn.add_theme_font_size_override("font_size", 18 * s)
+	var btn_style_norm = StyleBoxFlat.new()
+	btn_style_norm.bg_color = border_color
+	btn_style_norm.set_corner_radius_all(10 * s)
+	var btn_style_hover = btn_style_norm.duplicate()
+	btn_style_hover.bg_color = border_color.lightened(0.15)
+	btn.add_theme_stylebox_override("normal", btn_style_norm)
+	btn.add_theme_stylebox_override("hover", btn_style_hover)
+	btn.add_theme_stylebox_override("pressed", btn_style_norm)
+	btn.add_theme_color_override("font_color", Color.WHITE)
+	
+	var center = CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_STOP
+	center.add_child(bubble)
+	
+	btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		center.queue_free()
+	)
+	vbox.add_child(btn)
+	ui_root.add_child(center)
