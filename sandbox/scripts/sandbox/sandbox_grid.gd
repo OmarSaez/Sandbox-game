@@ -14698,7 +14698,17 @@ func _add_save_slot_ui(container, slot_idx):
 
 func _get_slot_data(idx):
 	var path = "user://save_slot_" + str(idx) + ".dat"
-	var thumb_path = "user://save_slot_" + str(idx) + ".png"
+	var thumb_path_jpg = "user://save_slot_" + str(idx) + ".jpg"
+	var thumb_path_webp = "user://save_slot_" + str(idx) + ".webp"
+	var thumb_path_png = "user://save_slot_" + str(idx) + ".png"
+	var final_path = ""
+	
+	if FileAccess.file_exists(thumb_path_webp):
+		final_path = thumb_path_webp
+	elif FileAccess.file_exists(thumb_path_jpg):
+		final_path = thumb_path_jpg
+	elif FileAccess.file_exists(thumb_path_png):
+		final_path = thumb_path_png
 	
 	var data = {}
 	if FileAccess.file_exists(path):
@@ -14710,8 +14720,8 @@ func _get_slot_data(idx):
 				data.date = dict.get("date", "Unknown")
 			file.close()
 			
-	if FileAccess.file_exists(thumb_path):
-		var _img = Image.load_from_file(thumb_path)
+	if final_path != "":
+		var _img = Image.load_from_file(final_path)
 		if _img:
 			data.thumbnail = ImageTexture.create_from_image(_img)
 			
@@ -15298,7 +15308,9 @@ func _on_share_pressed(slot_idx: int, slot_name: String):
 	_check_and_request_storage_permission(func():
 		_execute_monetized_action("share", func():
 			var path = "user://save_slot_" + str(slot_idx) + ".dat"
-			var thumb_path = "user://save_slot_" + str(slot_idx) + ".png"
+			var thumb_path_webp = "user://save_slot_" + str(slot_idx) + ".webp"
+			var thumb_path_jpg = "user://save_slot_" + str(slot_idx) + ".jpg"
+			var thumb_path_png = "user://save_slot_" + str(slot_idx) + ".png"
 			
 			if not FileAccess.file_exists(path):
 				return
@@ -15323,8 +15335,16 @@ func _on_share_pressed(slot_idx: int, slot_name: String):
 				"grid_data": data_dict
 			}
 			
-			if FileAccess.file_exists(thumb_path):
-				var thumb_bytes = FileAccess.get_file_as_bytes(thumb_path)
+			var final_thumb_path = ""
+			if FileAccess.file_exists(thumb_path_webp):
+				final_thumb_path = thumb_path_webp
+			elif FileAccess.file_exists(thumb_path_jpg):
+				final_thumb_path = thumb_path_jpg
+			elif FileAccess.file_exists(thumb_path_png):
+				final_thumb_path = thumb_path_png
+			
+			if final_thumb_path != "":
+				var thumb_bytes = FileAccess.get_file_as_bytes(final_thumb_path)
 				if thumb_bytes and thumb_bytes.size() > 0:
 					sbu_dict["thumbnail_bytes"] = thumb_bytes
 					
@@ -15509,13 +15529,36 @@ func _execute_import_data(sbu_dict: Dictionary, file_path: String, slot_idx: int
 	if sbu_dict.has("thumbnail_bytes"):
 		var thumb_bytes = sbu_dict["thumbnail_bytes"]
 		if thumb_bytes and thumb_bytes.size() > 0:
-			var png_file = FileAccess.open(target_png_path, FileAccess.WRITE)
-			if png_file:
-				png_file.store_buffer(thumb_bytes)
-				png_file.close()
+			var is_jpg = (thumb_bytes.size() > 2 and thumb_bytes[0] == 0xFF and thumb_bytes[1] == 0xD8)
+			var is_webp = (thumb_bytes.size() > 12 and thumb_bytes[8] == 0x57 and thumb_bytes[9] == 0x45 and thumb_bytes[10] == 0x42 and thumb_bytes[11] == 0x50)
+			
+			var ext = ".png"
+			if is_jpg: ext = ".jpg"
+			elif is_webp: ext = ".webp"
+			
+			var target_thumb_path = "user://save_slot_" + str(slot_idx) + ext
+			
+			# Limpiar cualquier miniatura vieja antes de guardar la nueva
+			var path_png = "user://save_slot_" + str(slot_idx) + ".png"
+			var path_jpg = "user://save_slot_" + str(slot_idx) + ".jpg"
+			var path_webp = "user://save_slot_" + str(slot_idx) + ".webp"
+			if FileAccess.file_exists(path_png): DirAccess.remove_absolute(path_png)
+			if FileAccess.file_exists(path_jpg): DirAccess.remove_absolute(path_jpg)
+			if FileAccess.file_exists(path_webp): DirAccess.remove_absolute(path_webp)
+				
+			var file_write = FileAccess.open(target_thumb_path, FileAccess.WRITE)
+			if file_write:
+				file_write.store_buffer(thumb_bytes)
+				file_write.close()
 	else:
+		var target_jpg_path = "user://save_slot_" + str(slot_idx) + ".jpg"
+		var target_webp_path = "user://save_slot_" + str(slot_idx) + ".webp"
 		if FileAccess.file_exists(target_png_path):
 			DirAccess.remove_absolute(target_png_path)
+		if FileAccess.file_exists(target_jpg_path):
+			DirAccess.remove_absolute(target_jpg_path)
+		if FileAccess.file_exists(target_webp_path):
+			DirAccess.remove_absolute(target_webp_path)
 			
 	AnalyticsManager.log_event("world_imported", {})
 	_show_modal_message(
@@ -15577,24 +15620,25 @@ func _save_to_slot(idx, custom_name: String = ""):
 	# CAPTURE ACCURATE MINI SCREENSHOT
 	# We only capture up to dynamic_grid_height to avoid the empty HUD space
 	var sample_height = dynamic_grid_height
-	var thumb_w = int(grid_width * 0.5)
-	var thumb_h = int(sample_height * 0.5)
+	var thumb_w = grid_width
+	var thumb_h = sample_height
 	var thumb = Image.create(thumb_w, thumb_h, false, Image.FORMAT_RGBA8)
 	
 	for ty in range(thumb_h):
 		for tx in range(thumb_w):
-			# Sample the grid (2x2 average for the thumbnail pixel)
-			var gx = tx * 2
-			var gy = ty * 2
+			# Sample the grid (1:1 Native Resolution)
+			var gx = tx
+			var gy = ty
 			var cell_idx = gy * grid_width + gx
 			var raw_id = cells[cell_idx]
 			var mid = raw_id & 0xFFFF
 			var variant = (raw_id >> 24) & 0xFF
 			
-			var color = Color(0,0,0,0)
+			var color = Color(0,0,0,0) # Transparencia real
 			
 			# 1. Start with background paint
-			color = background_img.get_pixel(gx, gy)
+			var bg_color = background_img.get_pixel(gx, gy)
+			if bg_color.a > 0: color = bg_color
 			
 			# 2. Add element (Palette or Custom)
 			if mid > 0:
@@ -15603,8 +15647,7 @@ func _save_to_slot(idx, custom_name: String = ""):
 					var r = (custom_i32 & 0xFF) / 255.0
 					var g = ((custom_i32 >> 8) & 0xFF) / 255.0
 					var b = ((custom_i32 >> 16) & 0xFF) / 255.0
-					var a = ((custom_i32 >> 24) & 0xFF) / 255.0
-					color = Color(r, g, b, a)
+					color = Color(r, g, b, 1.0)
 				else:
 					if variant == 1: color = mat_colors_2[mid]
 					elif variant == 2: color = mat_colors_3[mid]
@@ -15612,7 +15655,8 @@ func _save_to_slot(idx, custom_name: String = ""):
 			
 			thumb.set_pixel(tx, ty, color)
 	
-	thumb.save_png(thumb_path)
+	var thumb_path_webp = thumb_path.replace(".png", ".webp")
+	thumb.save_webp(thumb_path_webp, false) # Falso = Lossless (Sin pérdida de colores, ideal para Pixel Art)
 	
 	_setup_save_ui() # Refresh list
 

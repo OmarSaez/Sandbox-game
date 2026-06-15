@@ -70,18 +70,18 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 	if slot_data.has("thumbnail"):
 		var img = slot_data.thumbnail.get_image()
 		if img:
-			thumb_bytes = img.save_png_to_buffer()
+			thumb_bytes = img.save_webp_to_buffer(false) # Lossless WEBP
 			
 	var unique_id = str(Time.get_unix_time_from_system()) + "_" + str(randi() % 1000)
 	var sbu_filename = "worlds/" + unique_id + ".sbu"
-	var thumb_filename = "thumbnails/" + unique_id + ".png"
+	var thumb_filename = "thumbnails/" + unique_id + ".webp"
 	
 	emit_signal("upload_progress", 0.2)
 	
 	# 4. Subir Thumbnail (si existe)
 	var thumb_url = ""
 	if thumb_bytes.size() > 0:
-		var thumb_res = await Firebase.Storage.ref(thumb_filename).put_data(thumb_bytes, {"Content-Type": "image/png"})
+		var thumb_res = await Firebase.Storage.ref(thumb_filename).put_data(thumb_bytes, {"Content-Type": "image/webp"})
 		if thumb_res == null or (typeof(thumb_res) == TYPE_DICTIONARY and thumb_res.has("error")):
 			_finish_upload(false, "Error al subir imagen de miniatura.")
 			return
