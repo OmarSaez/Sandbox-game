@@ -102,13 +102,19 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 	
 	emit_signal("upload_progress", 0.9)
 	
+	var current_week_id = int(Time.get_unix_time_from_system() / 604800)
+	
 	# 6. Guardar en Firestore
 	var doc_data = {
 		"title": public_name,
 		"author": author_name,
 		"category": category_idx,
 		"likes": 0,
+		"dislikes": 0,
 		"downloads": 0,
+		"reports": 0,
+		"weekly_score": 0,
+		"weekly_week_id": current_week_id,
 		"timestamp": Time.get_unix_time_from_system(),
 		"sbu_url": sbu_url,
 		"thumbnail_url": thumb_url

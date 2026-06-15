@@ -391,3 +391,5 @@ btn_upload_confirm,Subir a la Workshop,Upload to Workshop,Carica nel Workshop,T�
 btn_select_slot,Seleccionar,Select,Seleziona,Sélectionner,Auswählen,Selecionar
 uploading_world,"Subiendo mundo a la Workshop","Uploading world to the Workshop","Caricamento del mondo nel Workshop","Envoi du monde vers le Workshop","Upload der Welt in den Workshop","Enviando mundo para o Workshop"
 upload_success,"Tu mundo {0} se ha subido con éxito a la Workshop","Your world {0} has been successfully uploaded to the Workshop","Il tuo mondo {0} è stato caricato con successo nel Workshop","Votre monde {0} a été envoyé avec succès vers le Workshop","Deine Welt {0} wurde erfolgreich in den Workshop hochgeladen","Seu mundo {0} foi enviado com sucesso para o Workshop"
+tab_mis_descargas,Mis Descargas,My Downloads,Meus Downloads,Mes Téléchargements,I miei download,Meine Downloads
+load_worls,Cargando mundos...,Loading worlds...,Carregando mundos...,Chargement des mondes...,Caricamento mondi...,Welten werden geladen...

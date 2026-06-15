@@ -1,0 +1,117 @@
+[gd_scene format=3 uid="uid://cn2l2xeuwdx80"]
+
+[ext_resource type="Script" uid="uid://bkji6b3w0s1ii" path="res://scripts/sandbox/world_card.gd" id="1_wcard"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wcard"]
+bg_color = Color(0.15, 0.16, 0.18, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+shadow_color = Color(0, 0, 0, 0.4)
+shadow_size = 5
+shadow_offset = Vector2(0, 4)
+
+[node name="WorldCard" type="PanelContainer" unique_id=1619308820]
+custom_minimum_size = Vector2(300, 240)
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_wcard")
+script = ExtResource("1_wcard")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=524018950]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ThumbnailRect" type="TextureRect" parent="VBoxContainer" unique_id=403793682]
+custom_minimum_size = Vector2(300, 150)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="TitleLabel" type="Label" parent="VBoxContainer" unique_id=1241835131]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Súper Mundo Épico"
+horizontal_alignment = 1
+vertical_alignment = 1
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="AuthorLabel" type="Label" parent="VBoxContainer" unique_id=518632298]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 14
+text = "Por: Jugador"
+horizontal_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer" unique_id=1820774748]
+layout_mode = 2
+alignment = 1
+
+[node name="LikesBox" type="HBoxContainer" parent="VBoxContainer/HBoxContainer" unique_id=1180117146]
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 1
+
+[node name="IconoCorazon" type="TextureRect" parent="VBoxContainer/HBoxContainer/LikesBox" unique_id=1330341242]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="LikesLabel" type="Label" parent="VBoxContainer/HBoxContainer/LikesBox" unique_id=2067366451]
+layout_mode = 2
+text = "99"
+
+[node name="DownloadsBox" type="HBoxContainer" parent="VBoxContainer/HBoxContainer" unique_id=959820290]
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 1
+
+[node name="IconoDescarga" type="TextureRect" parent="VBoxContainer/HBoxContainer/DownloadsBox" unique_id=496461909]
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="DownloadsLabel" type="Label" parent="VBoxContainer/HBoxContainer/DownloadsBox" unique_id=1403985479]
+layout_mode = 2
+text = "10K"
+
+[node name="CommunityButtons" type="VBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="DownloadButton" type="Button" parent="VBoxContainer/CommunityButtons"]
+layout_mode = 2
+text = "⬇️ Jugar / Descargar"
+
+[node name="ReportButton" type="Button" parent="VBoxContainer/CommunityButtons"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 12
+text = "🚩 Reportar (Inapropiado)"
+flat = true
+
+[node name="ManagementButtons" type="VBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/ManagementButtons"]
+layout_mode = 2
+alignment = 1
+
+[node name="EditButton" type="Button" parent="VBoxContainer/ManagementButtons/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "✏️ Editar"
+
+[node name="DeleteButton" type="Button" parent="VBoxContainer/ManagementButtons/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "🗑️ Eliminar"
+
+[node name="ReportsLabel" type="Label" parent="VBoxContainer/ManagementButtons"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.4, 0.4, 1)
+theme_override_font_sizes/font_size = 12
+text = "🚩 Reportes: 0"
+horizontal_alignment = 1

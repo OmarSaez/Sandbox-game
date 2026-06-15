@@ -3719,6 +3719,7 @@ func _setup_workshop_ui():
 	var btn_top = create_tab_btn.call("tab_top_semanal", 0)
 	var btn_rec = create_tab_btn.call("tab_recientes", 1)
 	var btn_mis = create_tab_btn.call("tab_mis_mundos", 2)
+	var btn_desc = create_tab_btn.call("tab_mis_descargas", 3)
 	
 	# Rotate text on "Mis mundos"
 	var rotate_timer = Timer.new()
@@ -3744,7 +3745,39 @@ func _setup_workshop_ui():
 	content_panel.add_theme_stylebox_override("panel", c_style)
 	main_vbox.add_child(content_panel)
 	
-	if current_tab == 2:
+	if current_tab == 0:
+		var scroll = ScrollContainer.new()
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		content_panel.add_child(scroll)
+		
+		var grid = GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 20 * s)
+		grid.add_theme_constant_override("v_separation", 20 * s)
+		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		
+		var margin = MarginContainer.new()
+		margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		margin.add_theme_constant_override("margin_left", 20 * s)
+		margin.add_theme_constant_override("margin_top", 20 * s)
+		margin.add_theme_constant_override("margin_right", 20 * s)
+		margin.add_theme_constant_override("margin_bottom", 20 * s)
+		margin.add_child(grid)
+		scroll.add_child(margin)
+		
+		var do_fetch = func():
+			if grid.get_child_count() == 0:
+				call_deferred("_fetch_top_semanal_async", grid)
+		
+		if workshop_panel.visible:
+			do_fetch.call()
+			
+		workshop_panel.visibility_changed.connect(func():
+			if workshop_panel.visible: do_fetch.call()
+		)
+
+	elif current_tab == 2:
 		var mis_mundos_vbox = VBoxContainer.new()
 		# Change alignment to BEGIN so buttons stay at top
 		mis_mundos_vbox.alignment = BoxContainer.ALIGNMENT_BEGIN
@@ -3804,6 +3837,49 @@ func _setup_workshop_ui():
 		
 	workshop_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	workshop_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
+
+func _fetch_top_semanal_async(grid: GridContainer):
+	if not is_instance_valid(grid): return
+	
+	# Pantalla de carga (El texto ya debería estar en translations.csv)
+	var loading_overlay = _show_processing_overlay(tr("load_worls"))
+	
+	var collection = Firebase.Firestore.collection("cache")
+	var document = await collection.get_doc("top_semanal")
+	
+	if is_instance_valid(loading_overlay):
+		loading_overlay.queue_free()
+		
+	if not is_instance_valid(grid): return
+	
+	if document and document.document.has("worlds"):
+		var raw_worlds = document.document["worlds"]
+		var worlds_list = []
+		
+		# Manejar todas las posibles formas en que Godot Firebase parsea el array
+		if typeof(raw_worlds) == TYPE_ARRAY:
+			worlds_list = raw_worlds
+		elif typeof(raw_worlds) == TYPE_DICTIONARY:
+			if raw_worlds.has("arrayValue"):
+				if raw_worlds["arrayValue"].has("values"):
+					worlds_list = raw_worlds["arrayValue"]["values"]
+			else:
+				worlds_list = raw_worlds.values()
+				
+		for w_data in worlds_list:
+			var clean_data = w_data
+			if typeof(w_data) == TYPE_DICTIONARY and w_data.has("mapValue"):
+				clean_data = {}
+				var fields = w_data["mapValue"]["fields"]
+				for key in fields.keys():
+					var val = fields[key]
+					if val.has("stringValue"): clean_data[key] = val["stringValue"]
+					elif val.has("integerValue"): clean_data[key] = int(val["integerValue"])
+					elif val.has("doubleValue"): clean_data[key] = float(val["doubleValue"])
+			
+			var card = preload("res://scenes/main/world_card.tscn").instantiate()
+			grid.add_child(card)
+			card.setup(clean_data, 0)
 
 func _show_upload_slot_selector(on_selected: Callable):
 	var s = _get_ui_scale()
