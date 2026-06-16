@@ -120,9 +120,23 @@ func _setup_mode(mode: int) -> void:
 		reports_label.text = tr("card_reports") + str(world_data.get("reports", 0))
 
 func _download_thumbnail(url: String) -> void:
+	var world_id = world_data.get("id", "")
+	var cache_path = "user://thumb_cache_" + str(world_id) + ".bin"
+	
+	if world_id != "" and FileAccess.file_exists(cache_path):
+		var modified_time = FileAccess.get_modified_time(cache_path)
+		var current_time = Time.get_unix_time_from_system()
+		if (current_time - modified_time) <= (7 * 86400): # 7 días
+			var f = FileAccess.open(cache_path, FileAccess.READ)
+			if f:
+				var body = f.get_buffer(f.get_length())
+				f.close()
+				if _apply_thumbnail_buffer(body):
+					return # Cache válido y aplicado con éxito
+	
 	var http_request = HTTPRequest.new()
 	add_child(http_request)
-	http_request.request_completed.connect(_on_thumbnail_downloaded.bind(http_request))
+	http_request.request_completed.connect(_on_thumbnail_downloaded.bind(http_request, cache_path))
 	
 	var headers = PackedStringArray()
 	if Firebase.Auth.auth != null and Firebase.Auth.auth.has("idtoken"):
@@ -130,32 +144,33 @@ func _download_thumbnail(url: String) -> void:
 		
 	http_request.request(url, headers)
 
-func _on_thumbnail_downloaded(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray, http_request: HTTPRequest) -> void:
-	if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
-		var image = Image.new()
-		var is_png = body.size() > 8 and body[0] == 0x89 and body[1] == 0x50 and body[2] == 0x4E and body[3] == 0x47
-		var is_jpg = body.size() > 3 and body[0] == 0xFF and body[1] == 0xD8 and body[2] == 0xFF
-		var is_webp = body.size() > 12 and body[8] == 0x57 and body[9] == 0x45 and body[10] == 0x42 and body[11] == 0x50
+func _apply_thumbnail_buffer(body: PackedByteArray) -> bool:
+	var image = Image.new()
+	var is_png = body.size() > 8 and body[0] == 0x89 and body[1] == 0x50 and body[2] == 0x4E and body[3] == 0x47
+	var is_jpg = body.size() > 3 and body[0] == 0xFF and body[1] == 0xD8 and body[2] == 0xFF
+	var is_webp = body.size() > 12 and body[8] == 0x57 and body[9] == 0x45 and body[10] == 0x42 and body[11] == 0x50
+	
+	var err = FAILED
+	if is_png:
+		err = image.load_png_from_buffer(body)
+	elif is_jpg:
+		err = image.load_jpg_from_buffer(body)
+	elif is_webp:
+		err = image.load_webp_from_buffer(body)
 		
-		var err = FAILED
-		if is_png:
-			err = image.load_png_from_buffer(body)
-		elif is_jpg:
-			err = image.load_jpg_from_buffer(body)
-		elif is_webp:
-			err = image.load_webp_from_buffer(body)
-			
-		if err == OK:
-			var texture = ImageTexture.create_from_image(image)
-			thumbnail_rect.texture = texture
-			print("Thumbnail loaded successfully!")
-		else:
-			print("Error parsing image buffer. Err code: ", err)
-	else:
-		print("Thumbnail download failed! Result: ", result, " HTTP Code: ", response_code)
-		if body.size() > 0:
-			print("Response body: ", body.get_string_from_utf8())
-			
+	if err == OK:
+		var texture = ImageTexture.create_from_image(image)
+		thumbnail_rect.texture = texture
+		return true
+	return false
+
+func _on_thumbnail_downloaded(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray, http_request: HTTPRequest, cache_path: String) -> void:
+	if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
+		if _apply_thumbnail_buffer(body) and cache_path != "":
+			var f = FileAccess.open(cache_path, FileAccess.WRITE)
+			if f:
+				f.store_buffer(body)
+				f.close()
 	http_request.queue_free()
 
 func _on_main_action_button_pressed() -> void:

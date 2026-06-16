@@ -83,6 +83,25 @@ var _cached_top_semanal_doc = null
 var _cached_recientes_doc = null
 var top_countdown_label: Label = null
 var bot_countdown_label: Label = null
+var top_downloads_count_label: Label = null
+
+var next_download_is_free: bool = true
+var uploads_today: int = 0
+var last_upload_day: int = 0
+
+func _load_workshop_economy():
+	var cfg = ConfigFile.new()
+	if cfg.load("user://workshop_economy.cfg") == OK:
+		next_download_is_free = cfg.get_value("economy", "next_download_is_free", true)
+		uploads_today = cfg.get_value("economy", "uploads_today", 0)
+		last_upload_day = cfg.get_value("economy", "last_upload_day", 0)
+
+func _save_workshop_economy():
+	var cfg = ConfigFile.new()
+	cfg.set_value("economy", "next_download_is_free", next_download_is_free)
+	cfg.set_value("economy", "uploads_today", uploads_today)
+	cfg.set_value("economy", "last_upload_day", last_upload_day)
+	cfg.save("user://workshop_economy.cfg")
 
 func _get_next_update_unix() -> int:
 	var current_unix = int(Time.get_unix_time_from_system())
@@ -108,9 +127,17 @@ func _get_last_update_unix() -> int:
 	if day_seconds >= threshold_2:
 		return base_day + threshold_2
 	elif day_seconds >= threshold_1:
-		return base_day + threshold_1
+		return base_day + threshold_2
 	else:
 		return base_day - 86400 + threshold_2
+
+func _update_day_check():
+	var current_day = Time.get_date_dict_from_system().day
+	if last_upload_day != current_day:
+		uploads_today = 0
+		next_download_is_free = true
+		last_upload_day = current_day
+		_save_workshop_economy()
 
 func _update_zoom_ui():
 	if not ui_elements.has("btn_pan") or not is_instance_valid(ui_elements["btn_pan"]):
@@ -637,6 +664,7 @@ func _get_safe_font() -> Font:
 		# Si no has puesto nada en el inspector, intenta buscar la carpeta por defecto
 		if not emoji_f:
 			var paths = [
+				"res://assets/fonts/Twemoji.Mozilla.ttf",
 				"res://assets/fonts/Twemoji.ttf",
 				"res://assets/fonts/NotoColorEmoji.ttf",
 				"res://assets/fonts/FluentEmoji.ttf"
@@ -976,6 +1004,9 @@ func _load_tool_settings():
 					is_piston_tutorial_done = dict["is_piston_tutorial_done"]
 
 func _ready():
+	_load_workshop_economy()
+	_update_day_check()
+	
 	# Session count tracking for rating and analytics
 	var app_config = ConfigFile.new()
 	app_config.load("user://achievements.cfg")
@@ -3796,6 +3827,13 @@ func _setup_workshop_ui():
 			top_countdown_label.add_theme_font_size_override("font_size", 18 * s)
 			top_countdown_label.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
 			scroll_vbox.add_child(top_countdown_label)
+		elif current_tab == 3:
+			top_downloads_count_label = Label.new()
+			top_downloads_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			top_downloads_count_label.add_theme_font_override("font", _get_safe_font())
+			top_downloads_count_label.add_theme_font_size_override("font_size", 18 * s)
+			top_downloads_count_label.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
+			scroll_vbox.add_child(top_downloads_count_label)
 		
 		var grid = GridContainer.new()
 		grid.columns = 2
@@ -3836,7 +3874,7 @@ func _setup_workshop_ui():
 				elif current_tab == 1:
 					call_deferred("_fetch_recientes_async", grid, pagination_hbox, p_page)
 				elif current_tab == 3:
-					call_deferred("_fetch_mis_descargas_async", grid)
+					call_deferred("_fetch_mis_descargas_async", grid, pagination_hbox, p_page)
 		
 		if workshop_panel.visible:
 			do_fetch.call()
@@ -3894,6 +3932,14 @@ func _setup_workshop_ui():
 			print("Gestionar mundos presionado")
 		)
 		top_buttons_hbox.add_child(btn_gestionar)
+		
+		var daily_uploads_label = Label.new()
+		daily_uploads_label.text = tr("daily_uploads_status").format([str(uploads_today), "5"])
+		daily_uploads_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		daily_uploads_label.add_theme_font_override("font", _get_safe_font())
+		daily_uploads_label.add_theme_font_size_override("font_size", 18 * s)
+		daily_uploads_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.65))
+		mis_mundos_vbox.add_child(daily_uploads_label)
 		
 		var list_scroll = ScrollContainer.new()
 		list_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -4166,25 +4212,37 @@ func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer
 		if idx == 0:
 			_show_empty_state_message(grid)
 
-func _fetch_mis_descargas_async(grid: GridContainer):
+func _fetch_mis_descargas_async(grid: GridContainer, pagination_hbox: HFlowContainer, page: int = 1):
 	if not is_instance_valid(grid): return
 	var downloads = []
 	if FileAccess.file_exists("user://downloads.json"):
 		var f = FileAccess.open("user://downloads.json", FileAccess.READ)
 		var dict = JSON.parse_string(f.get_as_text())
 		if typeof(dict) == TYPE_ARRAY: downloads = dict
+		
+	if is_instance_valid(top_downloads_count_label):
+		top_downloads_count_label.text = tr("downloaded_maps_count").format([str(downloads.size())])
+		
+	_build_pagination(pagination_hbox, downloads.size())
 	
 	for i in range(grid.get_child_count()):
 		grid.get_child(i).queue_free()
 		
-	for w_data in downloads:
+	var start_idx = (page - 1) * 10
+	var end_idx = start_idx + 10
+	if start_idx < 0: start_idx = 0
+	
+	var displayed = 0
+	for i in range(start_idx, min(end_idx, downloads.size())):
+		var w_data = downloads[i]
 		var card = preload("res://scenes/main/world_card.tscn").instantiate()
 		grid.add_child(card)
 		card.setup(w_data, 2) # CardMode.DOWNLOADED
 		card.play_requested.connect(_on_world_play_requested)
 		card.delete_requested.connect(_on_world_delete_downloaded)
+		displayed += 1
 		
-	if downloads.size() == 0:
+	if displayed == 0:
 		_show_empty_state_message(grid)
 
 func _show_empty_state_message(grid: GridContainer):
@@ -4231,77 +4289,195 @@ func _on_world_play_requested(world_data: Dictionary):
 	_load_world_from_path(path)
 	if is_instance_valid(loading): loading.queue_free()
 
+func _show_download_ad_popup(on_confirm: Callable, on_cancel: Callable):
+	var s = _get_ui_scale()
+	var overlay = PanelContainer.new()
+	var overlay_style = StyleBoxFlat.new()
+	overlay_style.bg_color = Color(0, 0, 0, 0.85)
+	overlay.add_theme_stylebox_override("panel", overlay_style)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(overlay)
+	
+	var center = CenterContainer.new()
+	overlay.add_child(center)
+	
+	var popup = PanelContainer.new()
+	popup.custom_minimum_size = Vector2(400 * s, 250 * s)
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.12, 0.12, 0.16, 1.0)
+	p_style.border_width_left = 3; p_style.border_width_top = 3
+	p_style.border_width_right = 3; p_style.border_width_bottom = 3
+	p_style.border_color = Color("#fbc531")
+	p_style.corner_radius_top_left = 15 * s; p_style.corner_radius_top_right = 15 * s
+	p_style.corner_radius_bottom_left = 15 * s; p_style.corner_radius_bottom_right = 15 * s
+	popup.add_theme_stylebox_override("panel", p_style)
+	center.add_child(popup)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 25 * s)
+	margin.add_theme_constant_override("margin_right", 25 * s)
+	margin.add_theme_constant_override("margin_top", 25 * s)
+	margin.add_theme_constant_override("margin_bottom", 25 * s)
+	popup.add_child(margin)
+	
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 20 * s)
+	margin.add_child(vbox)
+	
+	var label = Label.new()
+	label.text = tr("watch_ad_download_desc")
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_override("font", _get_safe_font())
+	label.add_theme_font_size_override("font_size", 22 * s)
+	label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
+	vbox.add_child(label)
+	
+	var spacer = Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(spacer)
+	
+	var hbox = HBoxContainer.new()
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	hbox.add_theme_constant_override("separation", 20 * s)
+	vbox.add_child(hbox)
+	
+	var btn_cancel = Button.new()
+	btn_cancel.text = tr("btn_cancel")
+	btn_cancel.custom_minimum_size = Vector2(120 * s, 50 * s)
+	btn_cancel.add_theme_font_override("font", _get_safe_font())
+	btn_cancel.add_theme_font_size_override("font_size", 18 * s)
+	var cancel_style = StyleBoxFlat.new()
+	cancel_style.bg_color = Color(0.3, 0.3, 0.35)
+	cancel_style.corner_radius_top_left = 8 * s; cancel_style.corner_radius_top_right = 8 * s
+	cancel_style.corner_radius_bottom_left = 8 * s; cancel_style.corner_radius_bottom_right = 8 * s
+	btn_cancel.add_theme_stylebox_override("normal", cancel_style)
+	btn_cancel.pressed.connect(func():
+		_play_action_sound("ui_click")
+		overlay.queue_free()
+		on_cancel.call()
+	)
+	hbox.add_child(btn_cancel)
+	
+	var btn_ad = Button.new()
+	btn_ad.text = tr("watch_ad_download")
+	btn_ad.custom_minimum_size = Vector2(200 * s, 50 * s)
+	btn_ad.add_theme_font_override("font", _get_safe_font())
+	btn_ad.add_theme_font_size_override("font_size", 18 * s)
+	btn_ad.add_theme_color_override("font_color", Color.BLACK)
+	var ad_style = StyleBoxFlat.new()
+	ad_style.bg_color = Color("#fbc531")
+	ad_style.corner_radius_top_left = 8 * s; ad_style.corner_radius_top_right = 8 * s
+	ad_style.corner_radius_bottom_left = 8 * s; ad_style.corner_radius_bottom_right = 8 * s
+	btn_ad.add_theme_stylebox_override("normal", ad_style)
+	var h_ad = ad_style.duplicate()
+	h_ad.bg_color = Color("#f5f6fa")
+	btn_ad.add_theme_stylebox_override("hover", h_ad)
+	btn_ad.add_theme_stylebox_override("pressed", h_ad)
+	btn_ad.pressed.connect(func():
+		_play_action_sound("ui_click")
+		overlay.queue_free()
+		on_confirm.call()
+	)
+	hbox.add_child(btn_ad)
+
 func _on_world_download_requested(world_data: Dictionary):
 	var world_id = str(world_data.get("id", ""))
-	var loading_overlay = _show_processing_overlay(tr("card_downloading"))
 	
-	var doc = await Firebase.Firestore.collection("community_worlds").get_doc(world_id)
-	if not doc or not doc.document.has("sbu_url"):
-		if is_instance_valid(loading_overlay): loading_overlay.queue_free()
-		_show_modal_message("Error", "No se encontró el archivo de descarga.")
-		return
+	var proceed_download = func():
+		var loading_overlay = _show_processing_overlay(tr("card_downloading"))
 		
-	var sbu_url = ""
-	var sbu_field = doc.document["sbu_url"]
-	if typeof(sbu_field) == TYPE_DICTIONARY and sbu_field.has("stringValue"):
-		sbu_url = sbu_field["stringValue"]
-	else:
-		sbu_url = str(sbu_field)
-		
-	var http_request = HTTPRequest.new()
-	add_child(http_request)
-	
-	var err = http_request.request(sbu_url)
-	if err != OK:
-		if is_instance_valid(loading_overlay): loading_overlay.queue_free()
-		_show_modal_message("Error", "Error al solicitar descarga.")
-		http_request.queue_free()
-		return
-		
-	var result_arr = await http_request.request_completed
-	var result = result_arr[0]
-	var response_code = result_arr[1]
-	var body = result_arr[3]
-	
-	if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
-		var save_path = "user://download_world_" + world_id + ".dat"
-		var f = FileAccess.open(save_path, FileAccess.WRITE)
-		if f:
-			f.store_buffer(body)
-			f.close()
-			
-			# Update downloads.json
-			var downloads = []
-			if FileAccess.file_exists("user://downloads.json"):
-				var df = FileAccess.open("user://downloads.json", FileAccess.READ)
-				var text = df.get_as_text()
-				if text != "":
-					var dt = JSON.parse_string(text)
-					if typeof(dt) == TYPE_ARRAY: downloads = dt
-				
-			# Remove old if exists
-			var new_downloads = []
-			for item in downloads:
-				if typeof(item) == TYPE_DICTIONARY and str(item.get("id", "")) != world_id:
-					new_downloads.append(item)
-			new_downloads.insert(0, world_data) # Insert at front
-			
-			var df = FileAccess.open("user://downloads.json", FileAccess.WRITE)
-			if df: df.store_string(JSON.stringify(new_downloads))
-			
+		var doc = await Firebase.Firestore.collection("community_worlds").get_doc(world_id)
+		if not doc or not doc.document.has("sbu_url"):
 			if is_instance_valid(loading_overlay): loading_overlay.queue_free()
-			_show_modal_message(tr("tab_mis_descargas"), tr("msg_download_success").format([world_data.get("title", "Mundo")]))
-			ui_root.set_meta("workshop_current_tab", 3)
-			ui_root.set_meta("workshop_page", 1)
-			call_deferred("_setup_main_ui_containers")
+			_show_modal_message("Error", "No se encontró el archivo de descarga.")
+			return
+			
+		var sbu_url = ""
+		var sbu_field = doc.document["sbu_url"]
+		if typeof(sbu_field) == TYPE_DICTIONARY and sbu_field.has("stringValue"):
+			sbu_url = sbu_field["stringValue"]
+		else:
+			sbu_url = str(sbu_field)
+			
+		var http_request = HTTPRequest.new()
+		add_child(http_request)
+		
+		var err = http_request.request(sbu_url)
+		if err != OK:
+			if is_instance_valid(loading_overlay): loading_overlay.queue_free()
+			_show_modal_message("Error", "Error al solicitar descarga.")
+			http_request.queue_free()
+			return
+			
+		var result_arr = await http_request.request_completed
+		var result = result_arr[0]
+		var response_code = result_arr[1]
+		var body = result_arr[3]
+		
+		if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
+			var save_path = "user://download_world_" + world_id + ".dat"
+			var f = FileAccess.open(save_path, FileAccess.WRITE)
+			if f:
+				f.store_buffer(body)
+				f.close()
+				
+				# Update downloads.json
+				var downloads = []
+				if FileAccess.file_exists("user://downloads.json"):
+					var df = FileAccess.open("user://downloads.json", FileAccess.READ)
+					var text = df.get_as_text()
+					if text != "":
+						var dt = JSON.parse_string(text)
+						if typeof(dt) == TYPE_ARRAY: downloads = dt
+					
+				# Remove old if exists
+				var new_downloads = []
+				for item in downloads:
+					if typeof(item) == TYPE_DICTIONARY and str(item.get("id", "")) != world_id:
+						new_downloads.append(item)
+				new_downloads.insert(0, world_data) # Insert at front
+				
+				var df = FileAccess.open("user://downloads.json", FileAccess.WRITE)
+				if df: df.store_string(JSON.stringify(new_downloads))
+				
+				if is_instance_valid(loading_overlay): loading_overlay.queue_free()
+				_show_modal_message(tr("tab_mis_descargas"), tr("msg_download_success").format([world_data.get("title", "Mundo")]))
+				ui_root.set_meta("workshop_current_tab", 3)
+				ui_root.set_meta("workshop_page", 1)
+				call_deferred("_setup_main_ui_containers")
+				
+				# Nota: El incremento de descargas en Firestore se gestionará
+				# desde una Cloud Function en el futuro para evitar colisiones.
+			else:
+				if is_instance_valid(loading_overlay): loading_overlay.queue_free()
+				_show_modal_message("Error", "No se pudo guardar el archivo localmente.")
 		else:
 			if is_instance_valid(loading_overlay): loading_overlay.queue_free()
-			_show_modal_message("Error", "No se pudo guardar el archivo local.")
-	else:
-		if is_instance_valid(loading_overlay): loading_overlay.queue_free()
-		_show_modal_message("Error", "Descarga fallida. Código: " + str(response_code))
+			_show_modal_message("Error", "Fallo al descargar el archivo: " + str(response_code))
 		
-	http_request.queue_free()
+		http_request.queue_free()
+	
+	if next_download_is_free:
+		next_download_is_free = false
+		_save_workshop_economy()
+		proceed_download.call()
+	else:
+		var on_cancel = func():
+			print("Descarga cancelada (Anuncio rechazado)")
+			
+		var on_confirm = func():
+			AdMobManager.show_workshop_rewarded()
+			var success = await AdMobManager.workshop_rewarded_completed
+			if success:
+				next_download_is_free = true
+				_save_workshop_economy()
+				proceed_download.call()
+			else:
+				_show_modal_message("Error", "El anuncio no se completó.")
+				
+		_show_download_ad_popup(on_confirm, on_cancel)
 
 func _show_upload_slot_selector(on_selected: Callable):
 	var s = _get_ui_scale()
@@ -4654,33 +4830,55 @@ func _show_upload_world_dialog():
 	var h_conf = conf_style.duplicate()
 	h_conf.bg_color = Color("#55efc4")
 	btn_confirm.add_theme_stylebox_override("hover", h_conf)
-	btn_confirm.add_theme_stylebox_override("pressed", h_conf)
+	if uploads_today >= 5:
+		btn_confirm.disabled = true
+		btn_confirm.text = tr("upload_limit_reached")
+		conf_style.bg_color = Color(0.4, 0.4, 0.4)
+	elif uploads_today >= 2:
+		btn_confirm.text = tr("btn_upload_ad")
+		conf_style.bg_color = Color("#fbc531")
+		btn_confirm.add_theme_color_override("font_color", Color.BLACK)
+		h_conf.bg_color = Color("#f5f6fa")
+		
 	btn_confirm.pressed.connect(func():
 		if name_input.text.strip_edges() == "": return
 		_play_action_sound("ui_click")
 		
-		var loading_overlay = _show_processing_overlay(tr("uploading_world"))
-		var start_time = Time.get_ticks_msec()
-		var chosen_name = name_input.text
-		
-		var on_done = func(success: bool, msg: String):
-			var elapsed = Time.get_ticks_msec() - start_time
-			if elapsed < 2000:
-				await get_tree().create_timer((2000 - elapsed) / 1000.0).timeout
-				
-			if is_instance_valid(loading_overlay):
-				loading_overlay.queue_free()
-				
-			if success:
-				if is_instance_valid(overlay): overlay.queue_free()
-				_show_centered_bubble(tr("upload_success").replace("'{0}'", "\"" + chosen_name + "\"").replace("{0}", "\"" + chosen_name + "\""), Color("#00cec9"))
-			else:
-				_show_centered_bubble("Error: " + msg, Color(0.8, 0.2, 0.2))
-				
-		if not WorkshopManager.upload_completed.is_connected(on_done):
-			WorkshopManager.upload_completed.connect(on_done, CONNECT_ONE_SHOT)
+		var proceed_upload = func():
+			var loading_overlay = _show_processing_overlay(tr("uploading_world"))
+			var start_time = Time.get_ticks_msec()
+			var chosen_name = name_input.text
 			
-		WorkshopManager.upload_world(selected_upload_slot_id[0], chosen_name, cat_opt.selected)
+			var on_done = func(success: bool, msg: String):
+				var elapsed = Time.get_ticks_msec() - start_time
+				if elapsed < 2000:
+					await get_tree().create_timer((2000 - elapsed) / 1000.0).timeout
+					
+				if is_instance_valid(loading_overlay):
+					loading_overlay.queue_free()
+					
+				if success:
+					uploads_today += 1
+					_save_workshop_economy()
+					if is_instance_valid(overlay): overlay.queue_free()
+					_show_centered_bubble(tr("upload_success").replace("'{0}'", "\"" + chosen_name + "\"").replace("{0}", "\"" + chosen_name + "\""), Color("#00cec9"))
+				else:
+					_show_centered_bubble("Error: " + msg, Color(0.8, 0.2, 0.2))
+					
+			if not WorkshopManager.upload_completed.is_connected(on_done):
+				WorkshopManager.upload_completed.connect(on_done, CONNECT_ONE_SHOT)
+			
+			WorkshopManager.upload_world(selected_upload_slot_id[0], chosen_name, cat_opt.selected)
+			
+		if uploads_today >= 2:
+			AdMobManager.show_workshop_rewarded()
+			var success = await AdMobManager.workshop_rewarded_completed
+			if success:
+				proceed_upload.call()
+			else:
+				_show_modal_message("Error", "El anuncio no se completó.")
+		else:
+			proceed_upload.call()
 	)
 	btn_hbox.add_child(btn_confirm)
 

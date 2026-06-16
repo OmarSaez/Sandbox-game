@@ -10,6 +10,8 @@ signal consent_info_updated
 signal rewarded_ad_loaded(success: bool)
 signal lab_rewarded_ad_loaded(success: bool)
 signal interstitial_ad_loaded(success: bool)
+signal workshop_rewarded_completed(success: bool)
+signal workshop_rewarded_ad_loaded(success: bool)
 
 var _banner_view : AdView
 var _banner_is_showing : bool = false
@@ -22,6 +24,8 @@ var _active_consent_form : ConsentForm # Keeps the UMP consent form alive
 var _interstitial_loading : bool = false
 var _rewarded_loading : bool = false
 var _lab_rewarded_loading : bool = false
+var _workshop_rewarded_ad : RewardedAd
+var _workshop_rewarded_loading : bool = false
 signal lab_unlocked
 var ad_free_time : float = 0.0 # Segundos restantes sin anuncios
 var first_pause_used : bool = false
@@ -755,3 +759,93 @@ func _exit_tree() -> void:
 	if _active_ad:
 		_active_ad.destroy()
 		_active_ad = null
+# --- SISTEMA DE REWARDED (WORKSHOP) ---
+
+func _load_workshop_rewarded():
+	if _app_is_paused: return
+	if _workshop_rewarded_loading or _workshop_rewarded_ad: return
+	_workshop_rewarded_loading = true
+	
+	var unit_id = "ca-app-pub-6982275568315854/7617075648"
+	var load_callback := RewardedAdLoadCallback.new()
+	
+	load_callback.on_ad_failed_to_load = func(error : LoadAdError):
+		print("ADMOB: Workshop Rewarded falló -> ", error.message)
+		_workshop_rewarded_loading = false
+		workshop_rewarded_ad_loaded.emit(false)
+
+	load_callback.on_ad_loaded = func(ad : RewardedAd):
+		print("ADMOB: Workshop Rewarded CARGADO.")
+		last_ad_interaction_time = Time.get_unix_time_from_system()
+		if _app_is_paused:
+			print("ADMOB: App pausada, descartando rewarded cargado por seguridad.")
+			ad.destroy()
+			_workshop_rewarded_loading = false
+			workshop_rewarded_ad_loaded.emit(false)
+		else:
+			_workshop_rewarded_ad = ad
+			_workshop_rewarded_loading = false
+			workshop_rewarded_ad_loaded.emit(true)
+	
+	var request = AdRequest.new()
+	print("ADMOB: Cargando Rewarded (Workshop)...")
+	RewardedAdLoader.new().load(unit_id, request, load_callback)
+
+func show_workshop_rewarded():
+	if not Engine.has_singleton("PoingGodotAdMob"):
+		print("ADMOB: show_workshop_rewarded() saltado (Plugin desactivado).")
+		workshop_rewarded_completed.emit(true) # Si no hay ads, asumimos éxito
+		return
+		
+	if _workshop_rewarded_ad:
+		print("ADMOB: Mostrando Workshop Rewarded inmediato...")
+		_active_ad = _workshop_rewarded_ad
+		_workshop_rewarded_ad = null
+		
+		var reward_earned = [false]
+		
+		var callback := FullScreenContentCallback.new()
+		callback.on_ad_dismissed_full_screen_content = func():
+			print("ADMOB: Workshop Rewarded cerrado.")
+			last_ad_interaction_time = Time.get_unix_time_from_system()
+			_active_ad = null
+			workshop_rewarded_completed.emit(reward_earned[0])
+			_load_workshop_rewarded() # Precargar el siguiente
+		
+		var reward_listener := OnUserEarnedRewardListener.new()
+		reward_listener.on_user_earned_reward = func(rewarded_item):
+			print("ADMOB: ¡RECOMPENSA DE WORKSHOP GANADA!")
+			reward_earned[0] = true
+		
+		_active_ad.full_screen_content_callback = callback
+		_active_ad.show(reward_listener)
+	else:
+		print("ADMOB: Workshop Rewarded no listo. Cargando bajo demanda...")
+		var overlay = _show_loading_overlay("Cargando anuncio de la Workshop...")
+		
+		if not _workshop_rewarded_loading:
+			_load_workshop_rewarded()
+			
+		var success = await workshop_rewarded_ad_loaded
+		
+		if success and _workshop_rewarded_ad:
+			if is_instance_valid(overlay):
+				overlay.queue_free()
+			show_workshop_rewarded()
+		else:
+			if is_instance_valid(overlay):
+				var spinner = overlay.get_meta("spinner", null)
+				if is_instance_valid(spinner): spinner.queue_free()
+				var sublabel = overlay.get_meta("sublabel", null)
+				if is_instance_valid(sublabel):
+					sublabel.text = "No se pudo cargar el anuncio. Comprueba tu conexión."
+					sublabel.add_theme_color_override("font_color", Color(0.9, 0.4, 0.4))
+				
+				var tween = overlay.create_tween()
+				tween.tween_interval(3.0)
+				tween.tween_property(overlay, "modulate:a", 0.0, 0.5)
+				await tween.finished
+				if is_instance_valid(overlay):
+					overlay.queue_free()
+					
+			workshop_rewarded_completed.emit(false)
