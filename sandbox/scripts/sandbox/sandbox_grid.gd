@@ -80,6 +80,36 @@ var cam_min_y: int = 0
 var cam_max_y: int = 9999
 
 var _cached_top_semanal_doc = null
+var top_countdown_label: Label = null
+var bot_countdown_label: Label = null
+
+func _get_next_update_unix() -> int:
+	var current_unix = int(Time.get_unix_time_from_system())
+	var day_seconds = current_unix % 86400
+	var threshold_1 = 5 * 60 # 00:05 UTC
+	var threshold_2 = (12 * 3600) + (5 * 60) # 12:05 UTC
+	var base_day = current_unix - day_seconds
+	
+	if day_seconds < threshold_1:
+		return base_day + threshold_1
+	elif day_seconds < threshold_2:
+		return base_day + threshold_2
+	else:
+		return base_day + 86400 + threshold_1
+
+func _get_last_update_unix() -> int:
+	var current_unix = int(Time.get_unix_time_from_system())
+	var day_seconds = current_unix % 86400
+	var threshold_1 = 5 * 60
+	var threshold_2 = (12 * 3600) + (5 * 60)
+	var base_day = current_unix - day_seconds
+	
+	if day_seconds >= threshold_2:
+		return base_day + threshold_2
+	elif day_seconds >= threshold_1:
+		return base_day + threshold_1
+	else:
+		return base_day - 86400 + threshold_2
 
 func _update_zoom_ui():
 	if not ui_elements.has("btn_pan") or not is_instance_valid(ui_elements["btn_pan"]):
@@ -3747,7 +3777,7 @@ func _setup_workshop_ui():
 	content_panel.add_theme_stylebox_override("panel", c_style)
 	main_vbox.add_child(content_panel)
 	
-	if current_tab == 0 or current_tab == 1:
+	if current_tab == 0 or current_tab == 1 or current_tab == 3:
 		var scroll = ScrollContainer.new()
 		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3757,6 +3787,14 @@ func _setup_workshop_ui():
 		var scroll_vbox = VBoxContainer.new()
 		scroll_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		scroll_vbox.add_theme_constant_override("separation", 30 * s)
+		
+		if current_tab == 0:
+			top_countdown_label = Label.new()
+			top_countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			top_countdown_label.add_theme_font_override("font", _get_safe_font())
+			top_countdown_label.add_theme_font_size_override("font_size", 18 * s)
+			top_countdown_label.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
+			scroll_vbox.add_child(top_countdown_label)
 		
 		var grid = GridContainer.new()
 		grid.columns = 2
@@ -3772,6 +3810,14 @@ func _setup_workshop_ui():
 		pagination_hbox.add_theme_constant_override("v_separation", 15 * s)
 		scroll_vbox.add_child(pagination_hbox)
 		
+		if current_tab == 0:
+			bot_countdown_label = Label.new()
+			bot_countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			bot_countdown_label.add_theme_font_override("font", _get_safe_font())
+			bot_countdown_label.add_theme_font_size_override("font_size", 18 * s)
+			bot_countdown_label.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0))
+			scroll_vbox.add_child(bot_countdown_label)
+		
 		var margin = MarginContainer.new()
 		margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		margin.add_theme_constant_override("margin_left", 20 * s)
@@ -3781,45 +3827,46 @@ func _setup_workshop_ui():
 		margin.add_child(scroll_vbox)
 		scroll.add_child(margin)
 		
-		var total_pages = 10 if current_tab == 0 else 2
-		for p in range(1, total_pages + 1):
-			var page_btn = Button.new()
-			page_btn.text = str(p)
-			page_btn.custom_minimum_size = Vector2(70 * s, 70 * s)
-			page_btn.add_theme_font_override("font", _get_safe_font())
-			page_btn.add_theme_font_size_override("font_size", 24 * s)
-			
-			var b_style = StyleBoxFlat.new()
-			b_style.bg_color = Color(0.2, 0.2, 0.25, 1.0)
-			b_style.corner_radius_top_left = 15 * s; b_style.corner_radius_top_right = 15 * s
-			b_style.corner_radius_bottom_left = 15 * s; b_style.corner_radius_bottom_right = 15 * s
-			page_btn.add_theme_stylebox_override("normal", b_style)
-			
-			var h_style = b_style.duplicate()
-			h_style.bg_color = Color(0.3, 0.3, 0.35, 1.0)
-			page_btn.add_theme_stylebox_override("hover", h_style)
-			page_btn.add_theme_stylebox_override("pressed", h_style)
-			
-			pagination_hbox.add_child(page_btn)
-			
-			page_btn.pressed.connect(func():
-				_play_action_sound("ui_click")
-				for child in grid.get_children():
-					child.queue_free()
-				scroll.scroll_vertical = 0
+		if current_tab == 0 or current_tab == 1:
+			var total_pages = 10 if current_tab == 0 else 2
+			for i in range(total_pages):
+				var page_idx = i + 1
+				var p_btn = Button.new()
+				p_btn.text = str(page_idx)
+				p_btn.custom_minimum_size = Vector2(60 * s, 60 * s)
 				
-				if current_tab == 0:
-					call_deferred("_fetch_top_semanal_async", grid, p)
-				elif current_tab == 1:
-					call_deferred("_fetch_recientes_async", grid, p)
-			)
+				var b_style = StyleBoxFlat.new()
+				var current_page = ui_root.get_meta("workshop_page", 1)
+				b_style.bg_color = Color(0.25, 0.25, 0.3) if page_idx == current_page else Color(0.15, 0.15, 0.2)
+				b_style.corner_radius_top_left = 12 * s; b_style.corner_radius_top_right = 12 * s
+				b_style.corner_radius_bottom_left = 12 * s; b_style.corner_radius_bottom_right = 12 * s
+				p_btn.add_theme_stylebox_override("normal", b_style)
+				
+				var h_style = b_style.duplicate()
+				h_style.bg_color = Color(0.35, 0.35, 0.4)
+				p_btn.add_theme_stylebox_override("hover", h_style)
+				p_btn.add_theme_stylebox_override("pressed", h_style)
+				
+				p_btn.add_theme_font_override("font", _get_safe_font())
+				p_btn.add_theme_font_size_override("font_size", 20 * s)
+				
+				p_btn.pressed.connect(func():
+					_play_action_sound("ui_click")
+					ui_root.set_meta("workshop_page", page_idx)
+					_setup_main_ui_containers() # Re-render con nueva página
+				)
+				
+				pagination_hbox.add_child(p_btn)
 		
 		var do_fetch = func():
+			var p_page = ui_root.get_meta("workshop_page", 1)
 			if grid.get_child_count() == 0:
 				if current_tab == 0:
-					call_deferred("_fetch_top_semanal_async", grid, 1)
+					call_deferred("_fetch_top_semanal_async", grid, p_page)
 				elif current_tab == 1:
-					call_deferred("_fetch_recientes_async", grid, 1)
+					call_deferred("_fetch_recientes_async", grid, p_page)
+				elif current_tab == 3:
+					call_deferred("_fetch_mis_descargas_async", grid)
 		
 		if workshop_panel.visible:
 			do_fetch.call()
@@ -3892,11 +3939,27 @@ func _setup_workshop_ui():
 func _fetch_top_semanal_async(grid: GridContainer, page: int = 1):
 	if not is_instance_valid(grid): return
 	
+	var document = _cached_top_semanal_doc
+	if document == null:
+		# Check disk cache first
+		var last_update = _get_last_update_unix()
+		if FileAccess.file_exists("user://top_semanal_cache.json"):
+			var cf = FileAccess.open("user://top_semanal_cache.json", FileAccess.READ)
+			if cf:
+				var text = cf.get_as_text()
+				cf.close()
+				if text != "":
+					var parsed = JSON.parse_string(text)
+					if typeof(parsed) == TYPE_DICTIONARY and parsed.has("fetch_time"):
+						if parsed["fetch_time"] >= last_update:
+							document = parsed["document"]
+							_cached_top_semanal_doc = document
+	
 	var loading_overlay = null
-	if _cached_top_semanal_doc == null:
+	if document == null:
 		loading_overlay = _show_processing_overlay(tr("load_worls"))
 	
-	# Pre-instanciar tarjetas para aprovechar tiempo de CPU mientras esperamos la red
+	# Pre-instanciar tarjetas para aprovechar tiempo de CPU
 	var preloaded_cards = []
 	for i in range(10):
 		var card = preload("res://scenes/main/world_card.tscn").instantiate()
@@ -3904,19 +3967,35 @@ func _fetch_top_semanal_async(grid: GridContainer, page: int = 1):
 		grid.add_child(card)
 		preloaded_cards.append(card)
 	
-	var document = _cached_top_semanal_doc
 	if document == null:
 		var collection = Firebase.Firestore.collection("cache")
-		document = await collection.get_doc("top_semanal")
-		_cached_top_semanal_doc = document
+		var fb_doc = await collection.get_doc("top_semanal")
+		if fb_doc:
+			document = fb_doc.document
+			_cached_top_semanal_doc = document
+			
+			# Save to disk cache
+			var cf = FileAccess.open("user://top_semanal_cache.json", FileAccess.WRITE)
+			if cf:
+				cf.store_string(JSON.stringify({
+					"fetch_time": int(Time.get_unix_time_from_system()),
+					"document": document
+				}))
+				cf.close()
 	
 	if is_instance_valid(loading_overlay):
 		loading_overlay.queue_free()
 		
 	if not is_instance_valid(grid): return
 	
-	if document and document.document.has("worlds"):
-		var raw_worlds = document.document["worlds"]
+	var dict_doc = null
+	if typeof(document) == TYPE_OBJECT and document is FirestoreDocument:
+		dict_doc = document.document
+	elif typeof(document) == TYPE_DICTIONARY:
+		dict_doc = document
+		
+	if dict_doc and dict_doc.has("worlds"):
+		var raw_worlds = dict_doc["worlds"]
 		var worlds_list = []
 		
 		# Manejar todas las posibles formas en que Godot Firebase parsea el array
@@ -3950,10 +4029,13 @@ func _fetch_top_semanal_async(grid: GridContainer, page: int = 1):
 				var card = preloaded_cards[idx]
 				card.modulate.a = 1.0
 				card.setup(clean_data, 0)
+				if not card.download_requested.is_connected(_on_world_download_requested):
+					card.download_requested.connect(_on_world_download_requested)
 			else:
 				var card = preload("res://scenes/main/world_card.tscn").instantiate()
 				grid.add_child(card)
 				card.setup(clean_data, 0)
+				card.download_requested.connect(_on_world_download_requested)
 			idx += 1
 			
 		for i in range(idx, preloaded_cards.size()):
@@ -4005,14 +4087,139 @@ func _fetch_recientes_async(grid: GridContainer, page: int = 1):
 			var card = preloaded_cards[idx]
 			card.modulate.a = 1.0
 			card.setup(clean_data, 0)
+			if not card.download_requested.is_connected(_on_world_download_requested):
+				card.download_requested.connect(_on_world_download_requested)
 		else:
 			var card = preload("res://scenes/main/world_card.tscn").instantiate()
 			grid.add_child(card)
 			card.setup(clean_data, 0)
+			card.download_requested.connect(_on_world_download_requested)
 		idx += 1
 		
 	for i in range(idx, preloaded_cards.size()):
 		preloaded_cards[i].queue_free()
+
+func _fetch_mis_descargas_async(grid: GridContainer):
+	if not is_instance_valid(grid): return
+	var downloads = []
+	if FileAccess.file_exists("user://downloads.json"):
+		var f = FileAccess.open("user://downloads.json", FileAccess.READ)
+		var dict = JSON.parse_string(f.get_as_text())
+		if typeof(dict) == TYPE_ARRAY: downloads = dict
+	
+	for i in range(grid.get_child_count()):
+		grid.get_child(i).queue_free()
+		
+	for w_data in downloads:
+		var card = preload("res://scenes/main/world_card.tscn").instantiate()
+		grid.add_child(card)
+		card.setup(w_data, 2) # CardMode.DOWNLOADED
+		card.play_requested.connect(_on_world_play_requested)
+		card.delete_requested.connect(_on_world_delete_downloaded)
+
+func _on_world_delete_downloaded(world_data: Dictionary):
+	var world_id = str(world_data.get("id", ""))
+	
+	var downloads = []
+	if FileAccess.file_exists("user://downloads.json"):
+		var f = FileAccess.open("user://downloads.json", FileAccess.READ)
+		var text = f.get_as_text()
+		if text != "":
+			var dict = JSON.parse_string(text)
+			if typeof(dict) == TYPE_ARRAY: downloads = dict
+			
+	var new_downloads = []
+	for item in downloads:
+		if typeof(item) == TYPE_DICTIONARY and str(item.get("id", "")) != world_id:
+			new_downloads.append(item)
+			
+	var f = FileAccess.open("user://downloads.json", FileAccess.WRITE)
+	if f: f.store_string(JSON.stringify(new_downloads))
+	
+	var save_path = "user://download_world_" + world_id + ".dat"
+	if FileAccess.file_exists(save_path):
+		DirAccess.remove_absolute(save_path)
+		
+	call_deferred("_setup_main_ui_containers")
+
+func _on_world_play_requested(world_data: Dictionary):
+	var path = "user://download_world_" + str(world_data.get("id", "")) + ".dat"
+	var loading = _show_processing_overlay("Cargando...")
+	await get_tree().create_timer(0.1).timeout
+	_load_world_from_path(path)
+	if is_instance_valid(loading): loading.queue_free()
+
+func _on_world_download_requested(world_data: Dictionary):
+	var world_id = str(world_data.get("id", ""))
+	var loading_overlay = _show_processing_overlay(tr("card_downloading"))
+	
+	var doc = await Firebase.Firestore.collection("community_worlds").get_doc(world_id)
+	if not doc or not doc.document.has("sbu_url"):
+		if is_instance_valid(loading_overlay): loading_overlay.queue_free()
+		_show_modal_message("Error", "No se encontró el archivo de descarga.")
+		return
+		
+	var sbu_url = ""
+	var sbu_field = doc.document["sbu_url"]
+	if typeof(sbu_field) == TYPE_DICTIONARY and sbu_field.has("stringValue"):
+		sbu_url = sbu_field["stringValue"]
+	else:
+		sbu_url = str(sbu_field)
+		
+	var http_request = HTTPRequest.new()
+	add_child(http_request)
+	
+	var err = http_request.request(sbu_url)
+	if err != OK:
+		if is_instance_valid(loading_overlay): loading_overlay.queue_free()
+		_show_modal_message("Error", "Error al solicitar descarga.")
+		http_request.queue_free()
+		return
+		
+	var result_arr = await http_request.request_completed
+	var result = result_arr[0]
+	var response_code = result_arr[1]
+	var body = result_arr[3]
+	
+	if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
+		var save_path = "user://download_world_" + world_id + ".dat"
+		var f = FileAccess.open(save_path, FileAccess.WRITE)
+		if f:
+			f.store_buffer(body)
+			f.close()
+			
+			# Update downloads.json
+			var downloads = []
+			if FileAccess.file_exists("user://downloads.json"):
+				var df = FileAccess.open("user://downloads.json", FileAccess.READ)
+				var text = df.get_as_text()
+				if text != "":
+					var dt = JSON.parse_string(text)
+					if typeof(dt) == TYPE_ARRAY: downloads = dt
+				
+			# Remove old if exists
+			var new_downloads = []
+			for item in downloads:
+				if typeof(item) == TYPE_DICTIONARY and str(item.get("id", "")) != world_id:
+					new_downloads.append(item)
+			new_downloads.insert(0, world_data) # Insert at front
+			
+			var df = FileAccess.open("user://downloads.json", FileAccess.WRITE)
+			if df: df.store_string(JSON.stringify(new_downloads))
+			
+			if is_instance_valid(loading_overlay): loading_overlay.queue_free()
+			_show_modal_message(tr("tab_mis_descargas"), tr("msg_download_success").format([world_data.get("title", "Mundo")]))
+			ui_root.set_meta("workshop_current_tab", 3)
+			ui_root.set_meta("workshop_page", 1)
+			call_deferred("_setup_main_ui_containers")
+		else:
+			if is_instance_valid(loading_overlay): loading_overlay.queue_free()
+			_show_modal_message("Error", "No se pudo guardar el archivo local.")
+	else:
+		if is_instance_valid(loading_overlay): loading_overlay.queue_free()
+		_show_modal_message("Error", "Descarga fallida. Código: " + str(response_code))
+		
+	http_request.queue_free()
 
 func _show_upload_slot_selector(on_selected: Callable):
 	var s = _get_ui_scale()
@@ -6413,6 +6620,21 @@ func _play_action_sound(action: String, min_interval: float = 0.08, volume_boost
 		_play_sfx(action_sfx[action], volume_boost, pitch_scale)
 
 func _process(delta):
+	if is_instance_valid(top_countdown_label):
+		var left = _get_next_update_unix() - int(Time.get_unix_time_from_system())
+		if left <= 0:
+			left = 0
+			# Invalidate memory cache so next tab click re-fetches
+			_cached_top_semanal_doc = null
+			
+		var h = left / 3600
+		var m = (left % 3600) / 60
+		var s = left % 60
+		var text = "Se actualiza en: %02d:%02d:%02d" % [h, m, s]
+		top_countdown_label.text = text
+		if is_instance_valid(bot_countdown_label):
+			bot_countdown_label.text = text
+
 	if not is_grid_ready: return
 	
 	# Animate Rainbow LED Button color in LED selection panel
@@ -15198,7 +15420,14 @@ func _show_modal_message(title_text: String, message_text: String):
 	dialog_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	dialog_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dialog_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	save_panel.add_child(dialog_container)
+	if is_instance_valid(save_panel) and save_panel.visible:
+		save_panel.add_child(dialog_container)
+	elif is_instance_valid(workshop_panel) and workshop_panel.visible:
+		workshop_panel.add_child(dialog_container)
+	elif is_instance_valid(ui_root):
+		ui_root.add_child(dialog_container)
+	else:
+		add_child(dialog_container)
 	
 	var dialog = PanelContainer.new()
 	dialog_container.add_child(dialog)
@@ -15795,10 +16024,14 @@ func _save_to_slot(idx, custom_name: String = ""):
 
 func _load_from_slot(idx):
 	var path = "user://save_slot_" + str(idx) + ".dat"
-	if not FileAccess.file_exists(path): return
 	
 	# Log to Firebase Analytics
 	AnalyticsManager.log_event("load_game", {"slot": int(idx)})
+	
+	_load_world_from_path(path)
+
+func _load_world_from_path(path: String):
+	if not FileAccess.file_exists(path): return
 	
 	var file = FileAccess.open_compressed(path, FileAccess.READ, FileAccess.COMPRESSION_ZSTD)
 	if file:

@@ -1,7 +1,15 @@
 extends PanelContainer
 class_name WorldCard
 
-enum CardMode { COMMUNITY, MANAGEMENT }
+enum CardMode {
+	COMMUNITY,
+	MANAGEMENT,
+	DOWNLOADED
+}
+
+signal download_requested(world_data: Dictionary)
+signal play_requested(world_data: Dictionary)
+signal delete_requested(world_data: Dictionary)
 
 @onready var title_label: Label = $VBoxContainer/TitleLabel
 @onready var author_label: Label = $VBoxContainer/AuthorLabel
@@ -33,8 +41,7 @@ func _ready() -> void:
 	_apply_scaling()
 	
 	if download_button:
-		download_button.text = tr("card_play_download")
-		download_button.pressed.connect(_on_download_button_pressed)
+		download_button.pressed.connect(_on_main_action_button_pressed)
 	if report_button:
 		report_button.text = tr("card_report")
 		report_button.pressed.connect(_on_report_button_pressed)
@@ -94,12 +101,22 @@ func setup(data: Dictionary, mode: int = CardMode.COMMUNITY) -> void:
 		_download_thumbnail(url)
 
 func _setup_mode(mode: int) -> void:
-	if mode == CardMode.COMMUNITY:
+	if mode == CardMode.COMMUNITY or mode == CardMode.DOWNLOADED:
 		community_buttons.visible = true
-		management_buttons.visible = false
+		management_buttons.visible = (mode == CardMode.DOWNLOADED)
+		if mode == CardMode.DOWNLOADED:
+			report_button.visible = true
+			download_button.text = tr("card_play")
+			if edit_button: edit_button.visible = false
+			if reports_label: reports_label.visible = false
+		else:
+			report_button.visible = true
+			download_button.text = tr("card_play_download")
 	elif mode == CardMode.MANAGEMENT:
-		community_buttons.visible = false # Quizás luego movemos el botón jugar aquí también
+		community_buttons.visible = false
 		management_buttons.visible = true
+		if edit_button: edit_button.visible = true
+		if reports_label: reports_label.visible = true
 		reports_label.text = tr("card_reports") + str(world_data.get("reports", 0))
 
 func _download_thumbnail(url: String) -> void:
@@ -141,16 +158,18 @@ func _on_thumbnail_downloaded(result: int, response_code: int, headers: PackedSt
 			
 	http_request.queue_free()
 
-func _on_download_button_pressed() -> void:
-	print("Descargar mundo: ", world_data.get("id", ""))
-	# TODO: Lógica de descarga
+func _on_main_action_button_pressed() -> void:
+	if current_mode == CardMode.DOWNLOADED:
+		play_requested.emit(world_data)
+	else:
+		download_requested.emit(world_data)
 
 func _on_edit_button_pressed() -> void:
 	print("Editar mundo: ", world_data.get("id", ""))
 	# TODO: Abrir popup para cambiar nombre
 
 func _on_delete_button_pressed() -> void:
-	print("Borrar mundo: ", world_data.get("id", ""))
+	delete_requested.emit(world_data)
 	# TODO: Confirmar y borrar de Firebase
 
 func _on_report_button_pressed() -> void:

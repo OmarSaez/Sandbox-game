@@ -400,4 +400,7 @@ card_play_download,⬇️ Descargar,⬇️ Download,⬇️ Scarica,⬇️ Télé
 card_report,🚩 Reportar,🚩 Report,🚩 Segnala,🚩 Signaler,🚩 Melden,🚩 Reportar
 card_edit,✏️ Editar,✏️ Edit,✏️ Modifica,✏️ Modifier,✏️ Bearbeiten,✏️ Editar
 card_delete,🗑️ Eliminar,🗑️ Delete,🗑️ Elimina,🗑️ Supprimer,🗑️ Löschen,🗑️ Excluir
-card_reports,🚩 Reportes: ,🚩 Reports: ,🚩 Segnalazioni: ,🚩 Signalements : ,🚩 Meldungen: ,🚩 Relatórios:
+card_reports,🚩 Reportes: ,🚩 Reports: ,🚩 Segnalazioni: ,🚩 Signalements : ,🚩 Meldungen: ,🚩 Denúncias: 
+card_downloading,Descargando mundo...,Downloading world...,Download mondo...,Téléchargement du monde...,Welt wird heruntergeladen...,Baixando mundo...
+card_play,▶️ Jugar,▶️ Play,▶️ Gioca,▶️ Jouer,▶️ Spielen,▶️ Jogar
+msg_download_success,El mundo "{0}" fue descargado con éxito.,The world "{0}" was successfully downloaded.,Il mondo "{0}" è stato scaricato con successo.,Le monde "{0}" a été téléchargé avec succès.,Die Welt "{0}" wurde erfolgreich heruntergeladen.,O mundo "{0}" foi baixado com sucesso.
