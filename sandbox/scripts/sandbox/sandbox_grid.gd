@@ -4502,11 +4502,12 @@ func _show_upload_slot_selector(on_selected: Callable):
 	panel_style.border_width_right = 3; panel_style.border_width_bottom = 3
 	panel_style.border_color = Color(0.6, 0.5, 0.2)
 	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
+	panel_style.corner_radius_bottom_left = 30; panel_style.corner_radius_bottom_right = 30
 	panel.add_theme_stylebox_override("panel", panel_style)
 	
 	var is_landscape = get_viewport_rect().size.x > get_viewport_rect().size.y
-	var base_height = 530 * s if is_landscape else 650 * s
-	var m_height = min(base_height, get_viewport_rect().size.y * 0.8)
+	var base_height = 530 * s if is_landscape else 750 * s
+	var m_height = min(base_height, get_viewport_rect().size.y * 0.95)
 	panel.custom_minimum_size = Vector2(530 * s, m_height)
 	center.add_child(panel)
 	
@@ -4540,6 +4541,7 @@ func _show_upload_slot_selector(on_selected: Callable):
 		var slot_data = _get_slot_data(i)
 		
 		var slot_panel = PanelContainer.new()
+		slot_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 		slot_panel.custom_minimum_size = Vector2(235 * s, 0)
 		var style = StyleBoxFlat.new()
 		style.bg_color = Color(0.15, 0.15, 0.18)
@@ -4551,18 +4553,22 @@ func _show_upload_slot_selector(on_selected: Callable):
 		grid.add_child(slot_panel)
 		
 		var vbox = VBoxContainer.new()
+		vbox.mouse_filter = Control.MOUSE_FILTER_PASS
 		vbox.add_theme_constant_override("separation", 5 * s)
 		slot_panel.add_child(vbox)
 		
 		var header = HBoxContainer.new()
+		header.mouse_filter = Control.MOUSE_FILTER_PASS
 		vbox.add_child(header)
 		
 		var lbl_idx = Label.new()
+		lbl_idx.mouse_filter = Control.MOUSE_FILTER_PASS
 		lbl_idx.text = "#" + str(i)
 		lbl_idx.add_theme_font_size_override("font_size", 26 * s)
 		header.add_child(lbl_idx)
 		
 		var lbl_name = Label.new()
+		lbl_name.mouse_filter = Control.MOUSE_FILTER_PASS
 		lbl_name.text = slot_data.name if slot_data.has("name") else tr("empty")
 		lbl_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		lbl_name.clip_text = true
@@ -4570,6 +4576,7 @@ func _show_upload_slot_selector(on_selected: Callable):
 		header.add_child(lbl_name)
 		
 		var thumb_rect = TextureRect.new()
+		thumb_rect.mouse_filter = Control.MOUSE_FILTER_PASS
 		thumb_rect.custom_minimum_size = Vector2(215 * s, 150 * s) 
 		thumb_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		thumb_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
