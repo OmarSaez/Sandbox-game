@@ -3745,7 +3745,7 @@ func _setup_workshop_ui():
 	content_panel.add_theme_stylebox_override("panel", c_style)
 	main_vbox.add_child(content_panel)
 	
-	if current_tab == 0:
+	if current_tab == 0 or current_tab == 1:
 		var scroll = ScrollContainer.new()
 		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3768,7 +3768,10 @@ func _setup_workshop_ui():
 		
 		var do_fetch = func():
 			if grid.get_child_count() == 0:
-				call_deferred("_fetch_top_semanal_async", grid)
+				if current_tab == 0:
+					call_deferred("_fetch_top_semanal_async", grid)
+				elif current_tab == 1:
+					call_deferred("_fetch_recientes_async", grid)
 		
 		if workshop_panel.visible:
 			do_fetch.call()
@@ -3880,6 +3883,43 @@ func _fetch_top_semanal_async(grid: GridContainer):
 			var card = preload("res://scenes/main/world_card.tscn").instantiate()
 			grid.add_child(card)
 			card.setup(clean_data, 0)
+
+func _fetch_recientes_async(grid: GridContainer):
+	if not is_instance_valid(grid): return
+	
+	var loading_overlay = _show_processing_overlay(tr("load_worls"))
+	
+	var query = FirestoreQuery.new()
+	query.from("community_worlds")
+	query.order_by("timestamp", FirestoreQuery.DIRECTION.DESCENDING)
+	query.limit(10)
+	
+	var documents = await Firebase.Firestore.query(query)
+	
+	if is_instance_valid(loading_overlay):
+		loading_overlay.queue_free()
+		
+	if not is_instance_valid(grid): return
+	
+	for doc in documents:
+		if typeof(doc) != TYPE_OBJECT or not doc is FirestoreDocument:
+			continue
+			
+		var fields = doc.document
+		var clean_data = {}
+		clean_data["id"] = doc.doc_name # Save the document ID
+		
+		for key in fields.keys():
+			var val = fields[key]
+			if typeof(val) == TYPE_DICTIONARY:
+				if val.has("stringValue"): clean_data[key] = val["stringValue"]
+				elif val.has("integerValue"): clean_data[key] = int(val["integerValue"])
+				elif val.has("doubleValue"): clean_data[key] = float(val["doubleValue"])
+				elif val.has("booleanValue"): clean_data[key] = val["booleanValue"]
+		
+		var card = preload("res://scenes/main/world_card.tscn").instantiate()
+		grid.add_child(card)
+		card.setup(clean_data, 0)
 
 func _show_upload_slot_selector(on_selected: Callable):
 	var s = _get_ui_scale()
