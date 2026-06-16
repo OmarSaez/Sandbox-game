@@ -1,4 +1,5 @@
 const {onSchedule} = require("firebase-functions/v2/scheduler");
+const {onDocumentCreated} = require("firebase-functions/v2/firestore");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 
@@ -57,5 +58,64 @@ exports.updateweeklytop = onSchedule("0 0,12 * * *", async (event) => {
     console.log("¡Caché del Top Semanal actualizado exitosamente!");
   } catch (error) {
     console.error("Error crítico al actualizar el Top Semanal:", error);
+  }
+});
+
+exports.onworldcreated = onDocumentCreated({
+  document: "community_worlds/{worldId}",
+  database: "default"
+}, async (event) => {
+  const snapshot = event.data;
+  if (!snapshot) {
+    console.log("No hay datos asociados al evento.");
+    return;
+  }
+  
+  const data = snapshot.data();
+  const worldId = event.params.worldId;
+  console.log(`Nuevo mundo detectado: ${worldId}`);
+
+  const newWorldInfo = {
+    id: worldId,
+    title: data.title || "Sin título",
+    author: data.author || "Anónimo",
+    likes: data.likes || 0,
+    downloads: data.downloads || 0,
+    weekly_score: data.weekly_score || 0,
+    thumbnail_url: data.thumbnail_url || "",
+    category: data.category || 0,
+    timestamp: data.timestamp || Date.now()
+  };
+
+  const cacheRef = db.collection("cache").doc("recientes");
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const cacheDoc = await transaction.get(cacheRef);
+      let worldsArray = [];
+      
+      if (cacheDoc.exists) {
+        const cacheData = cacheDoc.data();
+        if (cacheData.worlds && Array.isArray(cacheData.worlds)) {
+          worldsArray = cacheData.worlds;
+        }
+      }
+      
+      // Inyectar al principio
+      worldsArray.unshift(newWorldInfo);
+      
+      // Limitar a los 200 más recientes
+      if (worldsArray.length > 200) {
+        worldsArray = worldsArray.slice(0, 200);
+      }
+      
+      transaction.set(cacheRef, {
+        updated_at: new Date().toISOString(),
+        worlds: worldsArray
+      });
+    });
+    console.log(`Caché de recientes actualizado exitosamente con el mundo ${worldId}.`);
+  } catch (error) {
+    console.error("Error al actualizar la caché de recientes:", error);
   }
 });

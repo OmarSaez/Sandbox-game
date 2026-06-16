@@ -80,6 +80,7 @@ var cam_min_y: int = 0
 var cam_max_y: int = 9999
 
 var _cached_top_semanal_doc = null
+var _cached_recientes_doc = null
 var top_countdown_label: Label = null
 var bot_countdown_label: Label = null
 
@@ -3827,44 +3828,13 @@ func _setup_workshop_ui():
 		margin.add_child(scroll_vbox)
 		scroll.add_child(margin)
 		
-		if current_tab == 0 or current_tab == 1:
-			var total_pages = 10 if current_tab == 0 else 2
-			for i in range(total_pages):
-				var page_idx = i + 1
-				var p_btn = Button.new()
-				p_btn.text = str(page_idx)
-				p_btn.custom_minimum_size = Vector2(60 * s, 60 * s)
-				
-				var b_style = StyleBoxFlat.new()
-				var current_page = ui_root.get_meta("workshop_page", 1)
-				b_style.bg_color = Color(0.25, 0.25, 0.3) if page_idx == current_page else Color(0.15, 0.15, 0.2)
-				b_style.corner_radius_top_left = 12 * s; b_style.corner_radius_top_right = 12 * s
-				b_style.corner_radius_bottom_left = 12 * s; b_style.corner_radius_bottom_right = 12 * s
-				p_btn.add_theme_stylebox_override("normal", b_style)
-				
-				var h_style = b_style.duplicate()
-				h_style.bg_color = Color(0.35, 0.35, 0.4)
-				p_btn.add_theme_stylebox_override("hover", h_style)
-				p_btn.add_theme_stylebox_override("pressed", h_style)
-				
-				p_btn.add_theme_font_override("font", _get_safe_font())
-				p_btn.add_theme_font_size_override("font_size", 20 * s)
-				
-				p_btn.pressed.connect(func():
-					_play_action_sound("ui_click")
-					ui_root.set_meta("workshop_page", page_idx)
-					_setup_main_ui_containers() # Re-render con nueva página
-				)
-				
-				pagination_hbox.add_child(p_btn)
-		
 		var do_fetch = func():
 			var p_page = ui_root.get_meta("workshop_page", 1)
 			if grid.get_child_count() == 0:
 				if current_tab == 0:
-					call_deferred("_fetch_top_semanal_async", grid, p_page)
+					call_deferred("_fetch_top_semanal_async", grid, pagination_hbox, p_page)
 				elif current_tab == 1:
-					call_deferred("_fetch_recientes_async", grid, p_page)
+					call_deferred("_fetch_recientes_async", grid, pagination_hbox, p_page)
 				elif current_tab == 3:
 					call_deferred("_fetch_mis_descargas_async", grid)
 		
@@ -3936,7 +3906,46 @@ func _setup_workshop_ui():
 	workshop_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	workshop_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
-func _fetch_top_semanal_async(grid: GridContainer, page: int = 1):
+func _build_pagination(pagination_hbox: HFlowContainer, total_items: int):
+	if not is_instance_valid(pagination_hbox): return
+	
+	for child in pagination_hbox.get_children():
+		child.queue_free()
+		
+	var s = _get_ui_scale()
+	var total_pages = ceil(float(total_items) / 10.0)
+	if total_pages <= 0: total_pages = 1
+	
+	for i in range(total_pages):
+		var page_idx = i + 1
+		var p_btn = Button.new()
+		p_btn.text = str(page_idx)
+		p_btn.custom_minimum_size = Vector2(60 * s, 60 * s)
+		
+		var b_style = StyleBoxFlat.new()
+		var current_page = ui_root.get_meta("workshop_page", 1)
+		b_style.bg_color = Color(0.25, 0.25, 0.3) if page_idx == current_page else Color(0.15, 0.15, 0.2)
+		b_style.corner_radius_top_left = 12 * s; b_style.corner_radius_top_right = 12 * s
+		b_style.corner_radius_bottom_left = 12 * s; b_style.corner_radius_bottom_right = 12 * s
+		p_btn.add_theme_stylebox_override("normal", b_style)
+		
+		var h_style = b_style.duplicate()
+		h_style.bg_color = Color(0.35, 0.35, 0.4)
+		p_btn.add_theme_stylebox_override("hover", h_style)
+		p_btn.add_theme_stylebox_override("pressed", h_style)
+		
+		p_btn.add_theme_font_override("font", _get_safe_font())
+		p_btn.add_theme_font_size_override("font_size", 20 * s)
+		
+		p_btn.pressed.connect(func():
+			_play_action_sound("ui_click")
+			ui_root.set_meta("workshop_page", page_idx)
+			_setup_main_ui_containers() # Re-render con nueva página
+		)
+		
+		pagination_hbox.add_child(p_btn)
+
+func _fetch_top_semanal_async(grid: GridContainer, pagination_hbox: HFlowContainer, page: int = 1):
 	if not is_instance_valid(grid): return
 	
 	var document = _cached_top_semanal_doc
@@ -4008,6 +4017,9 @@ func _fetch_top_semanal_async(grid: GridContainer, page: int = 1):
 			else:
 				worlds_list = raw_worlds.values()
 				
+		if is_instance_valid(pagination_hbox):
+			_build_pagination(pagination_hbox, worlds_list.size())
+				
 		var start_idx = (page - 1) * 10
 		var page_worlds = []
 		if start_idx < worlds_list.size():
@@ -4044,10 +4056,29 @@ func _fetch_top_semanal_async(grid: GridContainer, page: int = 1):
 		if idx == 0:
 			_show_empty_state_message(grid)
 
-func _fetch_recientes_async(grid: GridContainer, page: int = 1):
+func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer, page: int = 1):
 	if not is_instance_valid(grid): return
 	
-	var loading_overlay = _show_processing_overlay(tr("load_worls"))
+	var document = _cached_recientes_doc
+	if document == null:
+		# Check disk cache first with 5 minutes expiration
+		if FileAccess.file_exists("user://recientes_cache.json"):
+			var cf = FileAccess.open("user://recientes_cache.json", FileAccess.READ)
+			if cf:
+				var text = cf.get_as_text()
+				cf.close()
+				if text != "":
+					var parsed = JSON.parse_string(text)
+					if typeof(parsed) == TYPE_DICTIONARY and parsed.has("fetch_time"):
+						var fetch_time = parsed["fetch_time"]
+						var current_time = int(Time.get_unix_time_from_system())
+						if current_time - fetch_time < 300: # 5 minutos
+							document = parsed["document"]
+							_cached_recientes_doc = document
+	
+	var loading_overlay = null
+	if document == null:
+		loading_overlay = _show_processing_overlay(tr("load_worls"))
 	
 	var preloaded_cards = []
 	for i in range(10):
@@ -4056,54 +4087,84 @@ func _fetch_recientes_async(grid: GridContainer, page: int = 1):
 		grid.add_child(card)
 		preloaded_cards.append(card)
 	
-	var query = FirestoreQuery.new()
-	query.from("community_worlds")
-	query.order_by("timestamp", FirestoreQuery.DIRECTION.DESCENDING)
-	query.limit(10)
-	query.offset((page - 1) * 10)
-	
-	var documents = await Firebase.Firestore.query(query)
+	if document == null:
+		var collection = Firebase.Firestore.collection("cache")
+		var fb_doc = await collection.get_doc("recientes")
+		if fb_doc:
+			document = fb_doc.document
+			_cached_recientes_doc = document
+			
+			var cf = FileAccess.open("user://recientes_cache.json", FileAccess.WRITE)
+			if cf:
+				cf.store_string(JSON.stringify({
+					"fetch_time": int(Time.get_unix_time_from_system()),
+					"document": document
+				}))
+				cf.close()
 	
 	if is_instance_valid(loading_overlay):
 		loading_overlay.queue_free()
 		
 	if not is_instance_valid(grid): return
 	
-	var idx = 0
-	for doc in documents:
-		if typeof(doc) != TYPE_OBJECT or not doc is FirestoreDocument:
-			continue
+	var dict_doc = null
+	if typeof(document) == TYPE_OBJECT and document is FirestoreDocument:
+		dict_doc = document.document
+	elif typeof(document) == TYPE_DICTIONARY:
+		dict_doc = document
+		
+	if dict_doc and dict_doc.has("worlds"):
+		var raw_worlds = dict_doc["worlds"]
+		var worlds_list = []
+		
+		# Manejar todas las posibles formas en que Godot Firebase parsea el array
+		if typeof(raw_worlds) == TYPE_ARRAY:
+			worlds_list = raw_worlds
+		elif typeof(raw_worlds) == TYPE_DICTIONARY:
+			if raw_worlds.has("arrayValue"):
+				if raw_worlds["arrayValue"].has("values"):
+					worlds_list = raw_worlds["arrayValue"]["values"]
+			else:
+				worlds_list = raw_worlds.values()
+				
+		if is_instance_valid(pagination_hbox):
+			_build_pagination(pagination_hbox, worlds_list.size())
+				
+		var start_idx = (page - 1) * 10
+		var page_worlds = []
+		if start_idx < worlds_list.size():
+			page_worlds = worlds_list.slice(start_idx, start_idx + 10)
+				
+		var idx = 0
+		for w_data in page_worlds:
+			var clean_data = w_data
+			if typeof(w_data) == TYPE_DICTIONARY and w_data.has("mapValue"):
+				clean_data = {}
+				var fields = w_data["mapValue"]["fields"]
+				for key in fields.keys():
+					var val = fields[key]
+					if val.has("stringValue"): clean_data[key] = val["stringValue"]
+					elif val.has("integerValue"): clean_data[key] = int(val["integerValue"])
+					elif val.has("doubleValue"): clean_data[key] = float(val["doubleValue"])
 			
-		var fields = doc.document
-		var clean_data = {}
-		clean_data["id"] = doc.doc_name # Save the document ID
-		
-		for key in fields.keys():
-			var val = fields[key]
-			if typeof(val) == TYPE_DICTIONARY:
-				if val.has("stringValue"): clean_data[key] = val["stringValue"]
-				elif val.has("integerValue"): clean_data[key] = int(val["integerValue"])
-				elif val.has("doubleValue"): clean_data[key] = float(val["doubleValue"])
-				elif val.has("booleanValue"): clean_data[key] = val["booleanValue"]
-		
-		if idx < preloaded_cards.size():
-			var card = preloaded_cards[idx]
-			card.modulate.a = 1.0
-			card.setup(clean_data, 0)
-			if not card.download_requested.is_connected(_on_world_download_requested):
+			if idx < preloaded_cards.size():
+				var card = preloaded_cards[idx]
+				card.modulate.a = 1.0
+				card.setup(clean_data, 0)
+				if not card.download_requested.is_connected(_on_world_download_requested):
+					card.download_requested.connect(_on_world_download_requested)
+			else:
+				var card = preload("res://scenes/main/world_card.tscn").instantiate()
+				grid.add_child(card)
+				card.setup(clean_data, 0)
 				card.download_requested.connect(_on_world_download_requested)
-		else:
-			var card = preload("res://scenes/main/world_card.tscn").instantiate()
-			grid.add_child(card)
-			card.setup(clean_data, 0)
-			card.download_requested.connect(_on_world_download_requested)
-		idx += 1
-		
-	for i in range(idx, preloaded_cards.size()):
-		preloaded_cards[i].queue_free()
-		
-	if idx == 0:
-		_show_empty_state_message(grid)
+			idx += 1
+			
+		for i in range(idx, preloaded_cards.size()):
+			preloaded_cards[i].queue_free()
+			
+		if idx == 0:
+			_show_empty_state_message(grid)
 
 func _fetch_mis_descargas_async(grid: GridContainer):
 	if not is_instance_valid(grid): return
