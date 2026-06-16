@@ -79,6 +79,8 @@ var cam_max_x: int = 9999
 var cam_min_y: int = 0
 var cam_max_y: int = 9999
 
+var _cached_top_semanal_doc = null
+
 func _update_zoom_ui():
 	if not ui_elements.has("btn_pan") or not is_instance_valid(ui_elements["btn_pan"]):
 		return
@@ -3749,7 +3751,12 @@ func _setup_workshop_ui():
 		var scroll = ScrollContainer.new()
 		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 		content_panel.add_child(scroll)
+		
+		var scroll_vbox = VBoxContainer.new()
+		scroll_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll_vbox.add_theme_constant_override("separation", 30 * s)
 		
 		var grid = GridContainer.new()
 		grid.columns = 2
@@ -3757,21 +3764,62 @@ func _setup_workshop_ui():
 		grid.add_theme_constant_override("v_separation", 20 * s)
 		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		
+		scroll_vbox.add_child(grid)
+		
+		var pagination_hbox = HFlowContainer.new()
+		pagination_hbox.alignment = FlowContainer.ALIGNMENT_CENTER
+		pagination_hbox.add_theme_constant_override("h_separation", 15 * s)
+		pagination_hbox.add_theme_constant_override("v_separation", 15 * s)
+		scroll_vbox.add_child(pagination_hbox)
+		
 		var margin = MarginContainer.new()
 		margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		margin.add_theme_constant_override("margin_left", 20 * s)
 		margin.add_theme_constant_override("margin_top", 20 * s)
 		margin.add_theme_constant_override("margin_right", 20 * s)
-		margin.add_theme_constant_override("margin_bottom", 20 * s)
-		margin.add_child(grid)
+		margin.add_theme_constant_override("margin_bottom", 40 * s) # Extra margin at bottom
+		margin.add_child(scroll_vbox)
 		scroll.add_child(margin)
+		
+		var total_pages = 10 if current_tab == 0 else 2
+		for p in range(1, total_pages + 1):
+			var page_btn = Button.new()
+			page_btn.text = str(p)
+			page_btn.custom_minimum_size = Vector2(70 * s, 70 * s)
+			page_btn.add_theme_font_override("font", _get_safe_font())
+			page_btn.add_theme_font_size_override("font_size", 24 * s)
+			
+			var b_style = StyleBoxFlat.new()
+			b_style.bg_color = Color(0.2, 0.2, 0.25, 1.0)
+			b_style.corner_radius_top_left = 15 * s; b_style.corner_radius_top_right = 15 * s
+			b_style.corner_radius_bottom_left = 15 * s; b_style.corner_radius_bottom_right = 15 * s
+			page_btn.add_theme_stylebox_override("normal", b_style)
+			
+			var h_style = b_style.duplicate()
+			h_style.bg_color = Color(0.3, 0.3, 0.35, 1.0)
+			page_btn.add_theme_stylebox_override("hover", h_style)
+			page_btn.add_theme_stylebox_override("pressed", h_style)
+			
+			pagination_hbox.add_child(page_btn)
+			
+			page_btn.pressed.connect(func():
+				_play_action_sound("ui_click")
+				for child in grid.get_children():
+					child.queue_free()
+				scroll.scroll_vertical = 0
+				
+				if current_tab == 0:
+					call_deferred("_fetch_top_semanal_async", grid, p)
+				elif current_tab == 1:
+					call_deferred("_fetch_recientes_async", grid, p)
+			)
 		
 		var do_fetch = func():
 			if grid.get_child_count() == 0:
 				if current_tab == 0:
-					call_deferred("_fetch_top_semanal_async", grid)
+					call_deferred("_fetch_top_semanal_async", grid, 1)
 				elif current_tab == 1:
-					call_deferred("_fetch_recientes_async", grid)
+					call_deferred("_fetch_recientes_async", grid, 1)
 		
 		if workshop_panel.visible:
 			do_fetch.call()
@@ -3841,14 +3889,26 @@ func _setup_workshop_ui():
 	workshop_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	workshop_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
-func _fetch_top_semanal_async(grid: GridContainer):
+func _fetch_top_semanal_async(grid: GridContainer, page: int = 1):
 	if not is_instance_valid(grid): return
 	
-	# Pantalla de carga (El texto ya debería estar en translations.csv)
-	var loading_overlay = _show_processing_overlay(tr("load_worls"))
+	var loading_overlay = null
+	if _cached_top_semanal_doc == null:
+		loading_overlay = _show_processing_overlay(tr("load_worls"))
 	
-	var collection = Firebase.Firestore.collection("cache")
-	var document = await collection.get_doc("top_semanal")
+	# Pre-instanciar tarjetas para aprovechar tiempo de CPU mientras esperamos la red
+	var preloaded_cards = []
+	for i in range(10):
+		var card = preload("res://scenes/main/world_card.tscn").instantiate()
+		card.modulate.a = 0.0 # Oculto hasta que haya datos
+		grid.add_child(card)
+		preloaded_cards.append(card)
+	
+	var document = _cached_top_semanal_doc
+	if document == null:
+		var collection = Firebase.Firestore.collection("cache")
+		document = await collection.get_doc("top_semanal")
+		_cached_top_semanal_doc = document
 	
 	if is_instance_valid(loading_overlay):
 		loading_overlay.queue_free()
@@ -3869,7 +3929,13 @@ func _fetch_top_semanal_async(grid: GridContainer):
 			else:
 				worlds_list = raw_worlds.values()
 				
-		for w_data in worlds_list:
+		var start_idx = (page - 1) * 10
+		var page_worlds = []
+		if start_idx < worlds_list.size():
+			page_worlds = worlds_list.slice(start_idx, start_idx + 10)
+				
+		var idx = 0
+		for w_data in page_worlds:
 			var clean_data = w_data
 			if typeof(w_data) == TYPE_DICTIONARY and w_data.has("mapValue"):
 				clean_data = {}
@@ -3880,19 +3946,36 @@ func _fetch_top_semanal_async(grid: GridContainer):
 					elif val.has("integerValue"): clean_data[key] = int(val["integerValue"])
 					elif val.has("doubleValue"): clean_data[key] = float(val["doubleValue"])
 			
-			var card = preload("res://scenes/main/world_card.tscn").instantiate()
-			grid.add_child(card)
-			card.setup(clean_data, 0)
+			if idx < preloaded_cards.size():
+				var card = preloaded_cards[idx]
+				card.modulate.a = 1.0
+				card.setup(clean_data, 0)
+			else:
+				var card = preload("res://scenes/main/world_card.tscn").instantiate()
+				grid.add_child(card)
+				card.setup(clean_data, 0)
+			idx += 1
+			
+		for i in range(idx, preloaded_cards.size()):
+			preloaded_cards[i].queue_free()
 
-func _fetch_recientes_async(grid: GridContainer):
+func _fetch_recientes_async(grid: GridContainer, page: int = 1):
 	if not is_instance_valid(grid): return
 	
 	var loading_overlay = _show_processing_overlay(tr("load_worls"))
+	
+	var preloaded_cards = []
+	for i in range(10):
+		var card = preload("res://scenes/main/world_card.tscn").instantiate()
+		card.modulate.a = 0.0
+		grid.add_child(card)
+		preloaded_cards.append(card)
 	
 	var query = FirestoreQuery.new()
 	query.from("community_worlds")
 	query.order_by("timestamp", FirestoreQuery.DIRECTION.DESCENDING)
 	query.limit(10)
+	query.offset((page - 1) * 10)
 	
 	var documents = await Firebase.Firestore.query(query)
 	
@@ -3901,6 +3984,7 @@ func _fetch_recientes_async(grid: GridContainer):
 		
 	if not is_instance_valid(grid): return
 	
+	var idx = 0
 	for doc in documents:
 		if typeof(doc) != TYPE_OBJECT or not doc is FirestoreDocument:
 			continue
@@ -3917,9 +4001,18 @@ func _fetch_recientes_async(grid: GridContainer):
 				elif val.has("doubleValue"): clean_data[key] = float(val["doubleValue"])
 				elif val.has("booleanValue"): clean_data[key] = val["booleanValue"]
 		
-		var card = preload("res://scenes/main/world_card.tscn").instantiate()
-		grid.add_child(card)
-		card.setup(clean_data, 0)
+		if idx < preloaded_cards.size():
+			var card = preloaded_cards[idx]
+			card.modulate.a = 1.0
+			card.setup(clean_data, 0)
+		else:
+			var card = preload("res://scenes/main/world_card.tscn").instantiate()
+			grid.add_child(card)
+			card.setup(clean_data, 0)
+		idx += 1
+		
+	for i in range(idx, preloaded_cards.size()):
+		preloaded_cards[i].queue_free()
 
 func _show_upload_slot_selector(on_selected: Callable):
 	var s = _get_ui_scale()

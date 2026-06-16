@@ -22,7 +22,14 @@ enum CardMode { COMMUNITY, MANAGEMENT }
 var world_data: Dictionary
 var current_mode: int = CardMode.COMMUNITY
 
+func _set_mouse_filter_pass_recursive(node: Node) -> void:
+	if node is Control:
+		node.mouse_filter = Control.MOUSE_FILTER_PASS
+	for child in node.get_children():
+		_set_mouse_filter_pass_recursive(child)
+
 func _ready() -> void:
+	_set_mouse_filter_pass_recursive(self)
 	_apply_scaling()
 	
 	if download_button:
