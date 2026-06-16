@@ -4040,6 +4040,9 @@ func _fetch_top_semanal_async(grid: GridContainer, page: int = 1):
 			
 		for i in range(idx, preloaded_cards.size()):
 			preloaded_cards[i].queue_free()
+			
+		if idx == 0:
+			_show_empty_state_message(grid)
 
 func _fetch_recientes_async(grid: GridContainer, page: int = 1):
 	if not is_instance_valid(grid): return
@@ -4098,6 +4101,9 @@ func _fetch_recientes_async(grid: GridContainer, page: int = 1):
 		
 	for i in range(idx, preloaded_cards.size()):
 		preloaded_cards[i].queue_free()
+		
+	if idx == 0:
+		_show_empty_state_message(grid)
 
 func _fetch_mis_descargas_async(grid: GridContainer):
 	if not is_instance_valid(grid): return
@@ -4116,6 +4122,21 @@ func _fetch_mis_descargas_async(grid: GridContainer):
 		card.setup(w_data, 2) # CardMode.DOWNLOADED
 		card.play_requested.connect(_on_world_play_requested)
 		card.delete_requested.connect(_on_world_delete_downloaded)
+		
+	if downloads.size() == 0:
+		_show_empty_state_message(grid)
+
+func _show_empty_state_message(grid: GridContainer):
+	var lbl = Label.new()
+	lbl.text = tr("no_worlds_here")
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_override("font", _get_safe_font())
+	lbl.add_theme_font_size_override("font_size", 24 * _get_ui_scale())
+	lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	lbl.custom_minimum_size = Vector2(0, 100 * _get_ui_scale())
+	grid.get_parent().add_child(lbl)
+	grid.get_parent().move_child(lbl, grid.get_index() + 1)
 
 func _on_world_delete_downloaded(world_data: Dictionary):
 	var world_id = str(world_data.get("id", ""))
@@ -6630,7 +6651,7 @@ func _process(delta):
 		var h = left / 3600
 		var m = (left % 3600) / 60
 		var s = left % 60
-		var text = "Se actualiza en: %02d:%02d:%02d" % [h, m, s]
+		var text = tr("update_in") + " %02d:%02d:%02d" % [h, m, s]
 		top_countdown_label.text = text
 		if is_instance_valid(bot_countdown_label):
 			bot_countdown_label.text = text
