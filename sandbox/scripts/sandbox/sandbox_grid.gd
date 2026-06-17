@@ -2968,6 +2968,9 @@ func _align_panel_to_hud(panel: Control, p_width: float, p_height: float):
 	panel.anchor_top = 1.0
 	panel.anchor_bottom = 1.0
 	
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_END
+	
 	# Optimized: Uses cached value updated only on UI rebuilds/orientation changes
 	var h_base = cached_hud_height
 	
@@ -3734,11 +3737,17 @@ func _setup_workshop_ui():
 	panel_style.border_width_right = 3; panel_style.border_width_bottom = 3
 	panel_style.border_color = Color("#48dbfb") # Same as community button
 	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
+	panel_style.content_margin_left = 15 * s
+	panel_style.content_margin_right = 15 * s
+	panel_style.content_margin_top = 20 * s
+	panel_style.content_margin_bottom = 20 * s
 	workshop_panel.add_theme_stylebox_override("panel", panel_style)
 	workshop_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	
 	workshop_panel.visible = ui_root.get_meta("workshop_v", false)
-	_align_panel_to_hud(workshop_panel, 530 * s, 570 * s)
+	var max_w = get_viewport_rect().size.x - 40 * s
+	var p_width = min(610 * s, max_w)
+	_align_panel_to_hud(workshop_panel, p_width, 570 * s)
 	
 	var main_vbox = VBoxContainer.new()
 	main_vbox.add_theme_constant_override("separation", 10 * s)
@@ -3749,6 +3758,13 @@ func _setup_workshop_ui():
 	search_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	search_hbox.add_theme_constant_override("separation", 5 * s)
 	main_vbox.add_child(search_hbox)
+	
+	var search_lbl_code = Label.new()
+	search_lbl_code.text = tr("map_code")
+	search_lbl_code.add_theme_font_override("font", _get_safe_font())
+	search_lbl_code.add_theme_font_size_override("font_size", 18 * s)
+	search_lbl_code.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+	search_hbox.add_child(search_lbl_code)
 	
 	var search_input_base = LineEdit.new()
 	search_input_base.placeholder_text = "xxxxxxxx"
@@ -3779,6 +3795,18 @@ func _setup_workshop_ui():
 	search_btn.custom_minimum_size = Vector2(80 * s, 45 * s)
 	search_btn.add_theme_font_override("font", _get_safe_font())
 	search_btn.add_theme_font_size_override("font_size", 16 * s)
+	
+	var search_btn_style = StyleBoxFlat.new()
+	search_btn_style.bg_color = Color(0, 0, 0, 0)
+	search_btn_style.border_width_left = 1; search_btn_style.border_width_top = 1
+	search_btn_style.border_width_right = 1; search_btn_style.border_width_bottom = 1
+	search_btn_style.border_color = Color(0.4, 0.4, 0.4, 1.0)
+	search_btn_style.corner_radius_top_left = 10 * s; search_btn_style.corner_radius_top_right = 10 * s
+	search_btn_style.corner_radius_bottom_left = 10 * s; search_btn_style.corner_radius_bottom_right = 10 * s
+	search_btn.add_theme_stylebox_override("normal", search_btn_style)
+	search_btn.add_theme_stylebox_override("hover", search_btn_style)
+	search_btn.add_theme_stylebox_override("pressed", search_btn_style)
+	
 	search_hbox.add_child(search_btn)
 	
 	# Auto format on paste or overtyping
@@ -3844,21 +3872,27 @@ func _setup_workshop_ui():
 	
 	var current_tab = ui_root.get_meta("workshop_current_tab", 0)
 	
-	var create_tab_btn = func(text_key: String, tab_idx: int):
+	var create_tab_btn = func(emoji: String, text_key: String, tab_idx: int):
 		var btn = Button.new()
-		btn.text = tr(text_key)
+		btn.text = emoji + "\n" + tr(text_key)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.custom_minimum_size = Vector2(0, 45 * s)
+		btn.custom_minimum_size = Vector2(0, 55 * s)
 		btn.add_theme_font_override("font", _get_safe_font())
 		btn.add_theme_font_size_override("font_size", 16 * s) # slightly smaller for fitting 3
 		btn.mouse_filter = Control.MOUSE_FILTER_PASS
 		
 		var t_style = StyleBoxFlat.new()
-		t_style.bg_color = Color(0.2, 0.2, 0.25, 1.0) if tab_idx == current_tab else Color(0.1, 0.1, 0.15, 1.0)
-		t_style.corner_radius_top_left = 10 * s; t_style.corner_radius_top_right = 10 * s
-		t_style.corner_radius_bottom_left = 10 * s; t_style.corner_radius_bottom_right = 10 * s
-		t_style.border_width_bottom = 3 if tab_idx == current_tab else 0
-		t_style.border_color = Color("#48dbfb")
+		if tab_idx == current_tab:
+			t_style.bg_color = Color(0.2, 0.5, 1.0, 1.0)
+			t_style.corner_radius_top_left = 10 * s; t_style.corner_radius_top_right = 10 * s
+			t_style.corner_radius_bottom_left = 10 * s; t_style.corner_radius_bottom_right = 10 * s
+		else:
+			t_style.bg_color = Color(0, 0, 0, 0)
+			t_style.border_width_left = 1; t_style.border_width_top = 1
+			t_style.border_width_right = 1; t_style.border_width_bottom = 1
+			t_style.border_color = Color(0.4, 0.4, 0.4, 1.0)
+			t_style.corner_radius_top_left = 10 * s; t_style.corner_radius_top_right = 10 * s
+			t_style.corner_radius_bottom_left = 10 * s; t_style.corner_radius_bottom_right = 10 * s
 		
 		btn.add_theme_stylebox_override("normal", t_style)
 		btn.add_theme_stylebox_override("hover", t_style)
@@ -3872,12 +3906,13 @@ func _setup_workshop_ui():
 		tab_hbox.add_child(btn)
 		return btn
 		
-	var btn_top = create_tab_btn.call(top_category, 0)
-	if top_category == "Top Histórico": btn_top.text = "Top Histórico"
-	else: btn_top.text = tr("tab_top_semanal")
-	var btn_rec = create_tab_btn.call("tab_recientes", 1)
-	var btn_mis = create_tab_btn.call("tab_mis_mundos", 2)
-	var btn_desc = create_tab_btn.call("tab_mis_descargas", 3)
+	var btn_top = create_tab_btn.call("🌟", top_category, 0)
+	if top_category == "Top Histórico": btn_top.text = "🌟\nTop Histórico"
+	else: btn_top.text = "🌟\n" + tr("tab_top_semanal")
+	
+	var btn_rec = create_tab_btn.call("🕒", "tab_recientes", 1)
+	var btn_mis = create_tab_btn.call("👤", "tab_mis_mundos", 2)
+	var btn_desc = create_tab_btn.call("⬇️", "tab_mis_descargas", 3)
 	
 	# Rotate text on "Mis mundos"
 	var rotate_timer = Timer.new()
@@ -3886,10 +3921,11 @@ func _setup_workshop_ui():
 	rotate_timer.timeout.connect(func():
 		if not is_instance_valid(btn_mis): return
 		var states = ["tab_mis_mundos", "tab_subir_mundo"]
+		var emojis = ["👤", "➕"]
 		var current_idx = btn_mis.get_meta("state_idx", 0)
 		current_idx = (current_idx + 1) % states.size()
 		btn_mis.set_meta("state_idx", current_idx)
-		btn_mis.text = tr(states[current_idx])
+		btn_mis.text = emojis[current_idx] + "\n" + tr(states[current_idx])
 	)
 	btn_mis.add_child(rotate_timer)
 	

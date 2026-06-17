@@ -29,11 +29,14 @@ expand_mode = 1
 stretch_mode = 6
 
 [node name="TitleLabel" type="Label" parent="VBoxContainer" unique_id=1241835131]
+custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
 theme_override_font_sizes/font_size = 20
 text = "Súper Mundo Épico"
 horizontal_alignment = 1
 vertical_alignment = 1
+autowrap_mode = 3
+max_lines_visible = 2
 clip_text = true
 text_overrun_behavior = 3
 
@@ -42,6 +45,13 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
 theme_override_font_sizes/font_size = 14
 text = "Por: Jugador"
+horizontal_alignment = 1
+
+[node name="CodeLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.3, 0.8, 0.9, 1)
+theme_override_font_sizes/font_size = 14
+text = "ID: a3ned7h1-j"
 horizontal_alignment = 1
 
 [node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer" unique_id=1820774748]

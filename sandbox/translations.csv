@@ -372,10 +372,10 @@ tut_grid,"💡 ¿Cómo funciona?\n• La malla técnica te ayuda a colocar mater
 btn_comunidad,Comunidad,Community,Comunità,Communauté,Gemeinschaft,Comunidade
 btn_top_semanal,Top Semanal,Weekly Top,Top Settimanale,Top Hebdomadaire,Wöchentliche Top,Top Semanal
 btn_recien_subidos,Recién Subidos,Recently Uploaded,Caricati di Recente,Récemment Ajoutés,Kürzlich Hochgeladen,Adicionados Recentemente
-tab_top_semanal,🌟 Top Semanal,🌟 Weekly Top,🌟 Top Settimanale,🌟 Top Hebdomadaire,🌟 Wöchentliche Top,🌟 Top Semanal
-tab_recientes,🕒 Recientes,🕒 Recent,🕒 Recenti,🕒 Récents,🕒 Neueste,🕒 Recentes
-tab_mis_mundos,👤 Mis Mundos,👤 My Worlds,👤 I Miei Mondi,👤 Mes Mondes,👤 Meine Welten,👤 Meus Mundos
-tab_subir_mundo,➕ Subir mi Mundo,➕ Upload my World,➕ Carica il mio Mondo,➕ Téléverser mon Monde,➕ Meine Welt hochladen,➕ Enviar meu Mundo
+tab_top_semanal,Top Semanal,Weekly Top,Top Settimanale,Top Hebdomadaire,Wöchentliche Top,Top Semanal
+tab_recientes,Recientes,Recent,Recenti,Récents,Neueste,Recentes
+tab_mis_mundos,Mis Mundos,My Worlds,I Miei Mondi,Mes Mondes,Meine Welten,Meus Mundos
+tab_subir_mundo,Subir mi Mundo,Upload my World,Carica il mio Mondo,Téléverser mon Monde,Meine Welt hochladen,Enviar meu Mundo
 btn_gestionar_mundos,⚙️ Gestionar Mundos,⚙️ Manage Worlds,⚙️ Gestisci Mondi,⚙️ Gérer les Mondes,⚙️ Welten verwalten,⚙️ Gerenciar Mundos
 upload_title,Subir Nuevo Mundo,Upload New World,Carica Nuovo Mondo,Téléverser un Nouveau Monde,Neue Welt hochladen,Enviar Novo Mundo
 upload_slot_label,Slot a subir:,Slot to upload:,Slot da caricare:,Emplacement à téléverser :,Slot zum Hochladen:,Slot para enviar:
@@ -391,7 +391,7 @@ btn_upload_confirm,Subir a la Workshop,Upload to Workshop,Carica nel Workshop,T�
 btn_select_slot,Seleccionar,Select,Seleziona,Sélectionner,Auswählen,Selecionar
 uploading_world,"Subiendo mundo a la Workshop","Uploading world to the Workshop","Caricamento del mondo nel Workshop","Envoi du monde vers le Workshop","Upload der Welt in den Workshop","Enviando mundo para o Workshop"
 upload_success,"Tu mundo {0} se ha subido con éxito a la Workshop","Your world {0} has been successfully uploaded to the Workshop","Il tuo mondo {0} è stato caricato con successo nel Workshop","Votre monde {0} a été envoyé avec succès vers le Workshop","Deine Welt {0} wurde erfolgreich in den Workshop hochgeladen","Seu mundo {0} foi enviado com sucesso para o Workshop"
-tab_mis_descargas,⬇️Mis Descargas,⬇️My Downloads,⬇️Meus Downloads,⬇️Mes Téléchargements,⬇️I miei download,⬇️Meine Downloads
+tab_mis_descargas,Mis Descargas,My Downloads,Meus Downloads,Mes Téléchargements,I miei download,Meine Downloads
 load_worls,Cargando mundos...,Loading worlds...,Carregando mundos...,Chargement des mondes...,Caricamento mondi...,Welten werden geladen...
 card_untitled,Sin título,Untitled,Senza titolo,Sans titre,Ohne Titel,Sem título
 card_anonymous,Anónimo,Anonymous,Anonimo,Anonyme,Anonym,Anônimo
@@ -414,3 +414,5 @@ daily_uploads_status,Subidas diarias: {0} de {1},Daily uploads: {0} of {1},Caric
 downloaded_maps_count,Mapas descargados: {0},Downloaded maps: {0},Mappe scaricate: {0},Cartes téléchargées : {0},Heruntergeladene Karten: {0},Mapas baixados: {0}
 btn_buscar,Buscar,Search,Cerca,Rechercher,Suchen,Procurar
 msg_error,Error,Error,Errore,Erreur,Fehler,Erro
+map_code,Código mapa:,Map code:,Codice mappa:,Code de carte:,Karten-Code:,Código do mapa:
+msg_copied,¡ID Copiado!,ID Copied!,ID Copiato!,ID Copié!,ID Kopiert!,ID Copiado!

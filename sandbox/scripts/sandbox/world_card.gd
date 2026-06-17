@@ -13,6 +13,7 @@ signal delete_requested(world_data: Dictionary)
 
 @onready var title_label: Label = $VBoxContainer/TitleLabel
 @onready var author_label: Label = $VBoxContainer/AuthorLabel
+@onready var code_label: Label = $VBoxContainer/CodeLabel
 @onready var thumbnail_rect: TextureRect = $VBoxContainer/ThumbnailRect
 @onready var likes_label: Label = $VBoxContainer/HBoxContainer/LikesBox/LikesLabel
 @onready var downloads_label: Label = $VBoxContainer/HBoxContainer/DownloadsBox/DownloadsLabel
@@ -57,16 +58,19 @@ func _apply_scaling() -> void:
 	if is_inside_tree() and get_viewport_rect().size.x > get_viewport_rect().size.y:
 		s = 1.7 * 1.30
 		
-	custom_minimum_size = Vector2(235 * s, 0) # Igual que save slot
+	custom_minimum_size = Vector2(200 * s, 0)
 	
 	if title_label: 
 		title_label.add_theme_font_size_override("font_size", 26 * s)
+		title_label.custom_minimum_size = Vector2(0, 75 * s)
 	if author_label:
 		author_label.add_theme_font_size_override("font_size", 18 * s)
+	if code_label:
+		code_label.add_theme_font_size_override("font_size", 16 * s)
 		
 	if thumbnail_rect:
-		thumbnail_rect.custom_minimum_size = Vector2(215 * s, 250 * s)
-		thumbnail_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED # Enum 5
+		thumbnail_rect.custom_minimum_size = Vector2(0, 200 * s)
+		thumbnail_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		
 	if likes_label: likes_label.add_theme_font_size_override("font_size", 20 * s)
 	if downloads_label: downloads_label.add_theme_font_size_override("font_size", 20 * s)
@@ -91,6 +95,19 @@ func setup(data: Dictionary, mode: int = CardMode.COMMUNITY) -> void:
 	
 	if title_label: title_label.text = data.get("title", tr("card_untitled"))
 	if author_label: author_label.text = tr("card_by") + data.get("author", tr("card_anonymous"))
+	
+	var w_id = data.get("id", data.get("world_id", ""))
+	if code_label:
+		if w_id != "":
+			code_label.text = "ID: " + w_id
+			code_label.visible = true
+			code_label.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+			code_label.mouse_filter = Control.MOUSE_FILTER_STOP
+			if not code_label.gui_input.is_connected(_on_code_label_gui_input):
+				code_label.gui_input.connect(_on_code_label_gui_input)
+		else:
+			code_label.visible = false
+			
 	if likes_label: likes_label.text = "👍 " + str(data.get("likes", 0))
 	if downloads_label: downloads_label.text = "⬇️ " + str(data.get("downloads", 0))
 	
@@ -99,6 +116,19 @@ func setup(data: Dictionary, mode: int = CardMode.COMMUNITY) -> void:
 	var url = data.get("thumbnail_url", "")
 	if url != "" and thumbnail_rect:
 		_download_thumbnail(url)
+
+func _on_code_label_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		var w_id = world_data.get("id", world_data.get("world_id", ""))
+		if w_id != "":
+			DisplayServer.clipboard_set(w_id)
+			var old_text = code_label.text
+			code_label.text = tr("msg_copied")
+			var t = get_tree().create_timer(1.5)
+			t.timeout.connect(func():
+				if is_instance_valid(code_label):
+					code_label.text = old_text
+			)
 
 func _setup_mode(mode: int) -> void:
 	if mode == CardMode.COMMUNITY or mode == CardMode.DOWNLOADED:
