@@ -418,3 +418,5 @@ map_code,Código mapa:,Map code:,Codice mappa:,Code de carte:,Karten-Code:,Códi
 msg_copied,¡ID Copiado!,ID Copied!,ID Copiato!,ID Copié!,ID Kopiert!,ID Copiado!
 card_like,Dar Like,Like,Mi piace,J'aime,Gefällt mir,Curtir
 card_liked,❤️ Ya te gusta,❤️ Liked,❤️ Piace,❤️ Aimé,❤️ Gefällt mir,❤️ Curtiu
+auth_required_desc,"Para subir mapas a la comunidad y proteger tus creaciones, debes vincular tu cuenta de Google Play Juegos.","To upload maps to the community and protect your creations, you must link your Google Play Games account.","Per caricare mappe nella community e proteggere le tue creazioni, devi collegare il tuo account Google Play Games.","Pour télécharger des cartes dans la communauté et protéger vos créations, vous devez lier votre compte Google Play Jeux.","Um Karten hochzuladen und Ihre Kreationen zu schützen, müssen Sie Ihr Google Play Games-Konto verknüpfen.","Para enviar mapas para a comunidade e proteger suas criações, você deve vincular sua conta do Google Play Games."
+btn_link_google_play,Vincular a Google Play,Link to Google Play,Collega a Google Play,Lier à Google Play,Mit Google Play verknüpfen,Vincular ao Google Play

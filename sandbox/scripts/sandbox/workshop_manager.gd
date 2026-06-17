@@ -3,13 +3,52 @@ extends Node
 signal upload_started
 signal upload_progress(percent: float)
 signal upload_completed(success: bool, message: String)
+signal google_play_auth_changed(is_auth: bool)
 
 var is_uploading: bool = false
 var auth_retries: int = 0
 
+var google_play_id: String = ""
+var google_play_name: String = ""
+var play_games_sign_in
+var play_games_players
+
 func _ready():
 	# Intentar autenticar anónimamente al inicio si no hay sesión
 	call_deferred("_try_auth")
+	call_deferred("_init_play_games")
+
+func _init_play_games():
+	if Engine.has_singleton("GodotPlayGameServices"):
+		play_games_sign_in = preload("res://addons/GodotPlayGameServices/scripts/sign_in/sign_in_client.gd").new()
+		add_child(play_games_sign_in)
+		play_games_sign_in.user_authenticated.connect(_on_google_play_auth)
+		
+		play_games_players = preload("res://addons/GodotPlayGameServices/scripts/players/players_client.gd").new()
+		add_child(play_games_players)
+		play_games_players.current_player_loaded.connect(_on_current_player_loaded)
+		
+		play_games_sign_in.is_authenticated()
+
+func request_manual_sign_in():
+	if play_games_sign_in:
+		play_games_sign_in.sign_in()
+
+func _on_google_play_auth(is_auth: bool):
+	if is_auth:
+		play_games_players.load_current_player(true)
+	else:
+		google_play_id = ""
+		google_play_name = ""
+		google_play_auth_changed.emit(false)
+
+func _on_current_player_loaded(player):
+	if player:
+		google_play_id = player.player_id
+		google_play_name = player.display_name
+		google_play_auth_changed.emit(true)
+	else:
+		google_play_auth_changed.emit(false)
 
 func _try_auth():
 	if Firebase.Auth.check_auth_file():
@@ -53,7 +92,9 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 		_finish_upload(false, "El slot está vacío")
 		return
 		
-	var author_name = "Player" # Todo: Añadir sistema de nombre de usuario en el futuro si se desea
+	var author_name = google_play_name
+	if author_name == "": author_name = "Player"
+	var author_id = google_play_id
 	
 	# 2. Generar Buffer SBU
 	var file_path = "user://save_slot_" + str(slot_id) + ".dat"
@@ -108,6 +149,7 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 	var doc_data = {
 		"title": public_name,
 		"author": author_name,
+		"author_id": author_id,
 		"category": category_idx,
 		"likes": 0,
 		"dislikes": 0,

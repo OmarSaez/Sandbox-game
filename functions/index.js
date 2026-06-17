@@ -30,8 +30,8 @@ exports.updateweeklytop = onSchedule("0 0,12 * * *", async (event) => {
       const data = doc.data();
       const reports = data.reports || 0;
       
-      // Solo aceptamos mundos de esta semana y que NO tengan 5 o más reportes
-      if (data.weekly_week_id === currentWeekId && reports < 5) {
+      // Solo aceptamos mundos de esta semana y que NO esten baneados
+      if (data.weekly_week_id === currentWeekId && !data.is_banned) {
         allWorlds.push({
           id: doc.id,
           title: data.title || "Sin título",
@@ -143,9 +143,8 @@ exports.updatehistoricaltop = onSchedule("0 0 * * *", async (event) => {
       const downloads = data.downloads || 0;
       const likes = data.likes || 0;
       
-      // Filtro de barrera de entrada: Solo entran si cumplen los requisitos mínimos.
-      // Si de los top 100 solo 5 cumplen esto (juego nuevo), la lista tendrá 5.
-      if (downloads >= 100 && likes >= 10 && reports < 5) {
+      // Filtro de barrera de entrada: Solo entran si cumplen los requisitos mínimos y no están baneados.
+      if (downloads >= 100 && likes >= 10 && !data.is_banned) {
         topWorlds.push({
           id: doc.id,
           title: data.title || "Sin título",
@@ -232,6 +231,37 @@ exports.processactionbuffer = onSchedule("*/10 * * * *", async (event) => {
       if (scoreIncrement !== 0) {
         updates.historical_score = FieldValue.increment(scoreIncrement);
         updates.weekly_score = FieldValue.increment(scoreIncrement);
+      }
+      
+      // LOGICA AUTO-BAN
+      if (stats.reports > 0) {
+        const docSnap = await worldRef.get();
+        if (docSnap.exists) {
+          const data = docSnap.data();
+          const currentDownloads = (data.downloads || 0) + stats.downloads;
+          const currentReports = (data.reports || 0) + stats.reports;
+          
+          const requiredReports = Math.max(5, Math.floor(Math.sqrt(currentDownloads) * 1.5));
+          if (currentReports >= requiredReports) {
+            updates.is_banned = true;
+            console.log(`Mundo ${wId} ha sido BANEADO. (${currentReports} reportes / ${currentDownloads} descargas)`);
+            
+            // Eliminar del caché de recientes inmediatamente
+            const cacheRef = db.collection("cache").doc("recientes");
+            const cacheSnap = await cacheRef.get();
+            if (cacheSnap.exists) {
+              let cacheData = cacheSnap.data();
+              if (cacheData && cacheData.worlds) {
+                const initialLength = cacheData.worlds.length;
+                cacheData.worlds = cacheData.worlds.filter(w => w.id !== wId);
+                if (cacheData.worlds.length < initialLength) {
+                  batch.update(cacheRef, { worlds: cacheData.worlds });
+                  console.log(`Mundo ${wId} borrado del caché de recientes.`);
+                }
+              }
+            }
+          }
+        }
       }
 
       batch.update(worldRef, updates);

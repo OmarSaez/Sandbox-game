@@ -1021,9 +1021,20 @@ func _load_tool_settings():
 				if dict.has("is_piston_tutorial_done"):
 					is_piston_tutorial_done = dict["is_piston_tutorial_done"]
 
+func _on_auth_changed(_is_auth: bool):
+	if is_instance_valid(workshop_panel) and workshop_panel.visible:
+		if ui_root and ui_root.has_meta("workshop_current_tab") and ui_root.get_meta("workshop_current_tab") == 2:
+			call_deferred("_setup_main_ui_containers")
+
 func _ready():
 	_load_workshop_economy()
 	_update_day_check()
+	
+	if has_node("/root/WorkshopManager"):
+		var wm = get_node("/root/WorkshopManager")
+		if wm.has_signal("google_play_auth_changed"):
+			if not wm.google_play_auth_changed.is_connected(_on_auth_changed):
+				wm.google_play_auth_changed.connect(_on_auth_changed)
 	
 	# Session count tracking for rating and analytics
 	var app_config = ConfigFile.new()
@@ -1037,7 +1048,9 @@ func _ready():
 	
 	if FileAccess.file_exists("user://rating_popup_shown.save"):
 		rating_popup_shown = true
-	
+
+
+
 	# Initialize Google Play Game Services on Android
 	if OS.has_feature("android") and Engine.has_singleton("GodotPlayGameServices"):
 		var gps = get_node_or_null("/root/GodotPlayGameServices")
@@ -4072,6 +4085,49 @@ func _setup_workshop_ui():
 		mis_mundos_vbox.add_theme_constant_override("separation", 15 * s)
 		content_panel.add_child(mis_mundos_vbox)
 		
+		var wm = get_node_or_null("/root/WorkshopManager")
+		if wm and wm.google_play_id == "":
+			mis_mundos_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+			var info_label = Label.new()
+			info_label.text = tr("auth_required_desc")
+			info_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+			info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			info_label.add_theme_font_override("font", _get_safe_font())
+			info_label.add_theme_font_size_override("font_size", 20 * s)
+			mis_mundos_vbox.add_child(info_label)
+			
+			var btn_vincular = Button.new()
+			btn_vincular.text = tr("btn_link_google_play")
+			btn_vincular.custom_minimum_size = Vector2(0, 60 * s)
+			btn_vincular.add_theme_font_override("font", _get_safe_font())
+			btn_vincular.add_theme_font_size_override("font_size", 22 * s)
+			
+			var b_style = StyleBoxFlat.new()
+			b_style.bg_color = Color("#2ecc71").lerp(Color.BLACK, 0.4)
+			b_style.border_width_left = 2; b_style.border_width_top = 2
+			b_style.border_width_right = 2; b_style.border_width_bottom = 2
+			b_style.border_color = Color("#2ecc71")
+			b_style.corner_radius_top_left = 10 * s; b_style.corner_radius_top_right = 10 * s
+			b_style.corner_radius_bottom_left = 10 * s; b_style.corner_radius_bottom_right = 10 * s
+			btn_vincular.add_theme_stylebox_override("normal", b_style)
+			
+			var h_style = b_style.duplicate()
+			h_style.bg_color = Color("#2ecc71").lerp(Color.BLACK, 0.2)
+			btn_vincular.add_theme_stylebox_override("hover", h_style)
+			btn_vincular.add_theme_stylebox_override("pressed", h_style)
+			
+			btn_vincular.pressed.connect(func():
+				_play_action_sound("ui_click")
+				if OS.has_feature("editor"):
+					wm.google_play_name = "ADMIN"
+					wm.google_play_id = "EDITOR"
+					wm.google_play_auth_changed.emit(true)
+				else:
+					wm.request_manual_sign_in()
+			)
+			mis_mundos_vbox.add_child(btn_vincular)
+			return
+		
 		var top_buttons_hbox = HBoxContainer.new()
 		top_buttons_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 		top_buttons_hbox.add_theme_constant_override("separation", 10 * s)
@@ -4122,14 +4178,38 @@ func _setup_workshop_ui():
 		daily_uploads_label.add_theme_font_size_override("font_size", 18 * s)
 		daily_uploads_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.65))
 		mis_mundos_vbox.add_child(daily_uploads_label)
-		
 		var list_scroll = ScrollContainer.new()
 		list_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		list_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		mis_mundos_vbox.add_child(list_scroll)
 		
-		var list_vbox = VBoxContainer.new()
-		list_scroll.add_child(list_vbox)
+		var list_margin = MarginContainer.new()
+		list_margin.add_theme_constant_override("margin_left", 20 * s)
+		list_margin.add_theme_constant_override("margin_top", 20 * s)
+		list_margin.add_theme_constant_override("margin_right", 20 * s)
+		list_margin.add_theme_constant_override("margin_bottom", 40 * s)
+		list_scroll.add_child(list_margin)
+		
+		var grid_and_pag_vbox = VBoxContainer.new()
+		grid_and_pag_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid_and_pag_vbox.add_theme_constant_override("separation", 20 * s)
+		list_margin.add_child(grid_and_pag_vbox)
+		
+		var list_grid = GridContainer.new()
+		list_grid.columns = 3
+		list_grid.add_theme_constant_override("h_separation", 20 * s)
+		list_grid.add_theme_constant_override("v_separation", 20 * s)
+		list_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grid_and_pag_vbox.add_child(list_grid)
+		
+		var pagination_hbox = HFlowContainer.new()
+		pagination_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		pagination_hbox.add_theme_constant_override("h_separation", 10 * s)
+		pagination_hbox.add_theme_constant_override("v_separation", 10 * s)
+		grid_and_pag_vbox.add_child(pagination_hbox)
+		
+		var page = ui_root.get_meta("workshop_page_2", 1)
+		_fetch_mis_mundos_async(list_grid, pagination_hbox, page)
 		
 	workshop_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
 	workshop_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
@@ -4466,6 +4546,63 @@ func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer
 			
 		if idx == 0:
 			_show_empty_state_message(grid)
+
+func _fetch_mis_mundos_async(grid: GridContainer, pagination_hbox: HFlowContainer, page: int = 1):
+	if not is_instance_valid(grid): return
+	
+	var wm = get_node_or_null("/root/WorkshopManager")
+	if not wm or wm.google_play_id == "":
+		_show_empty_state_message(grid)
+		return
+		
+	var author_id = wm.google_play_id
+	var query = FirestoreQuery.new()
+	query.from("community_worlds")
+	query.where("author_id", FirestoreQuery.OPERATOR.EQUAL, author_id)
+	
+	var document_array = await Firebase.Firestore.query(query)
+	
+	if not is_instance_valid(grid): return
+	
+	var preloaded_cards = grid.get_children()
+	
+	if typeof(document_array) == TYPE_ARRAY and document_array.size() > 0:
+		if is_instance_valid(pagination_hbox):
+			_build_pagination(pagination_hbox, document_array.size())
+			
+		var start_idx = (page - 1) * 10
+		var page_worlds = []
+		if start_idx < document_array.size():
+			page_worlds = document_array.slice(start_idx, start_idx + 10)
+			
+		var idx = 0
+		for doc in page_worlds:
+			var clean_data = doc.doc_fields
+			clean_data["id"] = doc.doc_name
+			
+			if idx < preloaded_cards.size():
+				preloaded_cards[idx].setup(clean_data, 0)
+				preloaded_cards[idx].download_requested.connect(_on_world_download_requested)
+				preloaded_cards[idx].like_requested.connect(_on_world_like_requested)
+				preloaded_cards[idx].report_requested.connect(_on_world_report_requested)
+			else:
+				var card = preload("res://scenes/main/world_card.tscn").instantiate()
+				grid.add_child(card)
+				card.setup(clean_data, 0)
+				card.download_requested.connect(_on_world_download_requested)
+				card.like_requested.connect(_on_world_like_requested)
+				card.report_requested.connect(_on_world_report_requested)
+			idx += 1
+			
+		for i in range(idx, preloaded_cards.size()):
+			preloaded_cards[i].queue_free()
+			
+		if idx == 0:
+			_show_empty_state_message(grid)
+	else:
+		for card in preloaded_cards:
+			card.queue_free()
+		_show_empty_state_message(grid)
 
 func _fetch_mis_descargas_async(grid: GridContainer, pagination_hbox: HFlowContainer, page: int = 1):
 	if not is_instance_valid(grid): return
