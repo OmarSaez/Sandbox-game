@@ -103,33 +103,45 @@ func _save_workshop_economy():
 	cfg.set_value("economy", "last_upload_day", last_upload_day)
 	cfg.save("user://workshop_economy.cfg")
 
-func _get_next_update_unix() -> int:
+func _get_next_update_unix(is_historico: bool = false) -> int:
 	var current_unix = int(Time.get_unix_time_from_system())
 	var day_seconds = current_unix % 86400
 	var threshold_1 = 5 * 60 # 00:05 UTC
 	var threshold_2 = (12 * 3600) + (5 * 60) # 12:05 UTC
 	var base_day = current_unix - day_seconds
 	
-	if day_seconds < threshold_1:
-		return base_day + threshold_1
-	elif day_seconds < threshold_2:
-		return base_day + threshold_2
+	if is_historico:
+		if day_seconds < threshold_1:
+			return base_day + threshold_1
+		else:
+			return base_day + 86400 + threshold_1
 	else:
-		return base_day + 86400 + threshold_1
+		if day_seconds < threshold_1:
+			return base_day + threshold_1
+		elif day_seconds < threshold_2:
+			return base_day + threshold_2
+		else:
+			return base_day + 86400 + threshold_1
 
-func _get_last_update_unix() -> int:
+func _get_last_update_unix(is_historico: bool = false) -> int:
 	var current_unix = int(Time.get_unix_time_from_system())
 	var day_seconds = current_unix % 86400
 	var threshold_1 = 5 * 60
 	var threshold_2 = (12 * 3600) + (5 * 60)
 	var base_day = current_unix - day_seconds
 	
-	if day_seconds >= threshold_2:
-		return base_day + threshold_2
-	elif day_seconds >= threshold_1:
-		return base_day + threshold_2
+	if is_historico:
+		if day_seconds >= threshold_1:
+			return base_day + threshold_1
+		else:
+			return base_day - 86400 + threshold_1
 	else:
-		return base_day - 86400 + threshold_2
+		if day_seconds >= threshold_2:
+			return base_day + threshold_2
+		elif day_seconds >= threshold_1:
+			return base_day + threshold_1
+		else:
+			return base_day - 86400 + threshold_2
 
 func _update_day_check():
 	var current_day = Time.get_date_dict_from_system().day
@@ -4173,7 +4185,8 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 	
 	if document == null:
 		# Check disk cache first
-		var last_update = _get_last_update_unix()
+		var is_historico = doc_name == "top_historico"
+		var last_update = _get_last_update_unix(is_historico)
 		if FileAccess.file_exists(cache_file):
 			var cf = FileAccess.open(cache_file, FileAccess.READ)
 			if cf:
@@ -4182,7 +4195,7 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 				if text != "":
 					var parsed = JSON.parse_string(text)
 					if typeof(parsed) == TYPE_DICTIONARY and parsed.has("fetch_time"):
-						if parsed["fetch_time"] >= last_update or doc_name == "top_historico": # historico doesn't reset weekly
+						if parsed["fetch_time"] >= last_update:
 							document = parsed["document"]
 							if doc_name == "top_semanal": _cached_top_semanal_doc = document
 							else: ui_root.set_meta("_cached_top_historico_doc", document)
@@ -7138,11 +7151,15 @@ func _play_action_sound(action: String, min_interval: float = 0.08, volume_boost
 
 func _process(delta):
 	if is_instance_valid(top_countdown_label):
-		var left = _get_next_update_unix() - int(Time.get_unix_time_from_system())
+		var is_historico = ui_root.get_meta("workshop_top_category", "Top Semanal") == "Top Histórico"
+		var left = _get_next_update_unix(is_historico) - int(Time.get_unix_time_from_system())
 		if left <= 0:
 			left = 0
 			# Invalidate memory cache so next tab click re-fetches
-			_cached_top_semanal_doc = null
+			if is_historico:
+				ui_root.set_meta("_cached_top_historico_doc", null)
+			else:
+				_cached_top_semanal_doc = null
 			
 		var h = left / 3600
 		var m = (left % 3600) / 60

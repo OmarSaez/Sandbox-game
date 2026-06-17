@@ -114,6 +114,7 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 		"downloads": 0,
 		"reports": 0,
 		"weekly_score": 0,
+		"historical_score": 0,
 		"weekly_week_id": current_week_id,
 		"timestamp": Time.get_unix_time_from_system(),
 		"sbu_url": sbu_url,

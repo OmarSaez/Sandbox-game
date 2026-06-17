@@ -82,6 +82,7 @@ exports.onworldcreated = onDocumentCreated({
     likes: data.likes || 0,
     downloads: data.downloads || 0,
     weekly_score: data.weekly_score || 0,
+    historical_score: data.historical_score || 0,
     thumbnail_url: data.thumbnail_url || "",
     category: data.category || 0,
     timestamp: data.timestamp || Date.now()
@@ -117,5 +118,56 @@ exports.onworldcreated = onDocumentCreated({
     console.log(`Caché de recientes actualizado exitosamente con el mundo ${worldId}.`);
   } catch (error) {
     console.error("Error al actualizar la caché de recientes:", error);
+  }
+});
+
+exports.updatehistoricaltop = onSchedule("0 0 * * *", async (event) => {
+  console.log("Iniciando actualización del Top Histórico...");
+
+  try {
+    // OPTIMIZACIÓN DEFINITIVA: Pedimos a Firebase que nos entregue SOLO los 100 mejores mapas
+    // ordenados por su 'historical_score'. Costo fijo: 100 lecturas exactas sin importar el tamaño de la DB.
+    const worldsSnapshot = await db.collection("community_worlds")
+      .orderBy("historical_score", "desc")
+      .limit(100)
+      .get();
+      
+    let topWorlds = [];
+
+    worldsSnapshot.forEach((doc) => {
+      const data = doc.data();
+      const reports = data.reports || 0;
+      const downloads = data.downloads || 0;
+      const likes = data.likes || 0;
+      
+      // Filtro de barrera de entrada: Solo entran si cumplen los requisitos mínimos.
+      // Si de los top 100 solo 5 cumplen esto (juego nuevo), la lista tendrá 5.
+      if (downloads >= 100 && likes >= 10 && reports < 5) {
+        topWorlds.push({
+          id: doc.id,
+          title: data.title || "Sin título",
+          author: data.author || "Anónimo",
+          likes: likes,
+          downloads: downloads,
+          reports: reports,
+          weekly_score: data.weekly_score || 0,
+          historical_score: data.historical_score || 0,
+          thumbnail_url: data.thumbnail_url || "",
+          category: data.category || 0,
+        });
+      }
+    });
+
+    console.log(`Se filtraron ${topWorlds.length} mundos que superan la barrera inicial.`);
+
+    // Guardar en caché
+    await db.collection("cache").doc("top_historico").set({
+      updated_at: new Date().toISOString(),
+      worlds: topWorlds,
+    });
+
+    console.log("¡Caché del Top Histórico actualizado exitosamente!");
+  } catch (error) {
+    console.error("Error crítico al actualizar el Top Histórico:", error);
   }
 });
