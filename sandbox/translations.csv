@@ -391,7 +391,7 @@ btn_upload_confirm,Subir a la Workshop,Upload to Workshop,Carica nel Workshop,T�
 btn_select_slot,Seleccionar,Select,Seleziona,Sélectionner,Auswählen,Selecionar
 uploading_world,"Subiendo mundo a la Workshop","Uploading world to the Workshop","Caricamento del mondo nel Workshop","Envoi du monde vers le Workshop","Upload der Welt in den Workshop","Enviando mundo para o Workshop"
 upload_success,"Tu mundo {0} se ha subido con éxito a la Workshop","Your world {0} has been successfully uploaded to the Workshop","Il tuo mondo {0} è stato caricato con successo nel Workshop","Votre monde {0} a été envoyé avec succès vers le Workshop","Deine Welt {0} wurde erfolgreich in den Workshop hochgeladen","Seu mundo {0} foi enviado com sucesso para o Workshop"
-tab_mis_descargas,Mis Descargas,My Downloads,Meus Downloads,Mes Téléchargements,I miei download,Meine Downloads
+tab_mis_descargas,⬇️Mis Descargas,⬇️My Downloads,⬇️Meus Downloads,⬇️Mes Téléchargements,⬇️I miei download,⬇️Meine Downloads
 load_worls,Cargando mundos...,Loading worlds...,Carregando mundos...,Chargement des mondes...,Caricamento mondi...,Welten werden geladen...
 card_untitled,Sin título,Untitled,Senza titolo,Sans titre,Ohne Titel,Sem título
 card_anonymous,Anónimo,Anonymous,Anonimo,Anonyme,Anonym,Anônimo
@@ -412,3 +412,5 @@ btn_upload_ad,🎥 Subir (Anuncio),🎥 Upload (Ad),🎥 Carica (Annuncio),🎥 
 upload_limit_reached,Límite Diario Alcanzado,Daily Limit Reached,Limite Giornaliero Raggiunto,Limite Quotidienne Atteinte,Tageslimit Erreicht,Limite Diário Atingido
 daily_uploads_status,Subidas diarias: {0} de {1},Daily uploads: {0} of {1},Caricamenti giornalieri: {0} di {1},Envois quotidiens : {0} sur {1},Tägliche Uploads: {0} von {1},Envios diários: {0} de {1}
 downloaded_maps_count,Mapas descargados: {0},Downloaded maps: {0},Mappe scaricate: {0},Cartes téléchargées : {0},Heruntergeladene Karten: {0},Mapas baixados: {0}
+btn_buscar,Buscar,Search,Cerca,Rechercher,Suchen,Procurar
+msg_error,Error,Error,Errore,Erreur,Fehler,Erro

@@ -133,7 +133,7 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 		
 		# Si retorna null, no existe. GodotFirebase a veces devuelve FirestoreDocument
 		# sin la propiedad document si falla, o un null, o un dict de error.
-		if not check_doc or (typeof(check_doc) == TYPE_OBJECT and not check_doc.has("document")) or (typeof(check_doc) == TYPE_DICTIONARY and check_doc.has("error")):
+		if not check_doc or (typeof(check_doc) == TYPE_OBJECT and not "document" in check_doc) or (typeof(check_doc) == TYPE_DICTIONARY and check_doc.has("error")):
 			is_unique = true
 		else:
 			print("WORKSHOP: ID de mapa ya existe: ", final_map_id, " reintentando...")

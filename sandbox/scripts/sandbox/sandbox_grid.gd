@@ -3744,11 +3744,103 @@ func _setup_workshop_ui():
 	main_vbox.add_theme_constant_override("separation", 10 * s)
 	workshop_panel.add_child(main_vbox)
 	
+	# SEARCH BAR
+	var search_hbox = HBoxContainer.new()
+	search_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	search_hbox.add_theme_constant_override("separation", 5 * s)
+	main_vbox.add_child(search_hbox)
+	
+	var search_input_base = LineEdit.new()
+	search_input_base.placeholder_text = "xxxxxxxx"
+	search_input_base.max_length = 15
+	search_input_base.custom_minimum_size = Vector2(180 * s, 45 * s)
+	search_input_base.add_theme_font_override("font", _get_safe_font())
+	search_input_base.add_theme_font_size_override("font_size", 20 * s)
+	search_input_base.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	search_hbox.add_child(search_input_base)
+	
+	var search_lbl_dash = Label.new()
+	search_lbl_dash.text = "-"
+	search_lbl_dash.add_theme_font_override("font", _get_safe_font())
+	search_lbl_dash.add_theme_font_size_override("font_size", 24 * s)
+	search_hbox.add_child(search_lbl_dash)
+	
+	var search_input_check = LineEdit.new()
+	search_input_check.placeholder_text = "x"
+	search_input_check.max_length = 1
+	search_input_check.custom_minimum_size = Vector2(40 * s, 45 * s)
+	search_input_check.add_theme_font_override("font", _get_safe_font())
+	search_input_check.add_theme_font_size_override("font_size", 20 * s)
+	search_input_check.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	search_hbox.add_child(search_input_check)
+	
+	var search_btn = Button.new()
+	search_btn.text = tr("btn_buscar") if TranslationServer.get_locale() == "es" else "Search"
+	search_btn.custom_minimum_size = Vector2(80 * s, 45 * s)
+	search_btn.add_theme_font_override("font", _get_safe_font())
+	search_btn.add_theme_font_size_override("font_size", 16 * s)
+	search_hbox.add_child(search_btn)
+	
+	# Auto format on paste or overtyping
+	search_input_base.text_changed.connect(func(new_text: String):
+		if new_text.find("-") != -1:
+			var parts = new_text.split("-")
+			if parts.size() >= 2:
+				search_input_base.text = parts[0].strip_edges().substr(0, 8)
+				search_input_check.text = parts[1].strip_edges().substr(0, 1)
+				search_input_check.grab_focus()
+				search_input_base.caret_column = search_input_base.text.length()
+		elif new_text.length() > 8:
+			search_input_base.text = new_text.substr(0, 8)
+			search_input_base.caret_column = 8
+	)
+	
+	search_btn.pressed.connect(func():
+		_play_action_sound("ui_click")
+		_on_search_world_requested(search_input_base.text.to_lower(), search_input_check.text.to_lower())
+	)
+	
 	# TAB HEADER
 	var tab_hbox = HBoxContainer.new()
 	tab_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	tab_hbox.add_theme_constant_override("separation", 5 * s)
 	main_vbox.add_child(tab_hbox)
+	
+	var top_category = ui_root.get_meta("workshop_top_category", "Top Semanal")
+	
+	var btn_hamburger = Button.new()
+	btn_hamburger.text = "☰"
+	btn_hamburger.custom_minimum_size = Vector2(45 * s, 45 * s)
+	btn_hamburger.add_theme_font_override("font", _get_safe_font())
+	btn_hamburger.add_theme_font_size_override("font_size", 24 * s)
+	var hamburger_style = StyleBoxFlat.new()
+	hamburger_style.bg_color = Color(0.1, 0.1, 0.15, 1.0)
+	hamburger_style.corner_radius_top_left = 10 * s; hamburger_style.corner_radius_top_right = 10 * s
+	hamburger_style.corner_radius_bottom_left = 10 * s; hamburger_style.corner_radius_bottom_right = 10 * s
+	hamburger_style.border_color = Color("#48dbfb")
+	btn_hamburger.add_theme_stylebox_override("normal", hamburger_style)
+	btn_hamburger.add_theme_stylebox_override("hover", hamburger_style)
+	btn_hamburger.add_theme_stylebox_override("pressed", hamburger_style)
+	tab_hbox.add_child(btn_hamburger)
+	
+	btn_hamburger.pressed.connect(func():
+		_play_action_sound("ui_click")
+		var popup = PopupMenu.new()
+		popup.add_theme_font_override("font", _get_safe_font())
+		popup.add_theme_font_size_override("font_size", 20 * s)
+		popup.add_item("Top Semanal", 0)
+		popup.add_item("Top Histórico", 1)
+		
+		popup.id_pressed.connect(func(id):
+			if id == 0: ui_root.set_meta("workshop_top_category", "Top Semanal")
+			elif id == 1: ui_root.set_meta("workshop_top_category", "Top Histórico")
+			call_deferred("_setup_main_ui_containers")
+		)
+		
+		btn_hamburger.add_child(popup)
+		var btn_rect = btn_hamburger.get_global_rect()
+		popup.popup(Rect2(btn_rect.position.x, btn_rect.position.y + btn_rect.size.y, 250, 0))
+	)
 	
 	var current_tab = ui_root.get_meta("workshop_current_tab", 0)
 	
@@ -3780,7 +3872,9 @@ func _setup_workshop_ui():
 		tab_hbox.add_child(btn)
 		return btn
 		
-	var btn_top = create_tab_btn.call("tab_top_semanal", 0)
+	var btn_top = create_tab_btn.call(top_category, 0)
+	if top_category == "Top Histórico": btn_top.text = "Top Histórico"
+	else: btn_top.text = tr("tab_top_semanal")
 	var btn_rec = create_tab_btn.call("tab_recientes", 1)
 	var btn_mis = create_tab_btn.call("tab_mis_mundos", 2)
 	var btn_desc = create_tab_btn.call("tab_mis_descargas", 3)
@@ -3870,7 +3964,7 @@ func _setup_workshop_ui():
 			var p_page = ui_root.get_meta("workshop_page_" + str(current_tab), 1)
 			if grid.get_child_count() == 0:
 				if current_tab == 0:
-					call_deferred("_fetch_top_semanal_async", grid, pagination_hbox, p_page)
+					call_deferred("_fetch_top_async", grid, pagination_hbox, p_page)
 				elif current_tab == 1:
 					call_deferred("_fetch_recientes_async", grid, pagination_hbox, p_page)
 				elif current_tab == 3:
@@ -3883,6 +3977,40 @@ func _setup_workshop_ui():
 			if workshop_panel.visible: do_fetch.call()
 		)
 
+	elif current_tab == 4:
+		var scroll = ScrollContainer.new()
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		content_panel.add_child(scroll)
+		
+		var scroll_vbox = VBoxContainer.new()
+		scroll_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll_vbox.add_theme_constant_override("separation", 30 * s)
+		
+		var grid = GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 20 * s)
+		grid.add_theme_constant_override("v_separation", 20 * s)
+		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll_vbox.add_child(grid)
+		
+		var margin = MarginContainer.new()
+		margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		margin.add_theme_constant_override("margin_left", 20 * s)
+		margin.add_theme_constant_override("margin_top", 20 * s)
+		margin.add_theme_constant_override("margin_right", 20 * s)
+		margin.add_theme_constant_override("margin_bottom", 40 * s)
+		margin.add_child(scroll_vbox)
+		scroll.add_child(margin)
+		
+		var clean_data = ui_root.get_meta("workshop_search_result", {})
+		if not clean_data.is_empty():
+			var card = preload("res://scenes/main/world_card.tscn").instantiate()
+			grid.add_child(card)
+			card.setup(clean_data, 0)
+			card.download_requested.connect(_on_world_download_requested)
+			
 	elif current_tab == 2:
 		var mis_mundos_vbox = VBoxContainer.new()
 		# Change alignment to BEGIN so buttons stay at top
@@ -3993,24 +4121,35 @@ func _build_pagination(pagination_hbox: HFlowContainer, total_items: int):
 		
 		pagination_hbox.add_child(p_btn)
 
-func _fetch_top_semanal_async(grid: GridContainer, pagination_hbox: HFlowContainer, page: int = 1):
+func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page: int = 1):
 	if not is_instance_valid(grid): return
 	
-	var document = _cached_top_semanal_doc
+	var top_category = ui_root.get_meta("workshop_top_category", "Top Semanal")
+	var doc_name = "top_semanal"
+	if top_category == "Top Histórico":
+		doc_name = "top_historico"
+		
+	var cache_file = "user://" + doc_name + "_cache.json"
+	var document = null
+	
+	if doc_name == "top_semanal" and _cached_top_semanal_doc != null: document = _cached_top_semanal_doc
+	elif doc_name == "top_historico" and ui_root.has_meta("_cached_top_historico_doc"): document = ui_root.get_meta("_cached_top_historico_doc")
+	
 	if document == null:
 		# Check disk cache first
 		var last_update = _get_last_update_unix()
-		if FileAccess.file_exists("user://top_semanal_cache.json"):
-			var cf = FileAccess.open("user://top_semanal_cache.json", FileAccess.READ)
+		if FileAccess.file_exists(cache_file):
+			var cf = FileAccess.open(cache_file, FileAccess.READ)
 			if cf:
 				var text = cf.get_as_text()
 				cf.close()
 				if text != "":
 					var parsed = JSON.parse_string(text)
 					if typeof(parsed) == TYPE_DICTIONARY and parsed.has("fetch_time"):
-						if parsed["fetch_time"] >= last_update:
+						if parsed["fetch_time"] >= last_update or doc_name == "top_historico": # historico doesn't reset weekly
 							document = parsed["document"]
-							_cached_top_semanal_doc = document
+							if doc_name == "top_semanal": _cached_top_semanal_doc = document
+							else: ui_root.set_meta("_cached_top_historico_doc", document)
 	
 	var loading_overlay = null
 	if document == null:
@@ -4026,13 +4165,14 @@ func _fetch_top_semanal_async(grid: GridContainer, pagination_hbox: HFlowContain
 	
 	if document == null:
 		var collection = Firebase.Firestore.collection("cache")
-		var fb_doc = await collection.get_doc("top_semanal")
+		var fb_doc = await collection.get_doc(doc_name)
 		if fb_doc:
 			document = fb_doc.document
-			_cached_top_semanal_doc = document
+			if doc_name == "top_semanal": _cached_top_semanal_doc = document
+			else: ui_root.set_meta("_cached_top_historico_doc", document)
 			
 			# Save to disk cache
-			var cf = FileAccess.open("user://top_semanal_cache.json", FileAccess.WRITE)
+			var cf = FileAccess.open(cache_file, FileAccess.WRITE)
 			if cf:
 				cf.store_string(JSON.stringify({
 					"fetch_time": int(Time.get_unix_time_from_system()),
@@ -4103,6 +4243,58 @@ func _fetch_top_semanal_async(grid: GridContainer, pagination_hbox: HFlowContain
 			
 		if idx == 0:
 			_show_empty_state_message(grid)
+
+func _get_char_value(c: String) -> int:
+	var ascii = c.unicode_at(0)
+	if ascii >= 48 and ascii <= 57: return ascii - 48
+	if ascii >= 97 and ascii <= 122: return ascii - 97 + 10
+	return 0
+
+func _get_value_char(val: int) -> String:
+	if val >= 0 and val <= 9: return String.chr(val + 48)
+	if val >= 10 and val <= 35: return String.chr(val - 10 + 97)
+	return "0"
+
+func _verify_map_code(base_code: String, check_char: String) -> bool:
+	if base_code.length() != 8 or check_char.length() != 1: return false
+	var sum = 0
+	for i in range(8): sum += _get_char_value(base_code[i]) * (i + 1)
+	return _get_value_char(sum % 36) == check_char
+
+func _on_search_world_requested(base_code: String, check_char: String):
+	if base_code.strip_edges() == "" or check_char.strip_edges() == "":
+		_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", "Por favor, introduce el código completo.")
+		return
+		
+	if not _verify_map_code(base_code, check_char):
+		_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", "El código ingresado es inválido (error de tipeo).")
+		return
+		
+	var full_code = base_code + "-" + check_char
+	var loading_overlay = _show_processing_overlay(tr("load_worls") if TranslationServer.get_locale() == "es" else "Searching...")
+	
+	var doc = await Firebase.Firestore.collection("community_worlds").get_doc(full_code)
+	if is_instance_valid(loading_overlay): loading_overlay.queue_free()
+	
+	if not doc or (typeof(doc) == TYPE_OBJECT and not "document" in doc) or (typeof(doc) == TYPE_DICTIONARY and doc.has("error")):
+		_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", "No se encontró ningún mapa con el código: " + full_code)
+		return
+		
+	var dict_doc = doc.document
+	var clean_data = {}
+	for key in dict_doc.keys():
+		var val = dict_doc[key]
+		if typeof(val) == TYPE_DICTIONARY:
+			if val.has("stringValue"): clean_data[key] = val["stringValue"]
+			elif val.has("integerValue"): clean_data[key] = int(val["integerValue"])
+			elif val.has("doubleValue"): clean_data[key] = float(val["doubleValue"])
+			else: clean_data[key] = val
+		else:
+			clean_data[key] = val
+			
+	ui_root.set_meta("workshop_search_result", clean_data)
+	ui_root.set_meta("workshop_current_tab", 4)
+	call_deferred("_setup_main_ui_containers")
 
 func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer, page: int = 1):
 	if not is_instance_valid(grid): return
@@ -15758,7 +15950,7 @@ func _show_modal_message(title_text: String, message_text: String):
 	vbox.add_child(lbl_msg)
 	
 	var ok_btn = Button.new()
-	ok_btn.text = tr("welcome_close") if tr("welcome_close") != "welcome_close" else "OK"
+	ok_btn.text = tr("GOT_IT") if tr("GOT_IT") != "GOT_IT" else "OK"
 	ok_btn.custom_minimum_size = Vector2(150 * s, 50 * s)
 	ok_btn.add_theme_font_size_override("font_size", 20 * s)
 	var btn_style = StyleBoxFlat.new()
