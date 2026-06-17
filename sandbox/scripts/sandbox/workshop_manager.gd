@@ -121,7 +121,32 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 	}
 	
 	var firestore_collection = Firebase.Firestore.collection("community_worlds")
-	var doc_res = await firestore_collection.add("", doc_data)
+	
+	var final_map_id = ""
+	var is_unique = false
+	var attempts = 0
+	
+	while not is_unique and attempts < 10:
+		emit_signal("upload_progress", 0.91 + (attempts * 0.01))
+		final_map_id = _generate_map_code()
+		var check_doc = await firestore_collection.get_doc(final_map_id)
+		
+		# Si retorna null, no existe. GodotFirebase a veces devuelve FirestoreDocument
+		# sin la propiedad document si falla, o un null, o un dict de error.
+		if not check_doc or (typeof(check_doc) == TYPE_OBJECT and not check_doc.has("document")) or (typeof(check_doc) == TYPE_DICTIONARY and check_doc.has("error")):
+			is_unique = true
+		else:
+			print("WORKSHOP: ID de mapa ya existe: ", final_map_id, " reintentando...")
+			attempts += 1
+			
+	if not is_unique:
+		_finish_upload(false, "Error: No se pudo generar un ID único para el mapa. Intenta de nuevo.")
+		return
+		
+	doc_data["id"] = final_map_id
+	
+	# Usamos add con el final_map_id para que lo use como ID del documento
+	var doc_res = await firestore_collection.add(final_map_id, doc_data)
 	if doc_res == null or (typeof(doc_res) == TYPE_DICTIONARY and doc_res.has("error")):
 		var err_msg = "Desconocido"
 		if typeof(doc_res) == TYPE_DICTIONARY and doc_res.has("error"):
@@ -130,6 +155,32 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 		return
 	
 	_finish_upload(true, "¡Mundo subido con éxito!")
+
+func _get_char_value(c: String) -> int:
+	var ascii = c.unicode_at(0)
+	if ascii >= 48 and ascii <= 57: return ascii - 48 # 0-9
+	if ascii >= 97 and ascii <= 122: return ascii - 97 + 10 # a-z
+	return 0
+
+func _get_value_char(val: int) -> String:
+	if val >= 0 and val <= 9: return String.chr(val + 48)
+	if val >= 10 and val <= 35: return String.chr(val - 10 + 97)
+	return "0"
+
+func _generate_map_code() -> String:
+	var chars = "0123456789abcdefghijklmnopqrstuvwxyz"
+	var code = ""
+	for i in range(8):
+		code += chars[randi() % chars.length()]
+		
+	var sum = 0
+	for i in range(8):
+		sum += _get_char_value(code[i]) * (i + 1)
+		
+	var check_digit_val = sum % 36
+	var check_char = _get_value_char(check_digit_val)
+	
+	return code + "-" + check_char
 
 func _finish_upload(success: bool, msg: String):
 	is_uploading = false

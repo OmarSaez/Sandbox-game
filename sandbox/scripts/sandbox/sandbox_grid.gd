@@ -3867,7 +3867,7 @@ func _setup_workshop_ui():
 		scroll.add_child(margin)
 		
 		var do_fetch = func():
-			var p_page = ui_root.get_meta("workshop_page", 1)
+			var p_page = ui_root.get_meta("workshop_page_" + str(current_tab), 1)
 			if grid.get_child_count() == 0:
 				if current_tab == 0:
 					call_deferred("_fetch_top_semanal_async", grid, pagination_hbox, p_page)
@@ -3969,7 +3969,8 @@ func _build_pagination(pagination_hbox: HFlowContainer, total_items: int):
 		p_btn.custom_minimum_size = Vector2(60 * s, 60 * s)
 		
 		var b_style = StyleBoxFlat.new()
-		var current_page = ui_root.get_meta("workshop_page", 1)
+		var current_tab = ui_root.get_meta("workshop_current_tab", 0)
+		var current_page = ui_root.get_meta("workshop_page_" + str(current_tab), 1)
 		b_style.bg_color = Color(0.25, 0.25, 0.3) if page_idx == current_page else Color(0.15, 0.15, 0.2)
 		b_style.corner_radius_top_left = 12 * s; b_style.corner_radius_top_right = 12 * s
 		b_style.corner_radius_bottom_left = 12 * s; b_style.corner_radius_bottom_right = 12 * s
@@ -3985,7 +3986,8 @@ func _build_pagination(pagination_hbox: HFlowContainer, total_items: int):
 		
 		p_btn.pressed.connect(func():
 			_play_action_sound("ui_click")
-			ui_root.set_meta("workshop_page", page_idx)
+			var c_tab = ui_root.get_meta("workshop_current_tab", 0)
+			ui_root.set_meta("workshop_page_" + str(c_tab), page_idx)
 			_setup_main_ui_containers() # Re-render con nueva página
 		)
 		
@@ -4445,7 +4447,7 @@ func _on_world_download_requested(world_data: Dictionary):
 				if is_instance_valid(loading_overlay): loading_overlay.queue_free()
 				_show_modal_message(tr("tab_mis_descargas"), tr("msg_download_success").format([world_data.get("title", "Mundo")]))
 				ui_root.set_meta("workshop_current_tab", 3)
-				ui_root.set_meta("workshop_page", 1)
+				ui_root.set_meta("workshop_page_3", 1)
 				call_deferred("_setup_main_ui_containers")
 				
 				# Nota: El incremento de descargas en Firestore se gestionará
