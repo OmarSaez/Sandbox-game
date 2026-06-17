@@ -396,8 +396,8 @@ load_worls,Cargando mundos...,Loading worlds...,Carregando mundos...,Chargement 
 card_untitled,Sin título,Untitled,Senza titolo,Sans titre,Ohne Titel,Sem título
 card_anonymous,Anónimo,Anonymous,Anonimo,Anonyme,Anonym,Anônimo
 card_by,Por: ,By: ,Da: ,Par : ,Von: ,Por: 
-card_play_download,⬇️ Descargar,⬇️ Download,⬇️ Scarica,⬇️ Télécharger,⬇️ Herunterladen,⬇️ Baixar
-card_report,🚩 Reportar,🚩 Report,🚩 Segnala,🚩 Signaler,🚩 Melden,🚩 Reportar
+card_play_download,Descargar,Download,Scarica,Télécharger,Herunterladen,Baixar
+card_report,Reportar,Report,Segnala,Signaler,Melden,Reportar
 card_edit,✏️ Editar,✏️ Edit,✏️ Modifica,✏️ Modifier,✏️ Bearbeiten,✏️ Editar
 card_delete,🗑️ Eliminar,🗑️ Delete,🗑️ Elimina,🗑️ Supprimer,🗑️ Löschen,🗑️ Excluir
 card_reports,🚩 Reportes: ,🚩 Reports: ,🚩 Segnalazioni: ,🚩 Signalements : ,🚩 Meldungen: ,🚩 Denúncias: 
@@ -416,3 +416,5 @@ btn_buscar,Buscar,Search,Cerca,Rechercher,Suchen,Procurar
 msg_error,Error,Error,Errore,Erreur,Fehler,Erro
 map_code,Código mapa:,Map code:,Codice mappa:,Code de carte:,Karten-Code:,Código do mapa:
 msg_copied,¡ID Copiado!,ID Copied!,ID Copiato!,ID Copié!,ID Kopiert!,ID Copiado!
+card_like,Dar Like,Like,Mi piace,J'aime,Gefällt mir,Curtir
+card_liked,❤️ Ya te gusta,❤️ Liked,❤️ Piace,❤️ Aimé,❤️ Gefällt mir,❤️ Curtiu

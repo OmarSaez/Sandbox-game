@@ -88,6 +88,8 @@ var top_downloads_count_label: Label = null
 var next_download_is_free: bool = true
 var uploads_today: int = 0
 var last_upload_day: int = 0
+var liked_worlds: Array = []
+var reported_worlds: Array = []
 
 func _load_workshop_economy():
 	var cfg = ConfigFile.new()
@@ -95,12 +97,16 @@ func _load_workshop_economy():
 		next_download_is_free = cfg.get_value("economy", "next_download_is_free", true)
 		uploads_today = cfg.get_value("economy", "uploads_today", 0)
 		last_upload_day = cfg.get_value("economy", "last_upload_day", 0)
+		liked_worlds = cfg.get_value("economy", "liked_worlds", [])
+		reported_worlds = cfg.get_value("economy", "reported_worlds", [])
 
 func _save_workshop_economy():
 	var cfg = ConfigFile.new()
 	cfg.set_value("economy", "next_download_is_free", next_download_is_free)
 	cfg.set_value("economy", "uploads_today", uploads_today)
 	cfg.set_value("economy", "last_upload_day", last_upload_day)
+	cfg.set_value("economy", "liked_worlds", liked_worlds)
+	cfg.set_value("economy", "reported_worlds", reported_worlds)
 	cfg.save("user://workshop_economy.cfg")
 
 func _get_next_update_unix(is_historico: bool = false) -> int:
@@ -4442,11 +4448,17 @@ func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer
 				card.setup(clean_data, 0)
 				if not card.download_requested.is_connected(_on_world_download_requested):
 					card.download_requested.connect(_on_world_download_requested)
+					if not card.like_requested.is_connected(_on_world_like_requested):
+						card.like_requested.connect(_on_world_like_requested)
+					if not card.report_requested.is_connected(_on_world_report_requested):
+						card.report_requested.connect(_on_world_report_requested)
 			else:
 				var card = preload("res://scenes/main/world_card.tscn").instantiate()
 				grid.add_child(card)
 				card.setup(clean_data, 0)
 				card.download_requested.connect(_on_world_download_requested)
+				card.like_requested.connect(_on_world_like_requested)
+				card.report_requested.connect(_on_world_report_requested)
 			idx += 1
 			
 		for i in range(idx, preloaded_cards.size()):
@@ -4478,15 +4490,84 @@ func _fetch_mis_descargas_async(grid: GridContainer, pagination_hbox: HFlowConta
 	var displayed = 0
 	for i in range(start_idx, min(end_idx, downloads.size())):
 		var w_data = downloads[i]
+		
+		# Emergency fix for corrupted data
+		var needs_save = false
+		for k in w_data.keys():
+			if typeof(w_data[k]) == TYPE_DICTIONARY:
+				if w_data[k].has("stringValue"): w_data[k] = w_data[k]["stringValue"]; needs_save = true
+				elif w_data[k].has("integerValue"): w_data[k] = int(w_data[k]["integerValue"]); needs_save = true
+				elif w_data[k].has("doubleValue"): w_data[k] = float(w_data[k]["doubleValue"]); needs_save = true
+				elif w_data[k].has("booleanValue"): w_data[k] = w_data[k]["booleanValue"]; needs_save = true
+		if needs_save:
+			var fw = FileAccess.open("user://downloads.json", FileAccess.WRITE)
+			if fw: fw.store_string(JSON.stringify(downloads))
+			
 		var card = preload("res://scenes/main/world_card.tscn").instantiate()
 		grid.add_child(card)
+		
+		var current_time = int(Time.get_unix_time_from_system())
+		var last_sync = w_data.get("last_sync_time", 0)
+		if current_time - last_sync > 604800: # 7 dias
+			_trigger_lazy_sync(w_data, card)
+			
 		card.setup(w_data, 2) # CardMode.DOWNLOADED
+		if liked_worlds.has(str(w_data.get("id", w_data.get("world_id", "")))):
+			card.set_liked_state(true)
+			
 		card.play_requested.connect(_on_world_play_requested)
 		card.delete_requested.connect(_on_world_delete_downloaded)
+		card.like_requested.connect(_on_world_like_requested)
+		card.unlike_requested.connect(_on_world_unlike_requested)
+		card.report_requested.connect(_on_world_report_requested)
 		displayed += 1
 		
 	if displayed == 0:
 		_show_empty_state_message(grid)
+
+func _trigger_lazy_sync(w_data: Dictionary, card: Control):
+	var world_id = str(w_data.get("id", w_data.get("world_id", "")))
+	if world_id == "": return
+	
+	var doc = await Firebase.Firestore.collection("community_worlds").get_doc(world_id)
+	if doc and doc.document:
+		var raw = doc.document
+		
+		var l_val = raw.get("likes", {})
+		if typeof(l_val) == TYPE_DICTIONARY and l_val.has("integerValue"): w_data["likes"] = int(l_val["integerValue"])
+		
+		var d_val = raw.get("downloads", {})
+		if typeof(d_val) == TYPE_DICTIONARY and d_val.has("integerValue"): w_data["downloads"] = int(d_val["integerValue"])
+		
+		w_data["last_sync_time"] = int(Time.get_unix_time_from_system())
+		
+		# Modificar visualmente si la tarjeta sigue activa
+		if is_instance_valid(card) and card.has_method("setup"):
+			card.world_data["likes"] = w_data.get("likes", 0)
+			card.world_data["downloads"] = w_data.get("downloads", 0)
+			if is_instance_valid(card.get("likes_label")):
+				card.likes_label.text = "👍 " + str(w_data.get("likes", 0))
+			if is_instance_valid(card.get("downloads_label")):
+				card.downloads_label.text = "⬇️ " + str(w_data.get("downloads", 0))
+				
+		# Actualizar el JSON
+		if FileAccess.file_exists("user://downloads.json"):
+			var f = FileAccess.open("user://downloads.json", FileAccess.READ)
+			var text = f.get_as_text()
+			f.close()
+			if text != "":
+				var downloads = JSON.parse_string(text)
+				if typeof(downloads) == TYPE_ARRAY:
+					var modified = false
+					for i in range(downloads.size()):
+						var w = downloads[i]
+						if typeof(w) == TYPE_DICTIONARY and str(w.get("id", w.get("world_id", ""))) == world_id:
+							downloads[i] = w_data
+							modified = true
+							break
+					if modified:
+						var fw = FileAccess.open("user://downloads.json", FileAccess.WRITE)
+						if fw: fw.store_string(JSON.stringify(downloads))
 
 func _show_empty_state_message(grid: GridContainer):
 	var lbl = Label.new()
@@ -4524,6 +4605,101 @@ func _on_world_delete_downloaded(world_data: Dictionary):
 		DirAccess.remove_absolute(save_path)
 		
 	call_deferred("_setup_main_ui_containers")
+
+func _on_world_like_requested(world_data: Dictionary):
+	var world_id = str(world_data.get("id", ""))
+	if world_id == "" or liked_worlds.has(world_id): return
+		
+	liked_worlds.append(world_id)
+	_save_workshop_economy()
+	
+	var action_data = {
+		"world_id": world_id,
+		"type": "like",
+		"timestamp": int(Time.get_unix_time_from_system())
+	}
+	_push_to_action_buffer(action_data)
+	
+	# Actualizar UI local optimísticamente para feedback instantáneo
+	var new_likes = int(world_data.get("likes", 0)) + 1
+	world_data["likes"] = new_likes
+	
+	var all_cards = ui_root.find_children("*", "PanelContainer", true, false)
+	for card in all_cards:
+		if card.has_method("setup") and card.get("world_data") != null:
+			if str(card.world_data.get("id", card.world_data.get("world_id", ""))) == world_id:
+				card.world_data["likes"] = new_likes
+				if card.has_method("set_liked_state"):
+					card.set_liked_state(true)
+				if is_instance_valid(card.get("likes_label")):
+					card.likes_label.text = "👍 " + str(new_likes)
+	_update_local_download_likes(world_id, new_likes)
+
+func _on_world_unlike_requested(world_data: Dictionary):
+	var world_id = str(world_data.get("id", ""))
+	if world_id == "" or not liked_worlds.has(world_id): return
+		
+	liked_worlds.erase(world_id)
+	_save_workshop_economy()
+	
+	var action_data = {
+		"world_id": world_id,
+		"type": "unlike",
+		"timestamp": int(Time.get_unix_time_from_system())
+	}
+	_push_to_action_buffer(action_data)
+	
+	# Actualizar UI local optimísticamente
+	var new_likes = max(0, int(world_data.get("likes", 0)) - 1)
+	world_data["likes"] = new_likes
+	
+	var all_cards = ui_root.find_children("*", "PanelContainer", true, false)
+	for card in all_cards:
+		if card.has_method("setup") and card.get("world_data") != null:
+			if str(card.world_data.get("id", card.world_data.get("world_id", ""))) == world_id:
+				card.world_data["likes"] = new_likes
+				if card.has_method("set_liked_state"):
+					card.set_liked_state(false)
+				if is_instance_valid(card.get("likes_label")):
+					card.likes_label.text = "👍 " + str(new_likes)
+	_update_local_download_likes(world_id, new_likes)
+
+func _update_local_download_likes(world_id: String, new_likes: int):
+	if FileAccess.file_exists("user://downloads.json"):
+		var f = FileAccess.open("user://downloads.json", FileAccess.READ)
+		var text = f.get_as_text()
+		f.close()
+		if text != "":
+			var downloads = JSON.parse_string(text)
+			if typeof(downloads) == TYPE_ARRAY:
+				var modified = false
+				for w in downloads:
+					if typeof(w) == TYPE_DICTIONARY and str(w.get("id", w.get("world_id", ""))) == world_id:
+						w["likes"] = new_likes
+						modified = true
+						break
+				if modified:
+					var fw = FileAccess.open("user://downloads.json", FileAccess.WRITE)
+					if fw: fw.store_string(JSON.stringify(downloads))
+
+func _on_world_report_requested(world_data: Dictionary):
+	var world_id = str(world_data.get("id", ""))
+	if world_id == "": return
+	
+	if reported_worlds.has(world_id):
+		_show_modal_message("Aviso", "Ya has reportado este mapa.")
+		return
+		
+	reported_worlds.append(world_id)
+	_save_workshop_economy()
+	
+	var action_data = {
+		"world_id": world_id,
+		"type": "report",
+		"timestamp": int(Time.get_unix_time_from_system())
+	}
+	_push_to_action_buffer(action_data)
+	_show_modal_message("Reporte Enviado", "Hemos recibido tu reporte sobre este mapa. El equipo de moderación lo revisará pronto.")
 
 func _on_world_play_requested(world_data: Dictionary):
 	var path = "user://download_world_" + str(world_data.get("id", "")) + ".dat"
@@ -4629,7 +4805,7 @@ func _on_world_download_requested(world_data: Dictionary):
 	var world_id = str(world_data.get("id", ""))
 	
 	var proceed_download = func():
-		var loading_overlay = _show_processing_overlay(tr("card_downloading"))
+		var loading_overlay = _show_processing_overlay(tr("card_play_download"))
 		
 		var doc = await Firebase.Firestore.collection("community_worlds").get_doc(world_id)
 		if not doc or not doc.document.has("sbu_url"):
@@ -4680,7 +4856,10 @@ func _on_world_download_requested(world_data: Dictionary):
 				for item in downloads:
 					if typeof(item) == TYPE_DICTIONARY and str(item.get("id", "")) != world_id:
 						new_downloads.append(item)
-				new_downloads.insert(0, world_data) # Insert at front
+						
+				var final_world_data = world_data.duplicate()
+				final_world_data["last_sync_time"] = int(Time.get_unix_time_from_system())
+				new_downloads.insert(0, final_world_data) # Insert at front
 				
 				var df = FileAccess.open("user://downloads.json", FileAccess.WRITE)
 				if df: df.store_string(JSON.stringify(new_downloads))
@@ -4691,14 +4870,19 @@ func _on_world_download_requested(world_data: Dictionary):
 				ui_root.set_meta("workshop_page_3", 1)
 				call_deferred("_setup_main_ui_containers")
 				
-				# Nota: El incremento de descargas en Firestore se gestionará
-				# desde una Cloud Function en el futuro para evitar colisiones.
+				# Registrar descarga en el Buffer de RTDB para que el servidor lo procese en lote
+				var action_data = {
+					"world_id": world_id,
+					"type": "download",
+					"timestamp": int(Time.get_unix_time_from_system())
+				}
+				_push_to_action_buffer(action_data)
 			else:
 				if is_instance_valid(loading_overlay): loading_overlay.queue_free()
 				_show_modal_message("Error", "No se pudo guardar el archivo localmente.")
 		else:
 			if is_instance_valid(loading_overlay): loading_overlay.queue_free()
-			_show_modal_message("Error", "Fallo al descargar el archivo: " + str(response_code))
+			_show_modal_message("Error", "Error al descargar el mundo. HTTP " + str(response_code))
 		
 		http_request.queue_free()
 	
@@ -4721,6 +4905,17 @@ func _on_world_download_requested(world_data: Dictionary):
 				_show_modal_message("Error", "El anuncio no se completó.")
 				
 		_show_download_ad_popup(on_confirm, on_cancel)
+
+func _push_to_action_buffer(action_data: Dictionary):
+	var http_request = HTTPRequest.new()
+	add_child(http_request)
+	http_request.request_completed.connect(func(_result, _response_code, _headers, _body):
+		http_request.queue_free()
+	)
+	var url = "https://sandbox-ultra-5c7d5-default-rtdb.firebaseio.com/action_buffer.json"
+	var body = JSON.stringify(action_data)
+	var headers = ["Content-Type: application/json"]
+	http_request.request(url, headers, HTTPClient.METHOD_POST, body)
 
 func _show_upload_slot_selector(on_selected: Callable):
 	var s = _get_ui_scale()

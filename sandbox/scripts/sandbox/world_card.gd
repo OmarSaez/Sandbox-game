@@ -10,6 +10,11 @@ enum CardMode {
 signal download_requested(world_data: Dictionary)
 signal play_requested(world_data: Dictionary)
 signal delete_requested(world_data: Dictionary)
+signal like_requested(world_data: Dictionary)
+signal unlike_requested(world_data: Dictionary)
+signal report_requested(world_data: Dictionary)
+
+var is_liked: bool = false
 
 @onready var title_label: Label = $VBoxContainer/TitleLabel
 @onready var author_label: Label = $VBoxContainer/AuthorLabel
@@ -31,6 +36,8 @@ signal delete_requested(world_data: Dictionary)
 var world_data: Dictionary
 var current_mode: int = CardMode.COMMUNITY
 
+var like_button: Button = null
+
 func _set_mouse_filter_pass_recursive(node: Node) -> void:
 	if node is Control:
 		node.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -44,8 +51,18 @@ func _ready() -> void:
 	if download_button:
 		download_button.pressed.connect(_on_main_action_button_pressed)
 	if report_button:
-		report_button.text = tr("card_report")
+		report_button.text = "🚩 " + tr("card_report")
 		report_button.pressed.connect(_on_report_button_pressed)
+		
+		# Crear el LikeButton clonando el ReportButton para mantener el estilo flat
+		like_button = report_button.duplicate()
+		like_button.name = "LikeButton"
+		like_button.text = "👍 " + tr("card_like", "Dar Like")
+		like_button.add_theme_color_override("font_color", Color(0.3, 0.8, 1.0))
+		community_buttons.add_child(like_button)
+		community_buttons.move_child(like_button, report_button.get_index()) # Mover arriba del reporte
+		like_button.pressed.connect(_on_like_button_pressed)
+		
 	if edit_button:
 		edit_button.text = tr("card_edit")
 		edit_button.pressed.connect(_on_edit_button_pressed)
@@ -80,6 +97,8 @@ func _apply_scaling() -> void:
 		download_button.custom_minimum_size = Vector2(0, 45 * s)
 	if report_button:
 		report_button.add_theme_font_size_override("font_size", 16 * s)
+	if like_button:
+		like_button.add_theme_font_size_override("font_size", 18 * s)
 	if edit_button:
 		edit_button.add_theme_font_size_override("font_size", 20 * s)
 		edit_button.custom_minimum_size = Vector2(0, 45 * s)
@@ -134,20 +153,38 @@ func _setup_mode(mode: int) -> void:
 	if mode == CardMode.COMMUNITY or mode == CardMode.DOWNLOADED:
 		community_buttons.visible = true
 		management_buttons.visible = (mode == CardMode.DOWNLOADED)
+		
+		# Modo descargas
 		if mode == CardMode.DOWNLOADED:
 			report_button.visible = true
+			if like_button: like_button.visible = true
 			download_button.text = tr("card_play")
 			if edit_button: edit_button.visible = false
 			if reports_label: reports_label.visible = false
+		
+		# Modo comunidad normal
 		else:
 			report_button.visible = true
-			download_button.text = tr("card_play_download")
+			if like_button: like_button.visible = false
+			download_button.text = "⬇️ " + tr("card_play_download", "Descargar")
+			
 	elif mode == CardMode.MANAGEMENT:
 		community_buttons.visible = false
 		management_buttons.visible = true
 		if edit_button: edit_button.visible = true
-		if reports_label: reports_label.visible = true
-		reports_label.text = tr("card_reports") + str(world_data.get("reports", 0))
+		if reports_label:
+			reports_label.visible = true
+			reports_label.text = "🚩 Reportes: " + str(world_data.get("reports", 0))
+
+func set_liked_state(liked: bool) -> void:
+	is_liked = liked
+	if like_button:
+		if is_liked:
+			like_button.modulate = Color(0.9, 0.4, 0.4) # Red color for liked
+			like_button.text = tr("card_liked", "❤️ Ya te gusta")
+		else:
+			like_button.modulate = Color(1.0, 1.0, 1.0) # Normal color
+			like_button.text = tr("card_like", "👍 Dar Like")
 
 func _download_thumbnail(url: String) -> void:
 	var world_id = world_data.get("id", "")
@@ -218,5 +255,10 @@ func _on_delete_button_pressed() -> void:
 	# TODO: Confirmar y borrar de Firebase
 
 func _on_report_button_pressed() -> void:
-	print("Reportar mundo: ", world_data.get("id", ""))
-	# TODO: Lógica de reporte
+	report_requested.emit(world_data)
+
+func _on_like_button_pressed() -> void:
+	if is_liked:
+		unlike_requested.emit(world_data)
+	else:
+		like_requested.emit(world_data)

@@ -813,7 +813,7 @@ func show_workshop_rewarded():
 			_load_workshop_rewarded() # Precargar el siguiente
 		
 		var reward_listener := OnUserEarnedRewardListener.new()
-		reward_listener.on_user_earned_reward = func(rewarded_item):
+		reward_listener.on_user_earned_reward = func(_rewarded_item):
 			print("ADMOB: ¡RECOMPENSA DE WORKSHOP GANADA!")
 			reward_earned[0] = true
 		
