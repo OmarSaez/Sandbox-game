@@ -4080,6 +4080,8 @@ func _setup_workshop_ui():
 			
 	elif current_tab == 2:
 		var mis_mundos_vbox = VBoxContainer.new()
+		mis_mundos_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		mis_mundos_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		# Change alignment to BEGIN so buttons stay at top
 		mis_mundos_vbox.alignment = BoxContainer.ALIGNMENT_BEGIN
 		mis_mundos_vbox.add_theme_constant_override("separation", 15 * s)
@@ -4181,6 +4183,7 @@ func _setup_workshop_ui():
 		var list_scroll = ScrollContainer.new()
 		list_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		list_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		list_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 		mis_mundos_vbox.add_child(list_scroll)
 		
 		var list_margin = MarginContainer.new()
@@ -4196,7 +4199,7 @@ func _setup_workshop_ui():
 		list_margin.add_child(grid_and_pag_vbox)
 		
 		var list_grid = GridContainer.new()
-		list_grid.columns = 3
+		list_grid.columns = 2
 		list_grid.add_theme_constant_override("h_separation", 20 * s)
 		list_grid.add_theme_constant_override("v_separation", 20 * s)
 		list_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -4577,7 +4580,17 @@ func _fetch_mis_mundos_async(grid: GridContainer, pagination_hbox: HFlowContaine
 			
 		var idx = 0
 		for doc in page_worlds:
-			var clean_data = doc.doc_fields
+			var clean_data = {}
+			for key in doc.document.keys():
+				var val = doc.document[key]
+				if typeof(val) == TYPE_DICTIONARY:
+					if val.has("stringValue"): clean_data[key] = val["stringValue"]
+					elif val.has("integerValue"): clean_data[key] = int(val["integerValue"])
+					elif val.has("doubleValue"): clean_data[key] = float(val["doubleValue"])
+					elif val.has("booleanValue"): clean_data[key] = bool(val["booleanValue"])
+				else:
+					clean_data[key] = val
+					
 			clean_data["id"] = doc.doc_name
 			
 			if idx < preloaded_cards.size():
