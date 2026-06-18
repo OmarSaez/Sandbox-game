@@ -4207,6 +4207,7 @@ func _setup_workshop_ui():
 		mis_mundos_vbox.add_child(list_scroll)
 		
 		var list_margin = MarginContainer.new()
+		list_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		list_margin.add_theme_constant_override("margin_left", 20 * s)
 		list_margin.add_theme_constant_override("margin_top", 20 * s)
 		list_margin.add_theme_constant_override("margin_right", 20 * s)
@@ -4642,7 +4643,7 @@ func _fetch_mis_mundos_async(grid: GridContainer, pagination_hbox: HFlowContaine
 		var idx = 0
 		for clean_data in page_worlds:
 			if idx < preloaded_cards.size():
-				preloaded_cards[idx].setup(clean_data, 0)
+				preloaded_cards[idx].setup(clean_data, 3)
 				if not preloaded_cards[idx].download_requested.is_connected(_on_world_download_requested):
 					preloaded_cards[idx].download_requested.connect(_on_world_download_requested)
 				if not preloaded_cards[idx].like_requested.is_connected(_on_world_like_requested):
@@ -4652,7 +4653,7 @@ func _fetch_mis_mundos_async(grid: GridContainer, pagination_hbox: HFlowContaine
 			else:
 				var card = preload("res://scenes/main/world_card.tscn").instantiate()
 				grid.add_child(card)
-				card.setup(clean_data, 0)
+				card.setup(clean_data, 3)
 				card.download_requested.connect(_on_world_download_requested)
 				card.like_requested.connect(_on_world_like_requested)
 				card.report_requested.connect(_on_world_report_requested)

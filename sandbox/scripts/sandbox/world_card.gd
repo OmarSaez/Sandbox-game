@@ -4,7 +4,8 @@ class_name WorldCard
 enum CardMode {
 	COMMUNITY,
 	MANAGEMENT,
-	DOWNLOADED
+	DOWNLOADED,
+	UPLOADS
 }
 
 signal download_requested(world_data: Dictionary)
@@ -175,6 +176,9 @@ func _setup_mode(mode: int) -> void:
 		if reports_label:
 			reports_label.visible = true
 			reports_label.text = "🚩 Reportes: " + str(world_data.get("reports", 0))
+	elif mode == CardMode.UPLOADS:
+		community_buttons.visible = false
+		management_buttons.visible = false
 
 func set_liked_state(liked: bool) -> void:
 	is_liked = liked
