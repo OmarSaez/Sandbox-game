@@ -4787,29 +4787,31 @@ func _show_empty_state_message(grid: GridContainer):
 	grid.get_parent().move_child(lbl, grid.get_index() + 1)
 
 func _on_world_delete_downloaded(world_data: Dictionary):
-	var world_id = str(world_data.get("id", ""))
-	
-	var downloads = []
-	if FileAccess.file_exists("user://downloads.json"):
-		var f = FileAccess.open("user://downloads.json", FileAccess.READ)
-		var text = f.get_as_text()
-		if text != "":
-			var dict = JSON.parse_string(text)
-			if typeof(dict) == TYPE_ARRAY: downloads = dict
-			
-	var new_downloads = []
-	for item in downloads:
-		if typeof(item) == TYPE_DICTIONARY and str(item.get("id", "")) != world_id:
-			new_downloads.append(item)
-			
-	var f = FileAccess.open("user://downloads.json", FileAccess.WRITE)
-	if f: f.store_string(JSON.stringify(new_downloads))
-	
-	var save_path = "user://download_world_" + world_id + ".dat"
-	if FileAccess.file_exists(save_path):
-		DirAccess.remove_absolute(save_path)
+	_show_confirm_dialog(tr("confirm_delete_download_title"), tr("confirm_delete_download_msg"), func():
+		var world_id = str(world_data.get("id", ""))
 		
-	call_deferred("_setup_main_ui_containers")
+		var downloads = []
+		if FileAccess.file_exists("user://downloads.json"):
+			var f = FileAccess.open("user://downloads.json", FileAccess.READ)
+			var text = f.get_as_text()
+			if text != "":
+				var dict = JSON.parse_string(text)
+				if typeof(dict) == TYPE_ARRAY: downloads = dict
+				
+		var new_downloads = []
+		for item in downloads:
+			if typeof(item) == TYPE_DICTIONARY and str(item.get("id", "")) != world_id:
+				new_downloads.append(item)
+				
+		var f = FileAccess.open("user://downloads.json", FileAccess.WRITE)
+		if f: f.store_string(JSON.stringify(new_downloads))
+		
+		var save_path = "user://download_world_" + world_id + ".dat"
+		if FileAccess.file_exists(save_path):
+			DirAccess.remove_absolute(save_path)
+			
+		call_deferred("_setup_main_ui_containers")
+	)
 
 func _on_world_like_requested(world_data: Dictionary):
 	var world_id = str(world_data.get("id", ""))
@@ -4892,19 +4894,21 @@ func _on_world_report_requested(world_data: Dictionary):
 	if world_id == "": return
 	
 	if reported_worlds.has(world_id):
-		_show_modal_message("Aviso", "Ya has reportado este mapa.")
+		_show_modal_message(tr("notice_title"), tr("already_reported_msg"))
 		return
 		
-	reported_worlds.append(world_id)
-	_save_workshop_economy()
-	
-	var action_data = {
-		"world_id": world_id,
-		"type": "report",
-		"timestamp": int(Time.get_unix_time_from_system())
-	}
-	_push_to_action_buffer(action_data)
-	_show_modal_message("Reporte Enviado", "Hemos recibido tu reporte sobre este mapa. El equipo de moderación lo revisará pronto.")
+	_show_confirm_dialog(tr("confirm_report_world_title"), tr("confirm_report_world_msg"), func():
+		reported_worlds.append(world_id)
+		_save_workshop_economy()
+		
+		var action_data = {
+			"world_id": world_id,
+			"type": "report",
+			"timestamp": int(Time.get_unix_time_from_system())
+		}
+		_push_to_action_buffer(action_data)
+		_show_modal_message(tr("report_sent_title"), tr("report_sent_msg"))
+	)
 
 func _on_world_play_requested(world_data: Dictionary):
 	var path = "user://download_world_" + str(world_data.get("id", "")) + ".dat"
@@ -5367,7 +5371,7 @@ func _show_world_manager_dialog():
 			var doc_title = doc.get("title", "")
 			btn_del.pressed.connect(func():
 				_play_action_sound("ui_click")
-				_show_confirm_dialog("Eliminar Mundo", "¿Seguro que quieres borrar este mundo de la Workshop? Esto no se puede deshacer.", func():
+				_show_confirm_dialog(tr("confirm_delete_world_title"), tr("confirm_delete_world_msg"), func():
 					overlay.queue_free()
 					_delete_world_from_workshop(doc_id, doc_title)
 				)
@@ -5490,7 +5494,7 @@ func _show_edit_world_dialog(world_data: Dictionary):
 	margin.add_child(main_vbox)
 	
 	var title = Label.new()
-	title.text = "✏️ Modificar Mundo"
+	title.text = tr("edit_world_dialog_title")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_override("font", _get_safe_font())
 	title.add_theme_font_size_override("font_size", 28 * s)
@@ -5532,11 +5536,11 @@ func _show_edit_world_dialog(world_data: Dictionary):
 		lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
 		return lbl
 		
-	var lbl_file = create_label.call("Archivo del mapa")
-	lbl_file.text = "Archivo del mapa"
+	var lbl_file = create_label.call("map_file_label")
+	lbl_file.text = tr("map_file_label")
 	main_vbox.add_child(lbl_file)
 	var btn_choose_slot = Button.new()
-	btn_choose_slot.text = "💾 Mantener archivo online actual"
+	btn_choose_slot.text = tr("keep_online_file")
 	btn_choose_slot.add_theme_font_override("font", _get_safe_font())
 	btn_choose_slot.add_theme_font_size_override("font_size", 20 * s)
 	btn_choose_slot.custom_minimum_size = Vector2(0, 45 * s)
@@ -5604,7 +5608,7 @@ func _show_edit_world_dialog(world_data: Dictionary):
 		if data.has("thumbnail"): thumb_rect.texture = data.thumbnail
 		else: thumb_rect.texture = null
 		
-		btn_choose_slot.text = "⚠️ Reemplazar usando: Slot " + str(slot_id)
+		btn_choose_slot.text = tr("replace_using_slot") + str(slot_id)
 		c_style.border_color = Color("#ff9f43")
 			
 	btn_choose_slot.pressed.connect(func():
@@ -5639,7 +5643,7 @@ func _show_edit_world_dialog(world_data: Dictionary):
 	btn_hbox.add_child(btn_cancel)
 	
 	var btn_confirm = Button.new()
-	btn_confirm.text = "Guardar Cambios"
+	btn_confirm.text = tr("confirm_save_changes_title")
 	btn_confirm.custom_minimum_size = Vector2(220 * s, 50 * s)
 	btn_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_confirm.add_theme_font_override("font", _get_safe_font())
@@ -5667,32 +5671,35 @@ func _show_edit_world_dialog(world_data: Dictionary):
 			overlay.queue_free()
 			return
 		
-		var loading_overlay = _show_processing_overlay("Guardando cambios...")
-		
-		var on_done = func(success: bool, msg: String, doc_data: Dictionary = {}):
-			if is_instance_valid(loading_overlay):
-				loading_overlay.queue_free()
-				
-			if success:
-				var cache = ui_root.get_meta("workshop_mis_mundos_cache", [])
-				for i in range(cache.size()):
-					if cache[i].get("id") == world_id or cache[i].get("world_id") == world_id:
-						cache[i] = doc_data
-						break
-				ui_root.set_meta("workshop_mis_mundos_cache", cache)
-				_save_workshop_cache()
-				
-				_setup_workshop_ui()
-				
-				if is_instance_valid(overlay): overlay.queue_free()
-				_show_centered_bubble("Cambios guardados con éxito", Color("#00cec9"))
-			else:
-				_show_centered_bubble("Error: " + msg, Color(0.8, 0.2, 0.2))
-				
-		if not WorkshopManager.update_completed.is_connected(on_done):
-			WorkshopManager.update_completed.connect(on_done, CONNECT_ONE_SHOT)
-		
-		WorkshopManager.update_world(world_id, world_data, chosen_name, chosen_cat, overwrite_slot)
+		var on_confirmed = func():
+			var loading_overlay = _show_processing_overlay("Guardando cambios...")
+			
+			var on_done = func(success: bool, msg: String, doc_data: Dictionary = {}):
+				if is_instance_valid(loading_overlay):
+					loading_overlay.queue_free()
+					
+				if success:
+					var cache = ui_root.get_meta("workshop_mis_mundos_cache", [])
+					for i in range(cache.size()):
+						if cache[i].get("id") == world_id or cache[i].get("world_id") == world_id:
+							cache[i] = doc_data
+							break
+					ui_root.set_meta("workshop_mis_mundos_cache", cache)
+					_save_workshop_cache()
+					
+					_setup_workshop_ui()
+					
+					if is_instance_valid(overlay): overlay.queue_free()
+					_show_centered_bubble("Cambios guardados con éxito", Color("#00cec9"))
+				else:
+					_show_centered_bubble("Error: " + msg, Color(0.8, 0.2, 0.2))
+					
+			if not WorkshopManager.update_completed.is_connected(on_done):
+				WorkshopManager.update_completed.connect(on_done, CONNECT_ONE_SHOT)
+			
+			WorkshopManager.update_world(world_id, world_data, chosen_name, chosen_cat, overwrite_slot)
+			
+		_show_confirm_dialog(tr("confirm_save_changes_title"), tr("confirm_save_changes_msg"), on_confirmed)
 	)
 
 func _show_upload_world_dialog():
@@ -5953,15 +5960,18 @@ func _show_upload_world_dialog():
 			
 			WorkshopManager.upload_world(selected_upload_slot_id[0], chosen_name, cat_opt.selected)
 			
-		if uploads_today >= 2:
-			AdMobManager.show_workshop_rewarded()
-			var success = await AdMobManager.workshop_rewarded_completed
-			if success:
-				proceed_upload.call()
+		var on_confirmed = func():
+			if uploads_today >= 2:
+				AdMobManager.show_workshop_rewarded()
+				var success = await AdMobManager.workshop_rewarded_completed
+				if success:
+					proceed_upload.call()
+				else:
+					_show_modal_message("Error", "El anuncio no se completó.")
 			else:
-				_show_modal_message("Error", "El anuncio no se completó.")
-		else:
-			proceed_upload.call()
+				proceed_upload.call()
+				
+		_show_confirm_dialog(tr("confirm_upload_world_title"), tr("confirm_upload_world_msg"), on_confirmed)
 	)
 	btn_hbox.add_child(btn_confirm)
 
@@ -16700,85 +16710,120 @@ func _is_version_newer(imported_ver: String, current_ver: String) -> bool:
 
 func _show_confirm_dialog(title_text: String, message_text: String, on_confirm: Callable):
 	var s = _get_ui_scale()
-	var dialog_container = Control.new()
-	dialog_container.name = "ConfirmDialogContainer"
-	dialog_container.mouse_filter = Control.MOUSE_FILTER_PASS
-	dialog_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	dialog_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	save_panel.add_child(dialog_container)
+	if not is_instance_valid(ui_root):
+		ui_root = get_parent().get_node_or_null("UI")
+		if not ui_root: return
+		
+	var blocker = Control.new()
+	blocker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	blocker.mouse_filter = Control.MOUSE_FILTER_STOP
+	blocker.gui_input.connect(func(event):
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			blocker.queue_free()
+	)
 	
-	var dialog = PanelContainer.new()
-	dialog_container.add_child(dialog)
+	var bubble = PanelContainer.new()
+	bubble.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	var d_style = StyleBoxFlat.new()
-	d_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
-	d_style.border_width_left = 3; d_style.border_width_top = 3
-	d_style.border_width_right = 3; d_style.border_width_bottom = 3
-	d_style.border_color = Color(0.6, 0.5, 0.2)
-	d_style.corner_radius_top_left = 30
-	d_style.corner_radius_top_right = 30
-	dialog.add_theme_stylebox_override("panel", d_style)
-	dialog.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.12, 0.12, 0.15, 0.98)
+	p_style.set_corner_radius_all(18 * s)
+	p_style.border_width_left = 3; p_style.border_width_top = 3
+	p_style.border_width_right = 3; p_style.border_width_bottom = 3
+	p_style.border_color = Color(0.8, 0.6, 0.2) # Golden border
+	p_style.shadow_color = Color(0, 0, 0, 0.6)
+	p_style.shadow_size = 15
+	bubble.add_theme_stylebox_override("panel", p_style)
 	
 	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_top", 40 * s)
-	margin.add_theme_constant_override("margin_bottom", 40 * s)
-	margin.add_theme_constant_override("margin_left", 30 * s)
-	margin.add_theme_constant_override("margin_right", 30 * s)
-	dialog.add_child(margin)
+	margin.mouse_filter = Control.MOUSE_FILTER_STOP
+	margin.add_theme_constant_override("margin_left", 20 * s)
+	margin.add_theme_constant_override("margin_top", 16 * s)
+	margin.add_theme_constant_override("margin_right", 20 * s)
+	margin.add_theme_constant_override("margin_bottom", 16 * s)
+	bubble.add_child(margin)
 	
 	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 25 * s)
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.mouse_filter = Control.MOUSE_FILTER_STOP
+	vbox.add_theme_constant_override("separation", 15 * s)
 	margin.add_child(vbox)
 	
 	var lbl_title = Label.new()
 	lbl_title.text = title_text
 	lbl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl_title.add_theme_font_size_override("font_size", 28 * s)
+	lbl_title.add_theme_font_size_override("font_size", 24 * s)
 	lbl_title.add_theme_font_override("font", _get_safe_font())
+	lbl_title.add_theme_color_override("font_color", Color("#f1c40f"))
 	vbox.add_child(lbl_title)
 	
 	var lbl_msg = Label.new()
 	lbl_msg.text = message_text
 	lbl_msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl_msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lbl_msg.add_theme_font_size_override("font_size", 22 * s)
+	lbl_msg.custom_minimum_size = Vector2(320 * s, 0)
+	lbl_msg.add_theme_font_size_override("font_size", 20 * s)
+	lbl_msg.add_theme_font_override("font", _get_safe_font())
 	vbox.add_child(lbl_msg)
 	
 	var hbox = HBoxContainer.new()
 	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	hbox.add_theme_constant_override("separation", 30 * s)
+	hbox.add_theme_constant_override("separation", 20 * s)
 	vbox.add_child(hbox)
 	
 	var yes_btn = Button.new()
 	yes_btn.text = tr("yes") if tr("yes") != "yes" else "Yes"
-	yes_btn.custom_minimum_size = Vector2(140 * s, 50 * s)
-	yes_btn.add_theme_font_size_override("font_size", 20 * s)
+	yes_btn.custom_minimum_size = Vector2(120 * s, 46 * s)
+	yes_btn.add_theme_font_size_override("font_size", 18 * s)
 	yes_btn.add_theme_font_override("font", _get_safe_font())
 	var yes_style = StyleBoxFlat.new()
-	yes_style.bg_color = Color(0.2, 0.6, 0.2)
+	yes_style.bg_color = Color("#27ae60")
 	yes_style.set_corner_radius_all(10 * s)
 	yes_btn.add_theme_stylebox_override("normal", yes_style)
+	yes_btn.add_theme_stylebox_override("hover", yes_style)
+	yes_btn.add_theme_stylebox_override("pressed", yes_style)
 	yes_btn.pressed.connect(func():
-		dialog_container.queue_free()
+		blocker.queue_free()
 		on_confirm.call()
 	)
 	hbox.add_child(yes_btn)
 	
 	var no_btn = Button.new()
 	no_btn.text = tr("no") if tr("no") != "no" else "No"
-	no_btn.custom_minimum_size = Vector2(140 * s, 50 * s)
-	no_btn.add_theme_font_size_override("font_size", 20 * s)
+	no_btn.custom_minimum_size = Vector2(120 * s, 46 * s)
+	no_btn.add_theme_font_size_override("font_size", 18 * s)
 	no_btn.add_theme_font_override("font", _get_safe_font())
 	var no_style = StyleBoxFlat.new()
-	no_style.bg_color = Color(0.6, 0.2, 0.2)
+	no_style.bg_color = Color("#c0392b")
 	no_style.set_corner_radius_all(10 * s)
 	no_btn.add_theme_stylebox_override("normal", no_style)
+	no_btn.add_theme_stylebox_override("hover", no_style)
+	no_btn.add_theme_stylebox_override("pressed", no_style)
 	no_btn.pressed.connect(func():
-		dialog_container.queue_free()
+		blocker.queue_free()
 	)
 	hbox.add_child(no_btn)
+	
+	blocker.add_child(bubble)
+	ui_root.add_child(blocker)
+	
+	# Position near mouse
+	var screen_pos = get_viewport().get_mouse_position()
+	await get_tree().process_frame # Wait for layout to calculate size
+	
+	if is_instance_valid(bubble):
+		var bubble_size = bubble.size
+		var margin_y = 20 * s
+		
+		var target_y = screen_pos.y - bubble_size.y - margin_y
+		if target_y < 30 * s:
+			target_y = screen_pos.y + 40 * s
+			
+		bubble.position.x = screen_pos.x - bubble_size.x / 2
+		bubble.position.y = target_y
+		
+		var screen_size = get_viewport_rect().size
+		bubble.position.x = clamp(bubble.position.x, 10 * s, screen_size.x - bubble_size.x - 10 * s)
+		bubble.position.y = clamp(bubble.position.y, 10 * s, screen_size.y - bubble_size.y - 10 * s)
 
 func _show_modal_message(title_text: String, message_text: String):
 	var s = _get_ui_scale()
