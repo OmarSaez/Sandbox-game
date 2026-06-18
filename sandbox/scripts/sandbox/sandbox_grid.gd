@@ -4165,7 +4165,7 @@ func _setup_workshop_ui():
 			if ui_root.has_meta("workshop_total_uploaded_worlds"):
 				var total = ui_root.get_meta("workshop_total_uploaded_worlds", 0)
 				if total >= 10:
-					var msg = "Has alcanzado el límite de 10 mundos subidos. Elimina uno antiguo desde 'Gestionar Mundos' para subir más."
+					var msg = tr("msg_upload_limit_reached")
 					_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", msg)
 					return
 					
@@ -4436,7 +4436,7 @@ func _on_search_world_requested(base_code: String, check_char: String):
 	if is_instance_valid(loading_overlay): loading_overlay.queue_free()
 	
 	if not doc or (typeof(doc) == TYPE_OBJECT and not "document" in doc) or (typeof(doc) == TYPE_DICTIONARY and doc.has("error")):
-		_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", "No se encontró ningún mapa con el código: " + full_code)
+		_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_map_not_found") + full_code)
 		return
 		
 	var dict_doc = doc.document
@@ -5019,7 +5019,7 @@ func _on_world_download_requested(world_data: Dictionary):
 		var doc = await Firebase.Firestore.collection("community_worlds").get_doc(world_id)
 		if not doc or not doc.document.has("sbu_url"):
 			if is_instance_valid(loading_overlay): loading_overlay.queue_free()
-			_show_modal_message("Error", "No se encontró el archivo de descarga.")
+			_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_download_file_not_found"))
 			return
 			
 		var sbu_url = ""
@@ -5111,7 +5111,7 @@ func _on_world_download_requested(world_data: Dictionary):
 				_save_workshop_economy()
 				proceed_download.call()
 			else:
-				_show_modal_message("Error", "El anuncio no se completó.")
+				_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_ad_failed"))
 				
 		_show_download_ad_popup(on_confirm, on_cancel)
 
@@ -5317,7 +5317,7 @@ func _show_world_manager_dialog():
 	margin.add_child(main_vbox)
 	
 	var title = Label.new()
-	title.text = "Gestor de Mundos"
+	title.text = tr("world_manager_title")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_override("font", _get_safe_font())
 	title.add_theme_font_size_override("font_size", 28 * s)
@@ -5336,7 +5336,7 @@ func _show_world_manager_dialog():
 	
 	if cache_data.size() == 0:
 		var empty_lbl = Label.new()
-		empty_lbl.text = "No tienes mundos subidos."
+		empty_lbl.text = tr("msg_no_worlds_uploaded")
 		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty_lbl.add_theme_font_override("font", _get_safe_font())
 		empty_lbl.add_theme_font_size_override("font_size", 18 * s)
@@ -5384,7 +5384,7 @@ func _show_world_manager_dialog():
 	main_vbox.add_child(spacer)
 	
 	var btn_close = Button.new()
-	btn_close.text = tr("btn_cancel") if TranslationServer.get_locale() == "es" else "Cerrar"
+	btn_close.text = tr("btn_close_word")
 	btn_close.custom_minimum_size = Vector2(200 * s, 50 * s)
 	btn_close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	btn_close.add_theme_font_override("font", _get_safe_font())
@@ -5396,7 +5396,7 @@ func _show_world_manager_dialog():
 	)
 
 func _delete_world_from_workshop(world_id: String, world_title: String):
-	var loading_overlay = _show_processing_overlay("Eliminando...")
+	var loading_overlay = _show_processing_overlay(tr("msg_deleting"))
 	
 	var firestore_col = Firebase.Firestore.collection("community_worlds")
 	var doc = await firestore_col.get_doc(world_id)
@@ -5672,7 +5672,7 @@ func _show_edit_world_dialog(world_data: Dictionary):
 			return
 		
 		var on_confirmed = func():
-			var loading_overlay = _show_processing_overlay("Guardando cambios...")
+			var loading_overlay = _show_processing_overlay(tr("msg_saving_changes"))
 			
 			var on_done = func(success: bool, msg: String, doc_data: Dictionary = {}):
 				if is_instance_valid(loading_overlay):
@@ -5690,7 +5690,7 @@ func _show_edit_world_dialog(world_data: Dictionary):
 					_setup_workshop_ui()
 					
 					if is_instance_valid(overlay): overlay.queue_free()
-					_show_centered_bubble("Cambios guardados con éxito", Color("#00cec9"))
+					_show_centered_bubble(tr("msg_changes_saved_success"), Color("#00cec9"))
 				else:
 					_show_centered_bubble("Error: " + msg, Color(0.8, 0.2, 0.2))
 					
@@ -5967,7 +5967,7 @@ func _show_upload_world_dialog():
 				if success:
 					proceed_upload.call()
 				else:
-					_show_modal_message("Error", "El anuncio no se completó.")
+					_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_ad_failed"))
 			else:
 				proceed_upload.call()
 				

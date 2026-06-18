@@ -130,7 +130,7 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 	if thumb_bytes.size() > 0:
 		var thumb_res = await Firebase.Storage.ref(thumb_filename).put_data(thumb_bytes, {"Content-Type": "image/webp"})
 		if thumb_res == null or (typeof(thumb_res) == TYPE_DICTIONARY and thumb_res.has("error")):
-			_finish_upload(false, "Error al subir imagen de miniatura.", {})
+			_finish_upload(false, tr("err_upload_thumb"), {})
 			return
 			
 		var bucket = Firebase._config.storageBucket
@@ -141,7 +141,7 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 	# 5. Subir SBU
 	var sbu_res = await Firebase.Storage.ref(sbu_filename).put_data(sbu_bytes, {"Content-Type": "application/octet-stream"})
 	if sbu_res == null or (typeof(sbu_res) == TYPE_DICTIONARY and sbu_res.has("error")):
-		_finish_upload(false, "Error al subir los datos del mundo.", {})
+		_finish_upload(false, tr("err_upload_data"), {})
 		return
 		
 	var bucket_sbu = Firebase._config.storageBucket
@@ -189,7 +189,7 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 			attempts += 1
 			
 	if not is_unique:
-		_finish_upload(false, "Error: No se pudo generar un ID único para el mapa. Intenta de nuevo.", {})
+		_finish_upload(false, tr("err_generate_id"), {})
 		return
 		
 	doc_data["id"] = final_map_id
@@ -200,10 +200,10 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 		var err_msg = "Desconocido"
 		if typeof(doc_res) == TYPE_DICTIONARY and doc_res.has("error"):
 			err_msg = str(doc_res.error)
-		_finish_upload(false, "Error al guardar información del mundo en la base de datos. Detalle: " + err_msg, {})
+		_finish_upload(false, tr("err_save_db") + err_msg, {})
 		return
 	
-	_finish_upload(true, "¡Mundo subido con éxito!", doc_data)
+	_finish_upload(true, tr("msg_upload_success"), doc_data)
 
 func _get_char_value(c: String) -> int:
 	var ascii = c.unicode_at(0)
@@ -239,7 +239,7 @@ func update_world(world_id: String, old_data: Dictionary, new_title: String, new
 	emit_signal("upload_started")
 	
 	if Firebase.Auth.auth == null or not Firebase.Auth.auth.has("localid") or Firebase.Auth.auth.localid == "":
-		_finish_update(false, "Error de autenticación.", {})
+		_finish_update(false, tr("err_auth"), {})
 		return
 		
 	var sbu_url = old_data.get("sbu_url", "")
@@ -248,18 +248,18 @@ func update_world(world_id: String, old_data: Dictionary, new_title: String, new
 	if overwrite_slot_id > 0:
 		var grid_node = get_tree().get_root().find_child("SandboxGrid", true, false)
 		if not grid_node:
-			_finish_update(false, "Error interno: Grid no encontrado", {})
+			_finish_update(false, tr("err_grid_not_found"), {})
 			return
 			
 		var slot_data = grid_node._get_slot_data(overwrite_slot_id)
 		
 		var file_path = "user://save_slot_" + str(overwrite_slot_id) + ".dat"
 		if not FileAccess.file_exists(file_path):
-			_finish_update(false, "El archivo de guardado no existe en el disco.", {})
+			_finish_update(false, tr("err_save_not_found"), {})
 			return
 		var sbu_bytes = FileAccess.get_file_as_bytes(file_path)
 		if sbu_bytes.size() == 0:
-			_finish_update(false, "El archivo de guardado está vacío.", {})
+			_finish_update(false, tr("err_save_empty"), {})
 			return
 		
 		var thumb_bytes = PackedByteArray()
@@ -276,7 +276,7 @@ func update_world(world_id: String, old_data: Dictionary, new_title: String, new
 		if thumb_bytes.size() > 0:
 			var thumb_res = await Firebase.Storage.ref(thumb_filename).put_data(thumb_bytes, {"Content-Type": "image/webp"})
 			if thumb_res == null or (typeof(thumb_res) == TYPE_DICTIONARY and thumb_res.has("error")):
-				_finish_update(false, "Error al subir nueva miniatura.", {})
+				_finish_update(false, tr("err_upload_new_thumb"), {})
 				return
 			var bucket = Firebase._config.storageBucket
 			thumb_url = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/" + thumb_filename.replace("/", "%2F") + "?alt=media"
@@ -290,7 +290,7 @@ func update_world(world_id: String, old_data: Dictionary, new_title: String, new
 		
 		var sbu_res = await Firebase.Storage.ref(sbu_filename).put_data(sbu_bytes, {"Content-Type": "application/octet-stream"})
 		if sbu_res == null or (typeof(sbu_res) == TYPE_DICTIONARY and sbu_res.has("error")):
-			_finish_update(false, "Error al subir los datos del nuevo mundo.", {})
+			_finish_update(false, tr("err_upload_new_data"), {})
 			return
 		var bucket_sbu = Firebase._config.storageBucket
 		sbu_url = "https://firebasestorage.googleapis.com/v0/b/" + bucket_sbu + "/o/" + sbu_filename.replace("/", "%2F") + "?alt=media"
@@ -313,7 +313,7 @@ func update_world(world_id: String, old_data: Dictionary, new_title: String, new
 	var firestore_col = Firebase.Firestore.collection("community_worlds")
 	var doc = await firestore_col.get_doc(world_id)
 	if typeof(doc) != TYPE_OBJECT:
-		_finish_update(false, "Error al obtener documento del mundo.", {})
+		_finish_update(false, tr("err_get_doc"), {})
 		return
 		
 	doc.add_or_update_field("title", new_title)
@@ -330,9 +330,9 @@ func update_world(world_id: String, old_data: Dictionary, new_title: String, new
 		final_data["category"] = new_category
 		final_data["sbu_url"] = sbu_url
 		final_data["thumbnail_url"] = thumb_url
-		_finish_update(true, "Mundo actualizado exitosamente.", final_data)
+		_finish_update(true, tr("msg_update_success"), final_data)
 	else:
-		_finish_update(false, "Error al actualizar la base de datos.", {})
+		_finish_update(false, tr("err_update_db"), {})
 
 func _finish_update(success: bool, msg: String, data: Dictionary):
 	emit_signal("update_completed", success, msg, data)
