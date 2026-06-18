@@ -281,6 +281,11 @@ func update_world(world_id: String, old_data: Dictionary, new_title: String, new
 			var bucket = Firebase._config.storageBucket
 			thumb_url = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/" + thumb_filename.replace("/", "%2F") + "?alt=media"
 			
+			var f = FileAccess.open("user://thumb_cache_" + str(world_id) + ".bin", FileAccess.WRITE)
+			if f:
+				f.store_buffer(thumb_bytes)
+				f.close()
+			
 		emit_signal("upload_progress", 0.6)
 		
 		var sbu_res = await Firebase.Storage.ref(sbu_filename).put_data(sbu_bytes, {"Content-Type": "application/octet-stream"})

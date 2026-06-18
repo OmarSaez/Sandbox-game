@@ -5513,12 +5513,16 @@ func _show_edit_world_dialog(world_data: Dictionary):
 	thumb_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	thumb_bg.add_child(thumb_rect)
 	
-	var t_url = world_data.get("thumbnail_url", "")
-	if t_url != "":
-		var cache_file = "user://" + t_url.md5_text() + ".webp"
+	if world_id != "":
+		var cache_file = "user://thumb_cache_" + str(world_id) + ".bin"
 		if FileAccess.file_exists(cache_file):
-			var img = Image.load_from_file(cache_file)
-			if img: thumb_rect.texture = ImageTexture.create_from_image(img)
+			var f = FileAccess.open(cache_file, FileAccess.READ)
+			if f:
+				var body = f.get_buffer(f.get_length())
+				f.close()
+				var img = Image.new()
+				if img.load_webp_from_buffer(body) == OK or img.load_png_from_buffer(body) == OK or img.load_jpg_from_buffer(body) == OK:
+					thumb_rect.texture = ImageTexture.create_from_image(img)
 	
 	var create_label = func(text_key: String):
 		var lbl = Label.new()
