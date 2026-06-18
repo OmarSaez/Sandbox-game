@@ -14348,10 +14348,14 @@ func _load_active_logic_gates(dict: Dictionary):
 	if dict.has("active_logic_gates"):
 		var old_w = int(dict.get("width", grid_width))
 		var old_h = int(dict.get("height", grid_height))
-		var y_offset = old_h - grid_height
-		var x_offset = int((old_w - grid_width) / 2.0)
-		var offset_logic_x = int(x_offset / 4.0)
-		var offset_logic_y = int(y_offset / 4.0)
+		var y_offset_px = old_h - grid_height
+		y_offset_px = int(floor(float(y_offset_px) / 4.0)) * 4
+		var x_offset_px = int((old_w - grid_width) / 2.0)
+		x_offset_px = int(floor(float(x_offset_px) / 4.0)) * 4
+		
+		var offset_logic_x = int(x_offset_px / 4)
+		var offset_logic_y = int(y_offset_px / 4)
+		
 		var max_tx = int(grid_width / 4.0)
 		var max_ty = int(grid_height / 4.0)
 
@@ -14405,7 +14409,9 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 			var old_w = int(dict["width"])
 			var old_h = int(dict["height"])
 			p_y_offset = old_h - grid_height
+			p_y_offset = int(floor(float(p_y_offset) / 4.0)) * 4
 			p_x_offset = int((old_w - grid_width) / 2.0)
+			p_x_offset = int(floor(float(p_x_offset) / 4.0)) * 4
 		for p_data in dict["active_pistons"]:
 			var p = p_data.duplicate(true)
 			if p.has("pos"):
@@ -14428,8 +14434,12 @@ func _reconstruct_sources_from_cells(dict: Dictionary = {}):
 		var old_h = int(dict["height"])
 		var old_y = int(old_idx / float(old_w))
 		var old_x = old_idx % old_w
+		
 		var y_offset = old_h - grid_height
+		y_offset = int(floor(float(y_offset) / 4.0)) * 4
 		var x_offset = int((old_w - grid_width) / 2.0)
+		x_offset = int(floor(float(x_offset) / 4.0)) * 4
+		
 		var new_x = old_x - x_offset
 		var new_y = old_y - y_offset
 		if new_x >= 0 and new_x < grid_width and new_y >= 0 and new_y < grid_height:
