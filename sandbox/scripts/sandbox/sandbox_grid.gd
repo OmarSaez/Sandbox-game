@@ -4648,6 +4648,8 @@ func _fetch_mis_mundos_async(grid: GridContainer, pagination_hbox: HFlowContaine
 					preloaded_cards[idx].download_requested.connect(_on_world_download_requested)
 				if not preloaded_cards[idx].like_requested.is_connected(_on_world_like_requested):
 					preloaded_cards[idx].like_requested.connect(_on_world_like_requested)
+				if not preloaded_cards[idx].edit_requested.is_connected(_on_world_edit_requested):
+					preloaded_cards[idx].edit_requested.connect(_on_world_edit_requested)
 				if not preloaded_cards[idx].report_requested.is_connected(_on_world_report_requested):
 					preloaded_cards[idx].report_requested.connect(_on_world_report_requested)
 			else:
@@ -4656,6 +4658,7 @@ func _fetch_mis_mundos_async(grid: GridContainer, pagination_hbox: HFlowContaine
 				card.setup(clean_data, 3)
 				card.download_requested.connect(_on_world_download_requested)
 				card.like_requested.connect(_on_world_like_requested)
+				card.edit_requested.connect(_on_world_edit_requested)
 				card.report_requested.connect(_on_world_report_requested)
 			idx += 1
 			
@@ -5352,7 +5355,8 @@ func _show_world_manager_dialog():
 			row.add_child(btn_mod)
 			btn_mod.pressed.connect(func():
 				_play_action_sound("ui_click")
-				_show_modal_message("En desarrollo", "La modificación de mundos estará disponible pronto.")
+				overlay.queue_free()
+				_show_edit_world_dialog(doc)
 			)
 			
 			var btn_del = Button.new()
@@ -5437,6 +5441,255 @@ func _save_workshop_cache():
 			"data": ui_root.get_meta("workshop_mis_mundos_cache", [])
 		}
 		file.store_var(data)
+
+func _on_world_edit_requested(world_data: Dictionary):
+	_show_edit_world_dialog(world_data)
+
+func _show_edit_world_dialog(world_data: Dictionary):
+	var s = _get_ui_scale()
+	var selected_overwrite_slot_id = [-1]
+	var world_id = world_data.get("id", "")
+	var old_title = world_data.get("title", "")
+	var old_category = world_data.get("category", 0)
+	
+	var overlay = PanelContainer.new()
+	var overlay_style = StyleBoxFlat.new()
+	overlay_style.bg_color = Color(0, 0, 0, 0.8) # Dim background
+	overlay.add_theme_stylebox_override("panel", overlay_style)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(overlay)
+	
+	is_mouse_over_ui = true
+	overlay.tree_exiting.connect(func(): is_mouse_over_ui = false)
+	
+	var center = CenterContainer.new()
+	overlay.add_child(center)
+	
+	var popup = PanelContainer.new()
+	popup.custom_minimum_size = Vector2(450 * s, 600 * s)
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.12, 0.12, 0.16, 1.0)
+	p_style.border_width_left = 3; p_style.border_width_top = 3
+	p_style.border_width_right = 3; p_style.border_width_bottom = 3
+	p_style.border_color = Color("#ff9f43")
+	p_style.corner_radius_top_left = 20 * s; p_style.corner_radius_top_right = 20 * s
+	p_style.corner_radius_bottom_left = 20 * s; p_style.corner_radius_bottom_right = 20 * s
+	popup.add_theme_stylebox_override("panel", p_style)
+	center.add_child(popup)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 20 * s)
+	margin.add_theme_constant_override("margin_right", 20 * s)
+	margin.add_theme_constant_override("margin_top", 20 * s)
+	margin.add_theme_constant_override("margin_bottom", 20 * s)
+	popup.add_child(margin)
+	
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 15 * s)
+	margin.add_child(main_vbox)
+	
+	var title = Label.new()
+	title.text = "✏️ Modificar Mundo"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", _get_safe_font())
+	title.add_theme_font_size_override("font_size", 28 * s)
+	title.add_theme_color_override("font_color", Color("#ff9f43"))
+	main_vbox.add_child(title)
+	
+	var thumb_bg = PanelContainer.new()
+	thumb_bg.custom_minimum_size = Vector2(300 * s, 150 * s)
+	thumb_bg.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var bg_style = StyleBoxFlat.new()
+	bg_style.bg_color = Color(0, 0, 0, 1)
+	bg_style.border_width_left = 2; bg_style.border_width_top = 2
+	bg_style.border_width_right = 2; bg_style.border_width_bottom = 2
+	bg_style.border_color = Color("#555555")
+	thumb_bg.add_theme_stylebox_override("panel", bg_style)
+	main_vbox.add_child(thumb_bg)
+	
+	var thumb_rect = TextureRect.new()
+	thumb_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	thumb_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	thumb_bg.add_child(thumb_rect)
+	
+	var t_url = world_data.get("thumbnail_url", "")
+	if t_url != "":
+		var cache_file = "user://" + t_url.md5_text() + ".webp"
+		if FileAccess.file_exists(cache_file):
+			var img = Image.load_from_file(cache_file)
+			if img: thumb_rect.texture = ImageTexture.create_from_image(img)
+	
+	var create_label = func(text_key: String):
+		var lbl = Label.new()
+		lbl.text = tr(text_key)
+		lbl.add_theme_font_override("font", _get_safe_font())
+		lbl.add_theme_font_size_override("font_size", 18 * s)
+		lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+		return lbl
+		
+	var lbl_file = create_label.call("Archivo del mapa")
+	lbl_file.text = "Archivo del mapa"
+	main_vbox.add_child(lbl_file)
+	var btn_choose_slot = Button.new()
+	btn_choose_slot.text = "💾 Mantener archivo online actual"
+	btn_choose_slot.add_theme_font_override("font", _get_safe_font())
+	btn_choose_slot.add_theme_font_size_override("font_size", 20 * s)
+	btn_choose_slot.custom_minimum_size = Vector2(0, 45 * s)
+	
+	var c_style = StyleBoxFlat.new()
+	c_style.bg_color = Color(0.15, 0.15, 0.2)
+	c_style.border_width_left = 2; c_style.border_width_top = 2
+	c_style.border_width_right = 2; c_style.border_width_bottom = 2
+	c_style.border_color = Color(0.4, 0.4, 0.5)
+	c_style.set_corner_radius_all(10 * s)
+	btn_choose_slot.add_theme_stylebox_override("normal", c_style)
+	
+	var hc_style = c_style.duplicate()
+	hc_style.bg_color = Color(0.25, 0.25, 0.3)
+	btn_choose_slot.add_theme_stylebox_override("hover", hc_style)
+	btn_choose_slot.add_theme_stylebox_override("pressed", hc_style)
+	main_vbox.add_child(btn_choose_slot)
+	
+	var name_label_hbox = HBoxContainer.new()
+	main_vbox.add_child(name_label_hbox)
+	
+	var name_lbl = create_label.call("upload_name_label")
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label_hbox.add_child(name_lbl)
+	
+	var char_count_lbl = Label.new()
+	char_count_lbl.add_theme_font_override("font", _get_safe_font())
+	char_count_lbl.add_theme_font_size_override("font_size", 16 * s)
+	char_count_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+	char_count_lbl.text = str(old_title.length()) + "/30"
+	name_label_hbox.add_child(char_count_lbl)
+	
+	var name_input = LineEdit.new()
+	name_input.add_theme_font_override("font", _get_safe_font())
+	name_input.add_theme_font_size_override("font_size", 20 * s)
+	name_input.custom_minimum_size = Vector2(0, 45 * s)
+	name_input.max_length = 30
+	name_input.text = old_title
+	main_vbox.add_child(name_input)
+	
+	name_input.text_changed.connect(func(new_text: String):
+		char_count_lbl.text = str(new_text.length()) + "/30"
+	)
+	
+	main_vbox.add_child(create_label.call("upload_category_label"))
+	var cat_opt = OptionButton.new()
+	cat_opt.add_theme_font_override("font", _get_safe_font())
+	cat_opt.add_theme_font_size_override("font_size", 20 * s)
+	cat_opt.custom_minimum_size = Vector2(0, 40 * s)
+	main_vbox.add_child(cat_opt)
+	
+	var categories = ["cat_none", "cat_circuits", "cat_npcs", "cat_art", "cat_music"]
+	for cat in categories:
+		cat_opt.add_item(tr(cat))
+	cat_opt.selected = old_category
+		
+	var cat_popup = cat_opt.get_popup()
+	cat_popup.add_theme_font_override("font", _get_safe_font())
+	cat_popup.add_theme_font_size_override("font_size", 22 * s)
+	
+	var update_preview = func(slot_id: int):
+		selected_overwrite_slot_id[0] = slot_id
+		var data = _get_slot_data(slot_id)
+		
+		if data.has("thumbnail"): thumb_rect.texture = data.thumbnail
+		else: thumb_rect.texture = null
+		
+		btn_choose_slot.text = "⚠️ Reemplazar usando: Slot " + str(slot_id)
+		c_style.border_color = Color("#ff9f43")
+			
+	btn_choose_slot.pressed.connect(func():
+		_play_action_sound("ui_click")
+		_show_upload_slot_selector(update_preview)
+	)
+	
+	var spacer = Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_vbox.add_child(spacer)
+	
+	var btn_hbox = HBoxContainer.new()
+	btn_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_hbox.add_theme_constant_override("separation", 15 * s)
+	main_vbox.add_child(btn_hbox)
+	
+	var btn_cancel = Button.new()
+	btn_cancel.text = tr("btn_cancel")
+	btn_cancel.custom_minimum_size = Vector2(130 * s, 50 * s)
+	btn_cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_cancel.add_theme_font_override("font", _get_safe_font())
+	btn_cancel.add_theme_font_size_override("font_size", 18 * s)
+	var cancel_style = StyleBoxFlat.new()
+	cancel_style.bg_color = Color(0.2, 0.2, 0.25)
+	cancel_style.corner_radius_top_left = 10 * s; cancel_style.corner_radius_top_right = 10 * s
+	cancel_style.corner_radius_bottom_left = 10 * s; cancel_style.corner_radius_bottom_right = 10 * s
+	btn_cancel.add_theme_stylebox_override("normal", cancel_style)
+	btn_cancel.pressed.connect(func():
+		_play_action_sound("ui_click")
+		overlay.queue_free()
+	)
+	btn_hbox.add_child(btn_cancel)
+	
+	var btn_confirm = Button.new()
+	btn_confirm.text = "Guardar Cambios"
+	btn_confirm.custom_minimum_size = Vector2(220 * s, 50 * s)
+	btn_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_confirm.add_theme_font_override("font", _get_safe_font())
+	btn_confirm.add_theme_font_size_override("font_size", 18 * s)
+	var conf_style = StyleBoxFlat.new()
+	conf_style.bg_color = Color("#ff9f43")
+	conf_style.corner_radius_top_left = 10 * s; conf_style.corner_radius_top_right = 10 * s
+	conf_style.corner_radius_bottom_left = 10 * s; conf_style.corner_radius_bottom_right = 10 * s
+	btn_confirm.add_theme_stylebox_override("normal", conf_style)
+	var h_conf = conf_style.duplicate()
+	h_conf.bg_color = Color("#ffb142")
+	btn_confirm.add_theme_stylebox_override("hover", h_conf)
+	
+	btn_hbox.add_child(btn_confirm)
+	
+	btn_confirm.pressed.connect(func():
+		if name_input.text.strip_edges() == "": return
+		_play_action_sound("ui_click")
+		
+		var chosen_name = name_input.text
+		var chosen_cat = cat_opt.selected
+		var overwrite_slot = selected_overwrite_slot_id[0]
+		
+		if chosen_name == old_title and chosen_cat == old_category and overwrite_slot == -1:
+			overlay.queue_free()
+			return
+		
+		var loading_overlay = _show_processing_overlay("Guardando cambios...")
+		
+		var on_done = func(success: bool, msg: String, doc_data: Dictionary = {}):
+			if is_instance_valid(loading_overlay):
+				loading_overlay.queue_free()
+				
+			if success:
+				var cache = ui_root.get_meta("workshop_mis_mundos_cache", [])
+				for i in range(cache.size()):
+					if cache[i].get("id") == world_id or cache[i].get("world_id") == world_id:
+						cache[i] = doc_data
+						break
+				ui_root.set_meta("workshop_mis_mundos_cache", cache)
+				_save_workshop_cache()
+				
+				_setup_workshop_ui()
+				
+				if is_instance_valid(overlay): overlay.queue_free()
+				_show_centered_bubble("Cambios guardados con éxito", Color("#00cec9"))
+			else:
+				_show_centered_bubble("Error: " + msg, Color(0.8, 0.2, 0.2))
+				
+		if not WorkshopManager.update_completed.is_connected(on_done):
+			WorkshopManager.update_completed.connect(on_done, CONNECT_ONE_SHOT)
+		
+		WorkshopManager.update_world(world_id, world_data, chosen_name, chosen_cat, overwrite_slot)
+	)
 
 func _show_upload_world_dialog():
 	var s = _get_ui_scale()

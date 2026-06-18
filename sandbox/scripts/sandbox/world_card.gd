@@ -11,6 +11,7 @@ enum CardMode {
 signal download_requested(world_data: Dictionary)
 signal play_requested(world_data: Dictionary)
 signal delete_requested(world_data: Dictionary)
+signal edit_requested(world_data: Dictionary)
 signal like_requested(world_data: Dictionary)
 signal unlike_requested(world_data: Dictionary)
 signal report_requested(world_data: Dictionary)
@@ -65,10 +66,10 @@ func _ready() -> void:
 		like_button.pressed.connect(_on_like_button_pressed)
 		
 	if edit_button:
-		edit_button.text = tr("card_edit")
+		edit_button.text = "✏️ " + tr("card_edit", "Modificar")
 		edit_button.pressed.connect(_on_edit_button_pressed)
 	if delete_button:
-		delete_button.text = tr("card_delete")
+		delete_button.text = "🗑️ " + tr("card_delete", "Borrar")
 		delete_button.pressed.connect(_on_delete_button_pressed)
 
 func _apply_scaling() -> void:

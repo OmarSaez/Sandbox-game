@@ -3,6 +3,7 @@ extends Node
 signal upload_started
 signal upload_progress(percent: float)
 signal upload_completed(success: bool, message: String, doc_data: Dictionary)
+signal update_completed(success: bool, message: String, doc_data: Dictionary)
 signal google_play_auth_changed(is_auth: bool)
 
 var is_uploading: bool = false
@@ -233,3 +234,100 @@ func _generate_map_code() -> String:
 func _finish_upload(success: bool, msg: String, doc_data: Dictionary):
 	is_uploading = false
 	emit_signal("upload_completed", success, msg, doc_data)
+
+func update_world(world_id: String, old_data: Dictionary, new_title: String, new_category: int, overwrite_slot_id: int):
+	emit_signal("upload_started")
+	
+	if Firebase.Auth.auth == null or not Firebase.Auth.auth.has("localid") or Firebase.Auth.auth.localid == "":
+		_finish_update(false, "Error de autenticación.", {})
+		return
+		
+	var sbu_url = old_data.get("sbu_url", "")
+	var thumb_url = old_data.get("thumbnail_url", "")
+	
+	if overwrite_slot_id > 0:
+		var grid_node = get_tree().get_root().find_child("SandboxGrid", true, false)
+		if not grid_node:
+			_finish_update(false, "Error interno: Grid no encontrado", {})
+			return
+			
+		var slot_data = grid_node._get_slot_data(overwrite_slot_id)
+		
+		var file_path = "user://save_slot_" + str(overwrite_slot_id) + ".dat"
+		if not FileAccess.file_exists(file_path):
+			_finish_update(false, "El archivo de guardado no existe en el disco.", {})
+			return
+		var sbu_bytes = FileAccess.get_file_as_bytes(file_path)
+		if sbu_bytes.size() == 0:
+			_finish_update(false, "El archivo de guardado está vacío.", {})
+			return
+		
+		var thumb_bytes = PackedByteArray()
+		if slot_data.has("thumbnail"):
+			var img = slot_data.thumbnail.get_image()
+			if img: thumb_bytes = img.save_webp_to_buffer(false)
+			
+		var unique_id = str(Time.get_unix_time_from_system()) + "_" + str(randi() % 1000) + "_upd"
+		var sbu_filename = "worlds/" + unique_id + ".sbu"
+		var thumb_filename = "thumbnails/" + unique_id + ".webp"
+		
+		emit_signal("upload_progress", 0.2)
+		
+		if thumb_bytes.size() > 0:
+			var thumb_res = await Firebase.Storage.ref(thumb_filename).put_data(thumb_bytes, {"Content-Type": "image/webp"})
+			if thumb_res == null or (typeof(thumb_res) == TYPE_DICTIONARY and thumb_res.has("error")):
+				_finish_update(false, "Error al subir nueva miniatura.", {})
+				return
+			var bucket = Firebase._config.storageBucket
+			thumb_url = "https://firebasestorage.googleapis.com/v0/b/" + bucket + "/o/" + thumb_filename.replace("/", "%2F") + "?alt=media"
+			
+		emit_signal("upload_progress", 0.6)
+		
+		var sbu_res = await Firebase.Storage.ref(sbu_filename).put_data(sbu_bytes, {"Content-Type": "application/octet-stream"})
+		if sbu_res == null or (typeof(sbu_res) == TYPE_DICTIONARY and sbu_res.has("error")):
+			_finish_update(false, "Error al subir los datos del nuevo mundo.", {})
+			return
+		var bucket_sbu = Firebase._config.storageBucket
+		sbu_url = "https://firebasestorage.googleapis.com/v0/b/" + bucket_sbu + "/o/" + sbu_filename.replace("/", "%2F") + "?alt=media"
+		
+		emit_signal("upload_progress", 0.8)
+		
+		# Delete old files safely (ignoring errors if they fail)
+		var old_sbu = old_data.get("sbu_url", "")
+		if "worlds%2F" in old_sbu:
+			var name = "worlds/" + old_sbu.split("worlds%2F")[1].split("?")[0]
+			await Firebase.Storage.ref(name).delete()
+		
+		var old_thumb = old_data.get("thumbnail_url", "")
+		if "thumbnails%2F" in old_thumb:
+			var name = "thumbnails/" + old_thumb.split("thumbnails%2F")[1].split("?")[0]
+			await Firebase.Storage.ref(name).delete()
+			
+	emit_signal("upload_progress", 0.9)
+	
+	var firestore_col = Firebase.Firestore.collection("community_worlds")
+	var doc = await firestore_col.get_doc(world_id)
+	if typeof(doc) != TYPE_OBJECT:
+		_finish_update(false, "Error al obtener documento del mundo.", {})
+		return
+		
+	doc.add_or_update_field("title", new_title)
+	doc.add_or_update_field("category", new_category)
+	if overwrite_slot_id > 0:
+		doc.add_or_update_field("sbu_url", sbu_url)
+		doc.add_or_update_field("thumbnail_url", thumb_url)
+		
+	var updated_doc = await firestore_col.update(doc)
+	if updated_doc != null:
+		emit_signal("upload_progress", 1.0)
+		var final_data = old_data.duplicate()
+		final_data["title"] = new_title
+		final_data["category"] = new_category
+		final_data["sbu_url"] = sbu_url
+		final_data["thumbnail_url"] = thumb_url
+		_finish_update(true, "Mundo actualizado exitosamente.", final_data)
+	else:
+		_finish_update(false, "Error al actualizar la base de datos.", {})
+
+func _finish_update(success: bool, msg: String, data: Dictionary):
+	emit_signal("update_completed", success, msg, data)
