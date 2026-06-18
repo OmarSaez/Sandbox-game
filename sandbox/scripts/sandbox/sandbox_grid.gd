@@ -4162,6 +4162,13 @@ func _setup_workshop_ui():
 		var btn_subir = create_top_action_btn.call("tab_subir_mundo", Color("#00d2d3"))
 		btn_subir.pressed.connect(func():
 			_play_action_sound("ui_click")
+			if ui_root.has_meta("workshop_total_uploaded_worlds"):
+				var total = ui_root.get_meta("workshop_total_uploaded_worlds", 0)
+				if total >= 10:
+					var msg = "Has alcanzado el límite de 10 mundos subidos. Elimina uno antiguo desde 'Gestionar Mundos' para subir más."
+					_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", msg)
+					return
+					
 			_show_upload_world_dialog()
 		)
 		top_buttons_hbox.add_child(btn_subir)
@@ -4169,9 +4176,22 @@ func _setup_workshop_ui():
 		var btn_gestionar = create_top_action_btn.call("btn_gestionar_mundos", Color("#ff9f43"))
 		btn_gestionar.pressed.connect(func():
 			_play_action_sound("ui_click")
-			print("Gestionar mundos presionado")
+			_show_world_manager_dialog()
 		)
 		top_buttons_hbox.add_child(btn_gestionar)
+		
+		var btn_actualizar = create_top_action_btn.call("btn_actualizar", Color("#2ecc71"))
+		btn_actualizar.pressed.connect(func():
+			_play_action_sound("ui_click")
+			var current_time = Time.get_unix_time_from_system()
+			var cache_time = ui_root.get_meta("workshop_mis_mundos_cache_time", 0.0)
+			
+			if cache_time == 0.0 or (current_time - cache_time) >= (11 * 60):
+				ui_root.set_meta("workshop_mis_mundos_cache_time", 0.0)
+			
+			_setup_workshop_ui()
+		)
+		top_buttons_hbox.add_child(btn_actualizar)
 		
 		var daily_uploads_label = Label.new()
 		daily_uploads_label.text = tr("daily_uploads_status").format([str(uploads_today), "5"])
@@ -4550,7 +4570,7 @@ func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer
 		if idx == 0:
 			_show_empty_state_message(grid)
 
-func _fetch_mis_mundos_async(grid: GridContainer, pagination_hbox: HFlowContainer, page: int = 1):
+func _fetch_mis_mundos_async(grid: GridContainer, pagination_hbox: HFlowContainer, page: int = 1, force_fetch: bool = false):
 	if not is_instance_valid(grid): return
 	
 	var wm = get_node_or_null("/root/WorkshopManager")
@@ -4558,14 +4578,55 @@ func _fetch_mis_mundos_async(grid: GridContainer, pagination_hbox: HFlowContaine
 		_show_empty_state_message(grid)
 		return
 		
-	var author_id = wm.google_play_id
-	var query = FirestoreQuery.new()
-	query.from("community_worlds")
-	query.where("author_id", FirestoreQuery.OPERATOR.EQUAL, author_id)
+	_load_workshop_cache()
+	var current_time = Time.get_unix_time_from_system()
+	var cache_time = ui_root.get_meta("workshop_mis_mundos_cache_time", 0.0)
+	var cache_data = ui_root.get_meta("workshop_mis_mundos_cache", [])
 	
-	var document_array = await Firebase.Firestore.query(query)
+	var document_array = []
+	var need_fetch = true
 	
-	if not is_instance_valid(grid): return
+	if not force_fetch and cache_time > 0 and (current_time - cache_time) < (30 * 60):
+		need_fetch = false
+		document_array = cache_data
+		
+	if need_fetch:
+		var author_id = wm.google_play_id
+		var query = FirestoreQuery.new()
+		query.from("community_worlds")
+		query.where("author_id", FirestoreQuery.OPERATOR.EQUAL, author_id)
+		
+		var raw_array = await Firebase.Firestore.query(query)
+		
+		if not is_instance_valid(grid): return
+		
+		if typeof(raw_array) == TYPE_ARRAY:
+			document_array = []
+			for doc in raw_array:
+				var clean_data = {}
+				if doc and "document" in doc:
+					for key in doc.document.keys():
+						var val = doc.document[key]
+						if typeof(val) == TYPE_DICTIONARY:
+							if val.has("stringValue"): clean_data[key] = val["stringValue"]
+							elif val.has("integerValue"): clean_data[key] = int(val["integerValue"])
+							elif val.has("doubleValue"): clean_data[key] = float(val["doubleValue"])
+							elif val.has("booleanValue"): clean_data[key] = bool(val["booleanValue"])
+						else:
+							clean_data[key] = val
+					clean_data["id"] = doc.doc_name
+					document_array.append(clean_data)
+			
+			ui_root.set_meta("workshop_mis_mundos_cache", document_array)
+			ui_root.set_meta("workshop_mis_mundos_cache_time", current_time)
+			ui_root.set_meta("workshop_total_uploaded_worlds", document_array.size())
+			_save_workshop_cache()
+		else:
+			document_array = []
+			ui_root.set_meta("workshop_mis_mundos_cache", [])
+			ui_root.set_meta("workshop_mis_mundos_cache_time", current_time)
+			ui_root.set_meta("workshop_total_uploaded_worlds", 0)
+			_save_workshop_cache()
 	
 	var preloaded_cards = grid.get_children()
 	
@@ -4579,25 +4640,15 @@ func _fetch_mis_mundos_async(grid: GridContainer, pagination_hbox: HFlowContaine
 			page_worlds = document_array.slice(start_idx, start_idx + 10)
 			
 		var idx = 0
-		for doc in page_worlds:
-			var clean_data = {}
-			for key in doc.document.keys():
-				var val = doc.document[key]
-				if typeof(val) == TYPE_DICTIONARY:
-					if val.has("stringValue"): clean_data[key] = val["stringValue"]
-					elif val.has("integerValue"): clean_data[key] = int(val["integerValue"])
-					elif val.has("doubleValue"): clean_data[key] = float(val["doubleValue"])
-					elif val.has("booleanValue"): clean_data[key] = bool(val["booleanValue"])
-				else:
-					clean_data[key] = val
-					
-			clean_data["id"] = doc.doc_name
-			
+		for clean_data in page_worlds:
 			if idx < preloaded_cards.size():
 				preloaded_cards[idx].setup(clean_data, 0)
-				preloaded_cards[idx].download_requested.connect(_on_world_download_requested)
-				preloaded_cards[idx].like_requested.connect(_on_world_like_requested)
-				preloaded_cards[idx].report_requested.connect(_on_world_report_requested)
+				if not preloaded_cards[idx].download_requested.is_connected(_on_world_download_requested):
+					preloaded_cards[idx].download_requested.connect(_on_world_download_requested)
+				if not preloaded_cards[idx].like_requested.is_connected(_on_world_like_requested):
+					preloaded_cards[idx].like_requested.connect(_on_world_like_requested)
+				if not preloaded_cards[idx].report_requested.is_connected(_on_world_report_requested):
+					preloaded_cards[idx].report_requested.connect(_on_world_report_requested)
 			else:
 				var card = preload("res://scenes/main/world_card.tscn").instantiate()
 				grid.add_child(card)
@@ -5216,6 +5267,176 @@ func _show_upload_slot_selector(on_selected: Callable):
 		overlay.queue_free()
 	)
 
+func _show_world_manager_dialog():
+	var s = _get_ui_scale()
+	var cache_data = ui_root.get_meta("workshop_mis_mundos_cache", [])
+	
+	var overlay = PanelContainer.new()
+	var overlay_style = StyleBoxFlat.new()
+	overlay_style.bg_color = Color(0, 0, 0, 0.8)
+	overlay.add_theme_stylebox_override("panel", overlay_style)
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(overlay)
+	
+	is_mouse_over_ui = true
+	overlay.tree_exiting.connect(func(): is_mouse_over_ui = false)
+	
+	var center = CenterContainer.new()
+	overlay.add_child(center)
+	
+	var popup = PanelContainer.new()
+	popup.custom_minimum_size = Vector2(450 * s, 600 * s)
+	var p_style = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.12, 0.12, 0.16, 1.0)
+	p_style.border_width_left = 3; p_style.border_width_top = 3
+	p_style.border_width_right = 3; p_style.border_width_bottom = 3
+	p_style.border_color = Color("#ff9f43")
+	p_style.corner_radius_top_left = 20 * s; p_style.corner_radius_top_right = 20 * s
+	p_style.corner_radius_bottom_left = 20 * s; p_style.corner_radius_bottom_right = 20 * s
+	popup.add_theme_stylebox_override("panel", p_style)
+	center.add_child(popup)
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 20 * s)
+	margin.add_theme_constant_override("margin_right", 20 * s)
+	margin.add_theme_constant_override("margin_top", 20 * s)
+	margin.add_theme_constant_override("margin_bottom", 20 * s)
+	popup.add_child(margin)
+	
+	var main_vbox = VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 15 * s)
+	margin.add_child(main_vbox)
+	
+	var title = Label.new()
+	title.text = "Gestor de Mundos"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_override("font", _get_safe_font())
+	title.add_theme_font_size_override("font_size", 28 * s)
+	title.add_theme_color_override("font_color", Color("#ff9f43"))
+	main_vbox.add_child(title)
+	
+	var scroll = ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 400 * s)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	main_vbox.add_child(scroll)
+	
+	var list_vbox = VBoxContainer.new()
+	list_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_vbox.add_theme_constant_override("separation", 10 * s)
+	scroll.add_child(list_vbox)
+	
+	if cache_data.size() == 0:
+		var empty_lbl = Label.new()
+		empty_lbl.text = "No tienes mundos subidos."
+		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty_lbl.add_theme_font_override("font", _get_safe_font())
+		empty_lbl.add_theme_font_size_override("font_size", 18 * s)
+		empty_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		list_vbox.add_child(empty_lbl)
+	else:
+		for doc in cache_data:
+			var row = HBoxContainer.new()
+			var title_lbl = Label.new()
+			title_lbl.text = str(doc.get("title", "Mundo"))
+			title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			title_lbl.clip_text = true
+			title_lbl.add_theme_font_override("font", _get_safe_font())
+			title_lbl.add_theme_font_size_override("font_size", 20 * s)
+			row.add_child(title_lbl)
+			
+			var btn_mod = Button.new()
+			btn_mod.text = "✏️"
+			btn_mod.custom_minimum_size = Vector2(40 * s, 40 * s)
+			row.add_child(btn_mod)
+			btn_mod.pressed.connect(func():
+				_play_action_sound("ui_click")
+				_show_modal_message("En desarrollo", "La modificación de mundos estará disponible pronto.")
+			)
+			
+			var btn_del = Button.new()
+			btn_del.text = "🗑️"
+			btn_del.custom_minimum_size = Vector2(40 * s, 40 * s)
+			row.add_child(btn_del)
+			var doc_id = doc.get("id", "")
+			var doc_title = doc.get("title", "")
+			btn_del.pressed.connect(func():
+				_play_action_sound("ui_click")
+				_show_confirm_dialog("Eliminar Mundo", "¿Seguro que quieres borrar este mundo de la Workshop? Esto no se puede deshacer.", func():
+					overlay.queue_free()
+					_delete_world_from_workshop(doc_id, doc_title)
+				)
+			)
+			
+			list_vbox.add_child(row)
+			
+	var spacer = Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_vbox.add_child(spacer)
+	
+	var btn_close = Button.new()
+	btn_close.text = tr("btn_cancel") if TranslationServer.get_locale() == "es" else "Cerrar"
+	btn_close.custom_minimum_size = Vector2(200 * s, 50 * s)
+	btn_close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	btn_close.add_theme_font_override("font", _get_safe_font())
+	btn_close.add_theme_font_size_override("font_size", 20 * s)
+	main_vbox.add_child(btn_close)
+	btn_close.pressed.connect(func():
+		_play_action_sound("ui_click")
+		overlay.queue_free()
+	)
+
+func _delete_world_from_workshop(world_id: String, world_title: String):
+	var loading_overlay = _show_processing_overlay("Eliminando...")
+	
+	var firestore_col = Firebase.Firestore.collection("community_worlds")
+	var doc = await firestore_col.get_doc(world_id)
+	if typeof(doc) == TYPE_OBJECT:
+		await firestore_col.delete(doc)
+		
+	var sbu_ref = Firebase.Storage.ref("worlds/" + world_id + ".sbu")
+	await sbu_ref.delete()
+	var thumb_ref = Firebase.Storage.ref("thumbnails/" + world_id + ".webp")
+	await thumb_ref.delete()
+	
+	if is_instance_valid(loading_overlay):
+		loading_overlay.queue_free()
+		
+	_show_centered_bubble("El mundo '" + world_title + "' ha sido eliminado.", Color("#ff7675"))
+	
+	var cache = ui_root.get_meta("workshop_mis_mundos_cache", [])
+	for i in range(cache.size() - 1, -1, -1):
+		if cache[i].get("id", "") == world_id:
+			cache.remove_at(i)
+	ui_root.set_meta("workshop_mis_mundos_cache", cache)
+	ui_root.set_meta("workshop_total_uploaded_worlds", cache.size())
+	_save_workshop_cache()
+	
+	_setup_workshop_ui()
+
+func _load_workshop_cache():
+	if not ui_root.has_meta("workshop_mis_mundos_cache"):
+		if FileAccess.file_exists("user://workshop_cache.dat"):
+			var file = FileAccess.open("user://workshop_cache.dat", FileAccess.READ)
+			if file:
+				var data = file.get_var()
+				if typeof(data) == TYPE_DICTIONARY and data.has("time") and data.has("data"):
+					ui_root.set_meta("workshop_mis_mundos_cache_time", data.time)
+					ui_root.set_meta("workshop_mis_mundos_cache", data.data)
+					ui_root.set_meta("workshop_total_uploaded_worlds", data.data.size())
+					return
+		ui_root.set_meta("workshop_mis_mundos_cache_time", 0.0)
+		ui_root.set_meta("workshop_mis_mundos_cache", [])
+
+func _save_workshop_cache():
+	var file = FileAccess.open("user://workshop_cache.dat", FileAccess.WRITE)
+	if file:
+		var data = {
+			"time": ui_root.get_meta("workshop_mis_mundos_cache_time", 0.0),
+			"data": ui_root.get_meta("workshop_mis_mundos_cache", [])
+		}
+		file.store_var(data)
+
 func _show_upload_world_dialog():
 	var s = _get_ui_scale()
 	var selected_upload_slot_id = [1]
@@ -5444,7 +5665,7 @@ func _show_upload_world_dialog():
 			var start_time = Time.get_ticks_msec()
 			var chosen_name = name_input.text
 			
-			var on_done = func(success: bool, msg: String):
+			var on_done = func(success: bool, msg: String, doc_data: Dictionary = {}):
 				var elapsed = Time.get_ticks_msec() - start_time
 				if elapsed < 2000:
 					await get_tree().create_timer((2000 - elapsed) / 1000.0).timeout
@@ -5455,6 +5676,15 @@ func _show_upload_world_dialog():
 				if success:
 					uploads_today += 1
 					_save_workshop_economy()
+					
+					var cache = ui_root.get_meta("workshop_mis_mundos_cache", [])
+					cache.insert(0, doc_data) # Add to top
+					ui_root.set_meta("workshop_mis_mundos_cache", cache)
+					ui_root.set_meta("workshop_total_uploaded_worlds", cache.size())
+					_save_workshop_cache()
+					
+					_setup_workshop_ui()
+					
 					if is_instance_valid(overlay): overlay.queue_free()
 					_show_centered_bubble(tr("upload_success").replace("'{0}'", "\"" + chosen_name + "\"").replace("{0}", "\"" + chosen_name + "\""), Color("#00cec9"))
 				else:

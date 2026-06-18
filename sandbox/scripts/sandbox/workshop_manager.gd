@@ -2,7 +2,7 @@ extends Node
 
 signal upload_started
 signal upload_progress(percent: float)
-signal upload_completed(success: bool, message: String)
+signal upload_completed(success: bool, message: String, doc_data: Dictionary)
 signal google_play_auth_changed(is_auth: bool)
 
 var is_uploading: bool = false
@@ -19,7 +19,12 @@ func _ready():
 	call_deferred("_init_play_games")
 
 func _init_play_games():
-	if Engine.has_singleton("GodotPlayGameServices"):
+	if OS.has_feature("android") and Engine.has_singleton("GodotPlayGameServices"):
+		var gps = get_node_or_null("/root/GodotPlayGameServices")
+		if gps:
+			var init_status = gps.initialize()
+			print("WORKSHOP_MANAGER: GPS Initialize status: ", init_status)
+			
 		play_games_sign_in = preload("res://addons/GodotPlayGameServices/scripts/sign_in/sign_in_client.gd").new()
 		add_child(play_games_sign_in)
 		play_games_sign_in.user_authenticated.connect(_on_google_play_auth)
@@ -78,18 +83,18 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 			await get_tree().process_frame
 			
 		if not auth_state.success:
-			_finish_upload(false, "Error de autenticación. Revisa tu conexión a internet o las reglas de Firebase.")
+			_finish_upload(false, "Error de autenticación. Revisa tu conexión a internet o las reglas de Firebase.", {})
 			return
 		
 	var grid_node = get_tree().get_root().find_child("SandboxGrid", true, false)
 	if not grid_node:
-		_finish_upload(false, "Error interno: Grid no encontrado")
+		_finish_upload(false, "Error interno: Grid no encontrado", {})
 		return
 		
 	# 1. Preparar datos
 	var slot_data = grid_node._get_slot_data(slot_id)
 	if not slot_data.has("name"):
-		_finish_upload(false, "El slot está vacío")
+		_finish_upload(false, "El slot está vacío", {})
 		return
 		
 	var author_name = google_play_name
@@ -99,11 +104,11 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 	# 2. Generar Buffer SBU
 	var file_path = "user://save_slot_" + str(slot_id) + ".dat"
 	if not FileAccess.file_exists(file_path):
-		_finish_upload(false, "El archivo de guardado no existe en el disco.")
+		_finish_upload(false, "El archivo de guardado no existe en el disco.", {})
 		return
 	var sbu_bytes = FileAccess.get_file_as_bytes(file_path)
 	if sbu_bytes.size() == 0:
-		_finish_upload(false, "El archivo de guardado está vacío.")
+		_finish_upload(false, "El archivo de guardado está vacío.", {})
 		return
 	
 	# 3. Generar Buffer Thumbnail
@@ -124,7 +129,7 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 	if thumb_bytes.size() > 0:
 		var thumb_res = await Firebase.Storage.ref(thumb_filename).put_data(thumb_bytes, {"Content-Type": "image/webp"})
 		if thumb_res == null or (typeof(thumb_res) == TYPE_DICTIONARY and thumb_res.has("error")):
-			_finish_upload(false, "Error al subir imagen de miniatura.")
+			_finish_upload(false, "Error al subir imagen de miniatura.", {})
 			return
 			
 		var bucket = Firebase._config.storageBucket
@@ -135,7 +140,7 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 	# 5. Subir SBU
 	var sbu_res = await Firebase.Storage.ref(sbu_filename).put_data(sbu_bytes, {"Content-Type": "application/octet-stream"})
 	if sbu_res == null or (typeof(sbu_res) == TYPE_DICTIONARY and sbu_res.has("error")):
-		_finish_upload(false, "Error al subir los datos del mundo.")
+		_finish_upload(false, "Error al subir los datos del mundo.", {})
 		return
 		
 	var bucket_sbu = Firebase._config.storageBucket
@@ -183,7 +188,7 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 			attempts += 1
 			
 	if not is_unique:
-		_finish_upload(false, "Error: No se pudo generar un ID único para el mapa. Intenta de nuevo.")
+		_finish_upload(false, "Error: No se pudo generar un ID único para el mapa. Intenta de nuevo.", {})
 		return
 		
 	doc_data["id"] = final_map_id
@@ -194,10 +199,10 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 		var err_msg = "Desconocido"
 		if typeof(doc_res) == TYPE_DICTIONARY and doc_res.has("error"):
 			err_msg = str(doc_res.error)
-		_finish_upload(false, "Error al guardar información del mundo en la base de datos. Detalle: " + err_msg)
+		_finish_upload(false, "Error al guardar información del mundo en la base de datos. Detalle: " + err_msg, {})
 		return
 	
-	_finish_upload(true, "¡Mundo subido con éxito!")
+	_finish_upload(true, "¡Mundo subido con éxito!", doc_data)
 
 func _get_char_value(c: String) -> int:
 	var ascii = c.unicode_at(0)
@@ -225,6 +230,6 @@ func _generate_map_code() -> String:
 	
 	return code + "-" + check_char
 
-func _finish_upload(success: bool, msg: String):
+func _finish_upload(success: bool, msg: String, doc_data: Dictionary):
 	is_uploading = false
-	emit_signal("upload_completed", success, msg)
+	emit_signal("upload_completed", success, msg, doc_data)
