@@ -213,6 +213,12 @@ exports.processactionbuffer = onSchedule("*/10 * * * *", async (event) => {
     const { FieldValue } = require("firebase-admin/firestore");
     const batch = db.batch();
     
+    // Obtener la caché de recientes UNA SOLA VEZ para actualizar las estadísticas ahí también
+    const cacheRef = db.collection("cache").doc("recientes");
+    const cacheSnap = await cacheRef.get();
+    let cacheData = cacheSnap.exists ? cacheSnap.data() : { worlds: [] };
+    let cacheUpdated = false;
+    
     let processedCount = 0;
     for (const wId in aggregated) {
       const stats = aggregated[wId];
@@ -232,14 +238,13 @@ exports.processactionbuffer = onSchedule("*/10 * * * *", async (event) => {
       if (stats.downloads > 0) updates.downloads = FieldValue.increment(stats.downloads);
       if (stats.reports > 0) updates.reports = FieldValue.increment(stats.reports);
       
-      // NOTA: historical_score y weekly_score también deberían incrementarse.
-      // 1 like = 10 puntos, 1 download = 1 punto, 1 report = -20 puntos.
       const scoreIncrement = (stats.likes * 10) + (stats.downloads * 1) - (stats.reports * 20);
       if (scoreIncrement !== 0) {
         updates.historical_score = FieldValue.increment(scoreIncrement);
         updates.weekly_score = FieldValue.increment(scoreIncrement);
       }
       
+      let isBanned = false;
       // LOGICA AUTO-BAN
       if (stats.reports > 0) {
         const data = docSnap.data();
@@ -249,30 +254,37 @@ exports.processactionbuffer = onSchedule("*/10 * * * *", async (event) => {
         const requiredReports = Math.max(5, Math.floor(Math.sqrt(currentDownloads) * 1.5));
         if (currentReports >= requiredReports) {
           updates.is_banned = true;
+          isBanned = true;
           console.log(`Mundo ${wId} ha sido BANEADO. (${currentReports} reportes / ${currentDownloads} descargas)`);
-          
-          // Eliminar del caché de recientes inmediatamente
-          const cacheRef = db.collection("cache").doc("recientes");
-          const cacheSnap = await cacheRef.get();
-          if (cacheSnap.exists) {
-            let cacheData = cacheSnap.data();
-            if (cacheData && cacheData.worlds) {
-              const initialLength = cacheData.worlds.length;
-              cacheData.worlds = cacheData.worlds.filter(w => w.id !== wId);
-              if (cacheData.worlds.length < initialLength) {
-                batch.update(cacheRef, { worlds: cacheData.worlds });
-                console.log(`Mundo ${wId} borrado del caché de recientes.`);
-              }
-            }
+        }
+      }
+
+      // ACTUALIZAR CACHÉ DE RECIENTES EN MEMORIA
+      if (cacheData && cacheData.worlds) {
+        const worldIndex = cacheData.worlds.findIndex(w => w.id === wId);
+        if (worldIndex !== -1) {
+          if (isBanned) {
+            // Eliminar del caché de recientes inmediatamente
+            cacheData.worlds.splice(worldIndex, 1);
+            cacheUpdated = true;
+            console.log(`Mundo ${wId} borrado del caché de recientes.`);
+          } else {
+            // Actualizar likes y descargas en la caché para evitar que se queden en 0
+            cacheData.worlds[worldIndex].likes = (cacheData.worlds[worldIndex].likes || 0) + stats.likes;
+            cacheData.worlds[worldIndex].downloads = (cacheData.worlds[worldIndex].downloads || 0) + stats.downloads;
+            cacheData.worlds[worldIndex].historical_score = (cacheData.worlds[worldIndex].historical_score || 0) + scoreIncrement;
+            cacheData.worlds[worldIndex].weekly_score = (cacheData.worlds[worldIndex].weekly_score || 0) + scoreIncrement;
+            cacheUpdated = true;
           }
         }
       }
 
       batch.update(worldRef, updates);
       processedCount++;
-      
-      // Si el batch supera los 500, habría que hacer commit y abrir otro, 
-      // pero es raro superar 500 mundos en 10 minutos para un indie.
+    }
+
+    if (cacheUpdated) {
+      batch.update(cacheRef, { worlds: cacheData.worlds });
     }
 
     if (processedCount > 0) {
