@@ -9486,19 +9486,30 @@ func _step_simulation():
 
 	# Pass 3: FALLING/STATIC particles (Bottom-to-Top by Active Chunks)
 	
-	# === MIGRACION FASE 2 & 3: C++ ENGINE ===
 	var cpp_state = { 
 		"cells": cells, 
 		"tags_array": tags_array,
 		"charge_array": charge_array,
 		"material_tags_raw": material_tags_raw,
-		"charge_visual_buffer": charge_visual_buffer
+		"charge_visual_buffer": charge_visual_buffer,
+		"cell_paint_colors": cell_paint_colors
 	}
+	# CLEAR GDScript references before passing to C++ to PREVENT massive 10-second Copy-On-Write GC freezes!
+	cells = PackedInt32Array()
+	tags_array = PackedInt64Array()
+	charge_array = PackedInt32Array()
+	charge_visual_buffer = PackedByteArray()
+	cell_paint_colors = PackedInt32Array()
+	
 	cpp_state = process_physics(cpp_state, grid_width, dynamic_grid_height, _frame_count)
 	cells = cpp_state["cells"]
 	tags_array = cpp_state["tags_array"]
 	charge_array = cpp_state["charge_array"]
 	charge_visual_buffer = cpp_state["charge_visual_buffer"]
+	cell_paint_colors = cpp_state["cell_paint_colors"]
+	if cpp_state.get("paint_changed", false):
+		element_paint_dirty = true
+		
 	if cpp_state.has("moved_charges"):
 		active_charge_indices.append_array(cpp_state["moved_charges"])
 	
@@ -9698,11 +9709,21 @@ func _process_electricity():
 		"prev_charges": prev_charges.keys(),
 		"prev_active_music_charges": prev_active_music_charges.keys()
 	}
+	# Drop references to prevent Godot Copy-On-Write lag spikes
+	cells = PackedInt32Array()
+	tags_array = PackedInt64Array()
+	charge_array = PackedInt32Array()
+	charge_visual_buffer = PackedByteArray()
+	powered_frame = PackedInt32Array()
+	next_chunks_active = PackedByteArray()
+	active_charge_indices = PackedInt32Array()
 	
 	# Execute native physics for electricity
 	var new_state = process_electricity(state, grid_width, grid_height, frame)
 	
 	# Recover updated state
+	cells = new_state["cells"]
+	tags_array = new_state["tags_array"]
 	charge_array = new_state["charge_array"]
 	charge_visual_buffer = new_state["charge_visual_buffer"]
 	active_charge_indices = new_state["active_charge_indices"]

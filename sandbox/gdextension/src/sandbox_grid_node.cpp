@@ -32,13 +32,17 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 	PackedInt32Array charge_array = state["charge_array"];
 	PackedInt64Array material_tags_raw = state["material_tags_raw"];
 	PackedByteArray charge_visual_buffer = state["charge_visual_buffer"];
+	PackedInt32Array cell_paint_colors = state["cell_paint_colors"];
 	
 	int32_t* cells_ptr = cells.ptrw();
 	int64_t* tags_ptr = tags_array.ptrw();
 	int32_t* charge_ptr = charge_array.ptrw();
 	uint8_t* charge_visual_ptr = charge_visual_buffer.ptrw();
+	int32_t* cell_paint_ptr = cell_paint_colors.ptrw();
 	const int64_t* mat_tags = material_tags_raw.ptr();
 	int mat_tags_size = material_tags_raw.size();
+	
+	bool paint_changed = false;
 	
 	Array explosions_queue;
 	
@@ -66,6 +70,7 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 		if (cid == 0) {
 			charge_ptr[t_idx] = 0;
 			charge_visual_ptr[t_idx] = 0;
+			cell_paint_ptr[t_idx] = 0;
 		}
 	};
 	
@@ -82,16 +87,21 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 		uint64_t temp_t = tags_ptr[idx1];
 		int32_t temp_charge = charge_ptr[idx1];
 		uint8_t temp_cv = charge_visual_ptr[idx1];
+		int32_t temp_paint = cell_paint_ptr[idx1];
 		
 		cells_ptr[idx1] = cells_ptr[idx2];
 		tags_ptr[idx1] = tags_ptr[idx2];
 		charge_ptr[idx1] = charge_ptr[idx2];
 		charge_visual_ptr[idx1] = charge_visual_ptr[idx2];
+		cell_paint_ptr[idx1] = cell_paint_ptr[idx2];
 		
 		cells_ptr[idx2] = temp_c;
 		tags_ptr[idx2] = temp_t;
 		charge_ptr[idx2] = temp_charge;
 		charge_visual_ptr[idx2] = temp_cv;
+		cell_paint_ptr[idx2] = temp_paint;
+		
+		if (cell_paint_ptr[idx1] != 0 || cell_paint_ptr[idx2] != 0) paint_changed = true;
 		
 		if (temp_charge > 0) moved_charges.push_back(idx2);
 		if (charge_ptr[idx1] > 0) moved_charges.push_back(idx1);
@@ -719,7 +729,9 @@ Dictionary SandboxGridNode::process_physics(Dictionary state, int width, int hei
 	state["tags_array"] = tags_array;
 	state["charge_array"] = charge_array;
 	state["charge_visual_buffer"] = charge_visual_buffer;
+	state["cell_paint_colors"] = cell_paint_colors;
 	state["explosions"] = explosions_queue;
+	state["paint_changed"] = paint_changed;
 	
 	PackedInt32Array out_moved_charges;
 	out_moved_charges.resize(moved_charges.size());
