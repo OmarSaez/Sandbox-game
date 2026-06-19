@@ -2930,6 +2930,10 @@ func _setup_main_ui_containers():
 	_setup_paint_ui()
 	_setup_npc_control_gui() # Fresh build of the control overlay
 	
+	for i in range(3):
+		_update_lab_preview(i)
+	_update_lab_inspector()
+	
 	_setup_materials_within_grid()
 	_setup_music_button() # Add the piano button to the action column
 	_update_material_highlights()
@@ -17532,9 +17536,9 @@ func _restore_lab_data(lab_data: Array):
 	
 	# Refresh UI if it exists
 	if is_instance_valid(lab_panel):
-		_update_lab_inspector()
 		for i in range(3):
 			_update_lab_preview(i)
+		_update_lab_inspector()
 	
 	# Always update tool list
 	_update_custom_mats_in_material_grid()
