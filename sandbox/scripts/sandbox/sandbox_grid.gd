@@ -954,6 +954,7 @@ var powered_frame := PackedInt32Array()
 # Display
 @onready var texture_rect: TextureRect = $Display
 var img: Image
+var _img_history: Array = [] # Retains old images for 3 frames to avoid Android RenderThread crashes
 
 # VOLUME SYSTEM
 var game_volume: float = 1.2
@@ -13945,6 +13946,7 @@ func _update_texture():
 	
 	# Update persistent image object (Thread-safe for RenderingServer)
 	var new_img = Image.create_from_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, raw_data)
+	_img_history.append(new_img)
 	texture_rect.texture.update(new_img)
 	img = new_img
 	
@@ -13952,6 +13954,7 @@ func _update_texture():
 	# Only update charge texture if there are active charges OR if something changed (decay/movement)
 	if active_charge_indices.size() > 0 or charge_dirty or _frame_count % 60 == 0:
 		var new_charge_img = Image.create_from_data(grid_width, grid_height, false, Image.FORMAT_L8, charge_visual_buffer.duplicate())
+		_img_history.append(new_charge_img)
 		charge_tex.update(new_charge_img)
 		charge_img = new_charge_img
 		charge_dirty = false
@@ -13959,15 +13962,20 @@ func _update_texture():
 	# Only update paint texture if dirty or actively painting
 	if is_paint_tool_active or element_paint_dirty:
 		var new_paint_img = Image.create_from_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cell_paint_colors.to_byte_array())
+		_img_history.append(new_paint_img)
 		element_paint_tex.update(new_paint_img)
 		element_paint_img = new_paint_img
 		element_paint_dirty = false
 	
 	if background_dirty:
 		var new_bg_img = Image.create_from_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, background_img.get_data())
+		_img_history.append(new_bg_img)
 		background_tex.update(new_bg_img)
 		background_img = new_bg_img
 		background_dirty = false
+		
+	while _img_history.size() > 16:
+		_img_history.pop_front()
 
 func _launch_firework(x, y):
 	sim_mutex.lock()
