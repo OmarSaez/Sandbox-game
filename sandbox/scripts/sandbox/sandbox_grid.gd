@@ -9537,11 +9537,9 @@ func _step_simulation():
 	var pass_groups = ceil(float(chunks_x) / 2.0)
 	
 	# Pass 2: RISING and SPECIAL particles (Top-to-Bottom by Active Chunks)
-	var g1 = WorkerThreadPool.add_group_task(_thread_pass2.bind(is_even_frame), pass_groups, -1, false, "SimP2E")
-	WorkerThreadPool.wait_for_group_task_completion(g1)
-	
-	var g2 = WorkerThreadPool.add_group_task(_thread_pass2.bind(not is_even_frame), pass_groups, -1, false, "SimP2O")
-	WorkerThreadPool.wait_for_group_task_completion(g2)
+	# Executed synchronously on Main Thread to PREVENT Scudo Memory Corruption! (C++ handles 90% of the physics anyway)
+	for i in range(pass_groups): _thread_pass2(i, is_even_frame)
+	for i in range(pass_groups): _thread_pass2(i, not is_even_frame)
 
 	# Pass 3: FALLING/STATIC particles (Bottom-to-Top by Active Chunks)
 	
@@ -9585,11 +9583,8 @@ func _step_simulation():
 				_tnt_chain_timer = 0.6
 	# ============================================
 
-	var g3 = WorkerThreadPool.add_group_task(_thread_pass3.bind(is_even_frame), pass_groups, -1, false, "SimP3E")
-	WorkerThreadPool.wait_for_group_task_completion(g3)
-	
-	var g4 = WorkerThreadPool.add_group_task(_thread_pass3.bind(not is_even_frame), pass_groups, -1, false, "SimP3O")
-	WorkerThreadPool.wait_for_group_task_completion(g4)
+	for i in range(pass_groups): _thread_pass3(i, is_even_frame)
+	for i in range(pass_groups): _thread_pass3(i, not is_even_frame)
 
 	# === GESTIÓN GLOBAL DE SONIDOS AMBIENTALES ===
 	if is_volcano_active: 
