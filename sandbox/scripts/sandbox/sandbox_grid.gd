@@ -9965,7 +9965,8 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 
 	# REACTIVE MATERIALS (Explosives) - Flammable logic moved to C++
 	if (tags & SandboxMaterial.Tags.EXPLOSIVE):
-		if _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY) or charge_array[idx] > 50:
+		var is_primed_or_hot = charge_array[idx] > 50 or (_get_lut_rand() < 0.2 and _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY))
+		if is_primed_or_hot:
 			# Only explosive materials with ELECTRIC_ACTIVATED can be primed by electricity
 			# We check for both charge (pulses) OR direct contact with Electric pixels (ID 9)
 			var has_elec_contact = _count_neighbor_id(x, y, 9) > 0
@@ -9973,13 +9974,14 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 			
 			# Fire/Heat ignition: Now ignores electricity pixels (ID 9) to respect the ELECTRIC_ACTIVATED requirement
 			var can_fire_prime = false
-			for ny in range(y - 1, y + 2):
-				for nx in range(x - 1, x + 2):
-					if nx == x and ny == y: continue
-					var nid = _get_cell(nx, ny)
-					if nid > 0 and nid != 9: # Ignore Electricity ID 9 here
-						if (material_tags_raw[nid] & SandboxMaterial.Tags.INCENDIARY):
-							can_fire_prime = true; break
+			if not can_elec_prime:
+				for ny in range(y - 1, y + 2):
+					for nx in range(x - 1, x + 2):
+						if nx == x and ny == y: continue
+						var nid = _get_cell(nx, ny)
+						if nid > 0 and nid != 9: # Ignore Electricity ID 9 here
+							if (material_tags_raw[nid] & SandboxMaterial.Tags.INCENDIARY):
+								can_fire_prime = true; break
 			
 			var can_acid_prime = _has_tag_neighbor(x, y, SandboxMaterial.Tags.ACID)
 			
@@ -9988,11 +9990,16 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				if can_acid_prime: trigger_type = 64
 				elif can_elec_prime: trigger_type = 128
 				_prime_explosive(x, y, pure_id, trigger_type)
-			elif pure_id == 18:
-				_set_cell(x, y, 19)
-				charge_array[idx] = int(_get_lut_rand_range(20, 70))
-				_register_charge(idx)
-				_play_action_sound("fuse_burning", 0.1)
+
+	# FIREWORKS IGNITION (Material 18)
+	if pure_id == 18:
+		# Check for electricity (charge_array is filled by C++)
+		# Or occasionally check for heat to avoid lag from neighbor checks on large brushes
+		if charge_array[idx] > 50 or (_get_lut_rand() < 0.1 and _has_tag_neighbor(x, y, SandboxMaterial.Tags.INCENDIARY)):
+			_set_cell(x, y, 19)
+			charge_array[idx] = int(_get_lut_rand_range(20, 70))
+			_register_charge(idx)
+			_play_action_sound("fuse_burning", 0.1)
 
 	# (Redundant Metronome Pulse removed to consolidate logic)
 	# --- MUSIC INTERACTIONS ---
