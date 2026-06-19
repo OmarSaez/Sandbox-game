@@ -4006,6 +4006,48 @@ func _setup_workshop_ui():
 		grid.add_theme_constant_override("v_separation", 20 * s)
 		grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		
+		if current_tab == 1:
+			var top_actions_hbox = HBoxContainer.new()
+			top_actions_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+			scroll_vbox.add_child(top_actions_hbox)
+			
+			var btn_actualizar = Button.new()
+			btn_actualizar.text = "🔄 " + tr("btn_actualizar")
+			btn_actualizar.custom_minimum_size = Vector2(160 * s, 45 * s)
+			btn_actualizar.add_theme_font_override("font", _get_safe_font())
+			btn_actualizar.add_theme_font_size_override("font_size", 16 * s)
+			var a_style = StyleBoxFlat.new()
+			a_style.bg_color = Color("#2ecc71").lerp(Color.BLACK, 0.6)
+			a_style.border_width_left = 2; a_style.border_width_top = 2
+			a_style.border_width_right = 2; a_style.border_width_bottom = 2
+			a_style.border_color = Color("#2ecc71")
+			a_style.corner_radius_top_left = 10 * s; a_style.corner_radius_top_right = 10 * s
+			a_style.corner_radius_bottom_left = 10 * s; a_style.corner_radius_bottom_right = 10 * s
+			btn_actualizar.add_theme_stylebox_override("normal", a_style)
+			var h_style = a_style.duplicate()
+			h_style.bg_color = Color("#2ecc71").lerp(Color.BLACK, 0.4)
+			btn_actualizar.add_theme_stylebox_override("hover", h_style)
+			btn_actualizar.add_theme_stylebox_override("pressed", h_style)
+			
+			btn_actualizar.pressed.connect(func():
+				_play_action_sound("ui_click")
+				var current_time = Time.get_unix_time_from_system()
+				var cache_time = ui_root.get_meta("workshop_recientes_cache_time", 0.0)
+				
+				# Cooldown de 5 minutos (300 segundos) para el botón manual
+				if cache_time == 0.0 or (current_time - cache_time) >= 300:
+					ui_root.set_meta("workshop_recientes_cache_time", 0.0)
+					_setup_workshop_ui()
+				else:
+					# Fake loading for "smart cache" feel
+					var loading = _show_processing_overlay(tr("load_worls"))
+					await get_tree().create_timer(0.4).timeout
+					if is_instance_valid(loading):
+						loading.queue_free()
+					_setup_workshop_ui()
+			)
+			top_actions_hbox.add_child(btn_actualizar)
+
 		scroll_vbox.add_child(grid)
 		
 		var pagination_hbox = HFlowContainer.new()
@@ -4192,8 +4234,13 @@ func _setup_workshop_ui():
 			
 			if cache_time == 0.0 or (current_time - cache_time) >= (11 * 60):
 				ui_root.set_meta("workshop_mis_mundos_cache_time", 0.0)
-			
-			_setup_workshop_ui()
+				_setup_workshop_ui()
+			else:
+				var loading = _show_processing_overlay(tr("load_worls"))
+				await get_tree().create_timer(0.4).timeout
+				if is_instance_valid(loading):
+					loading.queue_free()
+				_setup_workshop_ui()
 		)
 		top_buttons_hbox.add_child(btn_actualizar)
 		
@@ -4462,9 +4509,18 @@ func _on_search_world_requested(base_code: String, check_char: String):
 func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer, page: int = 1):
 	if not is_instance_valid(grid): return
 	
+	var current_time = int(Time.get_unix_time_from_system())
+	var mem_time = ui_root.get_meta("workshop_recientes_cache_time", 0.0)
+	
 	var document = _cached_recientes_doc
+	
+	# Auto-refresh de 30 minutos o forzado por el botón (0.0)
+	if document != null and (mem_time == 0.0 or (current_time - mem_time) >= 1800):
+		document = null
+		_cached_recientes_doc = null
+	
 	if document == null:
-		# Check disk cache first with 5 minutes expiration
+		# Check disk cache first con vencimiento de 30 minutos
 		if FileAccess.file_exists("user://recientes_cache.json"):
 			var cf = FileAccess.open("user://recientes_cache.json", FileAccess.READ)
 			if cf:
@@ -4474,10 +4530,10 @@ func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer
 					var parsed = JSON.parse_string(text)
 					if typeof(parsed) == TYPE_DICTIONARY and parsed.has("fetch_time"):
 						var fetch_time = parsed["fetch_time"]
-						var current_time = int(Time.get_unix_time_from_system())
-						if current_time - fetch_time < 300: # 5 minutos
+						if mem_time != 0.0 and (current_time - fetch_time) < 1800: # 30 mins
 							document = parsed["document"]
 							_cached_recientes_doc = document
+							ui_root.set_meta("workshop_recientes_cache_time", fetch_time)
 	
 	var loading_overlay = null
 	if document == null:
@@ -4496,11 +4552,13 @@ func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer
 		if fb_doc:
 			document = fb_doc.document
 			_cached_recientes_doc = document
+			var new_time = int(Time.get_unix_time_from_system())
+			ui_root.set_meta("workshop_recientes_cache_time", new_time)
 			
 			var cf = FileAccess.open("user://recientes_cache.json", FileAccess.WRITE)
 			if cf:
 				cf.store_string(JSON.stringify({
-					"fetch_time": int(Time.get_unix_time_from_system()),
+					"fetch_time": new_time,
 					"document": document
 				}))
 				cf.close()

@@ -219,6 +219,13 @@ exports.processactionbuffer = onSchedule("*/10 * * * *", async (event) => {
       if (stats.likes === 0 && stats.downloads === 0 && stats.reports === 0) continue;
 
       const worldRef = db.collection("community_worlds").doc(wId);
+      // Verificar existencia antes de actualizar para evitar Error 5 NOT_FOUND
+      const docSnap = await worldRef.get();
+      if (!docSnap.exists) {
+        console.log(`Mundo ${wId} no existe (probablemente eliminado). Ignorando acciones.`);
+        continue;
+      }
+
       const updates = {};
       
       if (stats.likes !== 0) updates.likes = FieldValue.increment(stats.likes);
@@ -235,29 +242,26 @@ exports.processactionbuffer = onSchedule("*/10 * * * *", async (event) => {
       
       // LOGICA AUTO-BAN
       if (stats.reports > 0) {
-        const docSnap = await worldRef.get();
-        if (docSnap.exists) {
-          const data = docSnap.data();
-          const currentDownloads = (data.downloads || 0) + stats.downloads;
-          const currentReports = (data.reports || 0) + stats.reports;
+        const data = docSnap.data();
+        const currentDownloads = (data.downloads || 0) + stats.downloads;
+        const currentReports = (data.reports || 0) + stats.reports;
+        
+        const requiredReports = Math.max(5, Math.floor(Math.sqrt(currentDownloads) * 1.5));
+        if (currentReports >= requiredReports) {
+          updates.is_banned = true;
+          console.log(`Mundo ${wId} ha sido BANEADO. (${currentReports} reportes / ${currentDownloads} descargas)`);
           
-          const requiredReports = Math.max(5, Math.floor(Math.sqrt(currentDownloads) * 1.5));
-          if (currentReports >= requiredReports) {
-            updates.is_banned = true;
-            console.log(`Mundo ${wId} ha sido BANEADO. (${currentReports} reportes / ${currentDownloads} descargas)`);
-            
-            // Eliminar del caché de recientes inmediatamente
-            const cacheRef = db.collection("cache").doc("recientes");
-            const cacheSnap = await cacheRef.get();
-            if (cacheSnap.exists) {
-              let cacheData = cacheSnap.data();
-              if (cacheData && cacheData.worlds) {
-                const initialLength = cacheData.worlds.length;
-                cacheData.worlds = cacheData.worlds.filter(w => w.id !== wId);
-                if (cacheData.worlds.length < initialLength) {
-                  batch.update(cacheRef, { worlds: cacheData.worlds });
-                  console.log(`Mundo ${wId} borrado del caché de recientes.`);
-                }
+          // Eliminar del caché de recientes inmediatamente
+          const cacheRef = db.collection("cache").doc("recientes");
+          const cacheSnap = await cacheRef.get();
+          if (cacheSnap.exists) {
+            let cacheData = cacheSnap.data();
+            if (cacheData && cacheData.worlds) {
+              const initialLength = cacheData.worlds.length;
+              cacheData.worlds = cacheData.worlds.filter(w => w.id !== wId);
+              if (cacheData.worlds.length < initialLength) {
+                batch.update(cacheRef, { worlds: cacheData.worlds });
+                console.log(`Mundo ${wId} borrado del caché de recientes.`);
               }
             }
           }
