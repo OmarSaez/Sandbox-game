@@ -13857,25 +13857,30 @@ func _update_texture():
 				fc.b = max(0.02, fc.b)
 				raw_data.encode_u32((fy * grid_width + fx) * 4, fc.to_abgr32())
 	
-	# Update persistent image object
-	img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, raw_data)
-	texture_rect.texture.update(img)
+	# Update persistent image object (Thread-safe for RenderingServer)
+	var new_img = Image.create_from_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, raw_data)
+	texture_rect.texture.update(new_img)
+	img = new_img
 	
 	# 4. CONDITIONAL AUXILIARY UPDATES
 	# Only update charge texture if there are active charges OR if something changed (decay/movement)
 	if active_charge_indices.size() > 0 or charge_dirty or _frame_count % 60 == 0:
-		charge_img.set_data(grid_width, grid_height, false, Image.FORMAT_L8, charge_visual_buffer)
-		charge_tex.update(charge_img)
+		var new_charge_img = Image.create_from_data(grid_width, grid_height, false, Image.FORMAT_L8, charge_visual_buffer.duplicate())
+		charge_tex.update(new_charge_img)
+		charge_img = new_charge_img
 		charge_dirty = false
 	
 	# Only update paint texture if dirty or actively painting
 	if is_paint_tool_active or element_paint_dirty:
-		element_paint_img.set_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cell_paint_colors.to_byte_array())
-		element_paint_tex.update(element_paint_img)
+		var new_paint_img = Image.create_from_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cell_paint_colors.to_byte_array())
+		element_paint_tex.update(new_paint_img)
+		element_paint_img = new_paint_img
 		element_paint_dirty = false
 	
 	if background_dirty:
-		background_tex.update(background_img)
+		var new_bg_img = Image.create_from_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, background_img.get_data())
+		background_tex.update(new_bg_img)
+		background_img = new_bg_img
 		background_dirty = false
 
 func _launch_firework(x, y):
