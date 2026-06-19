@@ -15615,8 +15615,8 @@ func _update_phase_blocks():
 func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false):
 	sim_mutex.lock()
 	
-	# Achievement Tracking: Composer
-	if not ignore_achievement and not achievements["compositor"].unlocked:
+	# Achievement Tracking: Composer (Exclude Metronome)
+	if inst_idx != 5 and not ignore_achievement and not achievements["compositor"].unlocked:
 		var current_time = Time.get_ticks_msec() / 1000.0
 		if current_time - last_note_play_time <= 1.0:
 			composition_note_count += 1
