@@ -1348,9 +1348,15 @@ func _ready():
 	
 	# --- BIOLOGICALS (21-24) ---
 	# 21: Pasto
-	_register_material(21, Color("#4CAF50"), SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#388E3C")) # Pasto
+	_register_material(21, Color("#4CAF50"), SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_MEDIUM, Color("#388E3C")) # Pasto
 	# 24: Enredadera
-	_register_material(24, Color("#3E5E2A"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#2E4A1F")) # Enredadera / Tallo
+	_register_material(24, Color("#3E5E2A"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_MEDIUM, Color("#2E4A1F")) # Enredadera / Tallo
+	# FLORES (31-34)
+	var flower_tags = SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL
+	_register_material(31, Color("#FF66CC"), flower_tags) # Pink Flower
+	_register_material(32, Color("#FF1A1A"), flower_tags) # Red Flower
+	_register_material(33, Color("#FFEA00"), flower_tags) # Yellow Flower
+	_register_material(34, Color("#9B30FF"), flower_tags) # Violet Flower
 	
 	# Setup Fertility
 	material_tags_raw[1] |= SandboxMaterial.Tags.FERTILE
@@ -9920,6 +9926,15 @@ func _step_simulation():
 			next_chunks_active[i] = val - 1
 		else:
 			next_chunks_active[i] = 0
+			
+	# Pass 0.3: Random Chunk Ticks (Allows nature to grow slowly in sleeping areas)
+	if chunks_active.size() > 0:
+		var pokes = max(1, chunks_active.size() / 10)
+		for p in range(pokes):
+			var poke_idx = randi() % chunks_active.size()
+			if chunks_active[poke_idx] == 0:
+				chunks_active[poke_idx] = 2
+				next_chunks_active[poke_idx] = 1
 	
 	# Pass 1: Electricity Pulse Processing (SPARSE)
 	_process_electricity()
@@ -10586,9 +10601,12 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					elif _get_lut_rand() < 0.15: # Sprout vines
 						if y > 0 and (cells[idx - grid_width] & 0xFFFF) == 0:
 							# DENSITY FIX: Only sprout vines if no other vines are nearby (Separation)
-							if _count_neighbor_id_radius(x, y, 24, 4) < 1:
+							if _count_neighbor_id_radius(x, y, 24, 2) < 2:
 								_set_cell(x, y-1, 24)
-								charge_array[idx - grid_width] = int(_get_lut_rand_range(4, 8))
+								if _get_lut_rand() < 0.5:
+									charge_array[idx - grid_width] = int(_get_lut_rand_range(1, 4)) # Flowers (1-3)
+								else:
+									charge_array[idx - grid_width] = int(_get_lut_rand_range(104, 108)) # Vines (4-8)
 				else:
 					if current_weather == 0 and _get_lut_rand() < 0.1:
 						_set_cell(x, y, 1 if pure_id == 22 else 6)
@@ -10598,8 +10616,16 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					if (cells[idx - grid_width] & 0xFFFF) == 0:
 						# Keep vines single-column (Don't clump)
 						if _count_neighbor_id_fast(idx - grid_width, 24) < 2:
-							_set_cell(x, y-1, 24)
-							charge_array[idx - grid_width] = h_left - 1
+							if h_left == 1:
+								var flower_colors = [31, 32, 33, 34]
+								var f_mat = flower_colors[int(_get_lut_rand_range(0, 4))]
+								_set_cell(x, y-1, f_mat)
+							elif h_left == 101:
+								_set_cell(x, y-1, 24)
+								# End of normal vine, charge becomes 0
+							else:
+								_set_cell(x, y-1, 24)
+								charge_array[idx - grid_width] = h_left - 1
 							charge_array[idx] = 0
 		
 
@@ -10609,7 +10635,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		if charge_array[idx] == 0: charge_array[idx] = int(_get_lut_rand_range(60, 120)) 
 		charge_array[idx] -= 1
 		if charge_array[idx] <= 1: _set_cell(x, y, 26) 
-
+		
 func _setup_paint_ui():
 	_set_panning_mode(false)
 	var s = _get_ui_scale()
