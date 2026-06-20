@@ -17798,7 +17798,29 @@ func _save_to_slot(idx, custom_name: String = ""):
 		"frame_count": _frame_count,
 		"music_tempo_frames": music_tempo_frames,
 		"active_logic_gates": active_logic_gates,
-		"active_pistons": active_pistons
+		"active_pistons": active_pistons,
+		"disasters": {
+			"current_weather": current_weather,
+			"acid_rain_intensity": acid_rain_intensity,
+			"earthquake_intensity": earthquake_intensity,
+			"earthquake_timer": earthquake_timer,
+			"tornado_intensity": tornado_intensity,
+			"tornado_timer": tornado_timer,
+			"tornado_x": tornado_x,
+			"tornado_target_x": tornado_target_x,
+			"tornado_ground_y": tornado_ground_y,
+			"tornado_element": tornado_element,
+			"tsunami_intensity": tsunami_intensity,
+			"tsunami_timer": tsunami_timer,
+			"tsunami_wave_x": tsunami_wave_x,
+			"bombardero_intensity": bombardero_intensity,
+			"bombardero_x": bombardero_x,
+			"bombardero_y": bombardero_y,
+			"bombardero_dir": bombardero_dir,
+			"bombardero_speed": bombardero_speed,
+			"bombardero_drop_prob": bombardero_drop_prob,
+			"bombardero_pending_checks": bombardero_pending_checks
+		}
 	}
 	
 	var file = FileAccess.open_compressed(path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
@@ -17890,6 +17912,48 @@ func _load_world_from_path(path: String):
 			# 3. RESTORE LABORATORY EXPERIMENTS
 			if dict.has("lab_data"):
 				_restore_lab_data(dict["lab_data"])
+				
+			# 4. RESTORE DISASTERS
+			if dict.has("disasters"):
+				var d = dict["disasters"]
+				current_weather = d.get("current_weather", 0)
+				acid_rain_intensity = d.get("acid_rain_intensity", 0)
+				earthquake_intensity = d.get("earthquake_intensity", 0)
+				earthquake_timer = d.get("earthquake_timer", 0.0)
+				tornado_intensity = d.get("tornado_intensity", 0)
+				tornado_timer = d.get("tornado_timer", 0.0)
+				tornado_x = d.get("tornado_x", 0.0)
+				tornado_target_x = d.get("tornado_target_x", 0.0)
+				tornado_ground_y = d.get("tornado_ground_y", 0.0)
+				tornado_element = d.get("tornado_element", 0)
+				tsunami_intensity = d.get("tsunami_intensity", 0)
+				tsunami_timer = d.get("tsunami_timer", 0.0)
+				tsunami_wave_x = d.get("tsunami_wave_x", 0.0)
+				bombardero_intensity = d.get("bombardero_intensity", 0)
+				bombardero_x = d.get("bombardero_x", 0.0)
+				bombardero_y = d.get("bombardero_y", 12.0)
+				bombardero_dir = d.get("bombardero_dir", 1.0)
+				bombardero_speed = d.get("bombardero_speed", 0.0)
+				bombardero_drop_prob = d.get("bombardero_drop_prob", 0.0)
+				bombardero_pending_checks = d.get("bombardero_pending_checks", [])
+				
+				# Reiniciar sonidos si están activos
+				if earthquake_intensity > 0: _play_action_sound("earthquake")
+				if tornado_intensity > 0: _play_action_sound("tornado")
+				if tsunami_intensity > 0: _play_action_sound("tsunami")
+				if bombardero_intensity > 0:
+					if not bombardero_texture: bombardero_texture = load("res://assets/icon_game/avion_bombardero.png")
+					_manage_looping_player(bombardero_player, "bomber_engine")
+					if is_instance_valid(bombardero_player): bombardero_player.volume_db = -6.0
+			else:
+				current_weather = 0; acid_rain_intensity = 0
+				earthquake_intensity = 0; earthquake_timer = 0.0
+				tornado_intensity = 0; tornado_timer = 0.0
+				tsunami_intensity = 0; tsunami_timer = 0.0
+				bombardero_intensity = 0; bombardero_pending_checks.clear()
+				if is_instance_valid(bombardero_player) and bombardero_player.playing: bombardero_player.stop()
+			
+			_update_arcade_dynamic_button()
 			
 			if dict.has("ach_unlocked"):
 				is_achievement_menu_unlocked = dict["ach_unlocked"]
