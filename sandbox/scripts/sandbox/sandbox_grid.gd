@@ -7619,7 +7619,15 @@ func _update_lab_preview(idx: int):
 	
 	var tex_rect = data["node"]
 	
-	var preview_img = Image.create(10, 10, false, Image.FORMAT_RGBA8)
+	var s = _get_ui_scale()
+	var tw = 128
+	var th = 128
+	
+	var pixel_size = max(1, int(6 * s))
+	var blocks_x = ceil(tw / float(pixel_size))
+	var blocks_y = ceil(th / float(pixel_size))
+	
+	var preview_img = Image.create(tw, th, false, Image.FORMAT_RGBA8)
 	var c1 = data["c1"]
 	var c2 = data["c2"]
 	var c3 = data["c3"]
@@ -7631,24 +7639,28 @@ func _update_lab_preview(idx: int):
 	if mix_val == 1: mix_factor = 0.25
 	elif mix_val == 2: mix_factor = 0.44
 	
-	for y in range(10):
-		for x in range(10):
+	for y_block in range(blocks_y):
+		for x_block in range(blocks_x):
 			var val = _get_lut_rand()
 			var p_color = c1
 			
 			if has_c2 and has_c3:
-				if val < mix_factor:
-					p_color = c2
-				elif val < mix_factor * 2.0:
-					p_color = c3
+				if val < mix_factor: p_color = c2
+				elif val < mix_factor * 2.0: p_color = c3
 			elif has_c2:
-				if val < mix_factor:
-					p_color = c2
-					
-			preview_img.set_pixel(x,y, p_color)
+				if val < mix_factor: p_color = c2
+				
+			var start_x = x_block * pixel_size
+			var start_y = y_block * pixel_size
+			for dy in range(pixel_size):
+				if start_y + dy >= th: break
+				for dx in range(pixel_size):
+					if start_x + dx >= tw: break
+					preview_img.set_pixel(start_x + dx, start_y + dy, p_color)
 			
 	var tex = ImageTexture.create_from_image(preview_img)
 	tex_rect.texture = tex
+	tex_rect.stretch_mode = TextureRect.STRETCH_TILE
 
 func _setup_disaster_ui():
 	_set_panning_mode(false)
@@ -7864,6 +7876,56 @@ func _refresh_ui_text():
 	TranslationServer.set_locale(current_language)
 	# (Individual element refreshes removed in favor of _setup_main_ui_containers)
 
+func _generate_material_texture(mat_id: int) -> ImageTexture:
+	if mat_id < 0 or mat_id >= material_tags_raw.size(): return null
+	
+	var tags = material_tags_raw[mat_id]
+	var has_double = (tags & SandboxMaterial.Tags.TEXTURE_DOUBLE) != 0
+	var has_triple = (tags & SandboxMaterial.Tags.TEXTURE_TRIPLE) != 0
+	
+	if not has_double and not has_triple: return null
+	
+	var c1 = mat_colors_1[mat_id] if mat_id < mat_colors_1.size() else Color.BLACK
+	var c2 = mat_colors_2[mat_id] if mat_id < mat_colors_2.size() else c1
+	var c3 = mat_colors_3[mat_id] if mat_id < mat_colors_3.size() else c2
+	
+	var mix_factor = 0.25
+	if (tags & SandboxMaterial.Tags.MIX_LOW) != 0: mix_factor = 0.1
+	elif (tags & SandboxMaterial.Tags.MIX_MEDIUM) != 0: mix_factor = 0.25
+	elif (tags & SandboxMaterial.Tags.MIX_HIGH) != 0: mix_factor = 0.44
+	
+	var s = _get_ui_scale()
+	var pixel_size = max(1, int(6 * s)) # 6 is a great chunky size
+	
+	var tex_w = 128
+	var tex_h = 128
+	
+	var img = Image.create(tex_w, tex_h, false, Image.FORMAT_RGBA8)
+	
+	var blocks_x = ceil(tex_w / float(pixel_size))
+	var blocks_y = ceil(tex_h / float(pixel_size))
+	
+	for y_block in range(blocks_y):
+		for x_block in range(blocks_x):
+			var val = _get_lut_rand()
+			var p_color = c1
+			
+			if has_triple:
+				if val < mix_factor: p_color = c2
+				elif val < mix_factor * 2.0: p_color = c3
+			elif has_double:
+				if val < mix_factor: p_color = c2
+				
+			var start_x = x_block * pixel_size
+			var start_y = y_block * pixel_size
+			for dy in range(pixel_size):
+				if start_y + dy >= tex_h: break
+				for dx in range(pixel_size):
+					if start_x + dx >= tex_w: break
+					img.set_pixel(start_x + dx, start_y + dy, p_color)
+			
+	return ImageTexture.create_from_image(img)
+
 func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	var s = _get_ui_scale()
 	if not is_upcoming:
@@ -7919,7 +7981,22 @@ func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	icon_panel.add_theme_stylebox_override("panel", icon_style)
 	icon_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	icon_panel.mouse_filter = Control.MOUSE_FILTER_PASS
+	
+	# Apply mask so texture doesn't spill over rounded corners
+	icon_panel.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
 	stack.add_child(icon_panel)
+	
+	# GENERATE PROCEDURAL TEXTURE
+	var tex = _generate_material_texture(mat_id)
+	if tex != null:
+		var tex_rect = TextureRect.new()
+		tex_rect.texture = tex
+		tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex_rect.stretch_mode = TextureRect.STRETCH_TILE
+		tex_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_panel.add_child(tex_rect)
 	
 	# 2. SELECTION OVERLAY (Only visible when selected)
 	var selection_overlay = PanelContainer.new()
