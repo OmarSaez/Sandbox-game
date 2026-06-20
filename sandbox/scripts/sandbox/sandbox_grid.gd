@@ -1534,9 +1534,9 @@ func _ready():
 	
 	_show_welcome_message()
 	
-	# Workshop discovery logic (Wait 40 seconds)
+	# Workshop discovery logic (Wait 7 minutes)
 	if not FileAccess.file_exists("user://workshop_discovery_shown.save"):
-		get_tree().create_timer(40.0).timeout.connect(func():
+		get_tree().create_timer(420.0).timeout.connect(func():
 			if not FileAccess.file_exists("user://workshop_discovery_shown.save") and ui_elements.has("tools_btn"):
 				# Ensure tools panel isn't already open
 				if not (is_instance_valid(tools_panel) and tools_panel.visible):
@@ -5580,10 +5580,12 @@ func _show_edit_world_dialog(world_data: Dictionary):
 	is_mouse_over_ui = true
 	overlay.tree_exiting.connect(func(): is_mouse_over_ui = false)
 	
-	var center = CenterContainer.new()
+	var center = MarginContainer.new()
 	overlay.add_child(center)
 	
 	var popup = PanelContainer.new()
+	popup.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	popup.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	popup.custom_minimum_size = Vector2(450 * s, 600 * s)
 	var p_style = StyleBoxFlat.new()
 	p_style.bg_color = Color(0.12, 0.12, 0.16, 1.0)
@@ -5711,6 +5713,15 @@ func _show_edit_world_dialog(world_data: Dictionary):
 	name_input.max_length = 30
 	name_input.text = old_title
 	main_vbox.add_child(name_input)
+	
+	name_input.focus_entered.connect(func():
+		var kb_height = DisplayServer.virtual_keyboard_get_height()
+		if kb_height == 0: kb_height = 300 * s
+		center.add_theme_constant_override("margin_bottom", kb_height)
+	)
+	name_input.focus_exited.connect(func():
+		center.add_theme_constant_override("margin_bottom", 0)
+	)
 	
 	name_input.text_changed.connect(func(new_text: String):
 		char_count_lbl.text = str(new_text.length()) + "/30"
@@ -5906,10 +5917,12 @@ func _show_upload_world_dialog():
 	is_mouse_over_ui = true
 	overlay.tree_exiting.connect(func(): is_mouse_over_ui = false)
 	
-	var center = CenterContainer.new()
+	var center = MarginContainer.new()
 	overlay.add_child(center)
 	
 	var popup = PanelContainer.new()
+	popup.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	popup.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	popup.custom_minimum_size = Vector2(450 * s, 600 * s)
 	var p_style = StyleBoxFlat.new()
 	p_style.bg_color = Color(0.12, 0.12, 0.16, 1.0)
@@ -6005,6 +6018,15 @@ func _show_upload_world_dialog():
 	name_input.custom_minimum_size = Vector2(0, 45 * s)
 	name_input.max_length = 30
 	main_vbox.add_child(name_input)
+	
+	name_input.focus_entered.connect(func():
+		var kb_height = DisplayServer.virtual_keyboard_get_height()
+		if kb_height == 0: kb_height = 300 * s
+		center.add_theme_constant_override("margin_bottom", kb_height)
+	)
+	name_input.focus_exited.connect(func():
+		center.add_theme_constant_override("margin_bottom", 0)
+	)
 	
 	name_input.text_changed.connect(func(new_text: String):
 		char_count_lbl.text = str(new_text.length()) + "/30"
