@@ -5611,7 +5611,13 @@ func _show_edit_world_dialog(world_data: Dictionary):
 	var lbl_file = create_label.call("map_file_label")
 	lbl_file.text = tr("map_file_label")
 	main_vbox.add_child(lbl_file)
+	
+	var slot_hbox = HBoxContainer.new()
+	slot_hbox.add_theme_constant_override("separation", 10 * s)
+	main_vbox.add_child(slot_hbox)
+	
 	var btn_choose_slot = Button.new()
+	btn_choose_slot.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_choose_slot.text = tr("keep_online_file")
 	btn_choose_slot.add_theme_font_override("font", _get_safe_font())
 	btn_choose_slot.add_theme_font_size_override("font_size", 20 * s)
@@ -5629,7 +5635,19 @@ func _show_edit_world_dialog(world_data: Dictionary):
 	hc_style.bg_color = Color(0.25, 0.25, 0.3)
 	btn_choose_slot.add_theme_stylebox_override("hover", hc_style)
 	btn_choose_slot.add_theme_stylebox_override("pressed", hc_style)
-	main_vbox.add_child(btn_choose_slot)
+	slot_hbox.add_child(btn_choose_slot)
+	
+	var btn_clear_slot = Button.new()
+	btn_clear_slot.text = "✖"
+	btn_clear_slot.visible = false
+	btn_clear_slot.custom_minimum_size = Vector2(45 * s, 45 * s)
+	btn_clear_slot.add_theme_font_override("font", _get_safe_font())
+	btn_clear_slot.add_theme_font_size_override("font_size", 20 * s)
+	var cls_style = c_style.duplicate()
+	cls_style.bg_color = Color(0.8, 0.2, 0.2)
+	btn_clear_slot.add_theme_stylebox_override("normal", cls_style)
+	btn_clear_slot.add_theme_stylebox_override("hover", cls_style)
+	slot_hbox.add_child(btn_clear_slot)
 	
 	var name_label_hbox = HBoxContainer.new()
 	main_vbox.add_child(name_label_hbox)
@@ -5673,6 +5691,40 @@ func _show_edit_world_dialog(world_data: Dictionary):
 	cat_popup.add_theme_font_override("font", _get_safe_font())
 	cat_popup.add_theme_font_size_override("font_size", 22 * s)
 	
+	var btn_hbox = HBoxContainer.new()
+	var btn_confirm = Button.new()
+	var conf_style = StyleBoxFlat.new()
+	var h_conf = StyleBoxFlat.new()
+	
+	var reset_preview = func():
+		selected_overwrite_slot_id[0] = -1
+		btn_choose_slot.text = tr("keep_online_file")
+		c_style.border_color = Color(0.4, 0.4, 0.5)
+		btn_clear_slot.visible = false
+		
+		# Reset button
+		btn_confirm.text = tr("confirm_save_changes_title")
+		conf_style.bg_color = Color("#ff9f43")
+		btn_confirm.add_theme_color_override("font_color", Color.WHITE)
+		h_conf.bg_color = Color("#ffb142")
+		
+		# Reset thumbnail to original online cache if exists
+		if world_id != "":
+			var cache_file = "user://thumb_cache_" + str(world_id) + ".bin"
+			if FileAccess.file_exists(cache_file):
+				var f = FileAccess.open(cache_file, FileAccess.READ)
+				if f:
+					var body = f.get_buffer(f.get_length())
+					f.close()
+					var img = Image.new()
+					if img.load_webp_from_buffer(body) == OK or img.load_png_from_buffer(body) == OK or img.load_jpg_from_buffer(body) == OK:
+						thumb_rect.texture = ImageTexture.create_from_image(img)
+	
+	btn_clear_slot.pressed.connect(func():
+		_play_action_sound("ui_click")
+		reset_preview.call()
+	)
+	
 	var update_preview = func(slot_id: int):
 		selected_overwrite_slot_id[0] = slot_id
 		var data = _get_slot_data(slot_id)
@@ -5682,9 +5734,19 @@ func _show_edit_world_dialog(world_data: Dictionary):
 		
 		btn_choose_slot.text = tr("replace_using_slot") + str(slot_id)
 		c_style.border_color = Color("#ff9f43")
+		btn_clear_slot.visible = true
+		
+		if uploads_today >= 2:
+			btn_confirm.text = tr("btn_upload_ad")
+			conf_style.bg_color = Color("#fbc531")
+			btn_confirm.add_theme_color_override("font_color", Color.BLACK)
+			h_conf.bg_color = Color("#f5f6fa")
 			
 	btn_choose_slot.pressed.connect(func():
 		_play_action_sound("ui_click")
+		if uploads_today >= 5:
+			_show_centered_bubble(tr("msg_edit_limit_reached"), Color(0.8, 0.2, 0.2))
+			return
 		_show_upload_slot_selector(update_preview)
 	)
 	
@@ -5692,7 +5754,6 @@ func _show_edit_world_dialog(world_data: Dictionary):
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	main_vbox.add_child(spacer)
 	
-	var btn_hbox = HBoxContainer.new()
 	btn_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	btn_hbox.add_theme_constant_override("separation", 15 * s)
 	main_vbox.add_child(btn_hbox)
@@ -5714,18 +5775,16 @@ func _show_edit_world_dialog(world_data: Dictionary):
 	)
 	btn_hbox.add_child(btn_cancel)
 	
-	var btn_confirm = Button.new()
 	btn_confirm.text = tr("confirm_save_changes_title")
 	btn_confirm.custom_minimum_size = Vector2(220 * s, 50 * s)
 	btn_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn_confirm.add_theme_font_override("font", _get_safe_font())
 	btn_confirm.add_theme_font_size_override("font_size", 18 * s)
-	var conf_style = StyleBoxFlat.new()
 	conf_style.bg_color = Color("#ff9f43")
 	conf_style.corner_radius_top_left = 10 * s; conf_style.corner_radius_top_right = 10 * s
 	conf_style.corner_radius_bottom_left = 10 * s; conf_style.corner_radius_bottom_right = 10 * s
 	btn_confirm.add_theme_stylebox_override("normal", conf_style)
-	var h_conf = conf_style.duplicate()
+	h_conf = conf_style.duplicate()
 	h_conf.bg_color = Color("#ffb142")
 	btn_confirm.add_theme_stylebox_override("hover", h_conf)
 	
@@ -5742,8 +5801,8 @@ func _show_edit_world_dialog(world_data: Dictionary):
 		if chosen_name == old_title and chosen_cat == old_category and overwrite_slot == -1:
 			overlay.queue_free()
 			return
-		
-		var on_confirmed = func():
+			
+		var proceed_edit = func():
 			var loading_overlay = _show_processing_overlay(tr("msg_saving_changes"))
 			
 			var on_done = func(success: bool, msg: String, doc_data: Dictionary = {}):
@@ -5751,6 +5810,10 @@ func _show_edit_world_dialog(world_data: Dictionary):
 					loading_overlay.queue_free()
 					
 				if success:
+					if overwrite_slot != -1:
+						uploads_today += 1
+						_save_workshop_economy()
+						
 					var cache = ui_root.get_meta("workshop_mis_mundos_cache", [])
 					for i in range(cache.size()):
 						if cache[i].get("id") == world_id or cache[i].get("world_id") == world_id:
@@ -5770,6 +5833,17 @@ func _show_edit_world_dialog(world_data: Dictionary):
 				WorkshopManager.update_completed.connect(on_done, CONNECT_ONE_SHOT)
 			
 			WorkshopManager.update_world(world_id, world_data, chosen_name, chosen_cat, overwrite_slot)
+		
+		var on_confirmed = func():
+			if overwrite_slot != -1 and uploads_today >= 2:
+				AdMobManager.show_workshop_rewarded()
+				var success = await AdMobManager.workshop_rewarded_completed
+				if success:
+					proceed_edit.call()
+				else:
+					_show_centered_bubble(tr("msg_error") + ": " + tr("msg_ad_failed") if TranslationServer.get_locale() == "es" else "Error: " + tr("msg_ad_failed"), Color(0.8, 0.2, 0.2))
+			else:
+				proceed_edit.call()
 			
 		_show_confirm_dialog(tr("confirm_save_changes_title"), tr("confirm_save_changes_msg"), on_confirmed)
 	)
@@ -6039,7 +6113,7 @@ func _show_upload_world_dialog():
 				if success:
 					proceed_upload.call()
 				else:
-					_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_ad_failed"))
+					_show_centered_bubble(tr("msg_error") + ": " + tr("msg_ad_failed") if TranslationServer.get_locale() == "es" else "Error: " + tr("msg_ad_failed"), Color(0.8, 0.2, 0.2))
 			else:
 				proceed_upload.call()
 				
