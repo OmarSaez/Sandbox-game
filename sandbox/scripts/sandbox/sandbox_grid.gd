@@ -1533,6 +1533,15 @@ func _ready():
 		tw.tween_callback(curtain_layer.queue_free)
 	
 	_show_welcome_message()
+	
+	# Workshop discovery logic (Wait 40 seconds)
+	if not FileAccess.file_exists("user://workshop_discovery_shown.save"):
+		get_tree().create_timer(40.0).timeout.connect(func():
+			if not FileAccess.file_exists("user://workshop_discovery_shown.save") and ui_elements.has("tools_btn"):
+				# Ensure tools panel isn't already open
+				if not (is_instance_valid(tools_panel) and tools_panel.visible):
+					_start_pulse(ui_elements["tools_btn"])
+		)
 
 func _show_welcome_message():
 	var save_path = "user://welcome_shown.save"
@@ -2045,6 +2054,23 @@ func _show_main_tutorial_step():
 	panel.position.y = clamp(panel.position.y, 20 * s, screen_size.y - p_size.y - 20 * s)
 	panel.position.x = clamp(panel.position.x, 10 * s, screen_size.x - p_size.x - 10 * s)
 
+
+func _start_pulse(btn: Control):
+	_stop_pulse(btn) # Ensure no duplicate tweens
+	var tween = create_tween()
+	tween.set_loops()
+	# Creates a very distinct yellow glowing effect
+	tween.tween_property(btn, "self_modulate", Color(1.8, 1.8, 0.6), 0.7).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(btn, "self_modulate", Color.WHITE, 0.7).set_trans(Tween.TRANS_SINE)
+	btn.set_meta("pulse_tween", tween)
+
+func _stop_pulse(btn: Control):
+	if btn.has_meta("pulse_tween"):
+		var tween = btn.get_meta("pulse_tween")
+		if is_instance_valid(tween):
+			tween.kill()
+		btn.remove_meta("pulse_tween")
+	btn.self_modulate = Color.WHITE
 
 func _show_menu_reminder(menu_id: String, parent_vbox: VBoxContainer, text_key: String):
 	var save_path = "user://reminder_seen_" + menu_id + ".save"
@@ -3367,6 +3393,21 @@ func _setup_tools_ui():
 	
 	community_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
+		_stop_pulse(community_btn)
+		
+		var save_path = "user://workshop_discovery_shown.save"
+		if not FileAccess.file_exists(save_path):
+			var file = FileAccess.open(save_path, FileAccess.WRITE)
+			if file:
+				file.store_string("shown")
+				file.close()
+				
+		if ui_elements.has("workshop_discovery_bubble"):
+			var b = ui_elements["workshop_discovery_bubble"]
+			if is_instance_valid(b):
+				b.queue_free()
+			ui_elements.erase("workshop_discovery_bubble")
+				
 		_toggle_category_panel(workshop_panel)
 	)
 	v_box.add_child(community_btn)
@@ -3947,8 +3988,8 @@ func _setup_workshop_ui():
 	else: btn_top.text = "🌟\n" + tr("tab_top_semanal")
 	
 	var btn_rec = create_tab_btn.call("🕒", "tab_recientes", 1)
-	var btn_mis = create_tab_btn.call("👤", "tab_mis_mundos", 2)
 	var btn_desc = create_tab_btn.call("⬇️", "tab_mis_descargas", 3)
+	var btn_mis = create_tab_btn.call("👤", "tab_mis_mundos", 2)
 	
 	# Rotate text on "Mis mundos"
 	var rotate_timer = Timer.new()
@@ -6759,6 +6800,45 @@ func _on_tools_btn_pressed():
 	_toggle_category_panel(tools_panel)
 	if is_instance_valid(tools_panel) and tools_panel.visible:
 		_show_menu_reminder("tools", tools_panel.get_child(0), "TUTORIAL_STEP_2")
+		
+		# Workshop discovery logic
+		if not FileAccess.file_exists("user://workshop_discovery_shown.save") and ui_elements.has("tools_btn"):
+			_stop_pulse(ui_elements["tools_btn"])
+			if ui_elements.has("btn_comunidad"):
+				_start_pulse(ui_elements["btn_comunidad"])
+			
+			var scroll = tools_panel.find_child("ToolsScroll", true, false)
+			if scroll and ui_elements.has("btn_comunidad"):
+				var btn_com = ui_elements["btn_comunidad"]
+				
+				# First scroll to it
+				get_tree().process_frame.connect(func():
+					scroll.ensure_control_visible(btn_com)
+					
+					# Then wait another frame so layout is updated
+					get_tree().process_frame.connect(func():
+						var bubble = _show_unified_tutorial_bubble(Vector2i.ZERO, "msg_workshop_discovery", func():
+							# The user clicked "Got it"
+							var save_path = "user://workshop_discovery_shown.save"
+							if not FileAccess.file_exists(save_path):
+								var file = FileAccess.open(save_path, FileAccess.WRITE)
+								if file:
+									file.store_string("shown")
+									file.close()
+						, Color(0.1, 0.4, 0.8, 0.95), 180.0)
+						
+						if is_instance_valid(bubble):
+							ui_elements["workshop_discovery_bubble"] = bubble
+							var s = _get_ui_scale()
+							var btn_rect = btn_com.get_global_rect()
+							bubble.position.x = btn_rect.position.x + btn_rect.size.x / 2.0 - bubble.size.x / 2.0
+							bubble.position.y = btn_rect.position.y - bubble.size.y - 15 * s
+							
+							var screen_size = get_viewport_rect().size
+							bubble.position.x = clamp(bubble.position.x, 10 * s, screen_size.x - bubble.size.x - 10 * s)
+							bubble.position.y = clamp(bubble.position.y, 10 * s, screen_size.y - bubble.size.y - 10 * s)
+					, CONNECT_ONE_SHOT)
+				, CONNECT_ONE_SHOT)
 	
 	# Update tutorial highlight if we just opened/closed tools
 	if lab_tutorial_step == 6:
