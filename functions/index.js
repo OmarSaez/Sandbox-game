@@ -1,5 +1,5 @@
 const {onSchedule} = require("firebase-functions/v2/scheduler");
-const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentDeleted, onDocumentUpdated} = require("firebase-functions/v2/firestore");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getDatabase } = require("firebase-admin/database");
@@ -121,6 +121,97 @@ exports.onworldcreated = onDocumentCreated({
     console.log(`Caché de recientes actualizado exitosamente con el mundo ${worldId}.`);
   } catch (error) {
     console.error("Error al actualizar la caché de recientes:", error);
+  }
+});
+
+exports.onworlddeleted = onDocumentDeleted({
+  document: "community_worlds/{worldId}",
+  database: "default"
+}, async (event) => {
+  const worldId = event.params.worldId;
+  console.log(`Mundo eliminado detectado: ${worldId}`);
+
+  const cacheRef = db.collection("cache").doc("recientes");
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const cacheDoc = await transaction.get(cacheRef);
+      if (!cacheDoc.exists) return;
+      
+      const cacheData = cacheDoc.data();
+      if (!cacheData.worlds || !Array.isArray(cacheData.worlds)) return;
+
+      const worldsArray = cacheData.worlds;
+      const initialLength = worldsArray.length;
+      
+      // Filter out the deleted world
+      const newWorldsArray = worldsArray.filter(w => w.id !== worldId);
+      
+      if (newWorldsArray.length !== initialLength) {
+        transaction.set(cacheRef, {
+          updated_at: new Date().toISOString(),
+          worlds: newWorldsArray
+        });
+        console.log(`Caché de recientes actualizado: mundo ${worldId} eliminado.`);
+      }
+    });
+  } catch (error) {
+    console.error("Error al eliminar el mundo de la caché de recientes:", error);
+  }
+});
+
+exports.onworldupdated = onDocumentUpdated({
+  document: "community_worlds/{worldId}",
+  database: "default"
+}, async (event) => {
+  const worldId = event.params.worldId;
+  const newData = event.data.after.data();
+  if (!newData) return;
+
+  console.log(`Mundo actualizado detectado: ${worldId}`);
+
+  const cacheRef = db.collection("cache").doc("recientes");
+
+  try {
+    await db.runTransaction(async (transaction) => {
+      const cacheDoc = await transaction.get(cacheRef);
+      if (!cacheDoc.exists) return;
+      
+      const cacheData = cacheDoc.data();
+      if (!cacheData.worlds || !Array.isArray(cacheData.worlds)) return;
+
+      const worldsArray = cacheData.worlds;
+      const worldIndex = worldsArray.findIndex(w => w.id === worldId);
+      
+      if (worldIndex !== -1) {
+        // Update title, category, etc.
+        let modified = false;
+        const w = worldsArray[worldIndex];
+        
+        if (newData.title && w.title !== newData.title) {
+          w.title = newData.title;
+          modified = true;
+        }
+        if (newData.category !== undefined && w.category !== newData.category) {
+          w.category = newData.category;
+          modified = true;
+        }
+        if (newData.thumbnail_url && w.thumbnail_url !== newData.thumbnail_url) {
+          w.thumbnail_url = newData.thumbnail_url;
+          modified = true;
+        }
+
+        if (modified) {
+          transaction.set(cacheRef, {
+            updated_at: new Date().toISOString(),
+            worlds: worldsArray
+          });
+          console.log(`Caché de recientes actualizado: mundo ${worldId} modificado.`);
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Error al actualizar el mundo en la caché de recientes:", error);
   }
 });
 

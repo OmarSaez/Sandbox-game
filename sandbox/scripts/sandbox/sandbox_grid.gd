@@ -4790,6 +4790,78 @@ func _fetch_mis_mundos_async(grid: GridContainer, pagination_hbox: HFlowContaine
 			card.queue_free()
 		_show_empty_state_message(grid)
 
+func _update_local_recientes_cache(world_id: String, delete: bool, new_data: Dictionary = {}):
+	var document = _cached_recientes_doc
+	
+	if document == null:
+		if FileAccess.file_exists("user://recientes_cache.json"):
+			var cf = FileAccess.open("user://recientes_cache.json", FileAccess.READ)
+			if cf:
+				var text = cf.get_as_text()
+				cf.close()
+				if text != "":
+					var parsed = JSON.parse_string(text)
+					if typeof(parsed) == TYPE_DICTIONARY and parsed.has("document"):
+						document = parsed["document"]
+						
+	var dict_doc = null
+	if typeof(document) == TYPE_OBJECT and document is FirestoreDocument:
+		dict_doc = document.document
+	elif typeof(document) == TYPE_DICTIONARY:
+		dict_doc = document
+		
+	if dict_doc and dict_doc.has("worlds"):
+		var raw_worlds = dict_doc["worlds"]
+		var worlds_list = []
+		if typeof(raw_worlds) == TYPE_ARRAY:
+			worlds_list = raw_worlds
+		elif typeof(raw_worlds) == TYPE_DICTIONARY and raw_worlds.has("arrayValue") and raw_worlds["arrayValue"].has("values"):
+			worlds_list = raw_worlds["arrayValue"]["values"]
+			
+		var modified = false
+		for i in range(worlds_list.size() - 1, -1, -1):
+			var w_data = worlds_list[i]
+			var check_id = ""
+			
+			if typeof(w_data) == TYPE_DICTIONARY and w_data.has("mapValue"):
+				var fields = w_data["mapValue"]["fields"]
+				if fields.has("id") and fields["id"].has("stringValue"):
+					check_id = fields["id"]["stringValue"]
+			elif typeof(w_data) == TYPE_DICTIONARY and w_data.has("id"):
+				check_id = w_data["id"]
+				
+			if check_id == world_id:
+				if delete:
+					worlds_list.remove_at(i)
+					modified = true
+				else:
+					# Update
+					if typeof(w_data) == TYPE_DICTIONARY and w_data.has("mapValue"):
+						var fields = w_data["mapValue"]["fields"]
+						if new_data.has("title"):
+							if not fields.has("title"): fields["title"] = {}
+							fields["title"]["stringValue"] = new_data["title"]
+						if new_data.has("category"):
+							if not fields.has("category"): fields["category"] = {}
+							fields["category"]["integerValue"] = str(new_data["category"])
+						modified = true
+					elif typeof(w_data) == TYPE_DICTIONARY:
+						if new_data.has("title"): w_data["title"] = new_data["title"]
+						if new_data.has("category"): w_data["category"] = new_data["category"]
+						modified = true
+				break
+				
+		if modified:
+			_cached_recientes_doc = dict_doc
+			var mem_time = ui_root.get_meta("workshop_recientes_cache_time", int(Time.get_unix_time_from_system()))
+			var cf = FileAccess.open("user://recientes_cache.json", FileAccess.WRITE)
+			if cf:
+				cf.store_string(JSON.stringify({
+					"fetch_time": mem_time,
+					"document": dict_doc
+				}))
+				cf.close()
+
 func _fetch_mis_descargas_async(grid: GridContainer, pagination_hbox: HFlowContainer, page: int = 1):
 	if not is_instance_valid(grid): return
 	var downloads = []
@@ -5548,6 +5620,8 @@ func _delete_world_from_workshop(world_id: String, world_title: String):
 	ui_root.set_meta("workshop_total_uploaded_worlds", cache.size())
 	_save_workshop_cache()
 	
+	_update_local_recientes_cache(world_id, true)
+	
 	_setup_workshop_ui()
 
 func _load_workshop_cache():
@@ -5887,6 +5961,8 @@ func _show_edit_world_dialog(world_data: Dictionary):
 							break
 					ui_root.set_meta("workshop_mis_mundos_cache", cache)
 					_save_workshop_cache()
+					
+					_update_local_recientes_cache(world_id, false, {"title": chosen_name, "category": chosen_cat})
 					
 					_setup_workshop_ui()
 					
