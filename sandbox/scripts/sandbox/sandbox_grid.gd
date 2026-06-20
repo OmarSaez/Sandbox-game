@@ -5158,25 +5158,34 @@ func _on_world_download_requested(world_data: Dictionary):
 		
 		http_request.queue_free()
 	
-	if next_download_is_free:
-		next_download_is_free = false
-		_save_workshop_economy()
-		proceed_download.call()
-	else:
-		var on_cancel = func():
-			print("Descarga cancelada (Anuncio rechazado)")
-			
-		var on_confirm = func():
-			AdMobManager.show_workshop_rewarded()
-			var success = await AdMobManager.workshop_rewarded_completed
-			if success:
-				next_download_is_free = true
-				_save_workshop_economy()
-				proceed_download.call()
-			else:
-				_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_ad_failed"))
+	var start_download_process = func():
+		if next_download_is_free:
+			next_download_is_free = false
+			_save_workshop_economy()
+			proceed_download.call()
+		else:
+			var on_cancel = func():
+				print("Descarga cancelada (Anuncio rechazado)")
 				
-		_show_download_ad_popup(on_confirm, on_cancel)
+			var on_confirm = func():
+				AdMobManager.show_workshop_rewarded()
+				var success = await AdMobManager.workshop_rewarded_completed
+				if success:
+					next_download_is_free = true
+					_save_workshop_economy()
+					proceed_download.call()
+				else:
+					_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_ad_failed"))
+					
+			_show_download_ad_popup(on_confirm, on_cancel)
+
+	var save_path_check = "user://download_world_" + world_id + ".dat"
+	if FileAccess.file_exists(save_path_check):
+		_show_confirm_dialog(tr("confirm_update_title"), tr("confirm_update_msg"), func():
+			start_download_process.call()
+		)
+	else:
+		start_download_process.call()
 
 func _push_to_action_buffer(action_data: Dictionary):
 	var http_request = HTTPRequest.new()
