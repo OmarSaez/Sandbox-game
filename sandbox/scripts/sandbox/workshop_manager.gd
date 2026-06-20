@@ -300,13 +300,13 @@ func update_world(world_id: String, old_data: Dictionary, new_title: String, new
 		# Delete old files safely (ignoring errors if they fail)
 		var old_sbu = old_data.get("sbu_url", "")
 		if "worlds%2F" in old_sbu:
-			var name = "worlds/" + old_sbu.split("worlds%2F")[1].split("?")[0]
-			await Firebase.Storage.ref(name).delete()
+			var file_name = "worlds/" + old_sbu.split("worlds%2F")[1].split("?")[0]
+			await Firebase.Storage.ref(file_name).delete()
 		
 		var old_thumb = old_data.get("thumbnail_url", "")
 		if "thumbnails%2F" in old_thumb:
-			var name = "thumbnails/" + old_thumb.split("thumbnails%2F")[1].split("?")[0]
-			await Firebase.Storage.ref(name).delete()
+			var file_name = "thumbnails/" + old_thumb.split("thumbnails%2F")[1].split("?")[0]
+			await Firebase.Storage.ref(file_name).delete()
 			
 	emit_signal("upload_progress", 0.9)
 	

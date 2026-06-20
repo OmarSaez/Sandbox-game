@@ -236,7 +236,7 @@ func _apply_thumbnail_buffer(body: PackedByteArray) -> bool:
 		return true
 	return false
 
-func _on_thumbnail_downloaded(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray, http_request: HTTPRequest, cache_path: String) -> void:
+func _on_thumbnail_downloaded(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, http_request: HTTPRequest, cache_path: String) -> void:
 	if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
 		if _apply_thumbnail_buffer(body) and cache_path != "":
 			var f = FileAccess.open(cache_path, FileAccess.WRITE)
@@ -252,8 +252,7 @@ func _on_main_action_button_pressed() -> void:
 		download_requested.emit(world_data)
 
 func _on_edit_button_pressed() -> void:
-	print("Editar mundo: ", world_data.get("id", ""))
-	# TODO: Abrir popup para cambiar nombre
+	edit_requested.emit(world_data)
 
 func _on_delete_button_pressed() -> void:
 	delete_requested.emit(world_data)

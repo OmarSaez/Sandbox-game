@@ -3788,6 +3788,20 @@ func _setup_tools_ui():
 		tr("circ"),
 		tr("tria")
 	], func(_l): pass, true)
+	
+	var current_ver = str(ProjectSettings.get_setting("application/config/version", "1.2.0"))
+	var version_lbl = Label.new()
+	version_lbl.text = "Version-game: " + current_ver
+	version_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	version_lbl.add_theme_font_override("font", _get_safe_font())
+	version_lbl.add_theme_font_size_override("font_size", 16 * s)
+	version_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.4))
+	
+	var ver_margin = MarginContainer.new()
+	ver_margin.add_theme_constant_override("margin_top", 15 * s)
+	ver_margin.add_theme_constant_override("margin_bottom", 20 * s)
+	ver_margin.add_child(version_lbl)
+	v_box.add_child(ver_margin)
 
 func _update_game_volume(value: float):
 	# Convert linear 0.0 - 1.5 to dB. Master is bus index 0.
@@ -3987,8 +4001,8 @@ func _setup_workshop_ui():
 	if top_category == "Top Histórico": btn_top.text = "🌟\nTop Histórico"
 	else: btn_top.text = "🌟\n" + tr("tab_top_semanal")
 	
-	var btn_rec = create_tab_btn.call("🕒", "tab_recientes", 1)
-	var btn_desc = create_tab_btn.call("⬇️", "tab_mis_descargas", 3)
+	create_tab_btn.call("🕒", "tab_recientes", 1)
+	create_tab_btn.call("⬇️", "tab_mis_descargas", 3)
 	var btn_mis = create_tab_btn.call("👤", "tab_mis_mundos", 2)
 	
 	# Rotate text on "Mis mundos"
@@ -4884,7 +4898,7 @@ func _show_empty_state_message(grid: GridContainer):
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_override("font", _get_safe_font())
-	lbl.add_theme_font_size_override("font_size", 24 * _get_ui_scale())
+	lbl.add_theme_font_size_override("font_size", int(24 * _get_ui_scale()))
 	lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
 	lbl.custom_minimum_size = Vector2(0, 100 * _get_ui_scale())
 	grid.get_parent().add_child(lbl)
@@ -4907,8 +4921,8 @@ func _on_world_delete_downloaded(world_data: Dictionary):
 			if typeof(item) == TYPE_DICTIONARY and str(item.get("id", "")) != world_id:
 				new_downloads.append(item)
 				
-		var f = FileAccess.open("user://downloads.json", FileAccess.WRITE)
-		if f: f.store_string(JSON.stringify(new_downloads))
+		var fw = FileAccess.open("user://downloads.json", FileAccess.WRITE)
+		if fw: fw.store_string(JSON.stringify(new_downloads))
 		
 		var save_path = "user://download_world_" + world_id + ".dat"
 		if FileAccess.file_exists(save_path):
@@ -5174,8 +5188,8 @@ func _on_world_download_requested(world_data: Dictionary):
 				final_world_data["last_sync_time"] = int(Time.get_unix_time_from_system())
 				new_downloads.insert(0, final_world_data) # Insert at front
 				
-				var df = FileAccess.open("user://downloads.json", FileAccess.WRITE)
-				if df: df.store_string(JSON.stringify(new_downloads))
+				var df_write = FileAccess.open("user://downloads.json", FileAccess.WRITE)
+				if df_write: df_write.store_string(JSON.stringify(new_downloads))
 				
 				if is_instance_valid(loading_overlay): loading_overlay.queue_free()
 				_show_modal_message(tr("tab_mis_descargas"), tr("msg_download_success").format([world_data.get("title", "Mundo")]))
@@ -5639,9 +5653,9 @@ func _show_edit_world_dialog(world_data: Dictionary):
 			if f:
 				var body = f.get_buffer(f.get_length())
 				f.close()
-				var img = Image.new()
-				if img.load_webp_from_buffer(body) == OK or img.load_png_from_buffer(body) == OK or img.load_jpg_from_buffer(body) == OK:
-					thumb_rect.texture = ImageTexture.create_from_image(img)
+				var cache_img = Image.new()
+				if cache_img.load_webp_from_buffer(body) == OK or cache_img.load_png_from_buffer(body) == OK or cache_img.load_jpg_from_buffer(body) == OK:
+					thumb_rect.texture = ImageTexture.create_from_image(cache_img)
 	
 	var create_label = func(text_key: String):
 		var lbl = Label.new()
@@ -5768,9 +5782,9 @@ func _show_edit_world_dialog(world_data: Dictionary):
 				if f:
 					var body = f.get_buffer(f.get_length())
 					f.close()
-					var img = Image.new()
-					if img.load_webp_from_buffer(body) == OK or img.load_png_from_buffer(body) == OK or img.load_jpg_from_buffer(body) == OK:
-						thumb_rect.texture = ImageTexture.create_from_image(img)
+					var cache_img = Image.new()
+					if cache_img.load_webp_from_buffer(body) == OK or cache_img.load_png_from_buffer(body) == OK or cache_img.load_jpg_from_buffer(body) == OK:
+						thumb_rect.texture = ImageTexture.create_from_image(cache_img)
 	
 	btn_clear_slot.pressed.connect(func():
 		_play_action_sound("ui_click")
@@ -8252,8 +8266,8 @@ func _process(delta):
 			else:
 				_cached_top_semanal_doc = null
 			
-		var h = left / 3600
-		var m = (left % 3600) / 60
+		var h = int(left / 3600.0)
+		var m = int((left % 3600) / 60.0)
 		var s = left % 60
 		var text = tr("update_in") + " %02d:%02d:%02d" % [h, m, s]
 		top_countdown_label.text = text
@@ -14636,8 +14650,8 @@ func _load_active_logic_gates(dict: Dictionary):
 		var x_offset_px = int((old_w - grid_width) / 2.0)
 		x_offset_px = int(floor(float(x_offset_px) / 4.0)) * 4
 		
-		var offset_logic_x = int(x_offset_px / 4)
-		var offset_logic_y = int(y_offset_px / 4)
+		var offset_logic_x = int(x_offset_px / 4.0)
+		var offset_logic_y = int(y_offset_px / 4.0)
 		
 		var max_tx = int(grid_width / 4.0)
 		var max_ty = int(grid_height / 4.0)
@@ -19236,7 +19250,7 @@ func _update_pipe_visuals(p, pass_index = -1):
 				var mat = elem.mat
 				if mat > 0:
 					var cx = count % 4
-					var cy = int(count / 4)
+					var cy = int(count / 4.0)
 					if is_horizontal:
 						var tx = gx + cx + offset.x
 						if flow_dir == -1: tx = gx + 3 - cx + offset.x
@@ -19379,7 +19393,7 @@ func _update_pipe_x2_visuals(p, pass_index = -1):
 				var mat = elem.mat
 				if mat > 0:
 					var cx = count % 8
-					var cy = int(count / 8)
+					var cy = int(count / 8.0)
 					
 					var tx = gx
 					var ty = gy
