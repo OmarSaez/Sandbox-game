@@ -9819,9 +9819,9 @@ func _set_cell(x, y, mat_id):
 			if (tags & SandboxMaterial.Tags.MIX_LOW): mix_prob = 0.15
 			elif (tags & SandboxMaterial.Tags.MIX_HIGH): mix_prob = 0.55
 			
-			if _get_lut_rand() < mix_prob:
+			if randf() < mix_prob:
 				variant = 1
-				if (tags & SandboxMaterial.Tags.TEXTURE_TRIPLE) and _get_lut_rand() < 0.35:
+				if (tags & SandboxMaterial.Tags.TEXTURE_TRIPLE) and randf() < 0.35:
 					variant = 2
 		
 		# TRACK METRONOME, BATTERY, AND ELECTRICITY REGISTRIES
