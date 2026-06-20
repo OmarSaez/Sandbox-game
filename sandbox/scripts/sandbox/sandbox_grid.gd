@@ -5203,6 +5203,20 @@ func _show_download_ad_popup(on_confirm: Callable, on_cancel: Callable):
 func _on_world_download_requested(world_data: Dictionary):
 	var world_id = str(world_data.get("id", ""))
 	
+	var is_already_downloaded = false
+	var download_history = []
+	if FileAccess.file_exists("user://download_history.json"):
+		var dh_file = FileAccess.open("user://download_history.json", FileAccess.READ)
+		if dh_file:
+			var txt = dh_file.get_as_text()
+			dh_file.close()
+			if txt != "":
+				var parsed = JSON.parse_string(txt)
+				if typeof(parsed) == TYPE_ARRAY:
+					download_history = parsed
+					if world_id in download_history:
+						is_already_downloaded = true
+	
 	var proceed_download = func():
 		var loading_overlay = _show_processing_overlay(tr("card_play_download"))
 		
@@ -5270,12 +5284,17 @@ func _on_world_download_requested(world_data: Dictionary):
 				call_deferred("_setup_main_ui_containers")
 				
 				# Registrar descarga en el Buffer de RTDB para que el servidor lo procese en lote
-				var action_data = {
-					"world_id": world_id,
-					"type": "download",
-					"timestamp": int(Time.get_unix_time_from_system())
-				}
-				_push_to_action_buffer(action_data)
+				if not is_already_downloaded:
+					download_history.append(world_id)
+					var dh_write = FileAccess.open("user://download_history.json", FileAccess.WRITE)
+					if dh_write: dh_write.store_string(JSON.stringify(download_history))
+					
+					var action_data = {
+						"world_id": world_id,
+						"type": "download",
+						"timestamp": int(Time.get_unix_time_from_system())
+					}
+					_push_to_action_buffer(action_data)
 			else:
 				if is_instance_valid(loading_overlay): loading_overlay.queue_free()
 				_show_modal_message("Error", "No se pudo guardar el archivo localmente.")
@@ -5286,7 +5305,9 @@ func _on_world_download_requested(world_data: Dictionary):
 		http_request.queue_free()
 	
 	var start_download_process = func():
-		if next_download_is_free:
+		if is_already_downloaded:
+			proceed_download.call() # Skip ad for already downloaded worlds
+		elif next_download_is_free:
 			next_download_is_free = false
 			_save_workshop_economy()
 			proceed_download.call()
