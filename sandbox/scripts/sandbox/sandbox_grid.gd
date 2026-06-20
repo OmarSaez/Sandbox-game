@@ -3916,6 +3916,7 @@ func _setup_workshop_ui():
 	
 	search_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
+		AnalyticsManager.log_event("workshop_search", {})
 		_on_search_world_requested(search_input_base.text.to_lower(), search_input_check.text.to_lower())
 	)
 	
@@ -3991,6 +3992,9 @@ func _setup_workshop_ui():
 		
 		btn.pressed.connect(func():
 			_play_action_sound("ui_click")
+			if tab_idx != current_tab:
+				var tab_names = ["top", "recents", "my_worlds", "my_downloads"]
+				AnalyticsManager.log_event("workshop_tab_view", {"tab": tab_names[tab_idx] if tab_idx < 4 else str(tab_idx)})
 			ui_root.set_meta("workshop_current_tab", tab_idx)
 			call_deferred("_setup_main_ui_containers") # Rebuild to show active tab
 		)
@@ -4529,21 +4533,21 @@ func _verify_map_code(base_code: String, check_char: String) -> bool:
 
 func _on_search_world_requested(base_code: String, check_char: String):
 	if base_code.strip_edges() == "" or check_char.strip_edges() == "":
-		_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", "Por favor, introduce el código completo.")
+		_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_enter_full_code"))
 		return
 		
 	if not _verify_map_code(base_code, check_char):
-		_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", "El código ingresado es inválido (error de tipeo).")
+		_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_invalid_map_code"))
 		return
 		
 	var full_code = base_code + "-" + check_char
-	var loading_overlay = _show_processing_overlay(tr("load_worls") if TranslationServer.get_locale() == "es" else "Searching...")
+	var loading_overlay = _show_processing_overlay(tr("msg_searching_map"))
 	
 	var doc = await Firebase.Firestore.collection("community_worlds").get_doc(full_code)
 	if is_instance_valid(loading_overlay): loading_overlay.queue_free()
 	
 	if not doc or (typeof(doc) == TYPE_OBJECT and not "document" in doc) or (typeof(doc) == TYPE_DICTIONARY and doc.has("error")):
-		_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_map_not_found") + full_code)
+		_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_map_not_found") + " " + full_code)
 		return
 		
 	var dict_doc = doc.document
@@ -5306,8 +5310,10 @@ func _on_world_download_requested(world_data: Dictionary):
 	
 	var start_download_process = func():
 		if is_already_downloaded:
+			AnalyticsManager.log_event("workshop_download", {"type": "redownload"})
 			proceed_download.call() # Skip ad for already downloaded worlds
 		elif next_download_is_free:
+			AnalyticsManager.log_event("workshop_download", {"type": "free"})
 			next_download_is_free = false
 			_save_workshop_economy()
 			proceed_download.call()
@@ -5319,6 +5325,7 @@ func _on_world_download_requested(world_data: Dictionary):
 				AdMobManager.show_workshop_rewarded()
 				var success = await AdMobManager.workshop_rewarded_completed
 				if success:
+					AnalyticsManager.log_event("workshop_download", {"type": "ad"})
 					next_download_is_free = true
 					_save_workshop_economy()
 					proceed_download.call()
@@ -5632,6 +5639,7 @@ func _delete_world_from_workshop(world_id: String, world_title: String):
 		loading_overlay.queue_free()
 		
 	_show_centered_bubble("El mundo '" + world_title + "' ha sido eliminado.", Color("#ff7675"))
+	AnalyticsManager.log_event("workshop_delete_world", {})
 	
 	var cache = ui_root.get_meta("workshop_mis_mundos_cache", [])
 	for i in range(cache.size() - 1, -1, -1):
@@ -6261,6 +6269,12 @@ func _show_upload_world_dialog():
 				if success:
 					uploads_today += 1
 					_save_workshop_economy()
+					
+					var type_str = "ad" if (uploads_today - 1) >= 2 else "free"
+					AnalyticsManager.log_event("workshop_upload", {
+						"type": type_str,
+						"slot": uploads_today
+					})
 					
 					var cache = ui_root.get_meta("workshop_mis_mundos_cache", [])
 					cache.insert(0, doc_data) # Add to top
@@ -7085,9 +7099,6 @@ func _update_lab_tutorial_highlight():
 		tw.set_loops() # Infinite loop safely managed by icon lifecycle
 
 func _save_lab_state():
-	# Log to Firebase Analytics
-	AnalyticsManager.log_event("custom_material_saved", {})
-	
 	var clean_data = []
 	for d in lab_custom_data:
 		var c = d.duplicate()
