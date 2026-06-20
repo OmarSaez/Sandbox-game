@@ -1347,9 +1347,9 @@ func _ready():
 	
 	# --- BIOLOGICALS (21-24) ---
 	# 21: Pasto
-	_register_material(21, Color("#4CAF50"), SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL) # Pasto
+	_register_material(21, Color("#4CAF50"), SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#388E3C")) # Pasto
 	# 24: Enredadera
-	_register_material(24, Color("#3E5E2A"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL) # Enredadera / Tallo
+	_register_material(24, Color("#3E5E2A"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.PLANT | SandboxMaterial.Tags.FLAMMABLE | SandboxMaterial.Tags.BURN_COAL | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#2E4A1F")) # Enredadera / Tallo
 	
 	# Setup Fertility
 	material_tags_raw[1] |= SandboxMaterial.Tags.FERTILE
@@ -1372,15 +1372,15 @@ func _ready():
 	
 	# --- CONSTRUCTION ---
 	# 25: Cemento Fresco
-	_register_material(25, Color("#d3c1a9ff"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.MIX_LOW, Color("#757570")) 
+	_register_material(25, Color("#d3c1a9ff"), SandboxMaterial.Tags.LIQUID | SandboxMaterial.Tags.GRAV_NORMAL | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#757570")) 
 	# 26: Cemento Solido
-	_register_material(26, Color("#C2B280"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC) # Cemento Solido
+	_register_material(26, Color("#C2B280"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#A6986A")) # Cemento Solido
 	# 27: Volcan Bloque
-	_register_material(27, Color("#FF5F1F"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # Volcan Bloque
+	_register_material(27, Color("#FF5F1F"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.EXPLOSIVE | SandboxMaterial.Tags.ELECTRIC_ACTIVATED | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#D84315")) # Volcan Bloque
 	# 28: Proyectil Volcan
 	_register_material(28, Color("#FFFF00"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_UP | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # Proyectil Volcan
 	# 29: Base de Volcan
-	_register_material(29, Color("#FF4500"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE) # Base de Volcan Activa
+	_register_material(29, Color("#FF4500"), SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.ANTI_EXPLOSIVE | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_MEDIUM, Color("#D84315")) # Base de Volcan Activa
 
 	# --- NPC SYSTEM: GUERRERO (1000-1009) ---
 	_register_material(1000, Color("1b977cff"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Master
@@ -1451,7 +1451,7 @@ func _ready():
 	_register_material(1035, Color.CYAN, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 
 	# --- CRYOGENIC SYSTEM (70-72) ---
-	_register_material(70, Color("#bbe0fcff"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC)
+	_register_material(70, Color("#bbe0fcff"), SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.TEXTURE_DOUBLE | SandboxMaterial.Tags.MIX_LOW, Color("#99CFFF"))
 	_register_material(71, Color.WHITE, SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.EXPLOSIVE)
 	_register_material(72, Color("#CCFF00"), SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.EXPLOSIVE)
 
