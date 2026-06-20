@@ -64,6 +64,7 @@ var material_tags_raw = PackedInt64Array()
 var selected_material: int = 1
 var current_weather: int = 0 
 var is_paused: bool = false
+var is_unpausing: bool = false
 # UI State
 var is_mouse_over_ui: bool = false
 var brush_radius: int = 2 
@@ -3590,7 +3591,15 @@ func _setup_tools_ui():
 		_play_action_sound("ui_click")
 		
 		if is_paused:
-			# --- RESUMING: AD FIRST -> 3s COUNTDOWN -> RESUME ---
+			if is_unpausing:
+				# --- CANCEL COUNTDOWN ---
+				is_unpausing = false
+				pause_btn.text = tr("play")
+				return
+				
+			# --- START RESUMING WITH COUNTDOWN ---
+			is_unpausing = true
+			
 			var ad_shown = false
 			if Engine.has_singleton("PoingGodotAdMob"):
 				ad_shown = AdMobManager.check_and_show_interstitial("pause")
@@ -3598,18 +3607,23 @@ func _setup_tools_ui():
 			if ad_shown:
 				await AdMobManager.ad_dismissed
 				
-				# COUNTDOWN LOGIC
-				pause_btn.disabled = true # Prevent double triggers
-				for i in range(3, 0, -1):
-					pause_btn.text = tr("resume_in") + str(i) + "..."
-					await get_tree().create_timer(1.0).timeout
-				pause_btn.disabled = false
+			# If unpausing was cancelled while ad was showing, abort
+			if not is_unpausing: return
 			
+			# ALWAYS DO COUNTDOWN
+			for i in range(3, 0, -1):
+				pause_btn.text = tr("resume_in") + str(i) + "..."
+				await get_tree().create_timer(1.0).timeout
+				if not is_unpausing: return # Abort if cancelled during countdown
+				
+			# FINISH RESUMING
+			is_unpausing = false
 			is_paused = false
 			pause_btn.text = tr("pause")
 		else:
-			# --- PAUSING: PAUSE FIRST -> THEN SHOW AD ---
+			# --- PAUSING ---
 			is_paused = true
+			is_unpausing = false
 			pause_btn.text = tr("play")
 			if Engine.has_singleton("PoingGodotAdMob"):
 				AdMobManager.check_and_show_interstitial("pause")
