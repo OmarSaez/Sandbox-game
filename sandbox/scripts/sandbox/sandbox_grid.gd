@@ -16442,14 +16442,21 @@ func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false, octa
 	var p_scale = MUSIC_PITCHES[note_idx % 12]
 	
 	if inst_idx < 4:
-		# Pianos: Apply octave scaling
-		var octave_multiplier = pow(2.0, float(octave - 2))
-		p_scale *= octave_multiplier
-	elif inst_idx == 4: # Drum Set (Now index 4)
+		# Pianos: Multi-sampling (1 file per octave)
+		# Octave 0 = 1ra Octava (oct1)
+		# Octave 1 = 2da Octava (oct2)
+		# Octave 2 = 3ra Octava (oct3)
+		# Octave 3 = 4ta Octava (oct4)
+		# Octave 4 = 5ta Octava (oct5)
+		var actual_octave = octave + 1
+		s_name = s_name + "_oct" + str(actual_octave)
+		# We do NOT multiply p_scale by octave_multiplier because the base file handles the octave base!
+		
+	elif inst_idx == 4: # Drum Set
 		var drum_keys = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom", "drum_tom_low", "drum_tom_high", "drum_ride", "drum_crash", "drum_sticks"]
 		s_name = drum_keys[note_idx % 9]
 		p_scale = 1.0
-	elif inst_idx == 5: # Metronome (Now index 5)
+	elif inst_idx == 5: # Metronome
 		s_name = "ui_pop" # Or any tick sound
 		p_scale = 2.0
 		
