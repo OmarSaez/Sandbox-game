@@ -4099,7 +4099,7 @@ func _setup_workshop_ui():
 	var http = HTTPRequest.new()
 	add_child(http)
 	if "timeout" in http: http.timeout = 3.0
-	http.request_completed.connect(func(result, response_code, headers, body):
+	http.request_completed.connect(func(result, _response_code, _headers, _body):
 		var net = (result == HTTPRequest.RESULT_SUCCESS)
 		if net == false and ui_root.get_meta("has_internet", true) == true:
 			ui_root.set_meta("has_internet", false)
@@ -4537,8 +4537,6 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 		if document != null and doc_name == "ruleta":
 			await get_tree().create_timer(0.4).timeout
 	
-	var preloaded_cards = [] # Deprecated
-	
 	if document == null:
 		var collection = Firebase.Firestore.collection("cache")
 		var fb_doc = await collection.get_doc(doc_name)
@@ -4687,8 +4685,8 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 								ui_root.set_meta("ruleta_spins", 0)
 								if is_instance_valid(btn_tirar): btn_tirar.set_meta("loading", true)
 								_play_action_sound("ui_click")
-								var c_tab = ui_root.get_meta("workshop_current_tab", 0)
-								ui_root.set_meta("workshop_page_" + str(c_tab), page + 1)
+								var cur_t = ui_root.get_meta("workshop_current_tab", 0)
+								ui_root.set_meta("workshop_page_" + str(cur_t), page + 1)
 								call_deferred("_setup_main_ui_containers")
 							else:
 								_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_ad_failed"))
@@ -4817,8 +4815,6 @@ func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer
 	var loading_overlay = null
 	if document == null:
 		loading_overlay = _show_processing_overlay(tr("load_worls"))
-	
-	var preloaded_cards = [] # Deprecated
 	
 	if document == null:
 		var collection = Firebase.Firestore.collection("cache")
@@ -8109,7 +8105,7 @@ func _generate_material_texture(mat_id: int) -> ImageTexture:
 	var tex_w = 128
 	var tex_h = 128
 	
-	var img = Image.create(tex_w, tex_h, false, Image.FORMAT_RGBA8)
+	var gen_img = Image.create(tex_w, tex_h, false, Image.FORMAT_RGBA8)
 	
 	var blocks_x = ceil(tex_w / float(pixel_size))
 	var blocks_y = ceil(tex_h / float(pixel_size))
@@ -8131,9 +8127,9 @@ func _generate_material_texture(mat_id: int) -> ImageTexture:
 				if start_y + dy >= tex_h: break
 				for dx in range(pixel_size):
 					if start_x + dx >= tex_w: break
-					img.set_pixel(start_x + dx, start_y + dy, p_color)
+					gen_img.set_pixel(start_x + dx, start_y + dy, p_color)
 			
-	return ImageTexture.create_from_image(img)
+	return ImageTexture.create_from_image(gen_img)
 
 func _add_button(key: String, mat_id: int, is_upcoming: bool = false):
 	var s = _get_ui_scale()
@@ -10118,7 +10114,7 @@ func _step_simulation():
 			
 	# Pass 0.3: Random Chunk Ticks (Allows nature to grow slowly in sleeping areas)
 	if chunks_active.size() > 0:
-		var pokes = max(1, chunks_active.size() / 10)
+		var pokes = max(1, int(chunks_active.size() / 10.0))
 		for p in range(pokes):
 			var poke_idx = randi() % chunks_active.size()
 			if chunks_active[poke_idx] == 0:
