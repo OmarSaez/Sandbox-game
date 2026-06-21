@@ -654,9 +654,9 @@ const MUSIC_INST_COLORS = [
 	Color("#FFC31F"), # Yellow
 	Color("#E0BB87")  # Neon Cyan
 ]
-const MUSIC_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B", "C", "C#", "D", "E"]
-const MUSIC_NOTES_LATIN = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si", "Do", "Do#", "Re", "Mi"]
-const MUSIC_PITCHES = [1.0, 1.05946, 1.12246, 1.18921, 1.25992, 1.33483, 1.41421, 1.49831, 1.58740, 1.68179, 1.78180, 1.88775, 2.0, 2.11893, 2.24492, 2.51984]
+const MUSIC_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+const MUSIC_NOTES_LATIN = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"]
+const MUSIC_PITCHES = [1.0, 1.05946, 1.12246, 1.18921, 1.25992, 1.33483, 1.41421, 1.49831, 1.58740, 1.68179, 1.78180, 1.88775]
 
 # --- PAINT SYSTEM ---
 var selected_paint_color: Color = Color.WHITE
@@ -16306,6 +16306,14 @@ func _get_music_data(id: int) -> Dictionary:
 		base_id = id % 10000
 	var inst = (base_id - MUSIC_ID_START) / 16
 	var note = (base_id - MUSIC_ID_START) % 16
+	
+	if inst < 4 and note >= 12:
+		octave += 1
+		if note == 12: note = 0
+		elif note == 13: note = 1
+		elif note == 14: note = 2
+		elif note >= 15: note = 4
+		
 	return {"inst": inst, "note": note, "octave": octave}
 
 func _encode_music_id(inst: int, note: int, octave: int) -> int:
@@ -16342,7 +16350,7 @@ func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false, octa
 		last_note_play_time = current_time
 	
 	var s_name = MUSIC_INSTRUMENTS[inst_idx]
-	var p_scale = MUSIC_PITCHES[note_idx % 16]
+	var p_scale = MUSIC_PITCHES[note_idx % 12]
 	
 	if inst_idx < 4:
 		# Pianos: Apply octave scaling
@@ -16886,7 +16894,7 @@ func _setup_music_ui(force_refresh: bool = false):
 		
 	else: # PIANO/DRUMS VIEW
 		var note_grid = GridContainer.new()
-		var n_count = 16 if selected_music_instrument < 4 else 9
+		var n_count = 12 if selected_music_instrument < 4 else 9
 		note_grid.columns = 4 if selected_music_instrument < 4 else 3
 		note_grid.add_theme_constant_override("h_separation", 8 * s)
 		note_grid.add_theme_constant_override("v_separation", 8 * s)
@@ -18240,9 +18248,12 @@ func _save_to_slot(idx, custom_name: String = ""):
 					var b = ((custom_i32 >> 16) & 0xFF) / 255.0
 					color = Color(r, g, b, 1.0)
 				else:
-					if variant == 1: color = mat_colors_2[mid]
-					elif variant == 2: color = mat_colors_3[mid]
-					else: color = mat_colors_1[mid]
+					var render_id = mid
+					if render_id >= 10000:
+						render_id = render_id % 10000
+					if variant == 1: color = mat_colors_2[render_id] if render_id < mat_colors_2.size() else Color.BLACK
+					elif variant == 2: color = mat_colors_3[render_id] if render_id < mat_colors_3.size() else Color.BLACK
+					else: color = mat_colors_1[render_id] if render_id < mat_colors_1.size() else Color.BLACK
 			
 			thumb.set_pixel(tx, ty, color)
 	

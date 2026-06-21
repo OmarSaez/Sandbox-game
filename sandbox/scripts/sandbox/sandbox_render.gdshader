@@ -38,8 +38,15 @@ void fragment() {
         // Get Charge from secondary L8 texture
         float charge = texture(charge_tex, UV).r;
         
+        // Strip octave offset for musical notes to sample correct palette color
+        int render_id = id;
+        if (render_id >= 10000) {
+            int div = render_id / 10000;
+            render_id = render_id - (div * 10000);
+        }
+        
         // Palette Lookup with variant row offset (Now 2048 wide)
-        vec4 color = texture(palette_tex, vec2((float(id) + 0.5) / 2048.0, py));
+        vec4 color = texture(palette_tex, vec2((float(render_id) + 0.5) / 2048.0, py));
         
         // 4. BACKGROUND PAINTING (Apply background_tex if cell is air/ID 0)
         if (id == 0) {
