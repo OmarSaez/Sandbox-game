@@ -593,6 +593,7 @@ var save_slots_data = {} # slot_index -> { "name": string, "date": string, "thum
 
 # --- MUSIC SYSTEM (NEW) ---
 var selected_music_instrument: int = 0
+var selected_music_octave: int = 2
 var selected_music_note: int = 0
 var music_player_pool: Array[AudioStreamPlayer] = []
 var music_next_idx: int = 0
@@ -8093,7 +8094,7 @@ func _refresh_ui_text():
 func _generate_material_texture(mat_id: int) -> ImageTexture:
 	if mat_id < 0 or mat_id >= material_tags_raw.size(): return null
 	
-	var tags = material_tags_raw[mat_id]
+	var tags = material_tags_raw[_get_tags_id(mat_id)]
 	var has_double = (tags & SandboxMaterial.Tags.TEXTURE_DOUBLE) != 0
 	var has_triple = (tags & SandboxMaterial.Tags.TEXTURE_TRIPLE) != 0
 	
@@ -8323,8 +8324,10 @@ func _update_material_highlights():
 		if not overlay or not label: continue
 		
 		var is_selected = (mat_id == selected_material)
-		if mat_id == MUSIC_ID_START and selected_material >= MUSIC_ID_START and selected_material < MUSIC_ID_START + 48:
-			is_selected = true
+		if mat_id == MUSIC_ID_START:
+			var m_data = _get_music_data(selected_material)
+			if m_data.inst >= 0 and m_data.inst < 4 and m_data.note >= 0 and m_data.note < 16:
+				is_selected = true
 			
 		# SMART UPDATE: Only modify if state changed
 		if slot.get_meta("is_highlighted", false) != is_selected:
@@ -8602,7 +8605,7 @@ func _play_sfx_main_thread(player: AudioStreamPlayer, stream: AudioStream, volum
 
 func _manage_brush_sound(id: int):
 	# Si no hay ID, es un NPC o está sobre la UI -> DETENER SONIDO
-	if id == -1 or (material_tags_raw[id] & SandboxMaterial.Tags.NPC):
+	if id == -1 or (material_tags_raw[_get_tags_id(id)] & SandboxMaterial.Tags.NPC):
 		if brush_player.playing: brush_player.stop()
 		return
 	
@@ -8882,8 +8885,8 @@ func _process(delta):
 			
 			var is_mechanism = (is_mechanism_mode_active and (selected_material == 8 or selected_material == 5)) or (selected_material == 93 or selected_material == 95 or selected_material == 96 or selected_material == 97)
 			
-			var is_npc = selected_material >= 0 and selected_material < material_tags_raw.size() and (material_tags_raw[selected_material] & SandboxMaterial.Tags.NPC)
-			var is_music = selected_material >= 0 and selected_material < material_tags_raw.size() and (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC)
+			var is_npc = selected_material >= 0 and _get_tags_id(selected_material) < material_tags_raw.size() and (material_tags_raw[_get_tags_id(selected_material)] & SandboxMaterial.Tags.NPC)
+			var is_music = _is_music_mat(selected_material)
 			var is_logic_gate = is_mechanism_mode_active and (selected_circuit_tool == "not" or selected_circuit_tool == "and" or selected_circuit_tool == "or" or selected_circuit_tool == "nand" or selected_circuit_tool == "nor" or selected_circuit_tool == "xor" or selected_circuit_tool == "xnor")
 			
 			var should_act_like_mechanism = is_mechanism or (force_grid_visible and not is_npc and not is_music and not is_paint_tool_active and selected_material != -3 and not is_logic_gate)
@@ -8991,7 +8994,7 @@ func _process(delta):
 						_play_action_sound("ui_click")
 						_check_logic_gate_tutorial(gate_pos)
 				_manage_brush_sound(-1)
-			elif selected_material >= 0 and selected_material < material_tags_raw.size() and (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC):
+			elif _is_music_mat(selected_material):
 				if not mouse_was_pressed:
 					# RHYTHM SNAP: Align to 4x4 grid for perfect tempo (32 real pixels at scale 8)
 					var snap = 4
@@ -9000,13 +9003,12 @@ func _process(delta):
 					_place_music_block(gx, gy, selected_material)
 					
 					# 4. MUSIC: Trigger note on pulse/heat
-					if (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC):
+					if _is_music_mat(selected_material):
 						if selected_material == 600:
 							_play_music_note(5, 0, true)
 						else:
-							var inst = int((selected_material - MUSIC_ID_START) / 16.0)
-							var note = (selected_material - MUSIC_ID_START) % 16
-							_play_music_note(inst, note, true)
+							var m_data = _get_music_data(selected_material)
+							_play_music_note(m_data.inst, m_data.note, true, m_data.octave)
 					
 				_manage_brush_sound(-1)
 			elif selected_material == -3:
@@ -9199,8 +9201,8 @@ func undo_history():
 		# Zero out stale conductor charges but preserve explosive timers
 		for ci in range(charge_array.size()):
 			var cid = cells[ci] & 0xFFFF
-			if cid > 0 and cid < material_tags_raw.size():
-				if not (material_tags_raw[cid] & SandboxMaterial.Tags.EXPLOSIVE):
+			if cid > 0 and _get_tags_id(cid) < material_tags_raw.size():
+				if not (material_tags_raw[_get_tags_id(cid)] & SandboxMaterial.Tags.EXPLOSIVE):
 					charge_array[ci] = 0
 			elif cid == 0:
 				charge_array[ci] = 0
@@ -9230,8 +9232,8 @@ func redo_history():
 		# Zero out stale conductor charges but preserve explosive timers
 		for ci in range(charge_array.size()):
 			var cid = cells[ci] & 0xFFFF
-			if cid > 0 and cid < material_tags_raw.size():
-				if not (material_tags_raw[cid] & SandboxMaterial.Tags.EXPLOSIVE):
+			if cid > 0 and _get_tags_id(cid) < material_tags_raw.size():
+				if not (material_tags_raw[_get_tags_id(cid)] & SandboxMaterial.Tags.EXPLOSIVE):
 					charge_array[ci] = 0
 			elif cid == 0:
 				charge_array[ci] = 0
@@ -9345,7 +9347,7 @@ func _process_tsunami(delta):
 	if ref_x >= 0 and ref_x < grid_width:
 		for gy in range(5, grid_height - 5):
 			var idx = gy * grid_width + ref_x
-			if (cells[idx] & 0xFF) > 0 and (material_tags_raw[cells[idx] & 0xFF] & SandboxMaterial.Tags.LIQUID):
+			if (cells[idx] & 0xFF) > 0 and (material_tags_raw[_get_tags_id(cells[idx] & 0xFF)] & SandboxMaterial.Tags.LIQUID):
 				break
 	
 	for ox in range(-radius, radius):
@@ -9365,8 +9367,8 @@ func _process_tsunami(delta):
 			if idx >= 0 and idx < cells.size():
 				var raw_id = cells[idx]
 				var pure_id = raw_id & 0xFFFF
-				if pure_id > 0 and pure_id < material_tags_raw.size():
-					if (material_tags_raw[pure_id] & SandboxMaterial.Tags.LIQUID):
+				if pure_id > 0 and _get_tags_id(pure_id) < material_tags_raw.size():
+					if (material_tags_raw[_get_tags_id(pure_id)] & SandboxMaterial.Tags.LIQUID):
 						y_top = gy
 						mid = raw_id # Keep variant info
 						break
@@ -9384,8 +9386,8 @@ func _process_tsunami(delta):
 				if _get_cell(rx, target_y) == 0:
 					_set_cell(rx, target_y, mid)
 					var check_id = _get_cell(rx, source_y) & 0xFFFF
-					if check_id > 0 and check_id < material_tags_raw.size():
-						if (material_tags_raw[check_id] & SandboxMaterial.Tags.LIQUID):
+					if check_id > 0 and _get_tags_id(check_id) < material_tags_raw.size():
+						if (material_tags_raw[_get_tags_id(check_id)] & SandboxMaterial.Tags.LIQUID):
 							_set_cell(rx, source_y, 0)
 
 func _start_bombardero():
@@ -9629,7 +9631,7 @@ func _process_tornado(delta):
 		var tid = cells[ry * grid_width + rx] & 0xFFFF # Inline fast lookup
 		if tid == 0 or tid == 17: continue 
 		
-		var tags = material_tags_raw[tid]
+		var tags = material_tags_raw[_get_tags_id(tid)]
 		
 		# Absorption tracking (Prioritize Electricity/Acid tags if material has multiple)
 		if (tags & SandboxMaterial.Tags.ELECTRICITY): tornado_absorb_elec += 1
@@ -9736,7 +9738,7 @@ func _process_earthquake(delta):
 		
 		# ANTI-TEARING: Don't move NPC pixels (they are managed as a single entity)
 		var tid = cells[idx] & 0xFFFF
-		if material_tags_raw[tid] & SandboxMaterial.Tags.NPC: continue
+		if material_tags_raw[_get_tags_id(tid)] & SandboxMaterial.Tags.NPC: continue
 		
 		# Random direction and distance using LUT for "disparar" effect
 		var dx = int(_get_lut_rand_range(-max_offset, max_offset))
@@ -9748,7 +9750,7 @@ func _process_earthquake(delta):
 		if nx >= 0 and nx < grid_width and ny >= 0 and ny < grid_height:
 			# ANTI-TEARING: Don't overwrite NPC pixels at destination either
 			var n_tid = cells[ny * grid_width + nx] & 0xFFFF
-			if not (material_tags_raw[n_tid] & SandboxMaterial.Tags.NPC):
+			if not (material_tags_raw[_get_tags_id(n_tid)] & SandboxMaterial.Tags.NPC):
 				# Massive mixing/dispersal: Swap regardless of what's there (liquefaction)
 				_swap_cells(rx, ry, nx, ny)
 				_activate_chunk(nx, ny) # Ensure it keeps moving/falling
@@ -9934,7 +9936,7 @@ func _register_material(id: int, color1: Color, tags: int, color2 = null, color3
 	mat_colors_1[id] = color1
 	mat_colors_2[id] = color2 if color2 != null else color1
 	mat_colors_3[id] = color3 if color3 != null else (color2 if color2 != null else color1)
-	material_tags_raw[id] = tags
+	material_tags_raw[_get_tags_id(id)] = tags
 
 func _set_cell(x, y, mat_id):
 	var ix = int(x)
@@ -9946,8 +9948,8 @@ func _set_cell(x, y, mat_id):
 		var current_tid = cells[idx] & 0xFFFF
 		if (current_tid == 90 or current_tid == 91) and mat_id != 0:
 			var look_pure = mat_id & 0xFFFF
-			if look_pure >= 0 and look_pure < material_tags_raw.size():
-				if (material_tags_raw[look_pure] & SandboxMaterial.Tags.NPC):
+			if look_pure >= 0 and _get_tags_id(look_pure) < material_tags_raw.size():
+				if (material_tags_raw[_get_tags_id(look_pure)] & SandboxMaterial.Tags.NPC):
 					return
 		
 		# CRITICAL PERFORMANCE OPTIMIZATION: Early Exit for Air
@@ -9996,13 +9998,14 @@ func _set_cell(x, y, mat_id):
 
 		# ENSURE mat_id is just the base material ID for lookup (Strip variants/data)
 		var pure_id = mat_id & 0xFFFF
-		if pure_id < 0 or pure_id >= material_tags_raw.size(): return
+		var tags_id = _get_tags_id(mat_id)
+
+		if tags_id < 0 or tags_id >= material_tags_raw.size(): return
 		
 		# PERFORMANCE: Early exit if the material is already exactly the same
-		# This prevents redundant work and mass-activation of chunks when painting over the same area
 		if (cells[idx] & 0xFFFF) == pure_id: return
 		
-		var tags = material_tags_raw[pure_id]
+		var tags = material_tags_raw[_get_tags_id(tags_id)]
 		
 		# Scalable Texturing Variant calculation
 		var variant = (mat_id >> 24) & 0xFF
@@ -10293,7 +10296,7 @@ func _process_electricity():
 	for idx in active_charge_indices:
 		prev_charges[idx] = true
 		var mid = cells[idx] & 0xFFFF
-		if material_tags_raw[mid] & SandboxMaterial.Tags.MUSIC:
+		if _is_music_mat(mid):
 			prev_active_music_charges[idx] = true
 		
 	# 2. Collect constant sources this frame
@@ -10401,7 +10404,12 @@ func _process_electricity():
 	for note_data in out_music_notes:
 		var inst = int(note_data.x)
 		var note = int(note_data.y)
-		_play_music_note(inst, note)
+		if inst == 5:
+			_play_music_note(5, 0, false, 2)
+		else:
+			var raw_mid = (inst * 16) + note + 500
+			var m_data = _get_music_data(raw_mid)
+			_play_music_note(m_data.inst, m_data.note, false, m_data.octave)
 		
 	charge_dirty = true
 	
@@ -10463,9 +10471,9 @@ func _swap_cells(x1, y1, x2, y2):
 	var m2 = cells[idx2]
 	
 	cells[idx1] = m2
-	tags_array[idx1] = material_tags_raw[m2 & 0xFFFF]
+	tags_array[idx1] = material_tags_raw[_get_tags_id(m2)]
 	cells[idx2] = m1
-	tags_array[idx2] = material_tags_raw[m1 & 0xFFFF]
+	tags_array[idx2] = material_tags_raw[_get_tags_id(m1)]
 	
 	# LAZY UPDATE: Only swap extra arrays if they contain data (Huge memory bandwidth save)
 	var c1 = charge_array[idx1]
@@ -10528,7 +10536,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				var nid = cells[ny * grid_width + nx] & 0xFFFF # Faster than _get_cell
 				# RANGE FIX: Allow infecting up to ID 1000 to include Lab Experiments (900+)
 				if nid > 0 and nid != pure_id and nid < 1000: 
-					var n_tags = material_tags_raw[nid]
+					var n_tags = material_tags_raw[_get_tags_id(nid)]
 					
 					# FIGHT LOGIC: If the target is ANOTHER type of virus, ignore protections!
 					# This allows different virus types to "fight" for territory.
@@ -10568,7 +10576,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					if vx == x and vy == y: continue
 					var vid = cells[vy * grid_width + vx] & 0xFFFF
 					if vid > 0 and vid != pure_id and vid < 500:
-						var n_tags = material_tags_raw[vid]
+						var n_tags = material_tags_raw[_get_tags_id(vid)]
 						if not (n_tags & SandboxMaterial.Tags.INVINCIBLE):
 							# Use squared distance to avoid sqrt in inner loop
 							var dx_v = x - vx
@@ -10615,7 +10623,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 					if vx == x and vy == y: continue
 					var vid = cells[vy * grid_width + vx] & 0xFFFF
 					if vid > 0 and vid != pure_id and vid < 1000:
-						var n_tags = material_tags_raw[vid]
+						var n_tags = material_tags_raw[_get_tags_id(vid)]
 						if not (n_tags & SandboxMaterial.Tags.GRAV_STATIC):
 							var dx = sign(vx - x) * _get_lut_rand_range(2, 6)
 							var dy = sign(vy - y) * _get_lut_rand_range(1, 4)
@@ -10662,7 +10670,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 						if nx == x and ny == y: continue
 						var nid = _get_cell(nx, ny)
 						if nid > 0 and nid != 9: # Ignore Electricity ID 9 here
-							if (material_tags_raw[nid] & SandboxMaterial.Tags.INCENDIARY):
+							if (material_tags_raw[_get_tags_id(nid)] & SandboxMaterial.Tags.INCENDIARY):
 								can_fire_prime = true; break
 			
 			var can_acid_prime = _has_tag_neighbor(x, y, SandboxMaterial.Tags.ACID)
@@ -10695,9 +10703,8 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 				if pure_id == 600:
 					_play_music_note(5, 0)
 				else:
-					var inst = (pure_id - MUSIC_ID_START) / 16
-					var note = (pure_id - MUSIC_ID_START) % 16
-					_play_music_note(inst, note)
+					var m_data = _get_music_data(pure_id)
+					_play_music_note(m_data.inst, m_data.note, false, m_data.octave)
 
 	if pure_id == 19: 
 		charge_array[idx] -= 1
@@ -10777,7 +10784,7 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 								for oy in range(-1, 2):
 									for ox in range(-1, 2):
 										var neighbor_id = _get_cell(gx + ox, gy + oy)
-										if (material_tags_raw[neighbor_id] & SandboxMaterial.Tags.FERTILE):
+										if (material_tags_raw[_get_tags_id(neighbor_id)] & SandboxMaterial.Tags.FERTILE):
 											can_grow = true; break
 									if can_grow: break
 								
@@ -11561,7 +11568,7 @@ func _trigger_controlled_npc_action():
 						var tx = controlled_npc.pos.x + dx; var ty = controlled_npc.pos.y + dy
 						if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 							var tid = _get_cell(tx, ty)
-							if tid > 0 and tid != 1 and not (material_tags_raw[tid] & SandboxMaterial.Tags.NPC):
+							if tid > 0 and tid != 1 and not (material_tags_raw[_get_tags_id(tid)] & SandboxMaterial.Tags.NPC):
 								found_x = tx; found_y = ty; found_mat = tid; break
 					if found_x != -1: break
 					
@@ -12037,7 +12044,7 @@ func _draw_npc_pixels(npc, override_mat = -1):
 			for cx in range(min_x, max_x + 1):
 				if cx >= 0 and cx < grid_width and cy >= 0 and cy < dynamic_grid_height:
 					var tid = cells[cy * grid_width + cx] & 0xFFFF
-					if tid > 0 and (material_tags_raw[tid] & SandboxMaterial.Tags.NPC): 
+					if tid > 0 and (material_tags_raw[_get_tags_id(tid)] & SandboxMaterial.Tags.NPC): 
 						_set_cell(cx, cy, 0)
 		return
 		
@@ -12787,7 +12794,7 @@ func _process_npcs(delta):
 										var tx = np.x + dx; var ty = np.y + dy
 										if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 											var tid = _get_cell(tx, ty)
-											if tid > 0 and tid != 1 and not (material_tags_raw[tid] & SandboxMaterial.Tags.NPC):
+											if tid > 0 and tid != 1 and not (material_tags_raw[_get_tags_id(tid)] & SandboxMaterial.Tags.NPC):
 												found_x = tx; found_y = ty; found_mat = tid; break
 									if found_x != -1: break
 									
@@ -13016,7 +13023,7 @@ func _process_npcs(delta):
 				for ox in range(w):
 					var tid = _get_cell(np.x + ox, feet_y)
 					if tid != 0 and tid != 15 and tid != 3 and tid != 17:
-						if !(material_tags_raw[tid] & (SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.PLANT)):
+						if !(material_tags_raw[_get_tags_id(tid)] & (SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.PLANT)):
 							can_fall = false; break
 			
 			if can_fall:
@@ -13054,7 +13061,7 @@ func _process_npcs(delta):
 						var is_danger = false
 						for oy in range(0, 6):
 							var tid = _get_cell(detect_x, np.y + oy)
-							if tid > 0 and (material_tags_raw[tid] & (SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.EXPLOSIVE)): 
+							if tid > 0 and (material_tags_raw[_get_tags_id(tid)] & (SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.ACID | SandboxMaterial.Tags.EXPLOSIVE)): 
 								is_danger = true; break
 						if is_danger:
 							if danger_dist == -1: danger_dist = dx
@@ -13482,7 +13489,7 @@ func _process_mage_rescue(npc):
 			for ty in range(start_y, res_target.pos.y + th):
 				var tid = cells[ty * grid_width + tx] & 0xFFFF
 				if tid > 0:
-					var tags = material_tags_raw[tid]
+					var tags = material_tags_raw[_get_tags_id(tid)]
 					if (tags & SandboxMaterial.Tags.SOLID) != 0 or (tags & SandboxMaterial.Tags.POWDER) != 0 or (tags & SandboxMaterial.Tags.LIQUID) != 0:
 						# Launch projectile upward and push to the sides via the isolated helper function
 						var vx = 0.0
@@ -13771,7 +13778,7 @@ func _process_projectiles(delta):
 				var hit_mat = _get_cell(gx, gy)
 				var hit_flammable = false
 				if hit_mat > 0:
-					var n_tags = material_tags_raw[hit_mat]
+					var n_tags = material_tags_raw[_get_tags_id(hit_mat)]
 					if (n_tags & SandboxMaterial.Tags.FLAMMABLE) != 0:
 						hit_flammable = true
 				
@@ -13817,8 +13824,8 @@ func _process_projectiles(delta):
 func _trigger_rock_impact(gx, gy, p):
 	var mat = p.get("block_material", 2)
 	var is_liquid = false
-	if mat < material_tags_raw.size():
-		is_liquid = (material_tags_raw[mat] & SandboxMaterial.Tags.LIQUID) != 0
+	if _get_tags_id(mat) < material_tags_raw.size():
+		is_liquid = (material_tags_raw[_get_tags_id(mat)] & SandboxMaterial.Tags.LIQUID) != 0
 		
 	if is_liquid:
 		# Splash liquid
@@ -13960,7 +13967,7 @@ func _check_npc_environment_damage(npc) -> bool:
 		if pt.x < 0 or pt.x >= grid_width or pt.y < 0 or pt.y >= dynamic_grid_height: continue
 		var cell_idx = pt.y * grid_width + pt.x
 		var tid = cells[cell_idx] & 0xFFFF
-		var t_tags = material_tags_raw[tid]
+		var t_tags = material_tags_raw[_get_tags_id(tid)]
 		var dmg_mult = 0.5 if npc == controlled_npc else 1.0
 		if (t_tags & SandboxMaterial.Tags.ACID):
 			npc.hp -= 3.5 * dmg_mult; npc.hit_flash = 5; npc.hit_type = "acid"; took_damage = true
@@ -14016,7 +14023,7 @@ func _check_npc_environment_damage(npc) -> bool:
 					air_found = true; break
 				if nid == 92 and check_powered_pb.call(row_offset, tx):
 					air_found = true; break
-				var tags = material_tags_raw[nid]
+				var tags = material_tags_raw[_get_tags_id(nid)]
 				if (tags & SandboxMaterial.Tags.SOLID) == 0 and (tags & SandboxMaterial.Tags.POWDER) == 0 and (tags & SandboxMaterial.Tags.LIQUID) == 0:
 					air_found = true; break
 					
@@ -14035,7 +14042,7 @@ func _check_npc_environment_damage(npc) -> bool:
 						air_found = true; break
 					if nid == 92 and check_powered_pb.call(row_offset, tx_l):
 						air_found = true; break
-					var tags = material_tags_raw[nid]
+					var tags = material_tags_raw[_get_tags_id(nid)]
 					if (tags & SandboxMaterial.Tags.SOLID) == 0 and (tags & SandboxMaterial.Tags.POWDER) == 0 and (tags & SandboxMaterial.Tags.LIQUID) == 0:
 						air_found = true; break
 				# Right
@@ -14046,7 +14053,7 @@ func _check_npc_environment_damage(npc) -> bool:
 						air_found = true; break
 					if nid == 92 and check_powered_pb.call(row_offset, tx_r):
 						air_found = true; break
-					var tags = material_tags_raw[nid]
+					var tags = material_tags_raw[_get_tags_id(nid)]
 					if (tags & SandboxMaterial.Tags.SOLID) == 0 and (tags & SandboxMaterial.Tags.POWDER) == 0 and (tags & SandboxMaterial.Tags.LIQUID) == 0:
 						air_found = true; break
 	if !air_found: 
@@ -14104,7 +14111,7 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 					if is_pb_powered:
 						continue
 				# Si es sólido, pero es una PLANTA, permitimos el paso (los soldados las pisan/atraviesan)
-				var tags = material_tags_raw[tid]
+				var tags = material_tags_raw[_get_tags_id(tid)]
 				if (tags & SandboxMaterial.Tags.PLANT): continue
 				if !(tags & SandboxMaterial.Tags.NPC): return false
 				
@@ -14127,7 +14134,7 @@ func _has_tag_neighbor(x, y, tag):
 		for nx in range(x - 1, x + 2):
 			if nx == x and ny == y: continue
 			var nid = _get_cell(nx, ny)
-			if nid > 0 and (material_tags_raw[nid] & tag): return true
+			if nid > 0 and (material_tags_raw[_get_tags_id(nid)] & tag): return true
 	return false
 
 func _has_tag_within_oval(x, y, tag, rx, ry):
@@ -14135,7 +14142,7 @@ func _has_tag_within_oval(x, y, tag, rx, ry):
 		for ox in range(-rx, rx + 1, 3):
 			if (float(ox*ox)/(rx*rx) + float(oy*oy)/(ry*ry)) <= 1.0:
 				var nid = _get_cell(x + ox, y + oy)
-				if nid > 0 and (material_tags_raw[nid] & tag): return true
+				if nid > 0 and (material_tags_raw[_get_tags_id(nid)] & tag): return true
 	return false
 
 func _precalculate_optimization_tables():
@@ -14207,7 +14214,7 @@ func _consume_neighbor_tag(x, y, tag):
 		for nx in range(x - 1, x + 2):
 			if nx == x and ny == y: continue
 			var nid = _get_cell(nx, ny)
-			if nid > 0 and (material_tags_raw[nid] & tag): _set_cell(nx, ny, 0); return true
+			if nid > 0 and (material_tags_raw[_get_tags_id(nid)] & tag): _set_cell(nx, ny, 0); return true
 	return false
 
 func _count_neighbor_id(x, y, id):
@@ -14238,7 +14245,7 @@ func _prime_explosive(x, y, id, manual_flags = -1):
 	if id == 27 or id == 28 or id == 29: return
 	
 	# Determine explosion type
-	var m_tags = material_tags_raw[id]
+	var m_tags = material_tags_raw[_get_tags_id(id)]
 	if (m_tags & SandboxMaterial.Tags.INVINCIBLE): return
 	var ignition_flags = 0
 	
@@ -14276,7 +14283,7 @@ func _trigger_electric_devices(x, y):
 		for nx in range(x - 1, x + 2):
 			if nx == x and ny == y: continue
 			var n_id = _get_cell(nx, ny)
-			if n_id > 0 and (material_tags_raw[n_id] & SandboxMaterial.Tags.ELECTRIC_ACTIVATED): _prime_explosive(nx, ny, n_id)
+			if n_id > 0 and (material_tags_raw[_get_tags_id(n_id)] & SandboxMaterial.Tags.ELECTRIC_ACTIVATED): _prime_explosive(nx, ny, n_id)
 
 func _check_neighbors_for_reaction(x, y, is_heat):
 	var my_id = _get_cell(x, y)
@@ -14285,7 +14292,7 @@ func _check_neighbors_for_reaction(x, y, is_heat):
 			if nx == x and ny == y: continue
 			var n_id = _get_cell(nx, ny)
 			if n_id > 0:
-				var n_idx = ny * grid_width + nx; var n_tags = material_tags_raw[n_id]
+				var n_idx = ny * grid_width + nx; var n_tags = material_tags_raw[_get_tags_id(n_id)]
 				if (my_id == 11 and n_id == 2) or (my_id == 2 and n_id == 11): _set_cell(x, y, 12); _set_cell(nx, ny, 12); return
 				var my_tags = tags_array[y * grid_width + x]
 				if (my_tags & SandboxMaterial.Tags.ACID):
@@ -14391,7 +14398,7 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 						var raw_id = cells[ty * grid_width + tx]
 						var tid = raw_id & 0xFFFF
 						if tid > 0:
-							var t_tags = 0 if tid >= material_tags_raw.size() else material_tags_raw[tid]
+							var t_tags = 0 if tid >= material_tags_raw.size() else material_tags_raw[_get_tags_id(tid)]
 							if t_tags & SandboxMaterial.Tags.INVINCIBLE: continue
 							
 							if t_tags & SandboxMaterial.Tags.EXPLOSIVE:
@@ -16291,7 +16298,36 @@ func _update_phase_blocks():
 		phase_block_registry.erase(idx)
 	is_phase_block_updating = false
 
-func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false):
+func _get_music_data(id: int) -> Dictionary:
+	var base_id = id
+	var octave = 2
+	if id >= 10000:
+		octave = int(id / 10000) - 1
+		base_id = id % 10000
+	var inst = (base_id - MUSIC_ID_START) / 16
+	var note = (base_id - MUSIC_ID_START) % 16
+	return {"inst": inst, "note": note, "octave": octave}
+
+func _encode_music_id(inst: int, note: int, octave: int) -> int:
+	var base_id = MUSIC_ID_START + (inst * 16) + note
+	if octave == 2: return base_id
+	return ((octave + 1) * 10000) + base_id
+
+
+func _get_tags_id(mat_id: int) -> int:
+	var tags_id = mat_id & 0xFFFF
+	if tags_id >= 10000:
+		tags_id = tags_id % 10000
+	return tags_id
+
+func _is_music_mat(mat_id: int) -> bool:
+	if mat_id == 600: return true
+	var tags_id = _get_tags_id(mat_id)
+	if tags_id >= 0 and _get_tags_id(tags_id) < material_tags_raw.size():
+		if (material_tags_raw[_get_tags_id(tags_id)] & SandboxMaterial.Tags.MUSIC): return true
+	return false
+
+func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false, octave: int = 2):
 	sim_mutex.lock()
 	
 	# Achievement Tracking: Composer (Exclude Metronome)
@@ -16308,7 +16344,11 @@ func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false):
 	var s_name = MUSIC_INSTRUMENTS[inst_idx]
 	var p_scale = MUSIC_PITCHES[note_idx % 16]
 	
-	if inst_idx == 4: # Drum Set (Now index 4)
+	if inst_idx < 4:
+		# Pianos: Apply octave scaling
+		var octave_multiplier = pow(2.0, float(octave - 2))
+		p_scale *= octave_multiplier
+	elif inst_idx == 4: # Drum Set (Now index 4)
 		var drum_keys = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom", "drum_tom_low", "drum_tom_high", "drum_ride", "drum_crash", "drum_sticks"]
 		s_name = drum_keys[note_idx % 9]
 		p_scale = 1.0
@@ -16774,8 +16814,8 @@ func _setup_music_ui(force_refresh: bool = false):
 			if idx == 5: # METRONOME (Now at index 5)
 				selected_material = 600
 			else:
-				selected_material = MUSIC_ID_START + (idx * 16) + selected_music_note
-				_play_music_note(selected_music_instrument, selected_music_note, true)
+				selected_material = _encode_music_id(idx, selected_music_note, selected_music_octave)
+				_play_music_note(selected_music_instrument, selected_music_note, true, selected_music_octave)
 			_setup_music_ui(true)
 		)
 		inst_grid.add_child(btn)
@@ -16910,13 +16950,44 @@ func _setup_music_ui(force_refresh: bool = false):
 			var nid = i
 			btn.pressed.connect(func():
 				selected_music_note = nid
-				selected_material = MUSIC_ID_START + (selected_music_instrument * 16) + nid
-				_play_music_note(selected_music_instrument, nid, true)
+				selected_material = _encode_music_id(selected_music_instrument, nid, selected_music_octave)
+				_play_music_note(selected_music_instrument, nid, true, selected_music_octave)
 				_setup_music_ui(true)
 			)
 			note_grid.add_child(btn)
+			
+	if selected_music_instrument < 4:
+		var oct_hbox = HBoxContainer.new()
+		oct_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		oct_hbox.add_theme_constant_override("separation", 15 * s)
+		
+		var m_margin = MarginContainer.new()
+		m_margin.add_theme_constant_override("margin_top", 15 * s)
+		m_margin.add_child(oct_hbox)
+		main_vbox.add_child(m_margin)
+		
+		var oct_lbl = Label.new()
+		oct_lbl.text = "Selección:"
+		oct_lbl.add_theme_font_override("font", _get_safe_font())
+		oct_lbl.add_theme_font_size_override("font_size", 22 * s)
+		oct_hbox.add_child(oct_lbl)
+		
+		var oct_opt = OptionButton.new()
+		oct_opt.add_theme_font_override("font", _get_safe_font())
+		oct_opt.add_theme_font_size_override("font_size", 22 * s)
+		var oct_names = ["Primera", "Segunda", "Tercera", "Cuarta", "Quinta"]
+		for i in range(oct_names.size()):
+			oct_opt.add_item(oct_names[i] + " octava", i)
+		
+		oct_opt.selected = selected_music_octave
+		
+		oct_opt.item_selected.connect(func(idx):
+			selected_music_octave = idx
+			if has_method("_play_action_sound"): _play_action_sound("ui_click")
+			_setup_music_ui(true)
+		)
+		oct_hbox.add_child(oct_opt)
 	
-	# (El botón de empezar ha sido eliminado para selección inmediata)
 	pass
 
 func _close_music_menu():
@@ -16970,9 +17041,7 @@ func _is_music_active() -> bool:
 		return true
 	if is_mechanism_mode_active:
 		return true
-	if selected_material >= 0 and selected_material < material_tags_raw.size():
-		return (material_tags_raw[selected_material] & SandboxMaterial.Tags.MUSIC) != 0
-	return false
+	return _is_music_mat(selected_material)
 
 # --- SAVE / LOAD SYSTEM ---
 
@@ -19531,7 +19600,7 @@ func _find_cannon_inlet_material(c) -> int:
 		if pt.x >= 0 and pt.x < grid_width and pt.y >= 0 and pt.y < dynamic_grid_height:
 			var mat = _get_cell(pt.x, pt.y)
 			if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
-				var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+				var tags = material_tags_raw[_get_tags_id(mat)] if _get_tags_id(mat) < material_tags_raw.size() else 0
 				if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 					# Absorb the cell
 					_set_cell(pt.x, pt.y, 0)
@@ -20119,7 +20188,7 @@ func _find_pipe_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var mat = _get_cell(tx, ty)
 					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
-						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						var tags = material_tags_raw[_get_tags_id(mat)] if _get_tags_id(mat) < material_tags_raw.size() else 0
 						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 							return Vector2i(tx, ty)
 	elif side == "right":
@@ -20130,7 +20199,7 @@ func _find_pipe_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var mat = _get_cell(tx, ty)
 					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
-						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						var tags = material_tags_raw[_get_tags_id(mat)] if _get_tags_id(mat) < material_tags_raw.size() else 0
 						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 							return Vector2i(tx, ty)
 	elif side == "top" or side == "horizontal":
@@ -20141,7 +20210,7 @@ func _find_pipe_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var mat = _get_cell(tx, ty)
 					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
-						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						var tags = material_tags_raw[_get_tags_id(mat)] if _get_tags_id(mat) < material_tags_raw.size() else 0
 						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 							return Vector2i(tx, ty)
 	elif side == "bottom":
@@ -20152,7 +20221,7 @@ func _find_pipe_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i:
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var mat = _get_cell(tx, ty)
 					if mat > 0 and not _is_cannon_base_material(mat) and mat != 96:
-						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						var tags = material_tags_raw[_get_tags_id(mat)] if _get_tags_id(mat) < material_tags_raw.size() else 0
 						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 							return Vector2i(tx, ty)
 	return Vector2i(-1, -1)
@@ -20211,7 +20280,7 @@ func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var mat = _get_cell(tx, ty)
 					if mat > 0 and not _is_cannon_base_material(mat) and mat != 97:
-						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						var tags = material_tags_raw[_get_tags_id(mat)] if _get_tags_id(mat) < material_tags_raw.size() else 0
 						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 							return Vector2i(tx, ty)
 	elif side == "right":
@@ -20222,7 +20291,7 @@ func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var mat = _get_cell(tx, ty)
 					if mat > 0 and not _is_cannon_base_material(mat) and mat != 97:
-						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						var tags = material_tags_raw[_get_tags_id(mat)] if _get_tags_id(mat) < material_tags_raw.size() else 0
 						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 							return Vector2i(tx, ty)
 	elif side == "top" or side == "horizontal":
@@ -20233,7 +20302,7 @@ func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var mat = _get_cell(tx, ty)
 					if mat > 0 and not _is_cannon_base_material(mat) and mat != 97:
-						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						var tags = material_tags_raw[_get_tags_id(mat)] if _get_tags_id(mat) < material_tags_raw.size() else 0
 						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 							return Vector2i(tx, ty)
 	elif side == "bottom":
@@ -20244,7 +20313,7 @@ func _find_pipe_x2_absorbable_cell_at_endpoint(p, endpoint_idx: int) -> Vector2i
 				if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
 					var mat = _get_cell(tx, ty)
 					if mat > 0 and not _is_cannon_base_material(mat) and mat != 97:
-						var tags = material_tags_raw[mat] if mat < material_tags_raw.size() else 0
+						var tags = material_tags_raw[_get_tags_id(mat)] if _get_tags_id(mat) < material_tags_raw.size() else 0
 						if (tags & SandboxMaterial.Tags.GRAV_STATIC) == 0:
 							return Vector2i(tx, ty)
 	return Vector2i(-1, -1)
