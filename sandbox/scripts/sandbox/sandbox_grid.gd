@@ -598,6 +598,8 @@ var show_music_notes_popup: bool = true
 var music_inspect_active: bool = false
 var music_inspect_timer: float = 0.0
 var pending_music_draw_pos: Vector2i = Vector2i(-1, -1)
+var played_music_this_frame = {}
+var music_block_cooldowns = {}
 var selected_music_note: int = 0
 var music_player_pool: Array[AudioStreamPlayer] = []
 var music_next_idx: int = 0
@@ -8663,6 +8665,8 @@ func _play_action_sound(action: String, min_interval: float = 0.08, volume_boost
 		_play_sfx(action_sfx[action], volume_boost, pitch_scale)
 
 func _process(delta):
+	played_music_this_frame.clear()
+	
 	if is_instance_valid(top_countdown_label):
 		var is_historico = ui_root.get_meta("workshop_top_category", "Top Semanal") == "Top Histórico"
 		var left = _get_next_update_unix(is_historico) - int(Time.get_unix_time_from_system())
@@ -10493,12 +10497,16 @@ func _process_electricity():
 	for note_data in out_music_notes:
 		var inst = int(note_data.x)
 		var note = int(note_data.y)
+		var b_idx = -1
+		if typeof(note_data) == TYPE_VECTOR3:
+			b_idx = int(note_data.z)
+			
 		if inst == 5:
-			_play_music_note(5, 0, false, 2)
+			_play_music_note(5, 0, false, 2, b_idx)
 		else:
 			var raw_mid = (inst * 16) + note + 500
 			var m_data = _get_music_data(raw_mid)
-			_play_music_note(m_data.inst, m_data.note, false, m_data.octave)
+			_play_music_note(m_data.inst, m_data.note, false, m_data.octave, b_idx)
 		
 	charge_dirty = true
 	
@@ -16424,7 +16432,18 @@ func _is_music_mat(mat_id: int) -> bool:
 		if (material_tags_raw[_get_tags_id(tags_id)] & SandboxMaterial.Tags.MUSIC): return true
 	return false
 
-func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false, octave: int = 2):
+func _play_music_note(inst_idx, note_idx, ignore_achievement: bool = false, octave: int = 2, b_idx: int = -1):
+	if b_idx != -1:
+		var current_time = Time.get_ticks_msec()
+		if music_block_cooldowns.has(b_idx) and current_time - music_block_cooldowns[b_idx] < 150:
+			return
+		music_block_cooldowns[b_idx] = current_time
+
+	var hash_key = str(inst_idx) + "_" + str(note_idx) + "_" + str(octave)
+	if played_music_this_frame.has(hash_key):
+		return
+	played_music_this_frame[hash_key] = true
+	
 	sim_mutex.lock()
 	
 	# Achievement Tracking: Composer (Exclude Metronome)

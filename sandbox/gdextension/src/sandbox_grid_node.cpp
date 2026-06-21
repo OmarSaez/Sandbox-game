@@ -890,7 +890,10 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 		int idx = active_charge_indices[i];
 		if (idx < 0 || idx >= width * height) continue;
 		if (charge_ptr[idx] == 100) {
-			wave_fronts.push_back(idx);
+			uint64_t t = tags_ptr[idx];
+			if ((t & MUSIC) == 0) {
+				wave_fronts.push_back(idx);
+			}
 		}
 	}
 	
@@ -1016,15 +1019,18 @@ Dictionary SandboxGridNode::process_electricity(Dictionary state, int width, int
 		if (m_tags & MUSIC) {
 			int gy = idx / width;
 			int gx = idx % width;
-			if (gx % 2 == 0 && gy % 2 == 0) {
-				if (elec_lookup[idx] != FLAG_MUSIC) {
-					if (mid == 600) {
-						out_music_notes.append(Vector2(5, 0));
-					} else {
-						int inst = (mid - 500) / 16;
-						int note = (mid - 500) % 16;
-						out_music_notes.append(Vector2(inst, note));
-					}
+			int bx = (gx % 2 == 0) ? (gx - 1) : gx;
+			int by = (gy % 2 == 0) ? (gy - 1) : gy;
+			int b_idx = by * width + bx;
+			
+			if (elec_lookup[b_idx] != FLAG_MUSIC) {
+				elec_lookup[b_idx] = FLAG_MUSIC; // Prevent multiple triggers in same frame
+				if (mid == 600) {
+					out_music_notes.append(Vector3(5, 0, b_idx));
+				} else {
+					int inst = (mid - 500) / 16;
+					int note = (mid - 500) % 16;
+					out_music_notes.append(Vector3(inst, note, b_idx));
 				}
 			}
 		}
