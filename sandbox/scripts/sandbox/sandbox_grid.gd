@@ -16975,26 +16975,46 @@ func _setup_music_ui(force_refresh: bool = false):
 		main_vbox.add_child(m_margin)
 		
 		var oct_lbl = Label.new()
-		oct_lbl.text = "Selección:"
+		oct_lbl.text = tr("octave_selection")
+		oct_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		oct_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		oct_lbl.add_theme_font_override("font", _get_safe_font())
 		oct_lbl.add_theme_font_size_override("font_size", 22 * s)
 		oct_hbox.add_child(oct_lbl)
-		
-		var oct_opt = OptionButton.new()
-		oct_opt.add_theme_font_override("font", _get_safe_font())
-		oct_opt.add_theme_font_size_override("font_size", 22 * s)
-		var oct_names = ["Primera", "Segunda", "Tercera", "Cuarta", "Quinta"]
+		var oct_names = ["1ra", "2da", "3ra", "4ta", "5ta"]
 		for i in range(oct_names.size()):
-			oct_opt.add_item(oct_names[i] + " octava", i)
-		
-		oct_opt.selected = selected_music_octave
-		
-		oct_opt.item_selected.connect(func(idx):
-			selected_music_octave = idx
-			if has_method("_play_action_sound"): _play_action_sound("ui_click")
-			_setup_music_ui(true)
-		)
-		oct_hbox.add_child(oct_opt)
+			var btn = Button.new()
+			btn.text = oct_names[i]
+			btn.add_theme_font_override("font", _get_safe_font())
+			btn.add_theme_font_size_override("font_size", 20 * s)
+			btn.custom_minimum_size = Vector2(65 * s, 50 * s)
+			
+			# Color matching the piano, darkened by octave index (0 = dark, 4 = bright)
+			var base_color = MUSIC_INST_COLORS[selected_music_instrument]
+			var max_o = 4.0
+			var factor = 0.4 + (float(i) / max_o) * 0.6
+			var o_color = base_color.darkened(1.0 - factor)
+			
+			var b_style = StyleBoxFlat.new()
+			b_style.bg_color = o_color
+			b_style.set_corner_radius_all(8 * s)
+			
+			if i == selected_music_octave:
+				b_style.border_width_left = 3; b_style.border_width_top = 3
+				b_style.border_width_right = 3; b_style.border_width_bottom = 3
+				b_style.border_color = Color.WHITE
+			
+			btn.add_theme_stylebox_override("normal", b_style)
+			btn.add_theme_stylebox_override("hover", b_style)
+			btn.add_theme_stylebox_override("pressed", b_style)
+			
+			btn.pressed.connect(func():
+				selected_music_octave = i
+				selected_material = _encode_music_id(selected_music_instrument, selected_music_note, selected_music_octave)
+				if has_method("_play_action_sound"): _play_action_sound("ui_click")
+				_setup_music_ui(true)
+			)
+			oct_hbox.add_child(btn)
 	
 	pass
 
