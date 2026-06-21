@@ -80,9 +80,15 @@ func _apply_scaling() -> void:
 	custom_minimum_size = Vector2(200 * s, 0)
 	
 	if title_label: 
+		var sys_font = SystemFont.new()
+		sys_font.font_names = PackedStringArray(["sans-serif", "arial"])
+		title_label.add_theme_font_override("font", sys_font)
 		title_label.add_theme_font_size_override("font_size", 26 * s)
 		title_label.custom_minimum_size = Vector2(0, 75 * s)
 	if author_label:
+		var sys_font = SystemFont.new()
+		sys_font.font_names = PackedStringArray(["sans-serif", "arial"])
+		author_label.add_theme_font_override("font", sys_font)
 		author_label.add_theme_font_size_override("font_size", 18 * s)
 	if code_label:
 		code_label.add_theme_font_size_override("font_size", 16 * s)

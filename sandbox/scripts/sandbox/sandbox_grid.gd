@@ -594,6 +594,10 @@ var save_slots_data = {} # slot_index -> { "name": string, "date": string, "thum
 # --- MUSIC SYSTEM (NEW) ---
 var selected_music_instrument: int = 0
 var selected_music_octave: int = 2
+var show_music_notes_popup: bool = true
+var music_inspect_active: bool = false
+var music_inspect_timer: float = 0.0
+var pending_music_draw_pos: Vector2i = Vector2i(-1, -1)
 var selected_music_note: int = 0
 var music_player_pool: Array[AudioStreamPlayer] = []
 var music_next_idx: int = 0
@@ -985,6 +989,7 @@ func _save_tool_settings():
 		"game_volume": game_volume,
 		"is_muted": is_muted,
 		"current_language": current_language,
+		"show_music_notes_popup": show_music_notes_popup,
 		"is_logic_gate_tutorial_done": is_logic_gate_tutorial_done,
 		"is_grid_tutorial_done": is_grid_tutorial_done,
 		"is_phase_block_tutorial_done": is_phase_block_tutorial_done,
@@ -1011,6 +1016,7 @@ func _load_tool_settings():
 				if dict.has("current_language"): 
 					current_language = dict["current_language"]
 					TranslationServer.set_locale(current_language)
+				if dict.has("show_music_notes_popup"): show_music_notes_popup = dict["show_music_notes_popup"]
 				if dict.has("is_logic_gate_tutorial_done"):
 					is_logic_gate_tutorial_done = dict["is_logic_gate_tutorial_done"]
 				if dict.has("is_grid_tutorial_done"):
@@ -9000,15 +9006,26 @@ func _process(delta):
 					var snap = 4
 					gx = int(floor(float(gx) / snap) * snap) + 1
 					gy = int(floor(float(gy) / snap) * snap) + 1
-					_place_music_block(gx, gy, selected_material)
 					
-					# 4. MUSIC: Trigger note on pulse/heat
-					if _is_music_mat(selected_material):
-						if selected_material == 600:
-							_play_music_note(5, 0, true)
-						else:
-							var m_data = _get_music_data(selected_material)
-							_play_music_note(m_data.inst, m_data.note, true, m_data.octave)
+					var cell_id = _get_cell(gx, gy)
+					if show_music_notes_popup and _is_music_mat(cell_id):
+						music_inspect_active = true
+						music_inspect_timer = 0.0
+						pending_music_draw_pos = Vector2i(gx, gy)
+					else:
+						music_inspect_active = false
+						_place_music_block(gx, gy, selected_material)
+						
+						# 4. MUSIC: Trigger note on pulse/heat
+						if _is_music_mat(selected_material):
+							if selected_material == 600:
+								_play_music_note(5, 0, true)
+							else:
+								var m_data = _get_music_data(selected_material)
+								_play_music_note(m_data.inst, m_data.note, true, m_data.octave)
+				
+				if music_inspect_active:
+					music_inspect_timer += delta
 					
 				_manage_brush_sound(-1)
 			elif selected_material == -3:
@@ -9027,15 +9044,87 @@ func _process(delta):
 		if mouse_was_pressed:
 			# CAPTURE HISTORY ON RELEASE (POST-ACTION)
 			if not touch_started_on_ui and not is_selecting_npc_to_control:
+				# --- MUSIC SHORT TAP LOGIC ---
+				if music_inspect_active and pending_music_draw_pos != Vector2i(-1, -1):
+					if music_inspect_timer < 0.6:
+						var gx = pending_music_draw_pos.x
+						var gy = pending_music_draw_pos.y
+						_place_music_block(gx, gy, selected_material)
+						if _is_music_mat(selected_material):
+							if selected_material == 600:
+								_play_music_note(5, 0, true)
+							else:
+								var m_data = _get_music_data(selected_material)
+								_play_music_note(m_data.inst, m_data.note, true, m_data.octave)
+				
 				save_history_state()
 			
 		mouse_was_pressed = false
 		touch_started_on_ui = false
+		music_inspect_active = false
+		pending_music_draw_pos = Vector2i(-1, -1)
 		_manage_brush_sound(-1) # Stop sound when finger lifted
 
 	if is_pipe_dirty:
 		_reconstruct_sources_from_cells()
 		is_pipe_dirty = false
+
+	# --- MUSIC NOTES POPUP ---
+	var show_pop = false
+	if show_music_notes_popup and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not is_panning_mode and not touch_started_on_ui:
+		show_pop = true
+		if music_inspect_active and music_inspect_timer < 0.6:
+			show_pop = false
+			
+	if show_pop:
+		var m_pos = get_local_mouse_position()
+		var gx = int(m_pos.x / grid_scale)
+		var gy = int(m_pos.y / grid_scale)
+		if gx >= 0 and gx < grid_width and gy >= 0 and gy < grid_height:
+			var cell_id = _get_cell(gx, gy)
+			if _is_music_mat(cell_id):
+				var m_data = _get_music_data(cell_id)
+				var pop = null
+				if is_instance_valid(ui_root): pop = ui_root.get_node_or_null("MusicNotePopup")
+				if not pop and is_instance_valid(ui_root):
+					pop = Label.new()
+					pop.name = "MusicNotePopup"
+					var style = StyleBoxFlat.new()
+					style.bg_color = Color(0.1, 0.1, 0.15, 0.9)
+					style.set_corner_radius_all(10)
+					style.content_margin_left = 15; style.content_margin_right = 15
+					style.content_margin_top = 8; style.content_margin_bottom = 8
+					style.border_width_left = 2; style.border_width_top = 2
+					style.border_width_right = 2; style.border_width_bottom = 2
+					style.border_color = Color(0.8, 0.2, 0.8, 0.8)
+					pop.add_theme_stylebox_override("normal", style)
+					pop.add_theme_font_override("font", _get_safe_font())
+					pop.add_theme_font_size_override("font_size", int(22 * _get_ui_scale()))
+					pop.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+					ui_root.add_child(pop)
+				
+				if pop:
+					pop.visible = true
+					if cell_id == 600:
+						pop.text = tr("metronome") if TranslationServer.get_locale() == "es" else "Metronome"
+					else:
+						var note_names = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"]
+						var octave_names = ["1ra", "2da", "3ra", "4ta", "5ta"]
+						var n_str = note_names[m_data.note] if m_data.note < note_names.size() else "?"
+						var o_str = octave_names[m_data.octave] if m_data.octave < octave_names.size() else "?"
+						pop.text = o_str + " " + tr("octave") + "\n" + n_str
+					
+					var screen_pos = get_viewport().get_mouse_position()
+					pop.position = screen_pos - Vector2(pop.size.x / 2.0, pop.size.y + 50 * _get_ui_scale())
+			else:
+				if is_instance_valid(ui_root):
+					var pop = ui_root.get_node_or_null("MusicNotePopup")
+					if pop: pop.visible = false
+	else:
+		if is_instance_valid(ui_root):
+			var pop = ui_root.get_node_or_null("MusicNotePopup")
+			if pop: pop.visible = false
+	# --------------------------
 
 	# Simulation
 	if not is_paused:
@@ -17015,6 +17104,46 @@ func _setup_music_ui(force_refresh: bool = false):
 				_setup_music_ui(true)
 			)
 			oct_hbox.add_child(btn)
+		# Toggle "Ver notas al pulsar"
+		var t_margin = MarginContainer.new()
+		t_margin.add_theme_constant_override("margin_top", 10 * s)
+		main_vbox.add_child(t_margin)
+		
+		var toggle_hbox = HBoxContainer.new()
+		toggle_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		t_margin.add_child(toggle_hbox)
+		
+		var t_lbl = Label.new()
+		t_lbl.text = tr("show_music_notes_popup") if TranslationServer.get_locale() != "en" else "Ver notas al pulsar"
+		t_lbl.add_theme_font_override("font", _get_safe_font())
+		t_lbl.add_theme_font_size_override("font_size", 20 * s)
+		toggle_hbox.add_child(t_lbl)
+		
+		var spacer = Control.new()
+		spacer.custom_minimum_size = Vector2(10 * s, 0)
+		toggle_hbox.add_child(spacer)
+		
+		var t_btn = Button.new()
+		var state_str = tr("active") if show_music_notes_popup else tr("inactive")
+		t_btn.text = state_str
+		t_btn.add_theme_font_override("font", _get_safe_font())
+		t_btn.add_theme_font_size_override("font_size", 20 * s)
+		t_btn.custom_minimum_size = Vector2(120 * s, 40 * s)
+		
+		var t_style = StyleBoxFlat.new()
+		t_style.bg_color = Color(0.2, 0.6, 0.3) if show_music_notes_popup else Color(0.6, 0.2, 0.2)
+		t_style.set_corner_radius_all(8 * s)
+		t_btn.add_theme_stylebox_override("normal", t_style)
+		t_btn.add_theme_stylebox_override("hover", t_style)
+		t_btn.add_theme_stylebox_override("pressed", t_style)
+		
+		t_btn.pressed.connect(func():
+			show_music_notes_popup = not show_music_notes_popup
+			if has_method("_play_action_sound"): _play_action_sound("ui_click")
+			_save_tool_settings()
+			_setup_music_ui(true)
+		)
+		toggle_hbox.add_child(t_btn)
 	
 	pass
 
