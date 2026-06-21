@@ -14,53 +14,103 @@ const app = initializeApp({
 const db = getFirestore(app, "default");
 const rtdb = getDatabase(app);
 
-exports.updateweeklytop = onSchedule("0 0,12 * * *", async (event) => {
-  console.log("Iniciando actualización del Top Semanal (vía Admin SDK con Base de Datos corregida)...");
-
+exports.updateWorkshopCaches = onSchedule("0 0,12 * * *", async (event) => {
+  console.log("Iniciando actualización de cachés de Workshop (El Maestro de los Cachés)...");
+  
   try {
     const currentWeekId = Math.floor(Date.now() / 1000 / 604800);
-    console.log(`Buscando mundos para la semana: ${currentWeekId}`);
-
-    // Obtenemos TODOS los mundos y filtramos en JS para eludir problemas de índices
+    const currentMonthId = Math.floor(Date.now() / 1000 / 2592000);
+    
+    // Obtenemos TODOS los mundos una sola vez para armar todas las listas
     const worldsSnapshot = await db.collection("community_worlds").get();
-
-    let allWorlds = [];
-
+    
+    let allValidWorlds = [];
+    
     worldsSnapshot.forEach((doc) => {
       const data = doc.data();
-      const reports = data.reports || 0;
+      const downloads = data.downloads || 0;
+      const likes = data.likes || 0;
       
-      // Solo aceptamos mundos de esta semana y que NO esten baneados
-      if (data.weekly_week_id === currentWeekId && !data.is_banned) {
-        allWorlds.push({
+      if (!data.is_banned) {
+        allValidWorlds.push({
           id: doc.id,
           title: data.title || "Sin título",
           author: data.author || "Anónimo",
-          likes: data.likes || 0,
-          downloads: data.downloads || 0,
+          likes: likes,
+          downloads: downloads,
+          reports: data.reports || 0,
           weekly_score: data.weekly_score || 0,
+          historical_score: data.historical_score || 0,
+          trending_score: data.trending_score || 0,
+          weekly_week_id: data.weekly_week_id || 0,
+          monthly_trend_id: data.monthly_trend_id || 0,
           thumbnail_url: data.thumbnail_url || "",
           category: data.category || 0,
+          timestamp: data.timestamp || 0
         });
       }
     });
 
-    // Ordenamos de mayor a menor puntaje
-    allWorlds.sort((a, b) => b.weekly_score - a.weekly_score);
-    const topWorlds = allWorlds.slice(0, 100);
+    console.log(`Mundos válidos obtenidos: ${allValidWorlds.length}. Generando listas...`);
 
-    console.log(`Se encontraron ${topWorlds.length} mundos en el top para esta semana.`);
+    // 1. Top Histórico
+    let topHistorico = allValidWorlds
+      .filter(w => w.downloads >= 100 && w.likes >= 10)
+      .sort((a, b) => b.historical_score - a.historical_score)
+      .slice(0, 100);
 
-    // Guardar toda la lista en la colección cache
-    await db.collection("cache").doc("top_semanal").set({
-      updated_at: new Date().toISOString(),
-      week_id: currentWeekId,
-      worlds: topWorlds,
-    });
+    // 2. Top Semanal
+    let topSemanal = allValidWorlds
+      .filter(w => w.weekly_week_id === currentWeekId)
+      .sort((a, b) => b.weekly_score - a.weekly_score)
+      .slice(0, 100);
 
-    console.log("¡Caché del Top Semanal actualizado exitosamente!");
+    // 3. Tendencias Mensual
+    let topTendencias = allValidWorlds
+      .filter(w => w.monthly_trend_id === currentMonthId && w.weekly_week_id !== currentWeekId) // Excluir semanales
+      .sort((a, b) => b.trending_score - a.trending_score)
+      .slice(0, 100);
+
+    // 4. Descubrir Hoy (Joyas Ocultas)
+    // Mapas con pocas descargas (< 100) pero con likes
+    let topDescubrir = allValidWorlds
+      .filter(w => w.downloads < 100 && w.likes >= 3)
+      .sort((a, b) => {
+        // Ordenar por ratio (likes / descargas)
+        let ratioA = a.likes / (a.downloads + 1);
+        let ratioB = b.likes / (b.downloads + 1);
+        return ratioB - ratioA;
+      })
+      .slice(0, 100);
+
+    // 5. Ruleta (Aleatorio)
+    // Solo mapas con al menos 2 likes para evitar auto-likes y mapas de prueba vacíos
+    let ruletaPool = allValidWorlds.filter(w => w.likes >= 2);
+    // Fisher-Yates shuffle en el servidor (Cuesta 0.00001 segundos de CPU, es gratis)
+    // NECESITAMOS hacerlo aquí para "elegir" 200 distintos de entre todos los miles de mapas.
+    for (let i = ruletaPool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [ruletaPool[i], ruletaPool[j]] = [ruletaPool[j], ruletaPool[i]];
+    }
+    let topRuleta = ruletaPool.slice(0, 200);
+
+    const nowIso = new Date().toISOString();
+    
+    // Guardar en Firestore usando Batch para ahorrar costos y escribir todo de golpe
+    const batch = db.batch();
+    const cacheRef = db.collection("cache");
+
+    batch.set(cacheRef.doc("top_historico"), { updated_at: nowIso, worlds: topHistorico });
+    batch.set(cacheRef.doc("top_semanal"), { updated_at: nowIso, week_id: currentWeekId, worlds: topSemanal });
+    batch.set(cacheRef.doc("tendencias_mensual"), { updated_at: nowIso, month_id: currentMonthId, worlds: topTendencias });
+    batch.set(cacheRef.doc("descubrir_hoy"), { updated_at: nowIso, worlds: topDescubrir });
+    batch.set(cacheRef.doc("ruleta"), { updated_at: nowIso, worlds: topRuleta });
+
+    await batch.commit();
+
+    console.log("¡Cachés maestros actualizados exitosamente (Histórico, Semanal, Tendencias, Descubrir, Ruleta)!");
   } catch (error) {
-    console.error("Error crítico al actualizar el Top Semanal:", error);
+    console.error("Error crítico al actualizar cachés maestros:", error);
   }
 });
 
@@ -215,55 +265,6 @@ exports.onworldupdated = onDocumentUpdated({
   }
 });
 
-exports.updatehistoricaltop = onSchedule("0 0 * * *", async (event) => {
-  console.log("Iniciando actualización del Top Histórico...");
-
-  try {
-    // OPTIMIZACIÓN DEFINITIVA: Pedimos a Firebase que nos entregue SOLO los 100 mejores mapas
-    // ordenados por su 'historical_score'. Costo fijo: 100 lecturas exactas sin importar el tamaño de la DB.
-    const worldsSnapshot = await db.collection("community_worlds")
-      .orderBy("historical_score", "desc")
-      .limit(100)
-      .get();
-      
-    let topWorlds = [];
-
-    worldsSnapshot.forEach((doc) => {
-      const data = doc.data();
-      const reports = data.reports || 0;
-      const downloads = data.downloads || 0;
-      const likes = data.likes || 0;
-      
-      // Filtro de barrera de entrada: Solo entran si cumplen los requisitos mínimos y no están baneados.
-      if (downloads >= 100 && likes >= 10 && !data.is_banned) {
-        topWorlds.push({
-          id: doc.id,
-          title: data.title || "Sin título",
-          author: data.author || "Anónimo",
-          likes: likes,
-          downloads: downloads,
-          reports: reports,
-          weekly_score: data.weekly_score || 0,
-          historical_score: data.historical_score || 0,
-          thumbnail_url: data.thumbnail_url || "",
-          category: data.category || 0,
-        });
-      }
-    });
-
-    console.log(`Se filtraron ${topWorlds.length} mundos que superan la barrera inicial.`);
-
-    // Guardar en caché
-    await db.collection("cache").doc("top_historico").set({
-      updated_at: new Date().toISOString(),
-      worlds: topWorlds,
-    });
-
-    console.log("¡Caché del Top Histórico actualizado exitosamente!");
-  } catch (error) {
-    console.error("Error crítico al actualizar el Top Histórico:", error);
-  }
-});
 
 exports.processactionbuffer = onSchedule("*/10 * * * *", async (event) => {
   console.log("Iniciando procesamiento del Buffer de RTDB...");
@@ -333,6 +334,16 @@ exports.processactionbuffer = onSchedule("*/10 * * * *", async (event) => {
       if (scoreIncrement !== 0) {
         updates.historical_score = FieldValue.increment(scoreIncrement);
         updates.weekly_score = FieldValue.increment(scoreIncrement);
+        
+        const data = docSnap.data();
+        const currentMonthId = Math.floor(Date.now() / 1000 / 2592000);
+        
+        if (data.monthly_trend_id !== currentMonthId) {
+          updates.monthly_trend_id = currentMonthId;
+          updates.trending_score = scoreIncrement;
+        } else {
+          updates.trending_score = FieldValue.increment(scoreIncrement);
+        }
       }
       
       let isBanned = false;
@@ -365,6 +376,15 @@ exports.processactionbuffer = onSchedule("*/10 * * * *", async (event) => {
             cacheData.worlds[worldIndex].downloads = (cacheData.worlds[worldIndex].downloads || 0) + stats.downloads;
             cacheData.worlds[worldIndex].historical_score = (cacheData.worlds[worldIndex].historical_score || 0) + scoreIncrement;
             cacheData.worlds[worldIndex].weekly_score = (cacheData.worlds[worldIndex].weekly_score || 0) + scoreIncrement;
+            
+            const currentMonthId = Math.floor(Date.now() / 1000 / 2592000);
+            if (cacheData.worlds[worldIndex].monthly_trend_id !== currentMonthId) {
+              cacheData.worlds[worldIndex].monthly_trend_id = currentMonthId;
+              cacheData.worlds[worldIndex].trending_score = scoreIncrement;
+            } else {
+              cacheData.worlds[worldIndex].trending_score = (cacheData.worlds[worldIndex].trending_score || 0) + scoreIncrement;
+            }
+            
             cacheUpdated = true;
           }
         }

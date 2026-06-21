@@ -3970,10 +3970,16 @@ func _setup_workshop_ui():
 		popup.add_theme_font_size_override("font_size", 20 * s)
 		popup.add_item("Top Semanal", 0)
 		popup.add_item("Top Histórico", 1)
+		popup.add_item("Tendencias", 2)
+		popup.add_item("Joyas Ocultas", 3)
+		popup.add_item("Ruleta", 4)
 		
 		popup.id_pressed.connect(func(id):
 			if id == 0: ui_root.set_meta("workshop_top_category", "Top Semanal")
 			elif id == 1: ui_root.set_meta("workshop_top_category", "Top Histórico")
+			elif id == 2: ui_root.set_meta("workshop_top_category", "Tendencias")
+			elif id == 3: ui_root.set_meta("workshop_top_category", "Joyas Ocultas")
+			elif id == 4: ui_root.set_meta("workshop_top_category", "Ruleta")
 			call_deferred("_setup_main_ui_containers")
 		)
 		
@@ -4022,7 +4028,10 @@ func _setup_workshop_ui():
 		return btn
 		
 	var btn_top = create_tab_btn.call("🌟", top_category, 0)
-	if top_category == "Top Histórico": btn_top.text = "🌟\nTop Histórico"
+	if top_category == "Top Histórico": btn_top.text = "🏛️\nTop Histórico"
+	elif top_category == "Tendencias": btn_top.text = "🔥\nTendencias"
+	elif top_category == "Joyas Ocultas": btn_top.text = "💎\nJoyas Ocultas"
+	elif top_category == "Ruleta": btn_top.text = "🎲\nRuleta"
 	else: btn_top.text = "🌟\n" + tr("tab_top_semanal")
 	
 	create_tab_btn.call("🕒", "tab_recientes", 1)
@@ -4415,14 +4424,16 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 	
 	var top_category = ui_root.get_meta("workshop_top_category", "Top Semanal")
 	var doc_name = "top_semanal"
-	if top_category == "Top Histórico":
-		doc_name = "top_historico"
+	if top_category == "Top Histórico": doc_name = "top_historico"
+	elif top_category == "Tendencias": doc_name = "tendencias_mensual"
+	elif top_category == "Joyas Ocultas": doc_name = "descubrir_hoy"
+	elif top_category == "Ruleta": doc_name = "ruleta"
 		
 	var cache_file = "user://" + doc_name + "_cache.json"
 	var document = null
 	
 	if doc_name == "top_semanal" and _cached_top_semanal_doc != null: document = _cached_top_semanal_doc
-	elif doc_name == "top_historico" and ui_root.has_meta("_cached_top_historico_doc"): document = ui_root.get_meta("_cached_top_historico_doc")
+	elif ui_root.has_meta("_cached_" + doc_name + "_doc"): document = ui_root.get_meta("_cached_" + doc_name + "_doc")
 	
 	if document == null:
 		# Check disk cache first
@@ -4439,7 +4450,7 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 						if parsed["fetch_time"] >= last_update:
 							document = parsed["document"]
 							if doc_name == "top_semanal": _cached_top_semanal_doc = document
-							else: ui_root.set_meta("_cached_top_historico_doc", document)
+							else: ui_root.set_meta("_cached_" + doc_name + "_doc", document)
 	
 	var loading_overlay = null
 	if document == null:
@@ -4459,7 +4470,7 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 		if fb_doc:
 			document = fb_doc.document
 			if doc_name == "top_semanal": _cached_top_semanal_doc = document
-			else: ui_root.set_meta("_cached_top_historico_doc", document)
+			else: ui_root.set_meta("_cached_" + doc_name + "_doc", document)
 			
 			# Save to disk cache
 			var cf = FileAccess.open(cache_file, FileAccess.WRITE)
@@ -4494,6 +4505,16 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 					worlds_list = raw_worlds["arrayValue"]["values"]
 			else:
 				worlds_list = raw_worlds.values()
+				
+		if doc_name == "ruleta":
+			var rng = RandomNumberGenerator.new()
+			rng.randomize()
+			var n = worlds_list.size()
+			for i in range(n - 1, 0, -1):
+				var j = rng.randi() % (i + 1)
+				var temp = worlds_list[i]
+				worlds_list[i] = worlds_list[j]
+				worlds_list[j] = temp
 				
 		if is_instance_valid(pagination_hbox):
 			_build_pagination(pagination_hbox, worlds_list.size())
