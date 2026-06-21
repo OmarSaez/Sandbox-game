@@ -5307,8 +5307,9 @@ func _on_world_report_requested(world_data: Dictionary):
 	)
 
 func _on_world_play_requested(world_data: Dictionary):
+	_close_all_popups()
 	var path = "user://download_world_" + str(world_data.get("id", "")) + ".dat"
-	var loading = _show_processing_overlay("Cargando...")
+	var loading = _show_processing_overlay(tr("load_worls") if TranslationServer.get_locale() == "es" else "Loading...")
 	await get_tree().create_timer(0.1).timeout
 	_load_world_from_path(path)
 	if is_instance_valid(loading): loading.queue_free()
@@ -8072,6 +8073,14 @@ func _close_all_popups():
 	if is_instance_valid(paint_panel): paint_panel.visible = false
 	if is_instance_valid(achievement_panel): achievement_panel.visible = false
 	if is_instance_valid(lab_panel): lab_panel.visible = false
+	
+	ui_root.set_meta("workshop_v", false)
+	ui_root.set_meta("tools_v", false)
+	ui_root.set_meta("lab_v", false)
+	ui_root.set_meta("disaster_v", false)
+	ui_root.set_meta("npc_v", false)
+	ui_root.set_meta("paint_v", false)
+	
 	if is_instance_valid(save_panel): save_panel.queue_free()
 	_close_music_menu()
 
