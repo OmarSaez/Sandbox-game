@@ -3968,11 +3968,11 @@ func _setup_workshop_ui():
 		var popup = PopupMenu.new()
 		popup.add_theme_font_override("font", _get_safe_font())
 		popup.add_theme_font_size_override("font_size", 20 * s)
-		popup.add_item("Top Semanal", 0)
-		popup.add_item("Top Histórico", 1)
-		popup.add_item("Tendencias", 2)
-		popup.add_item("Joyas Ocultas", 3)
-		popup.add_item("Ruleta", 4)
+		popup.add_item(tr("tab_top_semanal"), 0)
+		popup.add_item(tr("tab_top_historico"), 1)
+		popup.add_item(tr("tab_tendencias"), 2)
+		popup.add_item(tr("tab_joyas_ocultas"), 3)
+		popup.add_item(tr("tab_ruleta"), 4)
 		
 		popup.id_pressed.connect(func(id):
 			if id == 0: ui_root.set_meta("workshop_top_category", "Top Semanal")
@@ -4027,11 +4027,11 @@ func _setup_workshop_ui():
 		tab_hbox.add_child(btn)
 		return btn
 		
-	var btn_top = create_tab_btn.call("🌟", top_category, 0)
-	if top_category == "Top Histórico": btn_top.text = "🏛️\nTop Histórico"
-	elif top_category == "Tendencias": btn_top.text = "🔥\nTendencias"
-	elif top_category == "Joyas Ocultas": btn_top.text = "💎\nJoyas Ocultas"
-	elif top_category == "Ruleta": btn_top.text = "🎲\nRuleta"
+	var btn_top = create_tab_btn.call("🌟", "tab_top_semanal", 0)
+	if top_category == "Top Histórico": btn_top.text = "🏛️\n" + tr("tab_top_historico")
+	elif top_category == "Tendencias": btn_top.text = "🔥\n" + tr("tab_tendencias")
+	elif top_category == "Joyas Ocultas": btn_top.text = "💎\n" + tr("tab_joyas_ocultas")
+	elif top_category == "Ruleta": btn_top.text = "🎲\n" + tr("tab_ruleta")
 	else: btn_top.text = "🌟\n" + tr("tab_top_semanal")
 	
 	create_tab_btn.call("🕒", "tab_recientes", 1)
@@ -4453,8 +4453,10 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 							else: ui_root.set_meta("_cached_" + doc_name + "_doc", document)
 	
 	var loading_overlay = null
-	if document == null:
+	if document == null or doc_name == "ruleta":
 		loading_overlay = _show_processing_overlay(tr("load_worls"))
+		if document != null and doc_name == "ruleta":
+			await get_tree().create_timer(0.4).timeout
 	
 	# Pre-instanciar tarjetas para aprovechar tiempo de CPU
 	var preloaded_cards = []
@@ -4506,23 +4508,130 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 			else:
 				worlds_list = raw_worlds.values()
 				
-		if doc_name == "ruleta":
-			var rng = RandomNumberGenerator.new()
-			rng.randomize()
-			var n = worlds_list.size()
-			for i in range(n - 1, 0, -1):
-				var j = rng.randi() % (i + 1)
-				var temp = worlds_list[i]
-				worlds_list[i] = worlds_list[j]
-				worlds_list[j] = temp
-				
-		if is_instance_valid(pagination_hbox):
-			_build_pagination(pagination_hbox, worlds_list.size())
-				
-		var start_idx = (page - 1) * 10
 		var page_worlds = []
-		if start_idx < worlds_list.size():
-			page_worlds = worlds_list.slice(start_idx, start_idx + 10)
+		
+		if doc_name == "ruleta":
+			var r_file = "user://ruleta_state.json"
+			var r_state = ui_root.get_meta("ruleta_state", {})
+			var needs_save = false
+			
+			if r_state.is_empty() and FileAccess.file_exists(r_file):
+				var sf = FileAccess.open(r_file, FileAccess.READ)
+				if sf:
+					var text = sf.get_as_text()
+					sf.close()
+					if text != "":
+						var parsed = JSON.parse_string(text)
+						if typeof(parsed) == TYPE_DICTIONARY: r_state = parsed
+						
+			var last_update = _get_last_update_unix(false)
+			var force_shuffle = false
+			
+			if not r_state.has("cache_time") or r_state["cache_time"] < last_update:
+				force_shuffle = true
+			elif not r_state.has("shuffled_list") or typeof(r_state["shuffled_list"]) != TYPE_ARRAY:
+				force_shuffle = true
+				
+			if force_shuffle:
+				var rng = RandomNumberGenerator.new()
+				rng.randomize()
+				var n = worlds_list.size()
+				for i in range(n - 1, 0, -1):
+					var j = rng.randi() % (i + 1)
+					var temp = worlds_list[i]
+					worlds_list[i] = worlds_list[j]
+					worlds_list[j] = temp
+				
+				r_state = {
+					"cache_time": int(Time.get_unix_time_from_system()),
+					"shuffled_list": worlds_list.duplicate(),
+					"pointer": 0
+				}
+				needs_save = true
+				
+			worlds_list = r_state["shuffled_list"]
+			var p = int(r_state.get("pointer", 0))
+			var items_per_page = 4
+			
+			# Si le dio al botón de actualizar, avanzamos el pointer
+			if page > 1:
+				p += items_per_page
+				if p >= worlds_list.size() and worlds_list.size() > 0:
+					var rng = RandomNumberGenerator.new()
+					rng.randomize()
+					var n = worlds_list.size()
+					for i in range(n - 1, 0, -1):
+						var j = rng.randi() % (i + 1)
+						var temp = worlds_list[i]
+						worlds_list[i] = worlds_list[j]
+						worlds_list[j] = temp
+					r_state["shuffled_list"] = worlds_list.duplicate()
+					p = 0
+				needs_save = true
+				
+			page_worlds = worlds_list.slice(p, p + items_per_page)
+			r_state["pointer"] = p
+			ui_root.set_meta("ruleta_state", r_state)
+			
+			if needs_save:
+				var sf = FileAccess.open(r_file, FileAccess.WRITE)
+				if sf:
+					sf.store_string(JSON.stringify(r_state))
+					sf.close()
+					
+			if is_instance_valid(pagination_hbox):
+				var s = _get_ui_scale()
+				for c in pagination_hbox.get_children(): c.queue_free()
+				var btn_tirar = Button.new()
+				btn_tirar.text = "🎲 " + tr("btn_tirar_dados")
+				btn_tirar.add_theme_font_override("font", _get_safe_font())
+				btn_tirar.add_theme_font_size_override("font_size", 20 * s)
+				btn_tirar.custom_minimum_size = Vector2(0, 50 * s)
+				btn_tirar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				var b_style = StyleBoxFlat.new()
+				b_style.bg_color = Color(0.15, 0.45, 0.85, 1.0)
+				b_style.corner_radius_top_left = 10 * s; b_style.corner_radius_top_right = 10 * s
+				b_style.corner_radius_bottom_left = 10 * s; b_style.corner_radius_bottom_right = 10 * s
+				btn_tirar.add_theme_stylebox_override("normal", b_style)
+				btn_tirar.add_theme_stylebox_override("hover", b_style)
+				btn_tirar.add_theme_stylebox_override("pressed", b_style)
+				btn_tirar.pressed.connect(func():
+					if btn_tirar.has_meta("loading"): return
+					
+					var spins = ui_root.get_meta("ruleta_spins", 0)
+					if spins >= 4:
+						var on_cancel = func(): pass
+						var on_confirm = func():
+							AdMobManager.show_workshop_rewarded()
+							var success = await AdMobManager.workshop_rewarded_completed
+							if success:
+								ui_root.set_meta("ruleta_spins", 0)
+								if is_instance_valid(btn_tirar): btn_tirar.set_meta("loading", true)
+								_play_action_sound("ui_click")
+								var c_tab = ui_root.get_meta("workshop_current_tab", 0)
+								ui_root.set_meta("workshop_page_" + str(c_tab), page + 1)
+								call_deferred("_setup_main_ui_containers")
+							else:
+								_show_modal_message(tr("msg_error") if TranslationServer.get_locale() == "es" else "Error", tr("msg_ad_failed"))
+						
+						_show_download_ad_popup(on_confirm, on_cancel, "watch_ad_ruleta_desc")
+						return
+						
+					ui_root.set_meta("ruleta_spins", spins + 1)
+					btn_tirar.set_meta("loading", true)
+					_play_action_sound("ui_click")
+					var c_tab = ui_root.get_meta("workshop_current_tab", 0)
+					ui_root.set_meta("workshop_page_" + str(c_tab), page + 1)
+					call_deferred("_setup_main_ui_containers")
+				)
+				pagination_hbox.add_child(btn_tirar)
+		else:
+			if is_instance_valid(pagination_hbox):
+				_build_pagination(pagination_hbox, worlds_list.size())
+			var items_per_page = 10
+			var start_idx = (page - 1) * items_per_page
+			if start_idx < worlds_list.size():
+				page_worlds = worlds_list.slice(start_idx, start_idx + items_per_page)
 				
 		var idx = 0
 		for w_data in page_worlds:
@@ -5152,7 +5261,7 @@ func _on_world_play_requested(world_data: Dictionary):
 	_load_world_from_path(path)
 	if is_instance_valid(loading): loading.queue_free()
 
-func _show_download_ad_popup(on_confirm: Callable, on_cancel: Callable):
+func _show_download_ad_popup(on_confirm: Callable, on_cancel: Callable, custom_text: String = "watch_ad_download_desc"):
 	var s = _get_ui_scale()
 	var overlay = PanelContainer.new()
 	var overlay_style = StyleBoxFlat.new()
@@ -5189,7 +5298,7 @@ func _show_download_ad_popup(on_confirm: Callable, on_cancel: Callable):
 	margin.add_child(vbox)
 	
 	var label = Label.new()
-	label.text = tr("watch_ad_download_desc")
+	label.text = tr(custom_text)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_font_override("font", _get_safe_font())
@@ -6291,13 +6400,16 @@ func _show_upload_world_dialog():
 		h_conf.bg_color = Color("#f5f6fa")
 		
 	btn_confirm.pressed.connect(func():
-		if name_input.text.strip_edges() == "": return
+		var chosen_name = name_input.text.strip_edges()
+		if chosen_name == "": return
 		_play_action_sound("ui_click")
+		
+		var slot_id = selected_upload_slot_id[0]
+		var cat_id = cat_opt.selected
 		
 		var proceed_upload = func():
 			var loading_overlay = _show_processing_overlay(tr("uploading_world"))
 			var start_time = Time.get_ticks_msec()
-			var chosen_name = name_input.text
 			
 			var on_done = func(success: bool, msg: String, doc_data: Dictionary = {}):
 				var elapsed = Time.get_ticks_msec() - start_time
@@ -6333,7 +6445,7 @@ func _show_upload_world_dialog():
 			if not WorkshopManager.upload_completed.is_connected(on_done):
 				WorkshopManager.upload_completed.connect(on_done, CONNECT_ONE_SHOT)
 			
-			WorkshopManager.upload_world(selected_upload_slot_id[0], chosen_name, cat_opt.selected)
+			WorkshopManager.upload_world(slot_id, chosen_name, cat_id)
 			
 		var on_confirmed = func():
 			if uploads_today >= 2:
