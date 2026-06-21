@@ -9082,8 +9082,13 @@ func _process(delta):
 			
 	if show_pop:
 		var m_pos = get_local_mouse_position()
-		var gx = int(m_pos.x / grid_scale)
-		var gy = int(m_pos.y / grid_scale)
+		var raw_gx = int(m_pos.x / grid_scale)
+		var raw_gy = int(m_pos.y / grid_scale)
+		var snap = 4
+		# Snap to the top-left of the 4x4 grid to give a much larger hit tolerance
+		var gx = int(floor(float(raw_gx) / snap) * snap) + 1
+		var gy = int(floor(float(raw_gy) / snap) * snap) + 1
+		
 		if gx >= 0 and gx < grid_width and gy >= 0 and gy < grid_height:
 			var cell_id = _get_cell(gx, gy)
 			if _is_music_mat(cell_id):
@@ -9095,15 +9100,15 @@ func _process(delta):
 					pop.name = "MusicNotePopup"
 					var style = StyleBoxFlat.new()
 					style.bg_color = Color(0.1, 0.1, 0.15, 0.9)
-					style.set_corner_radius_all(10)
-					style.content_margin_left = 15; style.content_margin_right = 15
-					style.content_margin_top = 8; style.content_margin_bottom = 8
-					style.border_width_left = 2; style.border_width_top = 2
-					style.border_width_right = 2; style.border_width_bottom = 2
+					style.set_corner_radius_all(12)
+					style.content_margin_left = 20; style.content_margin_right = 20
+					style.content_margin_top = 12; style.content_margin_bottom = 12
+					style.border_width_left = 3; style.border_width_top = 3
+					style.border_width_right = 3; style.border_width_bottom = 3
 					style.border_color = Color(0.8, 0.2, 0.8, 0.8)
 					pop.add_theme_stylebox_override("normal", style)
 					pop.add_theme_font_override("font", _get_safe_font())
-					pop.add_theme_font_size_override("font_size", int(22 * _get_ui_scale()))
+					pop.add_theme_font_size_override("font_size", int(32 * _get_ui_scale()))
 					pop.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 					ui_root.add_child(pop)
 				
@@ -9111,15 +9116,42 @@ func _process(delta):
 					pop.visible = true
 					if cell_id == 600:
 						pop.text = tr("metronome") if TranslationServer.get_locale() == "es" else "Metronome"
+					elif m_data.inst == 4:
+						var drum_keys = ["drum_kick", "drum_snare", "drum_hihat", "drum_tom", "drum_tom_low", "drum_tom_high", "drum_ride", "drum_crash", "drum_sticks"]
+						if m_data.note < drum_keys.size():
+							pop.text = tr(drum_keys[m_data.note])
+						else:
+							pop.text = "?"
 					else:
-						var note_names = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"]
+						var note_names = ["C - Do", "C# - Do#", "D - Re", "D# - Re#", "E - Mi", "F - Fa", "F# - Fa#", "G - Sol", "G# - Sol#", "A - La", "A# - La#", "B - Si"]
 						var octave_names = ["1ra", "2da", "3ra", "4ta", "5ta"]
 						var n_str = note_names[m_data.note] if m_data.note < note_names.size() else "?"
 						var o_str = octave_names[m_data.octave] if m_data.octave < octave_names.size() else "?"
 						pop.text = o_str + " " + tr("octave") + "\n" + n_str
 					
 					var screen_pos = get_viewport().get_mouse_position()
-					pop.position = screen_pos - Vector2(pop.size.x / 2.0, pop.size.y + 50 * _get_ui_scale())
+					var vp_size = get_viewport_rect().size
+					var p_size = pop.size
+					if p_size.x == 0: p_size = pop.get_minimum_size() # Fallback if size hasn't updated yet
+					
+					var target_y = screen_pos.y - p_size.y - 100 * _get_ui_scale()
+					var target_x = screen_pos.x - p_size.x / 2.0
+					
+					# If it hits the top edge, shift it to the side instead of clipping
+					if target_y < 10:
+						# Keep it slightly above the finger, but lower than the ideal height
+						target_y = max(10, screen_pos.y - p_size.y - 40 * _get_ui_scale())
+						if screen_pos.x < vp_size.x / 2.0:
+							# Finger is on left half, place popup to the RIGHT
+							target_x = screen_pos.x + 80 * _get_ui_scale()
+						else:
+							# Finger is on right half, place popup to the LEFT
+							target_x = screen_pos.x - p_size.x - 80 * _get_ui_scale()
+							
+					# Ensure it doesn't go off horizontally
+					target_x = clamp(target_x, 10, vp_size.x - p_size.x - 10)
+					
+					pop.position = Vector2(target_x, target_y)
 			else:
 				if is_instance_valid(ui_root):
 					var pop = ui_root.get_node_or_null("MusicNotePopup")
@@ -17140,7 +17172,7 @@ func _setup_music_ui(force_refresh: bool = false):
 		t_margin.add_child(toggle_hbox)
 		
 		var t_lbl = Label.new()
-		t_lbl.text = tr("show_music_notes_popup") if TranslationServer.get_locale() != "en" else "Ver notas al pulsar"
+		t_lbl.text = tr("show_music_notes_popup")
 		t_lbl.add_theme_font_override("font", _get_safe_font())
 		t_lbl.add_theme_font_size_override("font_size", 20 * s)
 		toggle_hbox.add_child(t_lbl)

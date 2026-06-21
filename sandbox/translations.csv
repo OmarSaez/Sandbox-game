@@ -495,7 +495,6 @@ msg_workshop_discovery,¡Aquí puedes encontrar mapas increíbles hechos por jug
 msg_enter_full_code,Por favor introduce el código completo.,Please enter the full map code.,Por favor insira o código completo.,Veuillez entrer le code complet.,Bitte geben Sie den vollständigen Code ein.,Пожалуйста введите полный код.
 msg_invalid_map_code,El código ingresado es inválido (error de tipeo).,The entered code is invalid (typo error).,O código inserido é inválido (erro de digitação).,Le code saisi est invalide (erreur de frappe).,Der eingegebene Code ist ungültig (Tippfehler).,Введенный код недействителен (опечатка).
 msg_searching_map,Buscando...,Searching...,Buscando...,Recherche...,Suchen...,Поиск...
-
 octave_selection,"Selección
 Octava","Octave
 Selection","Selezione
@@ -503,7 +502,5 @@ Ottava","Sélection
 Octave","Oktaven-
 auswahl","Seleção de
 Oitava"
-
 show_music_notes_popup,"Ver notas al pulsar","Show notes on press","Mostra note alla pressione","Afficher les notes à l'appui","Noten beim Drücken anzeigen","Mostrar notas ao pressionar"
-
 octave,"Octava","Octave","Ottava","Octave","Oktave","Oitava"
