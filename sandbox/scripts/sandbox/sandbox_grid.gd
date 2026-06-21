@@ -3884,7 +3884,32 @@ func _setup_workshop_ui():
 	search_input_base.add_theme_font_override("font", _get_safe_font())
 	search_input_base.add_theme_font_size_override("font_size", 20 * s)
 	search_input_base.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	search_input_base.context_menu_enabled = false # Evitamos conflicto con el menu por defecto si lo hubiera
 	search_hbox.add_child(search_input_base)
+	
+	# --- LONG PRESS TO PASTE HACK FOR MOBILE ---
+	var press_timer = Timer.new()
+	press_timer.wait_time = 0.6
+	press_timer.one_shot = true
+	search_hbox.add_child(press_timer)
+	
+	press_timer.timeout.connect(func():
+		var cb = DisplayServer.clipboard_get()
+		if cb != "":
+			search_input_base.text = cb
+			search_input_base.text_changed.emit(cb)
+			_play_action_sound("ui_click")
+	)
+	
+	search_input_base.gui_input.connect(func(event):
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed: press_timer.start()
+			else: press_timer.stop()
+		elif event is InputEventScreenTouch:
+			if event.pressed: press_timer.start()
+			else: press_timer.stop()
+	)
+	# -------------------------------------------
 	
 	var search_lbl_dash = Label.new()
 	search_lbl_dash.text = "-"
