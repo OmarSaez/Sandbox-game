@@ -4098,16 +4098,20 @@ func _setup_workshop_ui():
 	
 	var http = HTTPRequest.new()
 	add_child(http)
-	if "timeout" in http: http.timeout = 2.0
-	var err = http.request("https://clients3.google.com/generate_204")
-	var has_internet = false
-	if err == OK:
-		var res = await http.request_completed
-		if res[0] == HTTPRequest.RESULT_SUCCESS:
-			has_internet = true
-	if is_instance_valid(http): http.queue_free()
+	if "timeout" in http: http.timeout = 3.0
+	http.request_completed.connect(func(result, response_code, headers, body):
+		var net = (result == HTTPRequest.RESULT_SUCCESS)
+		if net == false and ui_root.get_meta("has_internet", true) == true:
+			ui_root.set_meta("has_internet", false)
+			_setup_workshop_ui()
+		elif net == true and ui_root.get_meta("has_internet", true) == false:
+			ui_root.set_meta("has_internet", true)
+			_setup_workshop_ui()
+		if is_instance_valid(http): http.queue_free()
+	)
+	http.request("https://clients3.google.com/generate_204")
 	
-	ui_root.set_meta("has_internet", has_internet)
+	var has_internet = ui_root.get_meta("has_internet", true)
 	
 	if not is_instance_valid(content_panel): return
 	if is_instance_valid(loading_lbl): loading_lbl.queue_free()
@@ -4533,13 +4537,7 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 		if document != null and doc_name == "ruleta":
 			await get_tree().create_timer(0.4).timeout
 	
-	# Pre-instanciar tarjetas para aprovechar tiempo de CPU
-	var preloaded_cards = []
-	for i in range(10):
-		var card = preload("res://scenes/main/world_card.tscn").instantiate()
-		card.modulate.a = 0.0 # Oculto hasta que haya datos
-		grid.add_child(card)
-		preloaded_cards.append(card)
+	var preloaded_cards = [] # Deprecated
 	
 	if document == null:
 		var collection = Firebase.Firestore.collection("cache")
@@ -4563,6 +4561,12 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 		
 	if not is_instance_valid(grid): return
 	
+	if document == null:
+		if ui_root.get_meta("has_internet", true) == true:
+			ui_root.set_meta("has_internet", false)
+			_setup_workshop_ui()
+			return
+			
 	var dict_doc = null
 	if typeof(document) == TYPE_OBJECT and document is FirestoreDocument:
 		dict_doc = document.document
@@ -4720,21 +4724,11 @@ func _fetch_top_async(grid: GridContainer, pagination_hbox: HFlowContainer, page
 					elif val.has("integerValue"): clean_data[key] = int(val["integerValue"])
 					elif val.has("doubleValue"): clean_data[key] = float(val["doubleValue"])
 			
-			if idx < preloaded_cards.size():
-				var card = preloaded_cards[idx]
-				card.modulate.a = 1.0
-				card.setup(clean_data, 0)
-				if not card.download_requested.is_connected(_on_world_download_requested):
-					card.download_requested.connect(_on_world_download_requested)
-			else:
-				var card = preload("res://scenes/main/world_card.tscn").instantiate()
-				grid.add_child(card)
-				card.setup(clean_data, 0)
-				card.download_requested.connect(_on_world_download_requested)
+			var card = preload("res://scenes/main/world_card.tscn").instantiate()
+			grid.add_child(card)
+			card.setup(clean_data, 0)
+			card.download_requested.connect(_on_world_download_requested)
 			idx += 1
-			
-		for i in range(idx, preloaded_cards.size()):
-			preloaded_cards[i].queue_free()
 			
 		if idx == 0:
 			_show_empty_state_message(grid)
@@ -4824,12 +4818,7 @@ func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer
 	if document == null:
 		loading_overlay = _show_processing_overlay(tr("load_worls"))
 	
-	var preloaded_cards = []
-	for i in range(10):
-		var card = preload("res://scenes/main/world_card.tscn").instantiate()
-		card.modulate.a = 0.0
-		grid.add_child(card)
-		preloaded_cards.append(card)
+	var preloaded_cards = [] # Deprecated
 	
 	if document == null:
 		var collection = Firebase.Firestore.collection("cache")
@@ -4853,6 +4842,12 @@ func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer
 		
 	if not is_instance_valid(grid): return
 	
+	if document == null:
+		if ui_root.get_meta("has_internet", true) == true:
+			ui_root.set_meta("has_internet", false)
+			_setup_workshop_ui()
+			return
+			
 	var dict_doc = null
 	if typeof(document) == TYPE_OBJECT and document is FirestoreDocument:
 		dict_doc = document.document
@@ -4893,27 +4888,13 @@ func _fetch_recientes_async(grid: GridContainer, pagination_hbox: HFlowContainer
 					elif val.has("integerValue"): clean_data[key] = int(val["integerValue"])
 					elif val.has("doubleValue"): clean_data[key] = float(val["doubleValue"])
 			
-			if idx < preloaded_cards.size():
-				var card = preloaded_cards[idx]
-				card.modulate.a = 1.0
-				card.setup(clean_data, 0)
-				if not card.download_requested.is_connected(_on_world_download_requested):
-					card.download_requested.connect(_on_world_download_requested)
-					if not card.like_requested.is_connected(_on_world_like_requested):
-						card.like_requested.connect(_on_world_like_requested)
-					if not card.report_requested.is_connected(_on_world_report_requested):
-						card.report_requested.connect(_on_world_report_requested)
-			else:
-				var card = preload("res://scenes/main/world_card.tscn").instantiate()
-				grid.add_child(card)
-				card.setup(clean_data, 0)
-				card.download_requested.connect(_on_world_download_requested)
-				card.like_requested.connect(_on_world_like_requested)
-				card.report_requested.connect(_on_world_report_requested)
+			var card = preload("res://scenes/main/world_card.tscn").instantiate()
+			grid.add_child(card)
+			card.setup(clean_data, 0)
+			card.download_requested.connect(_on_world_download_requested)
+			card.like_requested.connect(_on_world_like_requested)
+			card.report_requested.connect(_on_world_report_requested)
 			idx += 1
-			
-		for i in range(idx, preloaded_cards.size()):
-			preloaded_cards[i].queue_free()
 			
 		if idx == 0:
 			_show_empty_state_message(grid)
