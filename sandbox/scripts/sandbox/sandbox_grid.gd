@@ -4014,7 +4014,6 @@ func _setup_workshop_ui():
 	)
 	
 	var current_tab = ui_root.get_meta("workshop_current_tab", 0)
-	
 	var create_tab_btn = func(emoji: String, text_key: String, tab_idx: int):
 		var btn = Button.new()
 		btn.text = emoji + "\n" + tr(text_key)
@@ -4088,6 +4087,57 @@ func _setup_workshop_ui():
 	content_panel.add_theme_stylebox_override("panel", c_style)
 	main_vbox.add_child(content_panel)
 	
+	current_tab = ui_root.get_meta("workshop_current_tab", 0)
+	var loading_lbl = Label.new()
+	loading_lbl.text = "..."
+	loading_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	loading_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	loading_lbl.add_theme_font_override("font", _get_safe_font())
+	loading_lbl.add_theme_font_size_override("font_size", 20 * s)
+	content_panel.add_child(loading_lbl)
+	
+	var http = HTTPRequest.new()
+	add_child(http)
+	if "timeout" in http: http.timeout = 2.0
+	var err = http.request("https://clients3.google.com/generate_204")
+	var has_internet = false
+	if err == OK:
+		var res = await http.request_completed
+		if res[0] == HTTPRequest.RESULT_SUCCESS:
+			has_internet = true
+	if is_instance_valid(http): http.queue_free()
+	
+	ui_root.set_meta("has_internet", has_internet)
+	
+	if not is_instance_valid(content_panel): return
+	if is_instance_valid(loading_lbl): loading_lbl.queue_free()
+	
+	if not has_internet and current_tab != 3:
+		if is_instance_valid(search_hbox): search_hbox.visible = false
+			
+		var no_net_vbox = VBoxContainer.new()
+		no_net_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		no_net_vbox.add_theme_constant_override("separation", 20 * s)
+		
+		var net_icon = Label.new()
+		net_icon.text = "🌐❌"
+		net_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		net_icon.add_theme_font_override("font", _get_safe_font())
+		net_icon.add_theme_font_size_override("font_size", 80 * s)
+		no_net_vbox.add_child(net_icon)
+		
+		var net_lbl = Label.new()
+		net_lbl.text = tr("no_internet")
+		net_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		net_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		net_lbl.add_theme_font_override("font", _get_safe_font())
+		net_lbl.add_theme_font_size_override("font_size", 24 * s)
+		net_lbl.add_theme_color_override("font_color", Color(0.8, 0.3, 0.3))
+		no_net_vbox.add_child(net_lbl)
+		
+		content_panel.add_child(no_net_vbox)
+		return
+			
 	if current_tab == 0 or current_tab == 1 or current_tab == 3:
 		var scroll = ScrollContainer.new()
 		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL

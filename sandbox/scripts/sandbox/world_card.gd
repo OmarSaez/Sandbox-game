@@ -181,6 +181,23 @@ func _setup_mode(mode: int) -> void:
 		community_buttons.visible = false
 		management_buttons.visible = false
 
+	call_deferred("_apply_offline_state")
+
+func _apply_offline_state() -> void:
+	if not is_inside_tree() or not get_tree() or not get_tree().current_scene: return
+	var ui_node = get_tree().current_scene.get_node_or_null("UI")
+	if not ui_node: return
+	
+	if not ui_node.get_meta("has_internet", true):
+		if report_button:
+			report_button.disabled = true
+			report_button.modulate = Color(0.5, 0.5, 0.5)
+			report_button.mouse_default_cursor_shape = Control.CURSOR_ARROW
+		if like_button:
+			like_button.disabled = true
+			like_button.modulate = Color(0.5, 0.5, 0.5)
+			like_button.mouse_default_cursor_shape = Control.CURSOR_ARROW
+
 func set_liked_state(liked: bool) -> void:
 	is_liked = liked
 	if like_button:
