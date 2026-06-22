@@ -86,7 +86,7 @@ var top_countdown_label: Label = null
 var bot_countdown_label: Label = null
 var top_downloads_count_label: Label = null
 
-var next_download_is_free: bool = true
+var free_downloads_remaining: int = 1
 var uploads_today: int = 0
 var last_upload_day: int = 0
 var liked_worlds: Array = []
@@ -95,7 +95,8 @@ var reported_worlds: Array = []
 func _load_workshop_economy():
 	var cfg = ConfigFile.new()
 	if cfg.load("user://workshop_economy.cfg") == OK:
-		next_download_is_free = cfg.get_value("economy", "next_download_is_free", true)
+		var old_free = cfg.get_value("economy", "next_download_is_free", true)
+		free_downloads_remaining = cfg.get_value("economy", "free_downloads_remaining", 1 if old_free else 0)
 		uploads_today = cfg.get_value("economy", "uploads_today", 0)
 		last_upload_day = cfg.get_value("economy", "last_upload_day", 0)
 		liked_worlds = cfg.get_value("economy", "liked_worlds", [])
@@ -103,7 +104,7 @@ func _load_workshop_economy():
 
 func _save_workshop_economy():
 	var cfg = ConfigFile.new()
-	cfg.set_value("economy", "next_download_is_free", next_download_is_free)
+	cfg.set_value("economy", "free_downloads_remaining", free_downloads_remaining)
 	cfg.set_value("economy", "uploads_today", uploads_today)
 	cfg.set_value("economy", "last_upload_day", last_upload_day)
 	cfg.set_value("economy", "liked_worlds", liked_worlds)
@@ -154,7 +155,7 @@ func _update_day_check():
 	var current_day = Time.get_date_dict_from_system().day
 	if last_upload_day != current_day:
 		uploads_today = 0
-		next_download_is_free = true
+		free_downloads_remaining = 1
 		last_upload_day = current_day
 		_save_workshop_economy()
 
@@ -5524,9 +5525,9 @@ func _on_world_download_requested(world_data: Dictionary):
 		if is_already_downloaded:
 			AnalyticsManager.log_event("workshop_download", {"type": "redownload"})
 			proceed_download.call() # Skip ad for already downloaded worlds
-		elif next_download_is_free:
+		elif free_downloads_remaining > 0:
 			AnalyticsManager.log_event("workshop_download", {"type": "free"})
-			next_download_is_free = false
+			free_downloads_remaining -= 1
 			_save_workshop_economy()
 			proceed_download.call()
 		else:
@@ -5538,7 +5539,7 @@ func _on_world_download_requested(world_data: Dictionary):
 				var success = await AdMobManager.workshop_rewarded_completed
 				if success:
 					AnalyticsManager.log_event("workshop_download", {"type": "ad"})
-					next_download_is_free = true
+					free_downloads_remaining = 2
 					_save_workshop_economy()
 					proceed_download.call()
 				else:
@@ -6117,7 +6118,7 @@ func _show_edit_world_dialog(world_data: Dictionary):
 		c_style.border_color = Color("#ff9f43")
 		btn_clear_slot.visible = true
 		
-		if uploads_today >= 2:
+		if uploads_today >= 3:
 			btn_confirm.text = tr("btn_upload_ad")
 			conf_style.bg_color = Color("#fbc531")
 			btn_confirm.add_theme_color_override("font_color", Color.BLACK)
@@ -6195,6 +6196,13 @@ func _show_edit_world_dialog(world_data: Dictionary):
 						uploads_today += 1
 						_save_workshop_economy()
 						
+						var type_str = "ad" if (uploads_today - 1) >= 3 else "free"
+						AnalyticsManager.log_event("workshop_upload", {
+							"type": type_str,
+							"slot": uploads_today,
+							"is_update": true
+						})
+						
 					var cache = ui_root.get_meta("workshop_mis_mundos_cache", [])
 					for i in range(cache.size()):
 						if cache[i].get("id") == world_id or cache[i].get("world_id") == world_id:
@@ -6218,7 +6226,7 @@ func _show_edit_world_dialog(world_data: Dictionary):
 			WorkshopManager.update_world(world_id, world_data, chosen_name, chosen_cat, overwrite_slot)
 		
 		var on_confirmed = func():
-			if overwrite_slot != -1 and uploads_today >= 2:
+			if overwrite_slot != -1 and uploads_today >= 3:
 				AdMobManager.show_workshop_rewarded()
 				var success = await AdMobManager.workshop_rewarded_completed
 				if success:
@@ -6455,7 +6463,7 @@ func _show_upload_world_dialog():
 		btn_confirm.disabled = true
 		btn_confirm.text = tr("upload_limit_reached")
 		conf_style.bg_color = Color(0.4, 0.4, 0.4)
-	elif uploads_today >= 2:
+	elif uploads_today >= 3:
 		btn_confirm.text = tr("btn_upload_ad")
 		conf_style.bg_color = Color("#fbc531")
 		btn_confirm.add_theme_color_override("font_color", Color.BLACK)
@@ -6485,7 +6493,7 @@ func _show_upload_world_dialog():
 					uploads_today += 1
 					_save_workshop_economy()
 					
-					var type_str = "ad" if (uploads_today - 1) >= 2 else "free"
+					var type_str = "ad" if (uploads_today - 1) >= 3 else "free"
 					AnalyticsManager.log_event("workshop_upload", {
 						"type": type_str,
 						"slot": uploads_today
@@ -6510,7 +6518,7 @@ func _show_upload_world_dialog():
 			WorkshopManager.upload_world(slot_id, chosen_name, cat_id)
 			
 		var on_confirmed = func():
-			if uploads_today >= 2:
+			if uploads_today >= 3:
 				AdMobManager.show_workshop_rewarded()
 				var success = await AdMobManager.workshop_rewarded_completed
 				if success:

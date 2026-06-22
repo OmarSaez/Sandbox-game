@@ -1,11 +1,11 @@
 {
-  "latest_version": "1.2.1",
+  "latest_version": "1.3.0",
   "min_version": "1.2.0",
   "update_url": "https://play.google.com/store/apps/details?id=com.sandbox.elexstudio",
-  "changelog_es": "¡Nuevas características! Mejora brutal de rendimiento y agregadado de piston que no conduce electricidad.",
-  "changelog_en": "New features! Performance awesome improvements and added pistons that don't conduct electricity.",
-  "changelog_it": "Nuove funzionalità! Miglioramenti delle prestazioni e aggiunta di pistoni che non conducono elettricità.",
-  "changelog_fr": "Nouvelles fonctionnalités ! Améliorations des performances et ajout de pistons qui ne conduisent pas l'électricité.",
-  "changelog_de": "Neue Funktionen! Leistungsverbesserungen und hinzugefügte Kolben, die keine Elektrizität leiten.",
-  "changelog_pt": "Novos recursos! Melhorias incrível de desempenho e adição de pistões que não conduzem eletricidade."
+  "changelog_es": "¡Nuevas características! Workshop, ahora puedes compartir y descargar mapas con todo el mundo, se mejora el sistema de musica, tuberia y vegetacion.",
+  "changelog_en": "New features! Workshop, you can now share and download maps with everyone, music system improvements, pipe and vegetation enhancements.",
+  "changelog_it": "Nuove funzionalità! Workshop, ora puoi condividere e scaricare mappe con tutti, miglioramenti del sistema musicale, tubature e miglioramenti della vegetazione.",
+  "changelog_fr": "Nouvelles fonctionnalités ! Workshop, vous pouvez maintenant partager et télécharger des cartes avec tout le monde, améliorations du système musical, tuyauterie et améliorations de la végétation.",
+  "changelog_de": "Neue Funktionen! Workshop, Sie können nun Karten mit allen teilen und herunterladen, Verbesserungen des Musiksystems, Rohrleitungen und Verbesserungen der Vegetation.",
+  "changelog_pt": "Novos recursos! Workshop, você pode agora compartilhar e baixar mapas com todos, melhorias no sistema de música, tubulações e melhorias na vegetação."
 }
