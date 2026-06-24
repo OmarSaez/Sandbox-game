@@ -5829,7 +5829,9 @@ func _show_world_manager_dialog():
 			
 			var btn_mod = Button.new()
 			btn_mod.text = "✏️"
-			btn_mod.custom_minimum_size = Vector2(40 * s, 40 * s)
+			btn_mod.add_theme_font_override("font", _get_safe_font())
+			btn_mod.add_theme_font_size_override("font_size", 28 * s)
+			btn_mod.custom_minimum_size = Vector2(50 * s, 50 * s)
 			row.add_child(btn_mod)
 			btn_mod.pressed.connect(func():
 				_play_action_sound("ui_click")
@@ -5839,7 +5841,9 @@ func _show_world_manager_dialog():
 			
 			var btn_del = Button.new()
 			btn_del.text = "🗑️"
-			btn_del.custom_minimum_size = Vector2(40 * s, 40 * s)
+			btn_del.add_theme_font_override("font", _get_safe_font())
+			btn_del.add_theme_font_size_override("font_size", 28 * s)
+			btn_del.custom_minimum_size = Vector2(50 * s, 50 * s)
 			row.add_child(btn_del)
 			var doc_id = doc.get("id", "")
 			var doc_title = doc.get("title", "")

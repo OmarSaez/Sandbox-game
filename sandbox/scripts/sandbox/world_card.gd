@@ -95,6 +95,33 @@ func _apply_scaling() -> void:
 		thumbnail_rect.custom_minimum_size = Vector2(0, 200 * s)
 		thumbnail_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		
+		# Add background to thumbnail to preserve the "map background" look
+		var bg = thumbnail_rect.get_node_or_null("ThumbBG")
+		if not bg:
+			bg = ColorRect.new()
+			bg.name = "ThumbBG"
+			bg.color = Color("#2e3036") # The original card background color
+			bg.show_behind_parent = true
+			bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			thumbnail_rect.add_child(bg)
+			
+		thumbnail_rect.mouse_filter = Control.MOUSE_FILTER_STOP
+		thumbnail_rect.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		if not thumbnail_rect.gui_input.is_connected(_on_thumbnail_gui_input):
+			thumbnail_rect.gui_input.connect(_on_thumbnail_gui_input)
+		if not thumbnail_rect.draw.is_connected(_on_thumbnail_draw):
+			thumbnail_rect.draw.connect(_on_thumbnail_draw)
+			
+	# Make the card itself black
+	var card_style = StyleBoxFlat.new()
+	card_style.bg_color = Color("#111214") # Very dark / black
+	card_style.set_corner_radius_all(10 * s)
+	card_style.content_margin_left = 15 * s
+	card_style.content_margin_right = 15 * s
+	card_style.content_margin_top = 15 * s
+	card_style.content_margin_bottom = 15 * s
+	add_theme_stylebox_override("panel", card_style)
+		
 	if likes_label: 
 		likes_label.add_theme_font_override("font", safe_font)
 		likes_label.add_theme_font_size_override("font_size", 20 * s)
@@ -114,11 +141,11 @@ func _apply_scaling() -> void:
 		like_button.add_theme_font_size_override("font_size", 18 * s)
 	if edit_button:
 		edit_button.add_theme_font_override("font", safe_font)
-		edit_button.add_theme_font_size_override("font_size", 20 * s)
+		edit_button.add_theme_font_size_override("font_size", 30 * s)
 		edit_button.custom_minimum_size = Vector2(0, 45 * s)
 	if delete_button:
 		delete_button.add_theme_font_override("font", safe_font)
-		delete_button.add_theme_font_size_override("font_size", 20 * s)
+		delete_button.add_theme_font_size_override("font_size", 30 * s)
 		delete_button.custom_minimum_size = Vector2(0, 45 * s)
 	if reports_label:
 		reports_label.add_theme_font_override("font", safe_font)
@@ -164,6 +191,107 @@ func _on_code_label_gui_input(event: InputEvent) -> void:
 				if is_instance_valid(code_label):
 					code_label.text = old_text
 			)
+
+func _on_thumbnail_draw() -> void:
+	if not is_instance_valid(thumbnail_rect) or not thumbnail_rect.texture: return
+	var bg = thumbnail_rect.get_node_or_null("ThumbBG")
+	if not is_instance_valid(bg): return
+	
+	var tex_size = thumbnail_rect.texture.get_size()
+	var rect_size = thumbnail_rect.size
+	if tex_size.x == 0 or tex_size.y == 0 or rect_size.x == 0 or rect_size.y == 0: return
+	
+	var scale_x = rect_size.x / tex_size.x
+	var scale_y = rect_size.y / tex_size.y
+	var min_scale = min(scale_x, scale_y)
+	
+	var drawn_size = tex_size * min_scale
+	bg.size = drawn_size
+	bg.position = (rect_size - drawn_size) / 2.0
+
+func _on_thumbnail_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		var tex = thumbnail_rect.texture
+		if tex:
+			var ui = get_tree().current_scene.get_node_or_null("UI")
+			if ui:
+				_show_large_thumbnail(tex, ui)
+
+func _show_large_thumbnail(tex: Texture2D, ui: Node) -> void:
+	var blocker = ColorRect.new()
+	blocker.color = Color(0, 0, 0, 0.92)
+	blocker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	blocker.z_index = 4096
+	ui.add_child(blocker)
+	
+	blocker.gui_input.connect(func(e):
+		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
+			blocker.accept_event()
+			if blocker.is_inside_tree():
+				blocker.get_viewport().set_input_as_handled()
+			blocker.queue_free()
+	)
+	
+	var tr_node = TextureRect.new()
+	tr_node.texture = tex
+	tr_node.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr_node.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tr_node.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	
+	var s = 1.0
+	if is_inside_tree() and get_viewport_rect().size.x > get_viewport_rect().size.y:
+		s = 1.3
+		
+	tr_node.offset_left = 60 * s
+	tr_node.offset_right = -60 * s
+	tr_node.offset_top = 80 * s
+	tr_node.offset_bottom = -120 * s # Make room for the button
+	tr_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	blocker.add_child(tr_node)
+	
+	var bg = ColorRect.new()
+	bg.color = Color("#2e3036")
+	bg.show_behind_parent = true
+	tr_node.add_child(bg)
+	
+	tr_node.draw.connect(func():
+		var tex_size = tr_node.texture.get_size()
+		var rect_size = tr_node.size
+		if tex_size.x == 0 or tex_size.y == 0 or rect_size.x == 0 or rect_size.y == 0: return
+		var scale_x = rect_size.x / tex_size.x
+		var scale_y = rect_size.y / tex_size.y
+		var min_scale = min(scale_x, scale_y)
+		var drawn_size = tex_size * min_scale
+		bg.size = drawn_size
+		bg.position = (rect_size - drawn_size) / 2.0
+	)
+	
+	var close_btn = Button.new()
+	close_btn.text = "✖"
+	close_btn.add_theme_font_override("font", _get_safe_font())
+	close_btn.add_theme_font_size_override("font_size", 40 * s)
+	close_btn.add_theme_color_override("font_color", Color.WHITE)
+	
+	var circle_style = StyleBoxFlat.new()
+	circle_style.bg_color = Color(0.1, 0.1, 0.12, 0.85)
+	circle_style.set_corner_radius_all(100) # Circular
+	
+	close_btn.add_theme_stylebox_override("normal", circle_style)
+	close_btn.add_theme_stylebox_override("hover", circle_style)
+	close_btn.add_theme_stylebox_override("pressed", circle_style)
+	close_btn.add_theme_stylebox_override("focus", circle_style)
+	
+	close_btn.anchor_left = 0.5
+	close_btn.anchor_right = 0.5
+	close_btn.anchor_top = 1.0
+	close_btn.anchor_bottom = 1.0
+	close_btn.offset_left = -40 * s
+	close_btn.offset_right = 40 * s
+	close_btn.offset_top = -100 * s
+	close_btn.offset_bottom = -20 * s
+	
+	close_btn.pressed.connect(func(): blocker.queue_free())
+	blocker.add_child(close_btn)
 
 func _setup_mode(mode: int) -> void:
 	if mode == CardMode.COMMUNITY or mode == CardMode.DOWNLOADED:
