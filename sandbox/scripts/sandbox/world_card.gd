@@ -271,9 +271,13 @@ func _show_large_thumbnail(tex: Texture2D, ui: Node) -> void:
 	close_btn.add_theme_font_override("font", _get_safe_font())
 	close_btn.add_theme_font_size_override("font_size", 40 * s)
 	close_btn.add_theme_color_override("font_color", Color.WHITE)
+	close_btn.add_theme_color_override("font_focus_color", Color.WHITE)
+	close_btn.add_theme_color_override("font_pressed_color", Color.WHITE)
+	close_btn.add_theme_color_override("font_hover_color", Color.WHITE)
+	close_btn.add_theme_color_override("font_hover_pressed_color", Color.WHITE)
 	
 	var circle_style = StyleBoxFlat.new()
-	circle_style.bg_color = Color(0.1, 0.1, 0.12, 0.85)
+	circle_style.bg_color = Color("#2255ff") # Bright blue
 	circle_style.set_corner_radius_all(100) # Circular
 	
 	close_btn.add_theme_stylebox_override("normal", circle_style)
