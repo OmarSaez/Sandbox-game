@@ -5852,7 +5852,6 @@ func _delete_world_from_workshop(world_id: String, world_title: String):
 	if is_instance_valid(loading_overlay):
 		loading_overlay.queue_free()
 		
-	_show_centered_bubble("El mundo '" + world_title + "' ha sido eliminado.", Color("#ff7675"))
 	AnalyticsManager.log_event("workshop_delete_world", {})
 	
 	var cache = ui_root.get_meta("workshop_mis_mundos_cache", [])
@@ -5866,6 +5865,7 @@ func _delete_world_from_workshop(world_id: String, world_title: String):
 	_update_local_recientes_cache(world_id, true)
 	
 	_setup_workshop_ui()
+	_show_centered_bubble("El mundo '" + world_title + "' ha sido eliminado.", Color("#ff7675"))
 
 func _load_workshop_cache():
 	if not ui_root.has_meta("workshop_mis_mundos_cache"):
