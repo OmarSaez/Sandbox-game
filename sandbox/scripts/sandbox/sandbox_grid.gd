@@ -8690,23 +8690,33 @@ func _process(delta):
 	played_music_this_frame.clear()
 	
 	if is_instance_valid(top_countdown_label):
-		var is_historico = ui_root.get_meta("workshop_top_category", "Top Semanal") == "Top Histórico"
-		var left = _get_next_update_unix(is_historico) - int(Time.get_unix_time_from_system())
-		if left <= 0:
-			left = 0
-			# Invalidate memory cache so next tab click re-fetches
-			if is_historico:
-				ui_root.set_meta("_cached_top_historico_doc", null)
-			else:
-				_cached_top_semanal_doc = null
-			
-		var h = int(left / 3600.0)
-		var m = int((left % 3600) / 60.0)
-		var s = left % 60
-		var text = tr("update_in") + " %02d:%02d:%02d" % [h, m, s]
-		top_countdown_label.text = text
-		if is_instance_valid(bot_countdown_label):
-			bot_countdown_label.text = text
+		var top_category = ui_root.get_meta("workshop_top_category", "Top Semanal")
+		if top_category == "Ruleta":
+			top_countdown_label.visible = false
+			if is_instance_valid(bot_countdown_label):
+				bot_countdown_label.visible = false
+		else:
+			top_countdown_label.visible = true
+			if is_instance_valid(bot_countdown_label):
+				bot_countdown_label.visible = true
+				
+			var is_historico = top_category == "Top Histórico"
+			var left = _get_next_update_unix(is_historico) - int(Time.get_unix_time_from_system())
+			if left <= 0:
+				left = 0
+				# Invalidate memory cache so next tab click re-fetches
+				if is_historico:
+					ui_root.set_meta("_cached_top_historico_doc", null)
+				else:
+					_cached_top_semanal_doc = null
+				
+			var h = int(left / 3600.0)
+			var m = int((left % 3600) / 60.0)
+			var s = left % 60
+			var text = tr("update_in") + " %02d:%02d:%02d" % [h, m, s]
+			top_countdown_label.text = text
+			if is_instance_valid(bot_countdown_label):
+				bot_countdown_label.text = text
 
 	if not is_grid_ready: return
 	

@@ -84,8 +84,8 @@ exports.updateWorkshopCaches = onSchedule("0 0,12 * * *", async (event) => {
       .slice(0, 100);
 
     // 5. Ruleta (Aleatorio)
-    // Solo mapas con al menos 2 likes para evitar auto-likes y mapas de prueba vacíos
-    let ruletaPool = allValidWorlds.filter(w => w.likes >= 2);
+    // Por ahora permitimos todos los mapas (incluso 0 likes) porque la comunidad recién empieza
+    let ruletaPool = allValidWorlds.filter(w => w.likes >= 0);
     // Fisher-Yates shuffle en el servidor (Cuesta 0.00001 segundos de CPU, es gratis)
     // NECESITAMOS hacerlo aquí para "elegir" 200 distintos de entre todos los miles de mapas.
     for (let i = ruletaPool.length - 1; i > 0; i--) {
