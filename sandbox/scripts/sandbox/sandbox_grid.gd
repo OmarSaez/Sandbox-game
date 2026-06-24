@@ -3437,13 +3437,12 @@ func _setup_tools_ui():
 		_play_action_sound("ui_click")
 		_stop_pulse(community_btn)
 		
-		if is_daily_workshop_pulse_ready:
-			is_daily_workshop_pulse_ready = false
-			var today_str = str(Time.get_date_dict_from_system().day)
-			var f = FileAccess.open("user://workshop_daily_pulse.save", FileAccess.WRITE)
-			if f:
-				f.store_string(today_str)
-				f.close()
+		is_daily_workshop_pulse_ready = false
+		var today_str = str(Time.get_date_dict_from_system().day)
+		var f = FileAccess.open("user://workshop_daily_pulse.save", FileAccess.WRITE)
+		if f:
+			f.store_string(today_str)
+			f.close()
 		
 		var save_path = "user://workshop_discovery_shown.save"
 		if not FileAccess.file_exists(save_path):
