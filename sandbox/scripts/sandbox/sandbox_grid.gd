@@ -3212,6 +3212,8 @@ func _setup_tools_ui():
 		redo_history()
 	)
 	
+	_update_undo_redo_ui()
+	
 	_setup_long_press_tooltip(btn_pan, "tooltip_zoom")
 	_setup_long_press_tooltip(btn_save, "tooltip_save")
 	_setup_long_press_tooltip(btn_undo, "tooltip_undo")
@@ -9328,14 +9330,16 @@ func save_history_state():
 		"next_chunks": next_chunks_active.duplicate(),
 		"npcs": _deep_copy_npcs(),
 		"logic_gates": _deep_copy_logic_gates(),
-		"active_pistons": _deep_copy_pistons()
+		"active_pistons": _deep_copy_pistons(),
+		"cell_paint": cell_paint_colors.duplicate(),
+		"bg_paint": background_img.duplicate(),
+		"el_paint_img": element_paint_img.duplicate()
 	}
 	
 	if history_buffer.size() > 0:
 		var last = history_buffer.back()
 		# HIGH-PERFORMANCE CHANGE DETECTION
-		# Only save if the actual grid cells have changed
-		if last.cells == current_snapshot.cells:
+		if last.cells == current_snapshot.cells and last.cell_paint == current_snapshot.cell_paint and not is_paint_tool_active:
 			return
 
 	history_buffer.append(current_snapshot)
@@ -9344,6 +9348,7 @@ func save_history_state():
 		history_buffer.pop_front()
 	
 	history_current_index = history_buffer.size() - 1
+	_update_undo_redo_ui()
 
 func _restore_npcs_from_snapshot(snapshot):
 	# 1. Clear current NPC pixels from the grid
@@ -9385,6 +9390,16 @@ func undo_history():
 		tags_array = snapshot.tags.duplicate()
 		chunks_active = snapshot.chunks.duplicate()
 		next_chunks_active = snapshot.next_chunks.duplicate()
+		
+		if snapshot.has("cell_paint"):
+			cell_paint_colors = snapshot.cell_paint.duplicate()
+			if snapshot.has("bg_paint"):
+				background_img.copy_from(snapshot.bg_paint)
+				background_dirty = true
+			if snapshot.has("el_paint_img"):
+				element_paint_img.copy_from(snapshot.el_paint_img)
+				element_paint_dirty = true
+		
 		# Reset electricity state so BFS rebuilds from scratch
 		# Zero out stale conductor charges but preserve explosive timers
 		for ci in range(charge_array.size()):
@@ -9404,6 +9419,7 @@ func undo_history():
 		_reconstruct_sources_from_cells(snapshot)
 		_update_texture()
 		queue_redraw()
+		_update_undo_redo_ui()
 
 func redo_history():
 	if history_current_index < history_buffer.size() - 1:
@@ -9416,6 +9432,16 @@ func redo_history():
 		tags_array = snapshot.tags.duplicate()
 		chunks_active = snapshot.chunks.duplicate()
 		next_chunks_active = snapshot.next_chunks.duplicate()
+		
+		if snapshot.has("cell_paint"):
+			cell_paint_colors = snapshot.cell_paint.duplicate()
+			if snapshot.has("bg_paint"):
+				background_img.copy_from(snapshot.bg_paint)
+				background_dirty = true
+			if snapshot.has("el_paint_img"):
+				element_paint_img.copy_from(snapshot.el_paint_img)
+				element_paint_dirty = true
+				
 		# Reset electricity state so BFS rebuilds from scratch
 		# Zero out stale conductor charges but preserve explosive timers
 		for ci in range(charge_array.size()):
@@ -9435,6 +9461,16 @@ func redo_history():
 		_reconstruct_sources_from_cells(snapshot)
 		_update_texture()
 		queue_redraw()
+		_update_undo_redo_ui()
+
+func _update_undo_redo_ui():
+	if ui_elements.has("btn_undo") and is_instance_valid(ui_elements["btn_undo"]):
+		var can_undo = history_current_index > 0
+		ui_elements["btn_undo"].modulate.a = 1.0 if can_undo else 0.3
+	
+	if ui_elements.has("btn_redo") and is_instance_valid(ui_elements["btn_redo"]):
+		var can_redo = history_current_index < history_buffer.size() - 1
+		ui_elements["btn_redo"].modulate.a = 1.0 if can_redo else 0.3
 
 func _draw():
 	if not is_grid_ready: return

@@ -78,42 +78,50 @@ func _apply_scaling() -> void:
 		s = 1.7 * 1.30
 		
 	custom_minimum_size = Vector2(200 * s, 0)
+	var safe_font = _get_safe_font()
 	
 	if title_label: 
-		var sys_font = SystemFont.new()
-		sys_font.font_names = PackedStringArray(["sans-serif", "arial"])
-		title_label.add_theme_font_override("font", sys_font)
+		title_label.add_theme_font_override("font", safe_font)
 		title_label.add_theme_font_size_override("font_size", 26 * s)
 		title_label.custom_minimum_size = Vector2(0, 75 * s)
 	if author_label:
-		var sys_font = SystemFont.new()
-		sys_font.font_names = PackedStringArray(["sans-serif", "arial"])
-		author_label.add_theme_font_override("font", sys_font)
+		author_label.add_theme_font_override("font", safe_font)
 		author_label.add_theme_font_size_override("font_size", 18 * s)
 	if code_label:
+		code_label.add_theme_font_override("font", safe_font)
 		code_label.add_theme_font_size_override("font_size", 16 * s)
 		
 	if thumbnail_rect:
 		thumbnail_rect.custom_minimum_size = Vector2(0, 200 * s)
 		thumbnail_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		
-	if likes_label: likes_label.add_theme_font_size_override("font_size", 20 * s)
-	if downloads_label: downloads_label.add_theme_font_size_override("font_size", 20 * s)
+	if likes_label: 
+		likes_label.add_theme_font_override("font", safe_font)
+		likes_label.add_theme_font_size_override("font_size", 20 * s)
+	if downloads_label: 
+		downloads_label.add_theme_font_override("font", safe_font)
+		downloads_label.add_theme_font_size_override("font_size", 20 * s)
 	
 	if download_button:
+		download_button.add_theme_font_override("font", safe_font)
 		download_button.add_theme_font_size_override("font_size", 20 * s)
 		download_button.custom_minimum_size = Vector2(0, 45 * s)
 	if report_button:
+		report_button.add_theme_font_override("font", safe_font)
 		report_button.add_theme_font_size_override("font_size", 16 * s)
 	if like_button:
+		like_button.add_theme_font_override("font", safe_font)
 		like_button.add_theme_font_size_override("font_size", 18 * s)
 	if edit_button:
+		edit_button.add_theme_font_override("font", safe_font)
 		edit_button.add_theme_font_size_override("font_size", 20 * s)
 		edit_button.custom_minimum_size = Vector2(0, 45 * s)
 	if delete_button:
+		delete_button.add_theme_font_override("font", safe_font)
 		delete_button.add_theme_font_size_override("font_size", 20 * s)
 		delete_button.custom_minimum_size = Vector2(0, 45 * s)
 	if reports_label:
+		reports_label.add_theme_font_override("font", safe_font)
 		reports_label.add_theme_font_size_override("font_size", 16 * s)
 
 func setup(data: Dictionary, mode: int = CardMode.COMMUNITY) -> void:
@@ -289,3 +297,32 @@ func _on_like_button_pressed() -> void:
 		unlike_requested.emit(world_data)
 	else:
 		like_requested.emit(world_data)
+
+static var _combined_font: FontVariation = null
+
+func _get_safe_font() -> Font:
+	if not _combined_font:
+		_combined_font = FontVariation.new()
+		
+		# 1. FUENTE BASE (Texto estándar)
+		var base_font = SystemFont.new()
+		base_font.font_names = PackedStringArray(["sans-serif", "arial"])
+		_combined_font.base_font = base_font
+		
+		# 2. FUENTE DE ICONOS
+		var emoji_f: Font = null
+		var paths = [
+			"res://assets/fonts/Twemoji.Mozilla.ttf",
+			"res://assets/fonts/Twemoji.ttf",
+			"res://assets/fonts/NotoColorEmoji.ttf",
+			"res://assets/fonts/FluentEmoji.ttf"
+		]
+		for p in paths:
+			if ResourceLoader.exists(p):
+				emoji_f = load(p)
+				break
+				
+		if emoji_f:
+			_combined_font.set_fallbacks([emoji_f])
+			
+	return _combined_font
