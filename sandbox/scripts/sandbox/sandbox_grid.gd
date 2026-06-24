@@ -819,6 +819,7 @@ var is_fire_active = false
 var is_npc_mode_menu_open: bool = false
 var is_lab_tutorial_done: bool = false
 var is_workshop_discovery_ready: bool = false
+var is_daily_workshop_pulse_ready: bool = false
 var lab_tutorial_step: int = 0 # 0: None, 1: Slots, 2: Colors, 3: Gravity, 4: State, 5: Tags
 var tutorial_rects: Array[Control] = []
 var _frame_count = 0
@@ -1563,6 +1564,25 @@ func _ready():
 					_start_pulse(ui_elements["tools_btn"])
 				else:
 					_trigger_workshop_discovery()
+		)
+	else:
+		# Workshop daily reminder logic (Wait 3 minutes)
+		get_tree().create_timer(180.0).timeout.connect(func():
+			var today_str = str(Time.get_date_dict_from_system().day)
+			var last_day = ""
+			if FileAccess.file_exists("user://workshop_daily_pulse.save"):
+				var f = FileAccess.open("user://workshop_daily_pulse.save", FileAccess.READ)
+				if f:
+					last_day = f.get_as_text()
+					f.close()
+					
+			if last_day != today_str and ui_elements.has("tools_btn"):
+				is_daily_workshop_pulse_ready = true
+				if not (is_instance_valid(tools_panel) and tools_panel.visible):
+					_start_pulse(ui_elements["tools_btn"])
+				else:
+					if ui_elements.has("btn_comunidad"):
+						_start_pulse(ui_elements["btn_comunidad"])
 		)
 
 func _show_welcome_message():
@@ -3416,6 +3436,14 @@ func _setup_tools_ui():
 	community_btn.pressed.connect(func():
 		_play_action_sound("ui_click")
 		_stop_pulse(community_btn)
+		
+		if is_daily_workshop_pulse_ready:
+			is_daily_workshop_pulse_ready = false
+			var today_str = str(Time.get_date_dict_from_system().day)
+			var f = FileAccess.open("user://workshop_daily_pulse.save", FileAccess.WRITE)
+			if f:
+				f.store_string(today_str)
+				f.close()
 		
 		var save_path = "user://workshop_discovery_shown.save"
 		if not FileAccess.file_exists(save_path):
@@ -7183,6 +7211,10 @@ func _on_tools_btn_pressed():
 		# Workshop discovery logic
 		if is_workshop_discovery_ready:
 			_trigger_workshop_discovery()
+		elif is_daily_workshop_pulse_ready:
+			_stop_pulse(ui_elements["tools_btn"])
+			if ui_elements.has("btn_comunidad"):
+				_start_pulse(ui_elements["btn_comunidad"])
 	
 	# Update tutorial highlight if we just opened/closed tools
 	if lab_tutorial_step == 6:
