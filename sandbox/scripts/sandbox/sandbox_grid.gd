@@ -86,7 +86,7 @@ var top_countdown_label: Label = null
 var bot_countdown_label: Label = null
 var top_downloads_count_label: Label = null
 
-var free_downloads_remaining: int = 1
+var free_downloads_remaining: int = 4
 var uploads_today: int = 0
 var last_upload_day: int = 0
 var liked_worlds: Array = []
@@ -96,7 +96,7 @@ func _load_workshop_economy():
 	var cfg = ConfigFile.new()
 	if cfg.load("user://workshop_economy.cfg") == OK:
 		var old_free = cfg.get_value("economy", "next_download_is_free", true)
-		free_downloads_remaining = cfg.get_value("economy", "free_downloads_remaining", 1 if old_free else 0)
+		free_downloads_remaining = cfg.get_value("economy", "free_downloads_remaining", 4 if old_free else 0)
 		uploads_today = cfg.get_value("economy", "uploads_today", 0)
 		last_upload_day = cfg.get_value("economy", "last_upload_day", 0)
 		liked_worlds = cfg.get_value("economy", "liked_worlds", [])
@@ -155,7 +155,7 @@ func _update_day_check():
 	var current_day = Time.get_date_dict_from_system().day
 	if last_upload_day != current_day:
 		uploads_today = 0
-		free_downloads_remaining = 1
+		free_downloads_remaining = 4
 		last_upload_day = current_day
 		_save_workshop_economy()
 
@@ -5539,7 +5539,7 @@ func _on_world_download_requested(world_data: Dictionary):
 				var success = await AdMobManager.workshop_rewarded_completed
 				if success:
 					AnalyticsManager.log_event("workshop_download", {"type": "ad"})
-					free_downloads_remaining = 2
+					free_downloads_remaining = 3
 					_save_workshop_economy()
 					proceed_download.call()
 				else:
