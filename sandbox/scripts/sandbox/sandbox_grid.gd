@@ -8363,6 +8363,9 @@ func _add_ui_header(container, key: String):
 # --- OPTIMIZED HIGHLIGHT SYSTEM ---
 
 func _update_material_highlights():
+	if is_instance_valid(music_panel) and music_panel.visible:
+		_setup_music_ui(true)
+		
 	if selected_material != -2 and selected_circuit_tool != "piston" and selected_circuit_tool != "cannon":
 		selected_circuit_tool = ""
 	if selected_material != 8 and selected_material != 5 and selected_circuit_tool == "":
@@ -17012,6 +17015,7 @@ func _setup_music_ui(force_refresh: bool = false):
 		return # Return early so the music UI setup below does not run!
 		
 	# --- MUSIC VIEW ---
+	var is_music_selected = _is_music_mat(selected_material)
 	var scroll = ScrollContainer.new()
 	scroll.name = "MusicScroll"
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -17053,7 +17057,7 @@ func _setup_music_ui(force_refresh: bool = false):
 		var b_style = StyleBoxFlat.new()
 		b_style.bg_color = MUSIC_INST_COLORS[i].darkened(0.6)
 		b_style.set_corner_radius_all(10 * s)
-		if i == selected_music_instrument:
+		if is_music_selected and i == selected_music_instrument:
 			b_style.border_width_bottom = 5
 			b_style.border_color = Color.WHITE
 			b_style.bg_color = MUSIC_INST_COLORS[i].darkened(0.2)
@@ -17195,7 +17199,7 @@ func _setup_music_ui(force_refresh: bool = false):
 			var n_style = StyleBoxFlat.new()
 			n_style.bg_color = n_color
 			n_style.set_corner_radius_all(12 * s)
-			if i == selected_music_note:
+			if is_music_selected and i == selected_music_note:
 				n_style.border_width_left = 4; n_style.border_width_top = 4
 				n_style.border_width_right = 4; n_style.border_width_bottom = 4
 				n_style.border_color = Color.WHITE
@@ -17245,7 +17249,7 @@ func _setup_music_ui(force_refresh: bool = false):
 			b_style.bg_color = o_color
 			b_style.set_corner_radius_all(8 * s)
 			
-			if i == selected_music_octave:
+			if is_music_selected and i == selected_music_octave:
 				b_style.border_width_left = 3; b_style.border_width_top = 3
 				b_style.border_width_right = 3; b_style.border_width_bottom = 3
 				b_style.border_color = Color.WHITE
@@ -17312,6 +17316,7 @@ func _close_music_menu():
 			if child.name.begins_with("MusicMenuBlocker") or child.name.begins_with("MusicPanel") or child.name == "TO_DELETE":
 				child.queue_free()
 	circuit_panel = null
+	music_panel = null
 	_update_material_highlights()
 	_update_menu_highlights()
 	_on_arcade_selection_made(false)
