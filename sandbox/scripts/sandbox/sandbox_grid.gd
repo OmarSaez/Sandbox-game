@@ -87,6 +87,7 @@ var bot_countdown_label: Label = null
 var top_downloads_count_label: Label = null
 
 var free_downloads_remaining: int = 4
+var pending_ad_upload: bool = false
 var uploads_today: int = 0
 var last_upload_day: int = 0
 var liked_worlds: Array = []
@@ -6118,7 +6119,7 @@ func _show_edit_world_dialog(world_data: Dictionary):
 		c_style.border_color = Color("#ff9f43")
 		btn_clear_slot.visible = true
 		
-		if uploads_today >= 3:
+		if uploads_today >= 3 and not pending_ad_upload:
 			btn_confirm.text = tr("btn_upload_ad")
 			conf_style.bg_color = Color("#fbc531")
 			btn_confirm.add_theme_color_override("font_color", Color.BLACK)
@@ -6194,6 +6195,7 @@ func _show_edit_world_dialog(world_data: Dictionary):
 				if success:
 					if overwrite_slot != -1:
 						uploads_today += 1
+						pending_ad_upload = false
 						_save_workshop_economy()
 						
 						var type_str = "ad" if (uploads_today - 1) >= 3 else "free"
@@ -6226,10 +6228,11 @@ func _show_edit_world_dialog(world_data: Dictionary):
 			WorkshopManager.update_world(world_id, world_data, chosen_name, chosen_cat, overwrite_slot)
 		
 		var on_confirmed = func():
-			if overwrite_slot != -1 and uploads_today >= 3:
+			if overwrite_slot != -1 and uploads_today >= 3 and not pending_ad_upload:
 				AdMobManager.show_workshop_rewarded()
 				var success = await AdMobManager.workshop_rewarded_completed
 				if success:
+					pending_ad_upload = true
 					proceed_edit.call()
 				else:
 					_show_centered_bubble(tr("msg_error") + ": " + tr("msg_ad_failed") if TranslationServer.get_locale() == "es" else "Error: " + tr("msg_ad_failed"), Color(0.8, 0.2, 0.2))
@@ -6463,7 +6466,7 @@ func _show_upload_world_dialog():
 		btn_confirm.disabled = true
 		btn_confirm.text = tr("upload_limit_reached")
 		conf_style.bg_color = Color(0.4, 0.4, 0.4)
-	elif uploads_today >= 3:
+	elif uploads_today >= 3 and not pending_ad_upload:
 		btn_confirm.text = tr("btn_upload_ad")
 		conf_style.bg_color = Color("#fbc531")
 		btn_confirm.add_theme_color_override("font_color", Color.BLACK)
@@ -6491,6 +6494,7 @@ func _show_upload_world_dialog():
 					
 				if success:
 					uploads_today += 1
+					pending_ad_upload = false
 					_save_workshop_economy()
 					
 					var type_str = "ad" if (uploads_today - 1) >= 3 else "free"
@@ -6518,10 +6522,11 @@ func _show_upload_world_dialog():
 			WorkshopManager.upload_world(slot_id, chosen_name, cat_id)
 			
 		var on_confirmed = func():
-			if uploads_today >= 3:
+			if uploads_today >= 3 and not pending_ad_upload:
 				AdMobManager.show_workshop_rewarded()
 				var success = await AdMobManager.workshop_rewarded_completed
 				if success:
+					pending_ad_upload = true
 					proceed_upload.call()
 				else:
 					_show_centered_bubble(tr("msg_error") + ": " + tr("msg_ad_failed") if TranslationServer.get_locale() == "es" else "Error: " + tr("msg_ad_failed"), Color(0.8, 0.2, 0.2))
