@@ -261,6 +261,14 @@ func _show_large_thumbnail(tex: Texture2D, ui: Node) -> void:
 	blocker.z_index = 4096
 	ui.add_child(blocker)
 	
+	var grid = get_tree().current_scene.get_node_or_null("SandboxGrid")
+	if grid:
+		grid.is_blocking = true
+		blocker.tree_exited.connect(func():
+			if is_instance_valid(grid):
+				grid.is_blocking = false
+		)
+	
 	var s = 1.0
 	if is_inside_tree() and get_viewport_rect().size.x > get_viewport_rect().size.y:
 		s = 1.3
