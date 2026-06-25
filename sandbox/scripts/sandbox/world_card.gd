@@ -146,23 +146,48 @@ func _apply_scaling() -> void:
 		download_button.add_theme_font_override("font", safe_font)
 		download_button.add_theme_font_size_override("font_size", 20 * s)
 		download_button.custom_minimum_size = Vector2(0, 45 * s)
+		_style_button(download_button, s)
 	if report_button:
 		report_button.add_theme_font_override("font", safe_font)
-		report_button.add_theme_font_size_override("font_size", 16 * s)
+		report_button.add_theme_font_size_override("font_size", 20 * s)
+		report_button.custom_minimum_size = Vector2(0, 45 * s)
+		_style_button(report_button, s)
 	if like_button:
 		like_button.add_theme_font_override("font", safe_font)
-		like_button.add_theme_font_size_override("font_size", 18 * s)
+		like_button.add_theme_font_size_override("font_size", 20 * s)
+		like_button.custom_minimum_size = Vector2(0, 45 * s)
+		_style_button(like_button, s)
 	if edit_button:
 		edit_button.add_theme_font_override("font", safe_font)
-		edit_button.add_theme_font_size_override("font_size", 30 * s)
+		edit_button.add_theme_font_size_override("font_size", 20 * s)
 		edit_button.custom_minimum_size = Vector2(0, 45 * s)
+		_style_button(edit_button, s)
 	if delete_button:
 		delete_button.add_theme_font_override("font", safe_font)
-		delete_button.add_theme_font_size_override("font_size", 30 * s)
+		delete_button.add_theme_font_size_override("font_size", 20 * s)
 		delete_button.custom_minimum_size = Vector2(0, 45 * s)
+		_style_button(delete_button, s)
 	if reports_label:
 		reports_label.add_theme_font_override("font", safe_font)
 		reports_label.add_theme_font_size_override("font_size", 16 * s)
+
+func _style_button(btn: Button, s: float) -> void:
+	if not btn: return
+	btn.flat = false
+	var normal_style = StyleBoxFlat.new()
+	normal_style.bg_color = Color("#2a2d34") # Un poco más claro que el fondo
+	normal_style.set_corner_radius_all(10 * s)
+	
+	var hover_style = normal_style.duplicate()
+	hover_style.bg_color = Color("#353942")
+	
+	var pressed_style = normal_style.duplicate()
+	pressed_style.bg_color = Color("#1e2025")
+	
+	btn.add_theme_stylebox_override("normal", normal_style)
+	btn.add_theme_stylebox_override("hover", hover_style)
+	btn.add_theme_stylebox_override("pressed", pressed_style)
+	btn.add_theme_stylebox_override("focus", normal_style)
 
 func setup(data: Dictionary, mode: int = CardMode.COMMUNITY) -> void:
 	world_data = data
@@ -316,26 +341,43 @@ func _show_large_thumbnail(tex: Texture2D, ui: Node) -> void:
 func _setup_mode(mode: int) -> void:
 	if mode == CardMode.COMMUNITY or mode == CardMode.DOWNLOADED:
 		community_buttons.visible = true
-		management_buttons.visible = (mode == CardMode.DOWNLOADED)
 		
 		# Modo descargas
 		if mode == CardMode.DOWNLOADED:
+			management_buttons.visible = false
 			report_button.visible = true
 			if like_button: like_button.visible = true
-			download_button.text = tr("card_play")
-			if edit_button: edit_button.visible = false
-			if reports_label: reports_label.visible = false
-		
+			download_button.text = "▶️ " + tr("card_play")
+			
+			if delete_button and delete_button.get_parent() != community_buttons:
+				delete_button.get_parent().remove_child(delete_button)
+				community_buttons.add_child(delete_button)
+			if delete_button: delete_button.visible = true
+			
+			var s = 1.7
+			if is_inside_tree() and get_viewport_rect().size.x > get_viewport_rect().size.y:
+				s = 1.7 * 1.30
+			community_buttons.add_theme_constant_override("separation", 15 * s)
+			
 		# Modo comunidad normal
 		else:
+			management_buttons.visible = false
 			report_button.visible = true
 			if like_button: like_button.visible = false
 			download_button.text = "⬇️ " + tr("card_play_download", "Descargar")
+			if delete_button and delete_button.get_parent() == community_buttons:
+				delete_button.visible = false
 			
 	elif mode == CardMode.MANAGEMENT:
 		community_buttons.visible = false
 		management_buttons.visible = true
 		if edit_button: edit_button.visible = true
+		if delete_button:
+			if delete_button.get_parent() != management_buttons.get_node("HBoxContainer"):
+				delete_button.get_parent().remove_child(delete_button)
+				management_buttons.get_node("HBoxContainer").add_child(delete_button)
+			delete_button.visible = true
+			
 		if reports_label:
 			reports_label.visible = true
 			reports_label.text = "🚩 Reportes: " + str(world_data.get("reports", 0))

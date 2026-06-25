@@ -4036,7 +4036,7 @@ func _setup_workshop_ui():
 		_play_action_sound("ui_click")
 		var popup = PopupMenu.new()
 		popup.add_theme_font_override("font", _get_safe_font())
-		popup.add_theme_font_size_override("font_size", 20 * s)
+		popup.add_theme_font_size_override("font_size", 32 * s)
 		popup.add_item(tr("tab_top_semanal"), 0)
 		popup.add_item(tr("tab_top_historico"), 1)
 		popup.add_item(tr("tab_tendencias"), 2)
@@ -4054,7 +4054,7 @@ func _setup_workshop_ui():
 		
 		btn_hamburger.add_child(popup)
 		var btn_rect = btn_hamburger.get_global_rect()
-		popup.popup(Rect2(btn_rect.position.x, btn_rect.position.y + btn_rect.size.y, 250, 0))
+		popup.popup(Rect2(btn_rect.position.x, btn_rect.position.y + btn_rect.size.y, 350 * s, 0))
 	)
 	
 	var current_tab = ui_root.get_meta("workshop_current_tab", 0)
