@@ -18,7 +18,8 @@ exports.updateWorkshopCaches = onSchedule("0 0,12 * * *", async (event) => {
   console.log("Iniciando actualización de cachés de Workshop (El Maestro de los Cachés)...");
   
   try {
-    const currentWeekId = Math.floor(Date.now() / 1000 / 604800);
+    // Se suma un offset de 3 días (259200 segundos) para que la semana inicie el Lunes a las 00:00 UTC en vez del Jueves (Epoch)
+    const currentWeekId = Math.floor((Date.now() / 1000 + 259200) / 604800);
     const currentMonthId = Math.floor(Date.now() / 1000 / 2592000);
     
     // Obtenemos TODOS los mundos una sola vez para armar todas las listas

@@ -105,10 +105,23 @@ func _apply_scaling() -> void:
 			bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			thumbnail_rect.add_child(bg)
 			
-		thumbnail_rect.mouse_filter = Control.MOUSE_FILTER_STOP
-		thumbnail_rect.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		if not thumbnail_rect.gui_input.is_connected(_on_thumbnail_gui_input):
-			thumbnail_rect.gui_input.connect(_on_thumbnail_gui_input)
+		# Make the thumbnail clickable properly (differentiating tap from scroll)
+		var btn = thumbnail_rect.get_node_or_null("ThumbBtn")
+		if not btn:
+			btn = Button.new()
+			btn.name = "ThumbBtn"
+			btn.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			var empty_sb = StyleBoxEmpty.new()
+			btn.add_theme_stylebox_override("normal", empty_sb)
+			btn.add_theme_stylebox_override("hover", empty_sb)
+			btn.add_theme_stylebox_override("pressed", empty_sb)
+			btn.add_theme_stylebox_override("focus", empty_sb)
+			btn.mouse_filter = Control.MOUSE_FILTER_PASS
+			btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+			thumbnail_rect.add_child(btn)
+			btn.pressed.connect(_on_thumbnail_clicked)
+			
+		thumbnail_rect.mouse_filter = Control.MOUSE_FILTER_PASS
 		if not thumbnail_rect.draw.is_connected(_on_thumbnail_draw):
 			thumbnail_rect.draw.connect(_on_thumbnail_draw)
 			
@@ -209,13 +222,12 @@ func _on_thumbnail_draw() -> void:
 	bg.size = drawn_size
 	bg.position = (rect_size - drawn_size) / 2.0
 
-func _on_thumbnail_gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		var tex = thumbnail_rect.texture
-		if tex:
-			var ui = get_tree().current_scene.get_node_or_null("UI")
-			if ui:
-				_show_large_thumbnail(tex, ui)
+func _on_thumbnail_clicked() -> void:
+	var tex = thumbnail_rect.texture
+	if tex:
+		var ui = get_tree().current_scene.get_node_or_null("UI")
+		if ui:
+			_show_large_thumbnail(tex, ui)
 
 func _show_large_thumbnail(tex: Texture2D, ui: Node) -> void:
 	var blocker = ColorRect.new()
@@ -224,47 +236,51 @@ func _show_large_thumbnail(tex: Texture2D, ui: Node) -> void:
 	blocker.z_index = 4096
 	ui.add_child(blocker)
 	
-	blocker.gui_input.connect(func(e):
-		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
-			blocker.accept_event()
-			if blocker.is_inside_tree():
-				blocker.get_viewport().set_input_as_handled()
-			blocker.queue_free()
-	)
+	var s = 1.0
+	if is_inside_tree() and get_viewport_rect().size.x > get_viewport_rect().size.y:
+		s = 1.3
+		
+	var ui_size = get_viewport_rect().size
+	var max_w = ui_size.x - 120 * s
+	var max_h = ui_size.y - 200 * s
+	
+	var tex_size = tex.get_size()
+	var scale_x = max_w / tex_size.x if tex_size.x > 0 else 1.0
+	var scale_y = max_h / tex_size.y if tex_size.y > 0 else 1.0
+	var min_scale = min(scale_x, scale_y)
+	var drawn_size = tex_size * min_scale
+	
+	var content_node = Control.new()
+	content_node.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	content_node.size = ui_size
+	content_node.pivot_offset = ui_size / 2.0
+	content_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	blocker.add_child(content_node)
+	
+	var zoom_handler = ZoomHandler.new()
+	zoom_handler.blocker = blocker
+	zoom_handler.content_node = content_node
+	zoom_handler.drawn_size = drawn_size
+	blocker.add_child(zoom_handler)
+	
+	var bg = ColorRect.new()
+	bg.color = Color("#2e3036")
+	bg.size = drawn_size
+	bg.position = Vector2(ui_size.x / 2.0 - drawn_size.x / 2.0, ui_size.y / 2.0 - drawn_size.y / 2.0 - 20 * s)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content_node.add_child(bg)
 	
 	var tr_node = TextureRect.new()
 	tr_node.texture = tex
 	tr_node.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tr_node.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	tr_node.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	
-	var s = 1.0
-	if is_inside_tree() and get_viewport_rect().size.x > get_viewport_rect().size.y:
-		s = 1.3
-		
 	tr_node.offset_left = 60 * s
 	tr_node.offset_right = -60 * s
 	tr_node.offset_top = 80 * s
-	tr_node.offset_bottom = -120 * s # Make room for the button
+	tr_node.offset_bottom = -120 * s
 	tr_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	blocker.add_child(tr_node)
-	
-	var bg = ColorRect.new()
-	bg.color = Color("#2e3036")
-	bg.show_behind_parent = true
-	tr_node.add_child(bg)
-	
-	tr_node.draw.connect(func():
-		var tex_size = tr_node.texture.get_size()
-		var rect_size = tr_node.size
-		if tex_size.x == 0 or tex_size.y == 0 or rect_size.x == 0 or rect_size.y == 0: return
-		var scale_x = rect_size.x / tex_size.x
-		var scale_y = rect_size.y / tex_size.y
-		var min_scale = min(scale_x, scale_y)
-		var drawn_size = tex_size * min_scale
-		bg.size = drawn_size
-		bg.position = (rect_size - drawn_size) / 2.0
-	)
+	content_node.add_child(tr_node)
 	
 	var close_btn = Button.new()
 	close_btn.text = "✖"
@@ -458,3 +474,93 @@ func _get_safe_font() -> Font:
 			_combined_font.set_fallbacks([emoji_f])
 			
 	return _combined_font
+
+class ZoomHandler extends Node:
+	var blocker: Control
+	var content_node: Control
+	var drawn_size: Vector2
+	var touches = {}
+	var pinch_dist = 0.0
+	
+	func _input(e: InputEvent) -> void:
+		if not is_instance_valid(blocker) or not is_instance_valid(content_node):
+			return
+			
+		if e is InputEventScreenTouch:
+			if e.pressed:
+				touches[e.index] = e.position
+			else:
+				touches.erase(e.index)
+			if touches.size() == 2:
+				var keys = touches.keys()
+				pinch_dist = touches[keys[0]].distance_to(touches[keys[1]])
+			else:
+				pinch_dist = 0.0
+			get_viewport().set_input_as_handled()
+				
+		elif e is InputEventScreenDrag:
+			if touches.has(e.index):
+				touches[e.index] = e.position
+			if touches.size() == 2:
+				var keys = touches.keys()
+				var current_dist = touches[keys[0]].distance_to(touches[keys[1]])
+				if pinch_dist > 0.0:
+					var ratio = current_dist / pinch_dist
+					var new_zoom = clamp(content_node.scale.x * ratio, 1.0, 5.0)
+					content_node.scale = Vector2(new_zoom, new_zoom)
+					if new_zoom == 1.0:
+						content_node.position = Vector2.ZERO
+				pinch_dist = current_dist
+				get_viewport().set_input_as_handled()
+			elif touches.size() == 1:
+				if content_node.scale.x > 1.0:
+					content_node.position += e.relative
+					get_viewport().set_input_as_handled()
+					
+		elif e is InputEventMouseMotion:
+			var is_dragging = false
+			if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+				is_dragging = true
+			if e.button_mask & MOUSE_BUTTON_MASK_LEFT:
+				is_dragging = true
+			if is_dragging and content_node.scale.x > 1.0:
+				content_node.position += e.relative
+				get_viewport().set_input_as_handled()
+				
+		elif e is InputEventMouseButton:
+			if e.button_index == MOUSE_BUTTON_WHEEL_UP:
+				var new_zoom = clamp(content_node.scale.x * 1.2, 1.0, 5.0)
+				content_node.scale = Vector2(new_zoom, new_zoom)
+				get_viewport().set_input_as_handled()
+			elif e.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				var new_zoom = clamp(content_node.scale.x / 1.2, 1.0, 5.0)
+				content_node.scale = Vector2(new_zoom, new_zoom)
+				if new_zoom == 1.0:
+					content_node.position = Vector2.ZERO
+				get_viewport().set_input_as_handled()
+				
+		_clamp_position()
+
+	func _clamp_position() -> void:
+		if not is_instance_valid(content_node) or not is_instance_valid(blocker):
+			return
+		
+		if content_node.scale.x <= 1.0:
+			content_node.position = Vector2.ZERO
+			return
+			
+		var z = content_node.scale.x
+		var ui_size = blocker.size
+		
+		var scaled_w = drawn_size.x * z
+		var limit_x = 0.0
+		if scaled_w > ui_size.x:
+			limit_x = (scaled_w - ui_size.x) / 2.0
+			
+		var scaled_h = drawn_size.y * z
+		var limit_y = 0.0
+		if scaled_h > ui_size.y:
+			limit_y = (scaled_h - ui_size.y) / 2.0
+			
+		content_node.position.x = clamp(content_node.position.x, -limit_x, limit_x)
+		content_node.position.y = clamp(content_node.position.y, -limit_y, limit_y)

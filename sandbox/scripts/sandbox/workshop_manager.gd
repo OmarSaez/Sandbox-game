@@ -149,8 +149,8 @@ func upload_world(slot_id: int, public_name: String, category_idx: int):
 	
 	emit_signal("upload_progress", 0.9)
 	
-	var current_week_id = int(Time.get_unix_time_from_system() / 604800)
-	
+	# Se suma un offset de 3 días (259200 segundos) para que la semana inicie el Lunes a las 00:00 UTC
+	var current_week_id = int((Time.get_unix_time_from_system() + 259200) / 604800)	
 	# 6. Guardar en Firestore
 	var doc_data = {
 		"title": public_name,
