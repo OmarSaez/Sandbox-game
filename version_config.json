@@ -1,11 +1,11 @@
 {
-  "latest_version": "1.3.0",
+  "latest_version": "1.3.2",
   "min_version": "1.2.0",
   "update_url": "https://play.google.com/store/apps/details?id=com.sandbox.elexstudio",
-  "changelog_es": "¡Nuevas características! Workshop, ahora puedes compartir y descargar mapas con todo el mundo, se mejora el sistema de musica, tuberia y vegetacion.",
-  "changelog_en": "New features! Workshop, you can now share and download maps with everyone, music system improvements, pipe and vegetation enhancements.",
-  "changelog_it": "Nuove funzionalità! Workshop, ora puoi condividere e scaricare mappe con tutti, miglioramenti del sistema musicale, tubature e miglioramenti della vegetazione.",
-  "changelog_fr": "Nouvelles fonctionnalités ! Workshop, vous pouvez maintenant partager et télécharger des cartes avec tout le monde, améliorations du système musical, tuyauterie et améliorations de la végétation.",
-  "changelog_de": "Neue Funktionen! Workshop, Sie können nun Karten mit allen teilen und herunterladen, Verbesserungen des Musiksystems, Rohrleitungen und Verbesserungen der Vegetation.",
-  "changelog_pt": "Novos recursos! Workshop, você pode agora compartilhar e baixar mapas com todos, melhorias no sistema de música, tubulações e melhorias na vegetação."
+  "changelog_es": "Mejora en la usabilidad de la workshop y poder agrandar la foto miniatura de los mapas.",
+  "changelog_en": "Improved workshop usability and the ability to enlarge map thumbnail images.",
+  "changelog_it": "Migliorata l'usabilità della workshop e possibilità di ingrandire l'anteprima delle mappe.",
+  "changelog_fr": "Amélioration de l'ergonomie de la workshop et possibilité d'agrandir la vignette des cartes.",
+  "changelog_de": "Verbesserte Benutzerfreundlichkeit des Workshops und Möglichkeit, die Karten-Miniaturansicht zu vergrößern.",
+  "changelog_pt": "Melhoria na usabilidade da oficina e possibilidade de ampliar a miniatura dos mapas."
 }
