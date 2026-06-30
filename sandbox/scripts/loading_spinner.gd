@@ -82,11 +82,11 @@ func _draw() -> void:
 		blue_jump = abs(sin(blue_time)) * jump_height
 	
 	# 2. Dibujar el Soldado Rojo (Izquierda, mirando a la derecha)
-	var red_pos = Vector2(center_x - 60, floor_y - (5 * pixel_size) - red_jump)
+	var red_pos = Vector2(center_x - 60, floor_y - (7 * pixel_size) - red_jump)
 	_draw_warrior(red_pos, COLOR_RED, 1)
 	
 	# 3. Dibujar el Soldado Azul (Derecha, mirando a la izquierda)
-	var blue_pos = Vector2(center_x + 36, floor_y - (5 * pixel_size) - blue_jump)
+	var blue_pos = Vector2(center_x + 36, floor_y - (7 * pixel_size) - blue_jump)
 	_draw_warrior(blue_pos, COLOR_BLUE, -1)
 	
 	# 4. Dibujar partículas de polvo al aterrizar
@@ -95,21 +95,25 @@ func _draw() -> void:
 		_draw_landing_dust(center_x + 48, floor_y, blue_time)
 
 func _draw_warrior(pos: Vector2, team_color: Color, dir: int) -> void:
-	# Definición de la cuadrícula de 2x5 celdas del NPC Standing
+	# Definición de la cuadrícula de 5x7 celdas del NPC Standing
+	var C_T = Color.TRANSPARENT
 	var cells = [
-		[COLOR_HEAD, COLOR_HEAD],      # Fila 0 (casco superior)
-		[COLOR_HEAD, COLOR_SKIN],      # Fila 1 (casco y cara)
-		[COLOR_TORSO, team_color],     # Fila 2 (torso y color de equipo)
-		[team_color, COLOR_TORSO],     # Fila 3 (color de equipo y torso)
-		[COLOR_SHOES, COLOR_SHOES]     # Fila 4 (pies/zapatos)
+		[COLOR_HEAD, COLOR_HEAD, COLOR_HEAD, COLOR_HEAD, C_T],
+		[COLOR_HEAD, COLOR_TORSO, COLOR_SKIN, COLOR_TORSO, C_T],
+		[COLOR_HEAD, COLOR_SKIN, COLOR_SKIN, COLOR_SKIN, C_T],
+		[team_color, COLOR_TORSO, team_color, COLOR_TORSO, C_T],
+		[COLOR_SKIN, team_color, COLOR_TORSO, team_color, COLOR_SKIN],
+		[COLOR_SHOES, COLOR_SHOES, COLOR_SHOES, COLOR_SHOES, C_T],
+		[COLOR_SHOES, C_T, C_T, COLOR_SHOES, C_T]
 	]
 	
-	for y in range(5):
-		for x in range(2):
-			var draw_x = x if dir > 0 else 1 - x
+	for y in range(7):
+		for x in range(5):
+			var draw_x = x if dir > 0 else 4 - x
 			var cell_color = cells[y][draw_x]
-			var rect_pos = pos + Vector2(x * pixel_size, y * pixel_size)
-			draw_rect(Rect2(rect_pos, Vector2(pixel_size, pixel_size)), cell_color)
+			if cell_color != Color.TRANSPARENT:
+				var rect_pos = pos + Vector2(x * pixel_size, y * pixel_size)
+				draw_rect(Rect2(rect_pos, Vector2(pixel_size, pixel_size)), cell_color)
 
 func _draw_landing_dust(x: float, y: float, jump_time: float) -> void:
 	var fraction = abs(sin(jump_time))

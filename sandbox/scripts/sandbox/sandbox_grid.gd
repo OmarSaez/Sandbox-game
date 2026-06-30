@@ -12265,10 +12265,10 @@ func _draw_npc_pixels(npc, override_mat = -1):
 		var is_tank = (npc.type == "zombie_tank")
 		var is_mage = (npc.type == "mage")
 		
-		var pad_left = 7 if was_lying else (1 if is_tank else 1)
-		var pad_right = 7 if was_lying else (3 if is_tank else 2)
+		var pad_left = 7 if was_lying else (1 if is_tank else 4)
+		var pad_right = 7 if was_lying else (3 if is_tank else 4)
 		var pad_top = 1
-		var pad_bottom = 7 if (is_tank or is_mage) else 6
+		var pad_bottom = 7 if (is_tank or is_mage) else 8
 		
 		var min_x = min(npc.pos.x, last_x) - pad_left - 1
 		var max_x = max(npc.pos.x, last_x) + pad_right + 1
@@ -12361,24 +12361,22 @@ func _draw_npc_pixels(npc, override_mat = -1):
 				_set_cell(lx, ly, m_shoes); _set_cell(lx+1, ly, team_mat); _set_cell(lx+2, ly, team_mat); _set_cell(lx+3, ly, team_mat); _set_cell(lx+4, ly, m_skin); _set_cell(lx+5, ly, team_mat)
 				_set_cell(lx, ly+1, m_shoes); _set_cell(lx+1, ly+1, m_head); _set_cell(lx+2, ly+1, m_head); _set_cell(lx+3, ly+1, m_head); _set_cell(lx+4, ly+1, m_head); _set_cell(lx+5, ly+1, team_mat)
 		else:
-			# --- LYING DOWN (Horizontal 5x2 - Face Up) ---
-			var lx = sx; var ly = sy + 3
-			if face_dir > 0:
-				# Fila Superior (Cara y pecho mirando arriba)
-				_set_cell(lx, ly, m_head); _set_cell(lx+1, ly, m_skin)
-				_set_cell(lx+2, ly, team_mat); _set_cell(lx+3, ly, m_torso)
-				_set_cell(lx+4, ly, m_shoes)
-				# Fila Inferior (Base del cuerpo)
-				_set_cell(lx, ly+1, m_head); _set_cell(lx+1, ly+1, m_head)
-				_set_cell(lx+2, ly+1, m_torso); _set_cell(lx+3, ly+1, team_mat)
-				_set_cell(lx+4, ly+1, m_shoes)
-			else:
-				# Espejo
-				_set_cell(lx, ly, m_shoes); _set_cell(lx, ly+1, m_shoes)
-				_set_cell(lx-1, ly, team_mat); _set_cell(lx-2, ly, m_torso)
-				_set_cell(lx-1, ly+1, m_torso); _set_cell(lx-2, ly+1, team_mat)
-				_set_cell(lx-3, ly, m_skin); _set_cell(lx-4, ly, m_head)
-				_set_cell(lx-3, ly+1, m_head); _set_cell(lx-4, ly+1, m_head)
+			# --- LYING DOWN (7x5) ---
+			var lx = sx - 3 if face_dir > 0 else sx + 3
+			var step = 1 if face_dir > 0 else -1
+			var y_H = sy + 2 # Front arm (Up)
+			var y_G = sy + 3 # Face
+			var y_F = sy + 4 # Middle
+			var y_E = sy + 5 # Middle
+			var y_D = sy + 6 # Back (Down)
+			
+			_set_cell(lx, y_D, m_head); _set_cell(lx, y_E, m_head); _set_cell(lx, y_F, m_head); _set_cell(lx, y_G, m_head)
+			_set_cell(lx+step, y_D, m_head); _set_cell(lx+step, y_E, m_torso); _set_cell(lx+step, y_F, m_skin); _set_cell(lx+step, y_G, m_torso)
+			_set_cell(lx+step*2, y_D, m_head); _set_cell(lx+step*2, y_E, m_skin); _set_cell(lx+step*2, y_F, m_skin); _set_cell(lx+step*2, y_G, m_skin)
+			_set_cell(lx+step*3, y_D, team_mat); _set_cell(lx+step*3, y_E, m_torso); _set_cell(lx+step*3, y_F, team_mat); _set_cell(lx+step*3, y_G, m_torso)
+			_set_cell(lx+step*4, y_D, m_skin); _set_cell(lx+step*4, y_E, team_mat); _set_cell(lx+step*4, y_F, m_torso); _set_cell(lx+step*4, y_G, team_mat); _set_cell(lx+step*4, y_H, m_skin)
+			_set_cell(lx+step*5, y_D, m_shoes); _set_cell(lx+step*5, y_E, m_shoes); _set_cell(lx+step*5, y_F, m_shoes); _set_cell(lx+step*5, y_G, m_shoes)
+			_set_cell(lx+step*6, y_D, m_shoes); _set_cell(lx+step*6, y_G, m_shoes)
 	else:
 		if npc.type == "zombie_tank":
 			# --- STANDING ZOMBIE TANK (3x6) ---
@@ -12416,21 +12414,29 @@ func _draw_npc_pixels(npc, override_mat = -1):
 			# Row 5: Shoes
 			_set_cell(px0, sy+5, m_shoes); _set_cell(px1, sy+5, m_shoes)
 		else:
-			# --- STANDING (Vertical 2x5) ---
-			var px0 = sx if face_dir > 0 else sx + 1
-			var px1 = sx + 1 if face_dir > 0 else sx
-			_set_cell(px0, sy, m_head); _set_cell(px1, sy, m_head)
-			_set_cell(px0, sy+1, m_head); _set_cell(px1, sy+1, m_skin)
+			# --- STANDING (5x7) ---
+			var c_D = sx - 1 if face_dir > 0 else sx + 2
+			var c_E = sx     if face_dir > 0 else sx + 1
+			var c_F = sx + 1 if face_dir > 0 else sx
+			var c_G = sx + 2 if face_dir > 0 else sx - 1
+			var c_H = sx + 3 if face_dir > 0 else sx - 2
+
+			_set_cell(c_D, sy, m_head); _set_cell(c_E, sy, m_head); _set_cell(c_F, sy, m_head); _set_cell(c_G, sy, m_head)
+			_set_cell(c_D, sy+1, m_head); _set_cell(c_E, sy+1, m_torso); _set_cell(c_F, sy+1, m_skin); _set_cell(c_G, sy+1, m_torso)
+			_set_cell(c_D, sy+2, m_head); _set_cell(c_E, sy+2, m_skin); _set_cell(c_F, sy+2, m_skin); _set_cell(c_G, sy+2, m_skin)
+			
 			if npc.type == "medic" and override_mat == -1 and !is_flashing:
-				_set_cell(px0, sy+2, 1041); _set_cell(px1, sy+2, 1041)
-				_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, team_mat)
+				_set_cell(c_D, sy+3, team_mat); _set_cell(c_E, sy+3, 1041); _set_cell(c_F, sy+3, team_mat); _set_cell(c_G, sy+3, 1041)
+				_set_cell(c_D, sy+4, m_skin); _set_cell(c_E, sy+4, team_mat); _set_cell(c_F, sy+4, 1041); _set_cell(c_G, sy+4, team_mat); _set_cell(c_H, sy+4, m_skin)
 			elif npc.type == "archer" and override_mat == -1 and !is_flashing:
-				_set_cell(px0, sy+2, team_mat); _set_cell(px1, sy+2, team_mat)
-				_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, team_mat)
+				_set_cell(c_D, sy+3, team_mat); _set_cell(c_E, sy+3, team_mat); _set_cell(c_F, sy+3, team_mat); _set_cell(c_G, sy+3, team_mat)
+				_set_cell(c_D, sy+4, m_skin); _set_cell(c_E, sy+4, team_mat); _set_cell(c_F, sy+4, team_mat); _set_cell(c_G, sy+4, team_mat); _set_cell(c_H, sy+4, m_skin)
 			else:
-				_set_cell(px0, sy+2, m_torso); _set_cell(px1, sy+2, team_mat)
-				_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, m_torso)
-			_set_cell(px0, sy+4, m_shoes); _set_cell(px1, sy+4, m_shoes)
+				_set_cell(c_D, sy+3, team_mat); _set_cell(c_E, sy+3, m_torso); _set_cell(c_F, sy+3, team_mat); _set_cell(c_G, sy+3, m_torso)
+				_set_cell(c_D, sy+4, m_skin); _set_cell(c_E, sy+4, team_mat); _set_cell(c_F, sy+4, m_torso); _set_cell(c_G, sy+4, team_mat); _set_cell(c_H, sy+4, m_skin)
+			
+			_set_cell(c_D, sy+5, m_shoes); _set_cell(c_E, sy+5, m_shoes); _set_cell(c_F, sy+5, m_shoes); _set_cell(c_G, sy+5, m_shoes)
+			_set_cell(c_D, sy+6, m_shoes); _set_cell(c_G, sy+6, m_shoes)
 
 func _update_npc_spatial_hash():
 	for cell in npc_spatial_grid:
