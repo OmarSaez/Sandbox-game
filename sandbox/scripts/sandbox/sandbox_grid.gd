@@ -12130,7 +12130,7 @@ func _place_npc(x, y):
 					var nearby = _get_nearby_npcs(test_x, test_y, 10.0)
 					var overlap = false
 					for other in nearby:
-						if test_x < other.pos.x + 2 and test_x + 2 > other.pos.x and test_y < other.pos.y + 5 and test_y + 5 > other.pos.y:
+						if test_x < other.pos.x + 5 and test_x + 5 > other.pos.x and test_y < other.pos.y + 7 and test_y + 7 > other.pos.y:
 							overlap = true
 							break
 					
@@ -13255,8 +13255,8 @@ func _process_npcs(delta):
 		# --- 3. MOVIMIENTO IA (SI NO HAY FISICA ACTIVA Y NO ESTÁ POSEÍDO) ---
 		if not moved_by_physics and npc != controlled_npc:
 			# 1. GRAVEDAD SOBERANA: Chequeo solo bajo los pies para evitar "colgarse" lateralmente
-			var w = 3 if (npc.type == "zombie_tank") else 2
-			var h = 6 if (npc.type == "zombie_tank" or npc.type == "mage") else 5
+			var w = 3 if (npc.type == "zombie_tank") else 5
+			var h = 6 if (npc.type == "zombie_tank" or npc.type == "mage") else 7
 			var feet_y = np.y + h
 			var can_fall = true
 			if feet_y >= dynamic_grid_height: can_fall = false
@@ -13343,8 +13343,8 @@ func _process_npcs(delta):
 						var has_z = _has_active_zombies()
 						for other in nearby:
 							if _is_ally(npc, other, has_z) and other != npc:
-								var ow = 3 if (other.type == "zombie_tank") else 2
-								var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 5
+								var ow = 3 if (other.type == "zombie_tank") else 5
+								var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 7
 								if tx_test < other.pos.x + ow and tx_test + w > other.pos.x and np.y < other.pos.y + oh and np.y + h > other.pos.y:
 									bumped_ally = true; break
 						
@@ -13901,8 +13901,8 @@ func _process_projectiles(delta):
 					is_enemy = (other.team != p.team)
 					
 			if is_enemy and other.hp > 0 and other.invul_timer <= 0:
-				var ow = 3 if (other.type == "zombie_tank") else 2
-				var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 5
+				var ow = 3 if (other.type == "zombie_tank") else 5
+				var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 7
 				var overlaps = false
 				if p.type == "bomber_bomb":
 					for ox in range(-1, 1):
@@ -14222,8 +14222,8 @@ func _check_npc_environment_damage(npc) -> bool:
 			npc.hp -= 2.5 * dmg_mult; took_damage = true; npc.hit_flash = 5; npc.hit_type = "electric"
 			if _get_lut_rand() < 0.4: _add_spark(float(pt.x),float(pt.y),_get_lut_rand_range(-20,20),_get_lut_rand_range(-40,-10),Color.CYAN,0.4)
 	var is_lying = npc.get("is_lying", false)
-	var w = 2
-	var h = 5
+	var w = 5
+	var h = 7
 	if npc.type == "zombie_tank":
 		w = 3
 		h = 6
@@ -14235,9 +14235,9 @@ func _check_npc_environment_damage(npc) -> bool:
 	var py = npc.pos.y
 	
 	if is_lying:
-		w = 6 if npc.type == "mage" else (6 if npc.type == "zombie_tank" else 5)
-		h = 2 if npc.type == "mage" else (3 if npc.type == "zombie_tank" else 2)
-		py += 4 if npc.type == "mage" else 3
+		w = 6 if npc.type == "mage" else (6 if npc.type == "zombie_tank" else 7)
+		h = 2 if npc.type == "mage" else (3 if npc.type == "zombie_tank" else 5)
+		py += 4 if npc.type == "mage" else (3 if npc.type == "zombie_tank" else 2)
 		
 	var air_found = false
 	
@@ -14313,8 +14313,8 @@ func _set_npc_emoji(npc, emoji_text: String, duration: float = 2.0):
 	npc.emoji_timer = duration
 
 func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
-	var w = 2
-	var h = 5
+	var w = 5
+	var h = 7
 	if moving_npc != null:
 		if moving_npc.type == "zombie_tank":
 			w = 3
@@ -14365,8 +14365,8 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 			# Regla de oro: Aliados no se estorban
 			if _is_ally(moving_npc, other, has_z): continue 
 			
-			var ow = 3 if (other.type == "zombie_tank") else 2
-			var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 5
+			var ow = 3 if (other.type == "zombie_tank") else 5
+			var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 7
 			if gx < other.pos.x + ow and gx + w > other.pos.x and gy < other.pos.y + oh and gy + h > other.pos.y: return false
 	return true
 
