@@ -397,9 +397,10 @@ func _on_load_pressed():
 		for x in range(w_s):
 			var val = standing[y][x]
 			if val != 0 and typeof(val) != TYPE_STRING:
-				if val == 4: val = 10
-				elif val == 8: val = 11
-				elif val == 9: val = 12
+				if typeof(vis.get("palette", {}).get(val)) == TYPE_ARRAY:
+					if val == 4: val = 10
+					elif val == 8: val = 11
+					elif val == 9: val = 12
 				current_brush = val
 				_paint_cell(start_x_s + x, start_y_s + y, false)
 				
@@ -412,9 +413,10 @@ func _on_load_pressed():
 		for x in range(w_l):
 			var val = lying[y][x]
 			if val != 0 and typeof(val) != TYPE_STRING:
-				if val == 4: val = 10
-				elif val == 8: val = 11
-				elif val == 9: val = 12
+				if typeof(vis.get("palette", {}).get(val)) == TYPE_ARRAY:
+					if val == 4: val = 10
+					elif val == 8: val = 11
+					elif val == 9: val = 12
 				current_brush = val
 				_paint_cell(start_x_l + x, start_y_l + y, true)
 				
