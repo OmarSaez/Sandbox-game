@@ -49,9 +49,11 @@ func _init_colors_for_loaded_npc():
 	
 	for i in range(1, 10):
 		if palette.has(i):
-			var mat_id = palette[i]
-			if typeof(mat_id) == TYPE_INT and NPC_MAT_COLORS.has(mat_id):
-				custom_base_colors[i] = NPC_MAT_COLORS[mat_id]
+			var val = palette[i]
+			if typeof(val) == TYPE_COLOR:
+				custom_base_colors[i] = val
+			elif typeof(val) == TYPE_INT and NPC_MAT_COLORS.has(val):
+				custom_base_colors[i] = NPC_MAT_COLORS[val]
 			else:
 				custom_base_colors[i] = Color.WHITE
 		else:
@@ -61,6 +63,20 @@ func _init_colors_for_loaded_npc():
 		custom_team_colors[t][10] = _get_standard_team_color(t, "team")
 		custom_team_colors[t][11] = _get_standard_team_color(t, "team_mage")
 		custom_team_colors[t][12] = Color.MAGENTA
+		
+	# Overwrite with actual array colors from palette if they exist
+	for k in palette.keys():
+		var val = palette[k]
+		if typeof(val) == TYPE_ARRAY:
+			var slot = 10
+			if k == 4: slot = 10
+			elif k == 8: slot = 11
+			elif k == 9: slot = 12
+			else: slot = k
+			
+			for t in range(min(4, val.size())):
+				if typeof(val[t]) == TYPE_COLOR:
+					custom_team_colors[t][slot] = val[t]
 
 func _set_brush(idx: int):
 	current_brush = idx
