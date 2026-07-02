@@ -883,10 +883,14 @@ const NPC_PROFILES = {
 	}
 }
 
-var NPC_VISUALS = {
+const NPC_VISUALS = {
 	"warrior": {
 		"width": 5, "height": 7,
-		"palette": {1: 1001, 2: 1002, 3: 1003, 4: "team", 5: 1008},
+		"palette": {
+			1: Color("717E80"), 2: Color("1F1F1F"), 3: Color("FFE2BD"),
+			4: [Color("E00000"), Color("008EE6"), Color("FFD000"), Color("00E317")],
+			5: Color("717E80")
+		},
 		"frames": {
 			"standing": [
 				[1, 1, 1, 1, 0],
@@ -908,7 +912,11 @@ var NPC_VISUALS = {
 	},
 	"archer": {
 		"width": 5, "height": 7,
-		"palette": {1: 1011, 2: 1014, 3: 1013, 4: "team", 5: 1015},
+		"palette": {
+			1: Color("9C5B00"), 2: Color("9D00FF"), 3: Color("FFBC78"),
+			4: [Color("E00000"), Color("008EE6"), Color("FFD000"), Color("00E317")],
+			5: Color("594E61")
+		},
 		"frames": {
 			"standing": [
 				[1, 1, 1, 1, 0],
@@ -930,7 +938,11 @@ var NPC_VISUALS = {
 	},
 	"miner": {
 		"width": 5, "height": 7,
-		"palette": {1: 1021, 2: 1023, 3: 1022, 4: "team", 5: 1024},
+		"palette": {
+			1: Color("#FFFB00"), 2: Color("#FF8D00"), 3: Color("7D522D"),
+			4: [Color("E00000"), Color("008EE6"), Color("FFD000"), Color("00E317")],
+			5: Color("000000")
+		},
 		"frames": {
 			"standing": [
 				[1, 1, 1, 1, 0],
@@ -952,7 +964,11 @@ var NPC_VISUALS = {
 	},
 	"medic": {
 		"width": 5, "height": 7,
-		"palette": {1: 1044, 2: 1043, 3: 1042, 4: "team", 5: 1045, 6: 1041},
+		"palette": {
+			1: Color("FFFFFF"), 2: Color("EEEEEE"), 3: Color("FFA691"),
+			4: [Color("E00000"), Color("008EE6"), Color("FFD000"), Color("00E317")],
+			5: Color("DEDEDE"), 6: Color("7A0000")
+		},
 		"frames": {
 			"standing": [
 				[1, 1, 1, 1, 0],
@@ -974,7 +990,10 @@ var NPC_VISUALS = {
 	},
 	"zombie": {
 		"width": 5, "height": 7,
-		"palette": {1: 1051, 2: 1052, 3: 1051, 4: 1053, 5: 1054},
+		"palette": {
+			1: Color("5D9C36"), 2: Color("4B245C"), 3: Color("5D9C36"),
+			4: Color("717E80"), 5: Color("5D9C36")
+		},
 		"frames": {
 			"standing": [
 				[1, 1, 1, 1, 0],
@@ -996,7 +1015,10 @@ var NPC_VISUALS = {
 	},
 	"zombie_tank": {
 		"width": 3, "height": 6,
-		"palette": {1: 1061, 2: 1062, 3: 1061, 4: 1063, 5: 1064},
+		"palette": {
+			1: Color("4E822E"), 2: Color("361B43"), 3: Color("4E822E"),
+			4: Color("555F61"), 5: Color("4E822E")
+		},
 		"frames": {
 			"standing": [
 				[1, 1, 1],
@@ -1015,7 +1037,11 @@ var NPC_VISUALS = {
 	},
 	"mage": {
 		"width": 2, "height": 6,
-		"palette": {1: 1071, 2: 1070, 3: 1072, 4: "team_mage", 5: 1008},
+		"palette": {
+			1: Color("F2F2F2"), 2: Color("A83938"), 3: Color("FFD8B3"),
+			4: [Color("A83938"), Color("384BA8"), Color("C79B1E"), Color("74A838")],
+			5: Color("717E80")
+		},
 		"frames": {
 			"standing": [
 				[4, 4],
@@ -1554,6 +1580,7 @@ func _ready():
 
 	# --- NPC SYSTEM: GUERRERO (1000-1009) ---
 	_register_material(1000, Color("1b977cff"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Master
+	# LEGACY NPC MATERIALS (DO NOT REMOVE. Needed for backwards compatibility with old saves)
 	_register_material(1001, Color("717E80"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Cabeza
 	_register_material(1002, Color("1F1F1F"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Torso
 	_register_material(1003, Color("FFE2BD"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Piel
@@ -12453,25 +12480,28 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	if face_dir == 0: face_dir = npc.get("last_dir", 1)
 	else: npc["last_dir"] = face_dir
 
+	var master_mat_id = 1000
+	if npc.type == "archer": master_mat_id = 1010
+	elif npc.type == "miner": master_mat_id = 1020
+	elif npc.type == "mage": master_mat_id = 1070
+	elif npc.type == "zombie" or npc.type == "zombie_tank": master_mat_id = 1080
+	elif npc.type == "medic": master_mat_id = 1040 # Assume 1040 is medic master if exists, else it will use 1000 logic for physics
+	
 	var p = {}
 	if override_mat != -1:
-		for k in range(1, 10): p[k] = override_mat
+		for k in range(1, 10): p[k] = _get_color_from_mat_id(override_mat)
 	elif is_flashing:
 		var f_mat = 1033; if is_dead: f_mat = 1034
 		elif npc.hit_type == "acid": f_mat = 1030
 		elif npc.hit_type == "fire": f_mat = 1031
 		elif npc.hit_type == "explosive": f_mat = 1032
 		elif npc.hit_type == "electric": f_mat = 1035
-		for k in range(1, 10): p[k] = f_mat
+		for k in range(1, 10): p[k] = _get_color_from_mat_id(f_mat)
 	else:
 		var base_p = vis["palette"]
 		for k in base_p.keys():
 			var val = base_p[k]
-			if typeof(val) == TYPE_STRING:
-				if val == "team": p[k] = 1004 + npc.team
-				elif val == "team_mage": p[k] = 1074 + npc.team
-				else: p[k] = val # Failsafe
-			elif typeof(val) == TYPE_ARRAY:
+			if typeof(val) == TYPE_ARRAY:
 				if npc.team >= 0 and npc.team < val.size():
 					p[k] = val[npc.team]
 				else:
@@ -12496,7 +12526,10 @@ func _draw_npc_pixels(npc, override_mat = -1):
 				if is_lying:
 					# Ajustar la altura al acostarse para que repose en el suelo
 					py = sy + (vis["height"] - h) + oy
-				_set_cell(px, py, p[mat_key])
+				_set_cell(px, py, master_mat_id)
+				var c = p[mat_key]
+				if typeof(c) == TYPE_COLOR:
+					cell_paint_colors[py * grid_width + px] = c.to_abgr32()
 
 func _update_npc_spatial_hash():
 	for cell in npc_spatial_grid:
@@ -14263,7 +14296,29 @@ func _attack_npc(attacker, victim):
 func _check_npc_environment_damage(npc) -> bool:
 	if npc.hp <= 0 or npc.invul_timer > 0: return false
 	var took_damage = false; var p = npc.pos
-	var check_points = [p, p + Vector2i(1, 2), p + Vector2i(0, 4), p + Vector2i(0, 5), p + Vector2i(1, 5), p + Vector2i(-1, 2), p + Vector2i(2, 2)]
+	
+	var w = 5; var h = 7
+	var is_lying = npc.get("is_lying", false)
+	if npc.type == "zombie_tank": w = 3; h = 6
+	elif npc.type == "mage": w = 2; h = 6
+	
+	if is_lying:
+		w = 6 if npc.type == "mage" else (6 if npc.type == "zombie_tank" else 7)
+		h = 2 if npc.type == "mage" else (3 if npc.type == "zombie_tank" else 5)
+		
+	var bottom_y = h - 1
+	var mid_y = int(h / 2)
+	var mid_x = int(w / 2)
+	
+	var check_points = [
+		p, 
+		p + Vector2i(mid_x, mid_y), 
+		p + Vector2i(0, bottom_y), 
+		p + Vector2i(w - 1, bottom_y),
+		p + Vector2i(mid_x, bottom_y),
+		p + Vector2i(mid_x, bottom_y + 1)
+	]
+	
 	for pt in check_points:
 		if pt.x < 0 or pt.x >= grid_width or pt.y < 0 or pt.y >= dynamic_grid_height: continue
 		var cell_idx = pt.y * grid_width + pt.x
@@ -14281,22 +14336,10 @@ func _check_npc_environment_damage(npc) -> bool:
 		if charge_array[cell_idx] > 50:
 			npc.hp -= 2.5 * dmg_mult; took_damage = true; npc.hit_flash = 5; npc.hit_type = "electric"
 			if _get_lut_rand() < 0.4: _add_spark(float(pt.x),float(pt.y),_get_lut_rand_range(-20,20),_get_lut_rand_range(-40,-10),Color.CYAN,0.4)
-	var is_lying = npc.get("is_lying", false)
-	var w = 5
-	var h = 7
-	if npc.type == "zombie_tank":
-		w = 3
-		h = 6
-	elif npc.type == "mage":
-		w = 2
-		h = 6
-		
 	var px = npc.pos.x
 	var py = npc.pos.y
 	
 	if is_lying:
-		w = 6 if npc.type == "mage" else (6 if npc.type == "zombie_tank" else 7)
-		h = 2 if npc.type == "mage" else (3 if npc.type == "zombie_tank" else 5)
 		py += 4 if npc.type == "mage" else (3 if npc.type == "zombie_tank" else 2)
 		
 	var air_found = false
@@ -21595,3 +21638,8 @@ func _show_centered_bubble(msg: String, border_color: Color):
 	)
 	vbox.add_child(btn)
 	ui_root.add_child(center)
+
+func _get_color_from_mat_id(id: int) -> Color:
+	var pure_id = id & 0xFFFF
+	if pure_id >= 0 and pure_id < mat_colors_1.size(): return mat_colors_1[pure_id]
+	return Color.WHITE
