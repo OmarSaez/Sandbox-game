@@ -883,6 +883,156 @@ const NPC_PROFILES = {
 	}
 }
 
+var NPC_VISUALS = {
+	"warrior": {
+		"width": 5, "height": 7,
+		"palette": {1: 1001, 2: 1002, 3: 1003, 4: "team", 5: 1008},
+		"frames": {
+			"standing": [
+				[1, 1, 1, 1, 0],
+				[1, 3, 2, 1, 0],
+				[1, 3, 3, 3, 0],
+				[4, 2, 4, 2, 0],
+				[3, 4, 2, 4, 3],
+				[5, 5, 5, 5, 0],
+				[5, 0, 0, 5, 0]
+			],
+			"lying": [
+				[0, 0, 0, 0, 3, 0, 0],
+				[1, 2, 3, 2, 4, 5, 5],
+				[1, 3, 3, 4, 2, 5, 0],
+				[1, 2, 3, 2, 4, 5, 0],
+				[1, 1, 1, 4, 3, 5, 5]
+			]
+		}
+	},
+	"archer": {
+		"width": 5, "height": 7,
+		"palette": {1: 1011, 2: 1014, 3: 1013, 4: "team", 5: 1015},
+		"frames": {
+			"standing": [
+				[1, 1, 1, 1, 0],
+				[1, 3, 2, 1, 0],
+				[1, 3, 3, 3, 0],
+				[4, 4, 4, 4, 0],
+				[3, 4, 4, 4, 3],
+				[5, 5, 5, 5, 0],
+				[5, 0, 0, 5, 0]
+			],
+			"lying": [
+				[0, 0, 0, 0, 3, 0, 0],
+				[1, 2, 3, 2, 4, 5, 5],
+				[1, 3, 3, 4, 2, 5, 0],
+				[1, 2, 3, 2, 4, 5, 0],
+				[1, 1, 1, 4, 3, 5, 5]
+			]
+		}
+	},
+	"miner": {
+		"width": 5, "height": 7,
+		"palette": {1: 1021, 2: 1023, 3: 1022, 4: "team", 5: 1024},
+		"frames": {
+			"standing": [
+				[1, 1, 1, 1, 0],
+				[1, 3, 2, 1, 0],
+				[1, 3, 3, 3, 0],
+				[4, 2, 4, 2, 0],
+				[3, 4, 2, 4, 3],
+				[5, 5, 5, 5, 0],
+				[5, 0, 0, 5, 0]
+			],
+			"lying": [
+				[0, 0, 0, 0, 3, 0, 0],
+				[1, 2, 3, 2, 4, 5, 5],
+				[1, 3, 3, 4, 2, 5, 0],
+				[1, 2, 3, 2, 4, 5, 0],
+				[1, 1, 1, 4, 3, 5, 5]
+			]
+		}
+	},
+	"medic": {
+		"width": 5, "height": 7,
+		"palette": {1: 1044, 2: 1043, 3: 1042, 4: "team", 5: 1045, 6: 1041},
+		"frames": {
+			"standing": [
+				[1, 1, 1, 1, 0],
+				[1, 3, 2, 1, 0],
+				[1, 3, 3, 3, 0],
+				[4, 6, 4, 6, 0],
+				[3, 4, 6, 4, 3],
+				[5, 5, 5, 5, 0],
+				[5, 0, 0, 5, 0]
+			],
+			"lying": [
+				[0, 0, 0, 0, 3, 0, 0],
+				[1, 2, 3, 2, 4, 5, 5],
+				[1, 3, 3, 4, 2, 5, 0],
+				[1, 2, 3, 2, 4, 5, 0],
+				[1, 1, 1, 4, 3, 5, 5]
+			]
+		}
+	},
+	"zombie": {
+		"width": 5, "height": 7,
+		"palette": {1: 1051, 2: 1052, 3: 1051, 4: 1053, 5: 1054},
+		"frames": {
+			"standing": [
+				[1, 1, 1, 1, 0],
+				[1, 3, 2, 1, 0],
+				[1, 3, 3, 3, 0],
+				[4, 2, 4, 2, 0],
+				[3, 4, 2, 4, 3],
+				[5, 5, 5, 5, 0],
+				[5, 0, 0, 5, 0]
+			],
+			"lying": [
+				[0, 0, 0, 0, 3, 0, 0],
+				[1, 2, 3, 2, 4, 5, 5],
+				[1, 3, 3, 4, 2, 5, 0],
+				[1, 2, 3, 2, 4, 5, 0],
+				[1, 1, 1, 4, 3, 5, 5]
+			]
+		}
+	},
+	"zombie_tank": {
+		"width": 3, "height": 6,
+		"palette": {1: 1061, 2: 1062, 3: 1061, 4: 1063, 5: 1064},
+		"frames": {
+			"standing": [
+				[1, 1, 1],
+				[1, 3, 3],
+				[4, 2, 2],
+				[2, 4, 4],
+				[4, 4, 4],
+				[5, 5, 5]
+			],
+			"lying": [
+				[1, 3, 4, 2, 4, 5],
+				[1, 1, 2, 4, 4, 5],
+				[1, 3, 2, 2, 4, 5]
+			]
+		}
+	},
+	"mage": {
+		"width": 2, "height": 6,
+		"palette": {1: 1071, 2: 1070, 3: 1072, 4: "team_mage", 5: 1008},
+		"frames": {
+			"standing": [
+				[4, 4],
+				[1, 3],
+				[4, 1],
+				[4, 1],
+				[4, 1],
+				[5, 5]
+			],
+			"lying": [
+				[4, 3, 4, 4, 4, 5],
+				[4, 1, 1, 1, 1, 5]
+			]
+		}
+	}
+}
+
 var sfx_cache = {} # Cache for loaded AudioStreams
 
 # Localization system (Standard tr() calls)
@@ -12296,147 +12446,57 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	npc["last_render_y"] = sy
 	npc["last_render_lying"] = is_lying
 		
-	# 1. Definir materiales por Clase (Dedicados para personalización)
-	var m_head = 1001; var m_skin = 1003; var m_torso = 1002; var m_shoes = 1008
-	var team_mat = 1004 + npc.team
+	# 1. Resolver Materiales y Paleta (Data-Driven)
+	var vis = NPC_VISUALS.get(npc.type, NPC_VISUALS["warrior"])
 	
-	if npc.type == "archer":
-		m_head = 1011; m_skin = 1013; m_torso = 1014; m_shoes = 1015
-	elif npc.type == "miner":
-		m_head = 1021; m_skin = 1022; m_torso = 1023; m_shoes = 1024
-	elif npc.type == "medic":
-		m_head = 1044; m_skin = 1042; m_torso = 1043; m_shoes = 1045
-	elif npc.type == "zombie":
-		m_head = 1051; m_skin = 1051; m_torso = 1052; m_shoes = 1054; team_mat = 1053
-	elif npc.type == "zombie_tank":
-		m_head = 1061; m_skin = 1061; m_torso = 1062; m_shoes = 1064; team_mat = 1063
-	elif npc.type == "mage":
-		m_head = 1071 # Mago Barba
-		m_skin = 1072 # Mago Piel
-		m_torso = 1070 # Mago Master
-		m_shoes = 1008 # Standard shoes
-		if npc.team == 0: team_mat = 1074
-		elif npc.team == 1: team_mat = 1075
-		elif npc.team == 2: team_mat = 1076
-		elif npc.team == 3: team_mat = 1077
-		else: team_mat = 1074
+	var face_dir = npc.get("dir", 1)
+	if face_dir == 0: face_dir = npc.get("last_dir", 1)
+	else: npc["last_dir"] = face_dir
 
-	
-	# 2. Aplicar Overrides (Daño/Muerte)
+	var p = {}
 	if override_mat != -1:
-		m_head = override_mat; m_skin = override_mat; m_torso = override_mat; m_shoes = override_mat; team_mat = override_mat
+		for k in range(1, 10): p[k] = override_mat
 	elif is_flashing:
 		var f_mat = 1033; if is_dead: f_mat = 1034
 		elif npc.hit_type == "acid": f_mat = 1030
 		elif npc.hit_type == "fire": f_mat = 1031
 		elif npc.hit_type == "explosive": f_mat = 1032
 		elif npc.hit_type == "electric": f_mat = 1035
-		m_head = f_mat; m_skin = f_mat; m_torso = f_mat; m_shoes = f_mat; team_mat = f_mat
-		
-	# 3. SET PIXELS (2x5 Grid or 5x2 Lying down)
-	var face_dir = npc.get("dir", 1)
-	if face_dir == 0: face_dir = npc.get("last_dir", 1)
-	else: npc["last_dir"] = face_dir
-		
-	if is_lying:
-		if npc.type == "zombie_tank":
-			# --- LYING DOWN ZOMBIE TANK (6x3) ---
-			var lx = sx; var ly = sy + 3
-			if face_dir > 0:
-				_set_cell(lx, ly, m_head); _set_cell(lx+1, ly, m_skin); _set_cell(lx+2, ly, team_mat); _set_cell(lx+3, ly, m_torso); _set_cell(lx+4, ly, team_mat); _set_cell(lx+5, ly, m_shoes)
-				_set_cell(lx, ly+1, m_head); _set_cell(lx+1, ly+1, m_head); _set_cell(lx+2, ly+1, m_torso); _set_cell(lx+3, ly+1, team_mat); _set_cell(lx+4, ly+1, team_mat); _set_cell(lx+5, ly+1, m_shoes)
-				_set_cell(lx, ly+2, m_head); _set_cell(lx+1, ly+2, m_skin); _set_cell(lx+2, ly+2, m_torso); _set_cell(lx+3, ly+2, m_torso); _set_cell(lx+4, ly+2, team_mat); _set_cell(lx+5, ly+2, m_shoes)
-			else:
-				_set_cell(lx, ly, m_shoes); _set_cell(lx+1, ly, team_mat); _set_cell(lx+2, ly, m_torso); _set_cell(lx+3, ly, team_mat); _set_cell(lx+4, ly, m_skin); _set_cell(lx+5, ly, m_head)
-				_set_cell(lx, ly+1, m_shoes); _set_cell(lx+1, ly+1, team_mat); _set_cell(lx+2, ly+1, team_mat); _set_cell(lx+3, ly+1, m_torso); _set_cell(lx+4, ly+1, m_head); _set_cell(lx+5, ly+1, m_head)
-				_set_cell(lx, ly+2, m_shoes); _set_cell(lx+1, ly+2, team_mat); _set_cell(lx+2, ly+2, m_torso); _set_cell(lx+3, ly+2, m_torso); _set_cell(lx+4, ly+2, m_skin); _set_cell(lx+5, ly+2, m_head)
-		elif npc.type == "mage":
-			# --- LYING DOWN WIZARD/MAGO (6x2) ---
-			var lx = sx; var ly = sy + 4
-			if face_dir > 0:
-				_set_cell(lx, ly, team_mat); _set_cell(lx+1, ly, m_skin); _set_cell(lx+2, ly, team_mat); _set_cell(lx+3, ly, team_mat); _set_cell(lx+4, ly, team_mat); _set_cell(lx+5, ly, m_shoes)
-				_set_cell(lx, ly+1, team_mat); _set_cell(lx+1, ly+1, m_head); _set_cell(lx+2, ly+1, m_head); _set_cell(lx+3, ly+1, m_head); _set_cell(lx+4, ly+1, m_head); _set_cell(lx+5, ly+1, m_shoes)
-			else:
-				# Mirror (Lying down facing left)
-				_set_cell(lx, ly, m_shoes); _set_cell(lx+1, ly, team_mat); _set_cell(lx+2, ly, team_mat); _set_cell(lx+3, ly, team_mat); _set_cell(lx+4, ly, m_skin); _set_cell(lx+5, ly, team_mat)
-				_set_cell(lx, ly+1, m_shoes); _set_cell(lx+1, ly+1, m_head); _set_cell(lx+2, ly+1, m_head); _set_cell(lx+3, ly+1, m_head); _set_cell(lx+4, ly+1, m_head); _set_cell(lx+5, ly+1, team_mat)
-		else:
-			# --- LYING DOWN (7x5) ---
-			var lx = sx if face_dir > 0 else sx + 6
-			var step = 1 if face_dir > 0 else -1
-			var y_H = sy + 2 # Front arm (Up)
-			var y_G = sy + 3 # Face
-			var y_F = sy + 4 # Middle
-			var y_E = sy + 5 # Middle
-			var y_D = sy + 6 # Back (Down)
-			
-			_set_cell(lx, y_D, m_head); _set_cell(lx, y_E, m_head); _set_cell(lx, y_F, m_head); _set_cell(lx, y_G, m_head)
-			_set_cell(lx+step, y_D, m_head); _set_cell(lx+step, y_E, m_torso); _set_cell(lx+step, y_F, m_skin); _set_cell(lx+step, y_G, m_torso)
-			_set_cell(lx+step*2, y_D, m_head); _set_cell(lx+step*2, y_E, m_skin); _set_cell(lx+step*2, y_F, m_skin); _set_cell(lx+step*2, y_G, m_skin)
-			_set_cell(lx+step*3, y_D, team_mat); _set_cell(lx+step*3, y_E, m_torso); _set_cell(lx+step*3, y_F, team_mat); _set_cell(lx+step*3, y_G, m_torso)
-			_set_cell(lx+step*4, y_D, m_skin); _set_cell(lx+step*4, y_E, team_mat); _set_cell(lx+step*4, y_F, m_torso); _set_cell(lx+step*4, y_G, team_mat); _set_cell(lx+step*4, y_H, m_skin)
-			_set_cell(lx+step*5, y_D, m_shoes); _set_cell(lx+step*5, y_E, m_shoes); _set_cell(lx+step*5, y_F, m_shoes); _set_cell(lx+step*5, y_G, m_shoes)
-			_set_cell(lx+step*6, y_D, m_shoes); _set_cell(lx+step*6, y_G, m_shoes)
+		for k in range(1, 10): p[k] = f_mat
 	else:
-		if npc.type == "zombie_tank":
-			# --- STANDING ZOMBIE TANK (3x6) ---
-			var px0 = sx if face_dir > 0 else sx + 2
-			var px1 = sx + 1
-			var px2 = sx + 2 if face_dir > 0 else sx
-			
-			# Fila 0 (Parte superior de la cabeza)
-			_set_cell(px0, sy, m_head); _set_cell(px1, sy, m_head); _set_cell(px2, sy, m_head)
-			# Fila 1 (Cara y nuca)
-			_set_cell(px0, sy+1, m_head); _set_cell(px1, sy+1, m_skin); _set_cell(px2, sy+1, m_skin)
-			# Fila 2 (Torso alto / Hombros)
-			_set_cell(px0, sy+2, team_mat); _set_cell(px1, sy+2, m_torso); _set_cell(px2, sy+2, m_torso)
-			# Fila 3 (Torso bajo)
-			_set_cell(px0, sy+3, m_torso); _set_cell(px1, sy+3, team_mat); _set_cell(px2, sy+3, team_mat)
-			# Fila 4 (Pantalones)
-			_set_cell(px0, sy+4, team_mat); _set_cell(px1, sy+4, team_mat); _set_cell(px2, sy+4, team_mat)
-			# Fila 5 (Pies descalzos)
-			_set_cell(px0, sy+5, m_shoes); _set_cell(px1, sy+5, m_shoes); _set_cell(px2, sy+5, m_shoes)
-		elif npc.type == "mage":
-			# --- STANDING WIZARD/MAGO (2x6) ---
-			var px0 = sx if face_dir > 0 else sx + 1 # Back
-			var px1 = sx + 1 if face_dir > 0 else sx # Front
-			
-			# Row 0: Hat tip
-			_set_cell(px0, sy, team_mat); _set_cell(px1, sy, team_mat)
-			# Row 1: Head / Face
-			_set_cell(px0, sy+1, m_head); _set_cell(px1, sy+1, m_skin)
-			# Row 2: Tunic / Beard
-			_set_cell(px0, sy+2, team_mat); _set_cell(px1, sy+2, m_head)
-			# Row 3: Tunic / Beard
-			_set_cell(px0, sy+3, team_mat); _set_cell(px1, sy+3, m_head)
-			# Row 4: Tunic / Beard
-			_set_cell(px0, sy+4, team_mat); _set_cell(px1, sy+4, m_head)
-			# Row 5: Shoes
-			_set_cell(px0, sy+5, m_shoes); _set_cell(px1, sy+5, m_shoes)
-		else:
-			# --- STANDING (5x7) ---
-			var c_D = sx     if face_dir > 0 else sx + 4
-			var c_E = sx + 1 if face_dir > 0 else sx + 3
-			var c_F = sx + 2 if face_dir > 0 else sx + 2
-			var c_G = sx + 3 if face_dir > 0 else sx + 1
-			var c_H = sx + 4 if face_dir > 0 else sx
-
-			_set_cell(c_D, sy, m_head); _set_cell(c_E, sy, m_head); _set_cell(c_F, sy, m_head); _set_cell(c_G, sy, m_head)
-			_set_cell(c_D, sy+1, m_head); _set_cell(c_E, sy+1, m_torso); _set_cell(c_F, sy+1, m_skin); _set_cell(c_G, sy+1, m_torso)
-			_set_cell(c_D, sy+2, m_head); _set_cell(c_E, sy+2, m_skin); _set_cell(c_F, sy+2, m_skin); _set_cell(c_G, sy+2, m_skin)
-			
-			if npc.type == "medic" and override_mat == -1 and !is_flashing:
-				_set_cell(c_D, sy+3, team_mat); _set_cell(c_E, sy+3, 1041); _set_cell(c_F, sy+3, team_mat); _set_cell(c_G, sy+3, 1041)
-				_set_cell(c_D, sy+4, m_skin); _set_cell(c_E, sy+4, team_mat); _set_cell(c_F, sy+4, 1041); _set_cell(c_G, sy+4, team_mat); _set_cell(c_H, sy+4, m_skin)
-			elif npc.type == "archer" and override_mat == -1 and !is_flashing:
-				_set_cell(c_D, sy+3, team_mat); _set_cell(c_E, sy+3, team_mat); _set_cell(c_F, sy+3, team_mat); _set_cell(c_G, sy+3, team_mat)
-				_set_cell(c_D, sy+4, m_skin); _set_cell(c_E, sy+4, team_mat); _set_cell(c_F, sy+4, team_mat); _set_cell(c_G, sy+4, team_mat); _set_cell(c_H, sy+4, m_skin)
+		var base_p = vis["palette"]
+		for k in base_p.keys():
+			var val = base_p[k]
+			if typeof(val) == TYPE_STRING:
+				if val == "team": p[k] = 1004 + npc.team
+				elif val == "team_mage": p[k] = 1074 + npc.team
+				else: p[k] = val # Failsafe
+			elif typeof(val) == TYPE_ARRAY:
+				if npc.team >= 0 and npc.team < val.size():
+					p[k] = val[npc.team]
+				else:
+					p[k] = val[0] # Fallback
 			else:
-				_set_cell(c_D, sy+3, team_mat); _set_cell(c_E, sy+3, m_torso); _set_cell(c_F, sy+3, team_mat); _set_cell(c_G, sy+3, m_torso)
-				_set_cell(c_D, sy+4, m_skin); _set_cell(c_E, sy+4, team_mat); _set_cell(c_F, sy+4, m_torso); _set_cell(c_G, sy+4, team_mat); _set_cell(c_H, sy+4, m_skin)
-			
-			_set_cell(c_D, sy+5, m_shoes); _set_cell(c_E, sy+5, m_shoes); _set_cell(c_F, sy+5, m_shoes); _set_cell(c_G, sy+5, m_shoes)
-			_set_cell(c_D, sy+6, m_shoes); _set_cell(c_G, sy+6, m_shoes)
+				p[k] = val
+				
+	# 2. Dibujar Matriz (Data-Driven)
+	var frames = vis["frames"]
+	var matrix = frames["lying"] if is_lying else frames["standing"]
+	
+	var h = matrix.size()
+	var w = matrix[0].size() if h > 0 else 0
+	
+	for oy in range(h):
+		var row = matrix[oy]
+		for ox in range(w):
+			var mat_key = row[ox]
+			if mat_key != 0:
+				var px = sx + ox if face_dir > 0 else sx + (w - 1 - ox)
+				var py = sy + oy
+				if is_lying:
+					# Ajustar la altura al acostarse para que repose en el suelo
+					py = sy + (vis["height"] - h) + oy
+				_set_cell(px, py, p[mat_key])
 
 func _update_npc_spatial_hash():
 	for cell in npc_spatial_grid:
@@ -14316,12 +14376,9 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 	var w = 5
 	var h = 7
 	if moving_npc != null:
-		if moving_npc.type == "zombie_tank":
-			w = 3
-			h = 6
-		elif moving_npc.type == "mage":
-			w = 2
-			h = 6
+		var vis = NPC_VISUALS.get(moving_npc.type, NPC_VISUALS["warrior"])
+		w = vis["width"]
+		h = vis["height"]
 		
 	if gx < 0 or gx + w - 1 >= grid_width or gy < 0 or gy + h - 1 >= dynamic_grid_height: return false
 	
