@@ -886,27 +886,23 @@ const NPC_PROFILES = {
 const NPC_VISUALS = {
 	"warrior": {
 		"width": 5, "height": 7,
-		"palette": {
-			1: Color("717E80"), 2: Color("1F1F1F"), 3: Color("FFE2BD"),
-			4: [Color("E00000"), Color("008EE6"), Color("FFD000"), Color("00E317")],
-			5: Color("717E80")
-		},
+	"palette": {1: Color("717e80"), 2: Color("2d2b24"), 3: Color("ffe2bd"), 5: Color("717e80"), 6: Color("a2a2a2"), 10: [Color("e00000"), Color("008ee6"), Color("ffd100"), Color("00e317")],},
 		"frames": {
 			"standing": [
-				[1, 1, 1, 1, 0],
-				[1, 3, 2, 1, 0],
-				[1, 3, 3, 3, 0],
-				[4, 2, 4, 2, 0],
-				[3, 4, 2, 4, 3],
-				[5, 5, 5, 5, 0],
-				[5, 0, 0, 5, 0]
-			],
+					[1, 1, 1, 1, 0],
+					[1, 2, 3, 2, 0],
+					[1, 3, 3, 3, 0],
+					[10, 6, 10, 6, 0],
+					[3, 10, 6, 10, 3],
+					[5, 5, 5, 5, 0],
+					[5, 0, 0, 5, 0],
+				],
 			"lying": [
 				[0, 0, 0, 0, 3, 0, 0],
-				[1, 2, 3, 2, 4, 5, 5],
-				[1, 3, 3, 4, 2, 5, 0],
-				[1, 2, 3, 2, 4, 5, 0],
-				[1, 1, 1, 4, 3, 5, 5]
+				[1, 3, 3, 6, 10, 1, 1],
+				[1, 3, 3, 10, 6, 1, 0],
+				[1, 3, 3, 6, 10, 1, 0],
+				[1, 1, 1, 10, 3, 1, 1],
 			]
 		}
 	},
@@ -12488,17 +12484,19 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	elif npc.type == "medic": master_mat_id = 1040 # Assume 1040 is medic master if exists, else it will use 1000 logic for physics
 	
 	var p = {}
+	var base_p = vis["palette"]
 	if override_mat != -1:
-		for k in range(1, 10): p[k] = _get_color_from_mat_id(override_mat)
+		var col = _get_color_from_mat_id(override_mat)
+		for k in base_p.keys(): p[k] = col
 	elif is_flashing:
 		var f_mat = 1033; if is_dead: f_mat = 1034
 		elif npc.hit_type == "acid": f_mat = 1030
 		elif npc.hit_type == "fire": f_mat = 1031
 		elif npc.hit_type == "explosive": f_mat = 1032
 		elif npc.hit_type == "electric": f_mat = 1035
-		for k in range(1, 10): p[k] = _get_color_from_mat_id(f_mat)
+		var col = _get_color_from_mat_id(f_mat)
+		for k in base_p.keys(): p[k] = col
 	else:
-		var base_p = vis["palette"]
 		for k in base_p.keys():
 			var val = base_p[k]
 			if typeof(val) == TYPE_ARRAY:
@@ -12527,7 +12525,7 @@ func _draw_npc_pixels(npc, override_mat = -1):
 					# Ajustar la altura al acostarse para que repose en el suelo
 					py = sy + (vis["height"] - h) + oy
 				_set_cell(px, py, master_mat_id)
-				var c = p[mat_key]
+				var c = p.get(mat_key, Color.WHITE)
 				if typeof(c) == TYPE_COLOR:
 					cell_paint_colors[py * grid_width + px] = c.to_abgr32()
 

@@ -2,8 +2,10 @@ extends Control
 
 const GRID_SIZE = 20
 
-var grid_cells = []
-var data_matrix = []
+var grid_cells_stand = []
+var grid_cells_lie = []
+var data_matrix_stand = []
+var data_matrix_lie = []
 var current_brush = 1
 var current_team_preview = 0 # 0: Red, 1: Blue, 2: Yellow, 3: Green
 var is_drawing = false
@@ -221,47 +223,86 @@ func _build_ui():
 	right_scroll.size_flags_horizontal = SIZE_EXPAND_FILL
 	hbox.add_child(right_scroll)
 	
-	var right_panel = CenterContainer.new()
+	var right_panel = VBoxContainer.new()
 	right_panel.size_flags_horizontal = SIZE_EXPAND_FILL
 	right_panel.size_flags_vertical = SIZE_EXPAND_FILL
+	right_panel.alignment = BoxContainer.ALIGNMENT_CENTER
+	right_panel.add_theme_constant_override("separation", 20)
 	right_scroll.add_child(right_panel)
+	
+	var stand_lbl = Label.new()
+	stand_lbl.text = "Standing (De Pie)"
+	stand_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	right_panel.add_child(stand_lbl)
 	
 	var canvas_bg = ColorRect.new()
 	canvas_bg.color = Color(0.1, 0.1, 0.1)
-	# 28 size per cell + 1px spacing
 	canvas_bg.custom_minimum_size = Vector2(GRID_SIZE * 29, GRID_SIZE * 29)
+	canvas_bg.size_flags_horizontal = SIZE_SHRINK_CENTER
 	right_panel.add_child(canvas_bg)
 	
 	var grid = GridContainer.new()
-	grid.name = "CanvasGrid"
+	grid.name = "CanvasGridStand"
 	grid.columns = GRID_SIZE
 	grid.add_theme_constant_override("h_separation", 1)
+	grid.add_theme_constant_override("v_separation", 1)
+	grid.set_anchors_preset(PRESET_FULL_RECT)
+	canvas_bg.add_child(grid)
+	
+	var lie_lbl = Label.new()
+	lie_lbl.text = "Lying (Acostado / Muerto)"
+	lie_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	right_panel.add_child(lie_lbl)
+	
+	var canvas_bg_lie = ColorRect.new()
+	canvas_bg_lie.color = Color(0.1, 0.1, 0.1)
+	canvas_bg_lie.custom_minimum_size = Vector2(GRID_SIZE * 29, GRID_SIZE * 29)
+	canvas_bg_lie.size_flags_horizontal = SIZE_SHRINK_CENTER
+	right_panel.add_child(canvas_bg_lie)
+	
+	var grid_lie = GridContainer.new()
+	grid_lie.name = "CanvasGridLie"
+	grid_lie.columns = GRID_SIZE
+	grid_lie.add_theme_constant_override("h_separation", 1)
+	grid_lie.add_theme_constant_override("v_separation", 1)
+	grid_lie.set_anchors_preset(PRESET_FULL_RECT)
+	canvas_bg_lie.add_child(grid_lie)
 	grid.add_theme_constant_override("v_separation", 1)
 	canvas_bg.add_child(grid)
 
 func _init_grid():
-	var grid = find_child("CanvasGrid", true, false)
-	if grid:
-		for c in grid.get_children():
-			c.queue_free()
+	var grid_stand = find_child("CanvasGridStand", true, false)
+	var grid_lie = find_child("CanvasGridLie", true, false)
+	
+	if grid_stand:
+		for c in grid_stand.get_children(): c.queue_free()
+	if grid_lie:
+		for c in grid_lie.get_children(): c.queue_free()
 			
-	grid_cells.clear()
-	data_matrix.clear()
+	grid_cells_stand.clear(); data_matrix_stand.clear()
+	grid_cells_lie.clear(); data_matrix_lie.clear()
 	
 	for y in range(GRID_SIZE):
-		var row = []
+		var r_stand = []; var r_lie = []
 		for x in range(GRID_SIZE):
-			row.append(0)
+			r_stand.append(0); r_lie.append(0)
 			
-			var cell = ColorRect.new()
-			cell.custom_minimum_size = Vector2(28, 28)
-			cell.color = Color(0.15, 0.15, 0.15)
+			var c_stand = ColorRect.new()
+			c_stand.custom_minimum_size = Vector2(28, 28)
+			c_stand.color = Color(0.15, 0.15, 0.15)
+			c_stand.gui_input.connect(_on_cell_gui_input.bind(x, y, false))
+			if grid_stand: grid_stand.add_child(c_stand)
+			grid_cells_stand.append(c_stand)
 			
-			cell.gui_input.connect(_on_cell_gui_input.bind(x, y))
+			var c_lie = ColorRect.new()
+			c_lie.custom_minimum_size = Vector2(28, 28)
+			c_lie.color = Color(0.15, 0.15, 0.15)
+			c_lie.gui_input.connect(_on_cell_gui_input.bind(x, y, true))
+			if grid_lie: grid_lie.add_child(c_lie)
+			grid_cells_lie.append(c_lie)
 			
-			if grid: grid.add_child(cell)
-			grid_cells.append(cell)
-		data_matrix.append(row)
+		data_matrix_stand.append(r_stand)
+		data_matrix_lie.append(r_lie)
 
 func _get_display_color(val: int, team: int) -> Color:
 	if val == 0: return Color(0.15, 0.15, 0.15)
@@ -271,26 +312,28 @@ func _get_display_color(val: int, team: int) -> Color:
 		if custom_team_colors[team].has(val): return custom_team_colors[team][val]
 	return Color.MAGENTA
 
-func _on_cell_gui_input(event: InputEvent, x: int, y: int):
+func _on_cell_gui_input(event: InputEvent, x: int, y: int, is_lying: bool = false):
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			is_drawing = event.pressed
-			if is_drawing: _paint_cell(x, y)
+			if is_drawing: _paint_cell(x, y, is_lying)
 	elif event is InputEventMouseMotion:
-		if is_drawing: _paint_cell(x, y)
+		if is_drawing: _paint_cell(x, y, is_lying)
 
-func _paint_cell(x: int, y: int):
-	data_matrix[y][x] = current_brush
-	var idx = y * GRID_SIZE + x
-	grid_cells[idx].color = _get_display_color(current_brush, current_team_preview)
+func _paint_cell(x: int, y: int, is_lying: bool = false):
+	if is_lying:
+		data_matrix_lie[y][x] = current_brush
+		grid_cells_lie[y * GRID_SIZE + x].color = _get_display_color(current_brush, current_team_preview)
+	else:
+		data_matrix_stand[y][x] = current_brush
+		grid_cells_stand[y * GRID_SIZE + x].color = _get_display_color(current_brush, current_team_preview)
 
 func _on_team_preview_changed(index: int):
 	current_team_preview = index
 	for y in range(GRID_SIZE):
 		for x in range(GRID_SIZE):
-			var val = data_matrix[y][x]
-			var idx = y * GRID_SIZE + x
-			grid_cells[idx].color = _get_display_color(val, current_team_preview)
+			grid_cells_stand[y * GRID_SIZE + x].color = _get_display_color(data_matrix_stand[y][x], current_team_preview)
+			grid_cells_lie[y * GRID_SIZE + x].color = _get_display_color(data_matrix_lie[y][x], current_team_preview)
 	_update_palette_buttons()
 
 func _on_color_picked(i: int, color: Color):
@@ -343,27 +386,37 @@ func _on_load_pressed():
 	_init_grid()
 	var frames = vis.get("frames", {})
 	var standing = frames.get("standing", [])
+	var lying = frames.get("lying", [])
 	
-	var h = standing.size()
-	var w = standing[0].size() if h > 0 else 0
+	var h_s = standing.size()
+	var w_s = standing[0].size() if h_s > 0 else 0
+	var start_x_s = (GRID_SIZE - w_s) / 2
+	var start_y_s = (GRID_SIZE - h_s) / 2
 	
-	var start_x = (GRID_SIZE - w) / 2
-	var start_y = (GRID_SIZE - h) / 2
+	for y in range(h_s):
+		for x in range(w_s):
+			var val = standing[y][x]
+			if val != 0 and typeof(val) != TYPE_STRING:
+				if val == 4: val = 10
+				elif val == 8: val = 11
+				elif val == 9: val = 12
+				current_brush = val
+				_paint_cell(start_x_s + x, start_y_s + y, false)
+				
+	var h_l = lying.size()
+	var w_l = lying[0].size() if h_l > 0 else 0
+	var start_x_l = (GRID_SIZE - w_l) / 2
+	var start_y_l = (GRID_SIZE - h_l) / 2
 	
-	for y in range(h):
-		var row = standing[y]
-		for x in range(w):
-			var val = row[x]
-			if val != 0:
-				if typeof(val) == TYPE_STRING:
-					pass
-				else:
-					if val == 4: val = 10
-					elif val == 8: val = 11
-					elif val == 9: val = 12
-					
-					current_brush = val
-					_paint_cell(start_x + x, start_y + y)
+	for y in range(h_l):
+		for x in range(w_l):
+			var val = lying[y][x]
+			if val != 0 and typeof(val) != TYPE_STRING:
+				if val == 4: val = 10
+				elif val == 8: val = 11
+				elif val == 9: val = 12
+				current_brush = val
+				_paint_cell(start_x_l + x, start_y_l + y, true)
 				
 	_set_brush(1)
 
@@ -374,43 +427,67 @@ func _get_mat_id_for_color(c: Color) -> Variant:
 	return "\"#" + c.to_html(false) + "\""
 
 func _on_export_pressed():
-	var min_x = GRID_SIZE; var max_x = -1
-	var min_y = GRID_SIZE; var max_y = -1
+	# Trim logic for Standing
+	var min_x_s = GRID_SIZE; var max_x_s = -1
+	var min_y_s = GRID_SIZE; var max_y_s = -1
+	var used_indices = {}
 	
 	for y in range(GRID_SIZE):
 		for x in range(GRID_SIZE):
-			if data_matrix[y][x] != 0:
-				min_x = min(min_x, x); max_x = max(max_x, x)
-				min_y = min(min_y, y); max_y = max(max_y, y)
+			var val = data_matrix_stand[y][x]
+			if val != 0:
+				min_x_s = min(min_x_s, x); max_x_s = max(max_x_s, x)
+				min_y_s = min(min_y_s, y); max_y_s = max(max_y_s, y)
+				used_indices[val] = true
 				
-	if max_x == -1: 
-		print("Grid is empty!")
+	# Trim logic for Lying
+	var min_x_l = GRID_SIZE; var max_x_l = -1
+	var min_y_l = GRID_SIZE; var max_y_l = -1
+	
+	for y in range(GRID_SIZE):
+		for x in range(GRID_SIZE):
+			var val = data_matrix_lie[y][x]
+			if val != 0:
+				min_x_l = min(min_x_l, x); max_x_l = max(max_x_l, x)
+				min_y_l = min(min_y_l, y); max_y_l = max(max_y_l, y)
+				used_indices[val] = true
+				
+	if max_x_s == -1: 
+		print("Standing grid is empty! Cannot export.")
 		return
 		
-	var out_w = max_x - min_x + 1
-	var out_h = max_y - min_y + 1
+	var out_w = max_x_s - min_x_s + 1
+	var out_h = max_y_s - min_y_s + 1
 	
-	var out_matrix = []
-	var used_indices = {}
-	for y in range(min_y, max_y + 1):
+	var out_matrix_s = []
+	for y in range(min_y_s, max_y_s + 1):
 		var row = []
-		for x in range(min_x, max_x + 1):
-			var val = data_matrix[y][x]
-			row.append(val)
-			if val != 0: used_indices[val] = true
-		out_matrix.append(row)
+		for x in range(min_x_s, max_x_s + 1):
+			row.append(data_matrix_stand[y][x])
+		out_matrix_s.append(row)
 		
-	var str_matrix = "[\n"
-	for row in out_matrix:
-		str_matrix += "\t\t\t\t" + str(row) + ",\n"
-	str_matrix += "\t\t\t]"
+	var out_matrix_l = []
+	if max_x_l != -1:
+		for y in range(min_y_l, max_y_l + 1):
+			var row = []
+			for x in range(min_x_l, max_x_l + 1):
+				row.append(data_matrix_lie[y][x])
+			out_matrix_l.append(row)
+			
+	var str_matrix_s = "[\n"
+	for row in out_matrix_s: str_matrix_s += "\t\t\t\t" + str(row) + ",\n"
+	str_matrix_s += "\t\t\t]"
+	
+	var str_matrix_l = "[]"
+	if max_x_l != -1:
+		str_matrix_l = "[\n"
+		for row in out_matrix_l: str_matrix_l += "\t\t\t\t" + str(row) + ",\n"
+		str_matrix_l += "\t\t\t]"
 	
 	var pal_str = "{"
-	
 	for i in range(1, 10):
 		if used_indices.has(i):
 			pal_str += "%d: Color(\"%s\"), " % [i, custom_base_colors[i].to_html(false)]
-			
 	for i in range(10, 13):
 		if used_indices.has(i):
 			var arr_str = "["
@@ -419,15 +496,14 @@ func _on_export_pressed():
 				if t < 3: arr_str += ", "
 			arr_str += "]"
 			pal_str += "%d: %s, " % [i, arr_str]
-				
 	pal_str += "}"
 	
 	var code = "\"custom_npc\": {\n"
 	code += "\t\"width\": %d, \"height\": %d,\n" % [out_w, out_h]
 	code += "\t\"palette\": %s,\n" % pal_str
 	code += "\t\"frames\": {\n"
-	code += "\t\t\"standing\": " + str_matrix + ",\n"
-	code += "\t\t\"lying\": [] # TODO: Dibuja y pega aqui tu version acostado\n"
+	code += "\t\t\"standing\": " + str_matrix_s + ",\n"
+	code += "\t\t\"lying\": " + str_matrix_l + "\n"
 	code += "\t}\n"
 	code += "}"
 	
