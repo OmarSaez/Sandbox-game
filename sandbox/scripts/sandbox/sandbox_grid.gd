@@ -12362,7 +12362,7 @@ func _draw_npc_pixels(npc, override_mat = -1):
 				_set_cell(lx, ly+1, m_shoes); _set_cell(lx+1, ly+1, m_head); _set_cell(lx+2, ly+1, m_head); _set_cell(lx+3, ly+1, m_head); _set_cell(lx+4, ly+1, m_head); _set_cell(lx+5, ly+1, team_mat)
 		else:
 			# --- LYING DOWN (7x5) ---
-			var lx = sx - 3 if face_dir > 0 else sx + 3
+			var lx = sx if face_dir > 0 else sx + 6
 			var step = 1 if face_dir > 0 else -1
 			var y_H = sy + 2 # Front arm (Up)
 			var y_G = sy + 3 # Face
@@ -12415,11 +12415,11 @@ func _draw_npc_pixels(npc, override_mat = -1):
 			_set_cell(px0, sy+5, m_shoes); _set_cell(px1, sy+5, m_shoes)
 		else:
 			# --- STANDING (5x7) ---
-			var c_D = sx - 1 if face_dir > 0 else sx + 2
-			var c_E = sx     if face_dir > 0 else sx + 1
-			var c_F = sx + 1 if face_dir > 0 else sx
-			var c_G = sx + 2 if face_dir > 0 else sx - 1
-			var c_H = sx + 3 if face_dir > 0 else sx - 2
+			var c_D = sx     if face_dir > 0 else sx + 4
+			var c_E = sx + 1 if face_dir > 0 else sx + 3
+			var c_F = sx + 2 if face_dir > 0 else sx + 2
+			var c_G = sx + 3 if face_dir > 0 else sx + 1
+			var c_H = sx + 4 if face_dir > 0 else sx
 
 			_set_cell(c_D, sy, m_head); _set_cell(c_E, sy, m_head); _set_cell(c_F, sy, m_head); _set_cell(c_G, sy, m_head)
 			_set_cell(c_D, sy+1, m_head); _set_cell(c_E, sy+1, m_torso); _set_cell(c_F, sy+1, m_skin); _set_cell(c_G, sy+1, m_torso)
