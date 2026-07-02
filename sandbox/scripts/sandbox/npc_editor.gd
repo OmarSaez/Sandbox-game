@@ -6,6 +6,8 @@ var grid_cells_stand = []
 var grid_cells_lie = []
 var data_matrix_stand = []
 var data_matrix_lie = []
+var undo_history = []
+var redo_history = []
 var current_brush = 1
 var current_team_preview = 0 # 0: Red, 1: Blue, 2: Yellow, 3: Green
 var is_drawing = false
@@ -86,11 +88,55 @@ func _set_brush(idx: int):
 
 func _toggle_grid(toggled_on: bool):
 	show_grid_lines = toggled_on
-	var grid = find_child("CanvasGrid", true, false)
-	if grid:
-		var sep = 1 if show_grid_lines else 0
-		grid.add_theme_constant_override("h_separation", sep)
-		grid.add_theme_constant_override("v_separation", sep)
+	var grid_stand = find_child("CanvasGridStand", true, false)
+	var grid_lie = find_child("CanvasGridLie", true, false)
+	var sep = 2 if show_grid_lines else 0
+	if grid_stand:
+		grid_stand.add_theme_constant_override("h_separation", sep)
+		grid_stand.add_theme_constant_override("v_separation", sep)
+	if grid_lie:
+		grid_lie.add_theme_constant_override("h_separation", sep)
+		grid_lie.add_theme_constant_override("v_separation", sep)
+
+func _save_state_for_undo():
+	undo_history.append(_get_matrices_snapshot())
+	if undo_history.size() > 10:
+		undo_history.pop_front()
+	redo_history.clear()
+
+func _get_matrices_snapshot() -> Dictionary:
+	return {
+		"stand": _duplicate_matrix(data_matrix_stand),
+		"lie": _duplicate_matrix(data_matrix_lie)
+	}
+
+func _duplicate_matrix(matrix: Array) -> Array:
+	var dup = []
+	for row in matrix:
+		dup.append(row.duplicate())
+	return dup
+
+func _on_undo_pressed():
+	if undo_history.is_empty(): return
+	redo_history.append(_get_matrices_snapshot())
+	var state = undo_history.pop_back()
+	_restore_snapshot(state)
+
+func _on_redo_pressed():
+	if redo_history.is_empty(): return
+	undo_history.append(_get_matrices_snapshot())
+	var state = redo_history.pop_back()
+	_restore_snapshot(state)
+
+func _restore_snapshot(state: Dictionary):
+	for y in range(GRID_SIZE):
+		for x in range(GRID_SIZE):
+			data_matrix_stand[y][x] = state["stand"][y][x]
+			data_matrix_lie[y][x] = state["lie"][y][x]
+	for y in range(GRID_SIZE):
+		for x in range(GRID_SIZE):
+			grid_cells_stand[y * GRID_SIZE + x].color = _get_display_color(data_matrix_stand[y][x], current_team_preview)
+			grid_cells_lie[y * GRID_SIZE + x].color = _get_display_color(data_matrix_lie[y][x], current_team_preview)
 
 func _build_ui():
 	var hbox = HBoxContainer.new()
@@ -214,9 +260,38 @@ func _build_ui():
 	left_panel.add_child(export_btn)
 	
 	var clear_btn = Button.new()
-	clear_btn.text = "Clear Grid"
-	clear_btn.pressed.connect(_init_grid)
+	clear_btn.text = "Clear All"
+	clear_btn.pressed.connect(func():
+		_save_state_for_undo()
+		_init_grid()
+	)
 	left_panel.add_child(clear_btn)
+	
+	var clear_s_btn = Button.new()
+	clear_s_btn.text = "Clear Standing"
+	clear_s_btn.pressed.connect(func():
+		_save_state_for_undo()
+		_clear_grid_data(false)
+	)
+	left_panel.add_child(clear_s_btn)
+	
+	var clear_l_btn = Button.new()
+	clear_l_btn.text = "Clear Lying"
+	clear_l_btn.pressed.connect(func():
+		_save_state_for_undo()
+		_clear_grid_data(true)
+	)
+	left_panel.add_child(clear_l_btn)
+	
+	var undo_btn = Button.new()
+	undo_btn.text = "Undo"
+	undo_btn.pressed.connect(_on_undo_pressed)
+	left_panel.add_child(undo_btn)
+	
+	var redo_btn = Button.new()
+	redo_btn.text = "Redo"
+	redo_btn.pressed.connect(_on_redo_pressed)
+	left_panel.add_child(redo_btn)
 	
 	# ScrollContainer for right panel so it can hold the big grid
 	var right_scroll = ScrollContainer.new()
@@ -237,15 +312,15 @@ func _build_ui():
 	
 	var canvas_bg = ColorRect.new()
 	canvas_bg.color = Color(0.1, 0.1, 0.1)
-	canvas_bg.custom_minimum_size = Vector2(GRID_SIZE * 29, GRID_SIZE * 29)
+	canvas_bg.custom_minimum_size = Vector2(GRID_SIZE * 30, GRID_SIZE * 30)
 	canvas_bg.size_flags_horizontal = SIZE_SHRINK_CENTER
 	right_panel.add_child(canvas_bg)
 	
 	var grid = GridContainer.new()
 	grid.name = "CanvasGridStand"
 	grid.columns = GRID_SIZE
-	grid.add_theme_constant_override("h_separation", 1)
-	grid.add_theme_constant_override("v_separation", 1)
+	grid.add_theme_constant_override("h_separation", 2)
+	grid.add_theme_constant_override("v_separation", 2)
 	grid.set_anchors_preset(PRESET_FULL_RECT)
 	canvas_bg.add_child(grid)
 	
@@ -256,15 +331,15 @@ func _build_ui():
 	
 	var canvas_bg_lie = ColorRect.new()
 	canvas_bg_lie.color = Color(0.1, 0.1, 0.1)
-	canvas_bg_lie.custom_minimum_size = Vector2(GRID_SIZE * 29, GRID_SIZE * 29)
+	canvas_bg_lie.custom_minimum_size = Vector2(GRID_SIZE * 30, GRID_SIZE * 30)
 	canvas_bg_lie.size_flags_horizontal = SIZE_SHRINK_CENTER
 	right_panel.add_child(canvas_bg_lie)
 	
 	var grid_lie = GridContainer.new()
 	grid_lie.name = "CanvasGridLie"
 	grid_lie.columns = GRID_SIZE
-	grid_lie.add_theme_constant_override("h_separation", 1)
-	grid_lie.add_theme_constant_override("v_separation", 1)
+	grid_lie.add_theme_constant_override("h_separation", 2)
+	grid_lie.add_theme_constant_override("v_separation", 2)
 	grid_lie.set_anchors_preset(PRESET_FULL_RECT)
 	canvas_bg_lie.add_child(grid_lie)
 	grid.add_theme_constant_override("v_separation", 1)
@@ -304,6 +379,18 @@ func _init_grid():
 		data_matrix_stand.append(r_stand)
 		data_matrix_lie.append(r_lie)
 
+func _clear_grid_data(is_lying: bool):
+	if is_lying:
+		for y in range(GRID_SIZE):
+			for x in range(GRID_SIZE):
+				data_matrix_lie[y][x] = 0
+				grid_cells_lie[y * GRID_SIZE + x].color = _get_display_color(0, current_team_preview)
+	else:
+		for y in range(GRID_SIZE):
+			for x in range(GRID_SIZE):
+				data_matrix_stand[y][x] = 0
+				grid_cells_stand[y * GRID_SIZE + x].color = _get_display_color(0, current_team_preview)
+
 func _get_display_color(val: int, team: int) -> Color:
 	if val == 0: return Color(0.15, 0.15, 0.15)
 	if val >= 1 and val <= 9:
@@ -315,6 +402,8 @@ func _get_display_color(val: int, team: int) -> Color:
 func _on_cell_gui_input(event: InputEvent, x: int, y: int, is_lying: bool = false):
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed and not is_drawing:
+				_save_state_for_undo()
 			is_drawing = event.pressed
 			if is_drawing: _paint_cell(x, y, is_lying)
 	elif event is InputEventMouseMotion:
@@ -383,6 +472,7 @@ func _on_load_pressed():
 	current_loaded_npc = npc_name
 	_init_colors_for_loaded_npc()
 	
+	_save_state_for_undo()
 	_init_grid()
 	var frames = vis.get("frames", {})
 	var standing = frames.get("standing", [])
