@@ -13346,8 +13346,9 @@ func _process_npcs(delta):
 		# --- 3. MOVIMIENTO IA (SI NO HAY FISICA ACTIVA Y NO ESTÁ POSEÍDO) ---
 		if not moved_by_physics and npc != controlled_npc:
 			# 1. GRAVEDAD SOBERANA: Chequeo solo bajo los pies para evitar "colgarse" lateralmente
-			var w = 3 if (npc.type == "zombie_tank") else 5
-			var h = 6 if (npc.type == "zombie_tank" or npc.type == "mage") else 7
+			var vis = NPC_VISUALS.get(npc.type, NPC_VISUALS["warrior"])
+			var w = vis["width"]
+			var h = vis["height"]
 			var feet_y = np.y + h
 			var can_fall = true
 			if feet_y >= dynamic_grid_height: can_fall = false
@@ -13434,8 +13435,9 @@ func _process_npcs(delta):
 						var has_z = _has_active_zombies()
 						for other in nearby:
 							if _is_ally(npc, other, has_z) and other != npc:
-								var ow = 3 if (other.type == "zombie_tank") else 5
-								var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 7
+								var o_vis = NPC_VISUALS.get(other.type, NPC_VISUALS["warrior"])
+								var ow = o_vis["width"]
+								var oh = o_vis["height"]
 								if tx_test < other.pos.x + ow and tx_test + w > other.pos.x and np.y < other.pos.y + oh and np.y + h > other.pos.y:
 									bumped_ally = true; break
 						
@@ -13599,8 +13601,9 @@ func _update_npc_doors(delta: float):
 	var triggered_door_cells = {}
 	for npc in active_npcs:
 		if npc.hp <= 0: continue
-		var npc_w = 3 if (npc.type == "zombie_tank") else 2
-		var npc_h = 6 if (npc.type == "zombie_tank" or npc.type == "mage") else 5
+		var o_vis = NPC_VISUALS.get(npc.type, NPC_VISUALS["warrior"])
+		var npc_w = o_vis["width"]
+		var npc_h = o_vis["height"]
 		var min_x = npc.pos.x - 8
 		var max_x = npc.pos.x + npc_w - 1 + 8
 		var min_y = npc.pos.y - 8
@@ -13811,7 +13814,8 @@ func _process_mage_rescue(npc):
 		_set_npc_emoji(npc, alt_emoji, 0.6)
 		
 		# Magic lifting
-		var th = 6 if (res_target.type == "zombie_tank" or res_target.type == "mage") else 5
+		var o_vis = NPC_VISUALS.get(res_target.type, NPC_VISUALS["warrior"])
+		var th = o_vis["height"]
 		for dx in range(-2, 3):
 			var tx = res_target.pos.x + dx
 			if tx < 0 or tx >= grid_width: continue
@@ -13992,8 +13996,9 @@ func _process_projectiles(delta):
 					is_enemy = (other.team != p.team)
 					
 			if is_enemy and other.hp > 0 and other.invul_timer <= 0:
-				var ow = 3 if (other.type == "zombie_tank") else 5
-				var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 7
+				var o_vis = NPC_VISUALS.get(other.type, NPC_VISUALS["warrior"])
+				var ow = o_vis["width"]
+				var oh = o_vis["height"]
 				var overlaps = false
 				if p.type == "bomber_bomb":
 					for ox in range(-1, 1):
@@ -14416,18 +14421,33 @@ func _set_npc_emoji(npc, emoji_text: String, duration: float = 2.0):
 func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 	var w = 5
 	var h = 7
+	var matrix = null
+	var face_dir = 1
 	if moving_npc != null:
 		var vis = NPC_VISUALS.get(moving_npc.type, NPC_VISUALS["warrior"])
 		w = vis["width"]
 		h = vis["height"]
+		var frames = vis.get("frames", {})
+		matrix = frames.get("standing", null)
+		face_dir = moving_npc.get("dir", 1)
+		if face_dir == 0: face_dir = moving_npc.get("last_dir", 1)
 		
-	if gx < 0 or gx + w - 1 >= grid_width or gy < 0 or gy + h - 1 >= dynamic_grid_height: return false
+	var igx = int(gx)
+	var igy = int(gy)
+	
+	if igx < 0 or igx + w - 1 >= grid_width or igy < 0 or igy + h - 1 >= dynamic_grid_height: return false
 	
 	# Chequeo de píxeles: Ignorar Plantas y NPCs para fluidez
 	for oy in range(h):
-		var row_offset = (gy + oy) * grid_width
+		var row_offset = (igy + oy) * grid_width
+		var row = null if matrix == null else (matrix[oy] if oy < matrix.size() else null)
 		for ox in range(w):
-			var tid = cells[row_offset + gx + ox] & 0xFFFF
+			if row != null:
+				var check_ox = ox if face_dir > 0 else (w - 1 - ox)
+				if check_ox < row.size() and row[check_ox] == 0:
+					continue # Este píxel de la malla es transparente, no colisiona
+			
+			var tid = cells[row_offset + igx + ox] & 0xFFFF
 			if tid != 0 and tid != 15 and tid != 3 and tid != 17:
 				if tid == 90 or tid == 91:
 					continue
@@ -14463,8 +14483,9 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 			# Regla de oro: Aliados no se estorban
 			if _is_ally(moving_npc, other, has_z): continue 
 			
-			var ow = 3 if (other.type == "zombie_tank") else 5
-			var oh = 6 if (other.type == "zombie_tank" or other.type == "mage") else 7
+			var o_vis = NPC_VISUALS.get(other.type, NPC_VISUALS["warrior"])
+			var ow = o_vis["width"]
+			var oh = o_vis["height"]
 			if gx < other.pos.x + ow and gx + w > other.pos.x and gy < other.pos.y + oh and gy + h > other.pos.y: return false
 	return true
 
