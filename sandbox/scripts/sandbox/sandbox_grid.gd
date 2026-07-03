@@ -12423,19 +12423,22 @@ func _draw_npc_pixels(npc, override_mat = -1):
 		var last_x = int(npc.get("last_render_x", npc.pos.x))
 		var last_y = int(npc.get("last_render_y", npc.pos.y))
 		
-		var was_lying = npc.get("last_render_lying", false)
-		var is_tank = (npc.type == "zombie_tank")
-		var is_mage = (npc.type == "mage")
+		var vis = NPC_VISUALS.get(npc.type, NPC_VISUALS["warrior"])
+		var frames = vis.get("frames", {})
+		var f_stand = frames.get("standing", [])
+		var f_lie = frames.get("lying", [])
 		
-		var pad_left = 7 if was_lying else (1 if is_tank else 4)
-		var pad_right = 7 if was_lying else (3 if is_tank else 4)
-		var pad_top = 1
-		var pad_bottom = 7 if (is_tank or is_mage) else 8
+		var max_w = 0
+		if f_stand.size() > 0: max_w = max(max_w, f_stand[0].size())
+		if f_lie.size() > 0: max_w = max(max_w, f_lie[0].size())
+		var max_h = max(f_stand.size(), f_lie.size())
 		
-		var min_x = min(npc.pos.x, last_x) - pad_left - 1
-		var max_x = max(npc.pos.x, last_x) + pad_right + 1
-		var min_y = min(npc.pos.y, last_y) - pad_top - 1
-		var max_y = max(npc.pos.y, last_y) + pad_bottom + 1
+		var pad = 4 # Generous padding for hit flashes and death offsets
+		
+		var min_x = min(npc.pos.x, last_x) - pad
+		var max_x = max(npc.pos.x, last_x) + max_w + pad
+		var min_y = min(npc.pos.y, last_y) - pad
+		var max_y = max(npc.pos.y, last_y) + max_h + pad
 		
 		for cy in range(min_y, max_y + 1):
 			for cx in range(min_x, max_x + 1):
