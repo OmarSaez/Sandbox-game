@@ -12465,8 +12465,13 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	var vis = NPC_VISUALS.get(npc.type, NPC_VISUALS["warrior"])
 	
 	var face_dir = npc.get("dir", 1)
-	if face_dir == 0: face_dir = npc.get("last_dir", 1)
-	else: npc["last_dir"] = face_dir
+	if npc.get("aim_dir", 0) != 0:
+		face_dir = npc.aim_dir
+		npc["last_dir"] = face_dir
+	elif face_dir == 0: 
+		face_dir = npc.get("last_dir", 1)
+	else: 
+		npc["last_dir"] = face_dir
 
 	var master_mat_id = 1000
 	if npc.type == "archer": master_mat_id = 1010
@@ -12661,6 +12666,7 @@ func _process_npcs(delta):
 					_convert_to_zombie(npc)
 		
 		var np = npc.pos; var target = null
+		npc["aim_dir"] = 0
 		if npc.hp > 0:
 			# Update common timers
 			if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
@@ -13047,6 +13053,7 @@ func _process_npcs(delta):
 									if npc.attack_cooldown <= 0: _attack_npc(npc, target); npc.attack_cooldown = 0.6
 								if dx_abs < 4 and !target_below: npc.dir = 0 
 							elif npc.type == "archer":
+								npc["aim_dir"] = 1 if dist_x > 0 else -1
 								var target_below = target.pos.y > np.y + 12
 								if npc.miss_counter < 0:
 									npc.miss_counter += 1
@@ -13063,6 +13070,7 @@ func _process_npcs(delta):
 									if npc.miss_counter >= 3: npc.miss_counter = -40
 									npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
 							elif npc.type == "mage":
+								npc["aim_dir"] = 1 if dist_x > 0 else -1
 								var target_below = target.pos.y > np.y + 12
 								if dx_abs > 110: npc.dir = 1 if dist_x > 0 else -1
 								elif dx_abs < 35: npc.dir = -1 if dist_x > 0 else 1
