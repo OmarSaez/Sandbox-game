@@ -12363,6 +12363,7 @@ func _place_npc(x, y):
 	new_npc["max_hp"] = new_npc["hp"]
 	active_npcs.append(new_npc)
 	_draw_npc_pixels(new_npc)
+	element_paint_dirty = true
 
 func _spawn_explosion_npc(x, y, team = 0):
 	# Final Full-Structure Sync to ensure 100% compatibility with _process_npcs
