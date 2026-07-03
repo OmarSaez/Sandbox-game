@@ -14300,24 +14300,37 @@ func _check_npc_environment_damage(npc) -> bool:
 	if npc.hp <= 0 or npc.invul_timer > 0: return false
 	var took_damage = false; var p = npc.pos
 	
-	var w = 5; var h = 7
+	var vis = NPC_VISUALS.get(npc.type, NPC_VISUALS["warrior"])
+	var frames = vis.get("frames", {})
 	var is_lying = npc.get("is_lying", false)
-	if npc.type == "zombie_tank": w = 3; h = 6
-	elif npc.type == "mage": w = 2; h = 6
+	var matrix = frames.get("lying") if is_lying else frames.get("standing")
+	var h = matrix.size()
+	var w = matrix[0].size() if h > 0 else 0
 	
-	if is_lying:
-		w = 6 if npc.type == "mage" else (6 if npc.type == "zombie_tank" else 7)
-		h = 2 if npc.type == "mage" else (3 if npc.type == "zombie_tank" else 5)
+	var first_y = -1; var last_y = -1; var first_x = w; var last_x = -1
+	for oy in range(h):
+		var row = matrix[oy]
+		for ox in range(w):
+			if row[ox] != 0:
+				if first_y == -1: first_y = oy
+				last_y = oy
+				if ox < first_x: first_x = ox
+				if ox > last_x: last_x = ox
+	if first_y == -1:
+		first_y = 0; last_y = h - 1; first_x = 0; last_x = w - 1
 		
-	var bottom_y = h - 1
-	var mid_y = int(h / 2)
-	var mid_x = int(w / 2)
+	var actual_w = last_x - first_x + 1
+	var actual_h = last_y - first_y + 1
+	
+	var bottom_y = first_y + actual_h - 1
+	var mid_y = first_y + int(actual_h / 2)
+	var mid_x = first_x + int(actual_w / 2)
 	
 	var check_points = [
-		p, 
+		p + Vector2i(first_x, first_y), 
 		p + Vector2i(mid_x, mid_y), 
-		p + Vector2i(0, bottom_y), 
-		p + Vector2i(w - 1, bottom_y),
+		p + Vector2i(first_x, bottom_y), 
+		p + Vector2i(last_x, bottom_y),
 		p + Vector2i(mid_x, bottom_y),
 		p + Vector2i(mid_x, bottom_y + 1)
 	]
@@ -14339,11 +14352,9 @@ func _check_npc_environment_damage(npc) -> bool:
 		if charge_array[cell_idx] > 50:
 			npc.hp -= 2.5 * dmg_mult; took_damage = true; npc.hit_flash = 5; npc.hit_type = "electric"
 			if _get_lut_rand() < 0.4: _add_spark(float(pt.x),float(pt.y),_get_lut_rand_range(-20,20),_get_lut_rand_range(-40,-10),Color.CYAN,0.4)
+			
 	var px = npc.pos.x
 	var py = npc.pos.y
-	
-	if is_lying:
-		py += 4 if npc.type == "mage" else (3 if npc.type == "zombie_tank" else 2)
 		
 	var air_found = false
 	
@@ -14359,10 +14370,10 @@ func _check_npc_environment_damage(npc) -> bool:
 		return false
 	
 	# 1. Check top row (above head/lying body)
-	var ty_top = py - 1
+	var ty_top = py + first_y - 1
 	if ty_top >= 0:
 		var row_offset = ty_top * grid_width
-		for ox in range(w):
+		for ox in range(first_x, last_x + 1):
 			var tx = px + ox
 			if tx >= 0 and tx < grid_width:
 				var nid = cells[row_offset + tx] & 0xFFFF
@@ -14376,13 +14387,13 @@ func _check_npc_environment_damage(npc) -> bool:
 					
 	if not air_found:
 		# 2. Check left and right side columns of head/lying body (only upper part for standing)
-		var check_h = h if is_lying else min(3, h)
+		var check_h = actual_h if is_lying else min(3, actual_h)
 		for oy in range(check_h):
-			var ty = py + oy
+			var ty = py + first_y + oy
 			if ty >= 0 and ty < dynamic_grid_height:
 				var row_offset = ty * grid_width
 				# Left
-				var tx_l = px - 1
+				var tx_l = px + first_x - 1
 				if tx_l >= 0:
 					var nid = cells[row_offset + tx_l] & 0xFFFF
 					if nid == 0 or nid == 15 or nid == 17:
@@ -14393,7 +14404,7 @@ func _check_npc_environment_damage(npc) -> bool:
 					if (tags & SandboxMaterial.Tags.SOLID) == 0 and (tags & SandboxMaterial.Tags.POWDER) == 0 and (tags & SandboxMaterial.Tags.LIQUID) == 0:
 						air_found = true; break
 				# Right
-				var tx_r = px + w
+				var tx_r = px + last_x + 1
 				if tx_r < grid_width:
 					var nid = cells[row_offset + tx_r] & 0xFFFF
 					if nid == 0 or nid == 15 or nid == 17:
