@@ -908,7 +908,7 @@ const NPC_VISUALS = {
 	},
 	"archer": {
 		"width": 5, "height": 7,
-		"palette": {1: Color("774600"), 2: Color("668340"), 3: Color("ffbc78"), 5: Color("594e61"), 10: [Color("e00000"), Color("008ee6"), Color("ffd000"), Color("00e317")], },
+		"palette": {1: Color("774600"), 2: Color("ffffff"), 3: Color("ffbc78"), 5: Color("594e61"), 10: [Color("e00000"), Color("008ee6"), Color("ffd000"), Color("00e317")], },
 		"frames": {
 			"standing": [
 					[10, 10, 10, 10, 0],
