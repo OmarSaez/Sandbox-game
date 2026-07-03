@@ -1,0 +1,16 @@
+BUG DIVERTIDO: "La Escalera al Cielo" (Staircase to Heaven)
+
+Descripción:
+Un NPC (como un zombi) sin su material maestro (ej. 1080) registrado con la etiqueta `SandboxMaterial.Tags.NPC` deja de borrar sus propios píxeles al moverse.
+
+Comportamiento resultante:
+Como los píxeles antiguos no se borran, se quedan en el mapa. Al no tener la etiqueta NPC, el sistema de colisiones los trata como muros sólidos impenetrables (como si fuera piedra o arena).
+El NPC, al intentar avanzar en el siguiente fotograma, choca inmediatamente con su propio "fantasma" sólido que acaba de dejar atrás.
+Al sentirse bloqueado por un muro, la IA del NPC decide saltar (moverse en diagonal hacia arriba) para superar el obstáculo.
+Al saltar, vuelve a dejar otro fantasma sólido, bloqueándose de nuevo.
+Esto genera un bucle infinito donde el NPC construye y escala una escalera diagonal perfecta de píxeles sólidos hacia el cielo, dejando un rastro permanente idéntico a sí mismo en cada escalón.
+
+Aplicaciones potenciales:
+- Un tipo de material mágico que se autoconstruye al paso.
+- Un NPC "constructor" o "mago de hielo" que va dejando un puente o escalera sólida por donde camina para ayudar a otros.
+- Un modo "Glitch" o un easter egg divertido.

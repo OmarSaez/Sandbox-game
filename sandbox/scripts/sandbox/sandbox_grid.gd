@@ -14287,13 +14287,22 @@ func _attack_npc(attacker, victim):
 	var bleed_color = Color("#5D9C36") if _is_zombie(victim.type) else (t_colors[victim.team] if (victim.team < t_colors.size() and victim.team >= 0) else Color.WHITE)
 	for _i in range(10): _add_spark(float(victim.pos.x) + _get_lut_rand_range(0, 2), float(victim.pos.y) + _get_lut_rand_range(0, 5), _get_lut_rand_range(-80, 80), _get_lut_rand_range(-120, -30), bleed_color if _get_lut_rand() > 0.4 else Color.WHITE, _get_lut_rand_range(0.3, 0.7))
 	var ldir = 1 if attacker.pos.x < victim.pos.x else -1
-	for d in range(3, 0, -1):
-		var lx = attacker.pos.x + ldir * d; var ly = attacker.pos.y - 1
-		if _can_npc_fit(lx, ly, attacker): attacker.pos.x = lx; attacker.pos.y = ly; break
+	var dist = abs(attacker.pos.x - victim.pos.x)
+	var max_d = min(3, max(0, dist - 1))
+	for d in range(max_d, 0, -1):
+		var lx = attacker.pos.x + ldir * d
+		if _can_npc_fit(lx, attacker.pos.y, attacker): 
+			attacker.pos.x = lx; break
+		elif _can_npc_fit(lx, attacker.pos.y - 1, attacker): 
+			attacker.pos.x = lx; attacker.pos.y -= 1; break
 	var push_dir = 1 if attacker.pos.x < victim.pos.x else -1
-	if victim.type == "archer": attacker.vx = -push_dir * 3.5; attacker.vy = -4.0
+	if victim.type == "archer": 
+		attacker.vx = -push_dir * 3.5
+		if attacker.vy == 0.0: attacker.vy = -4.0
 	else:
-		if _get_lut_rand() < 0.35: victim.vx = push_dir * _get_lut_rand_range(3.0, 5.0) * attacker.get("knockback_mult", 1.0); victim.vy = _get_lut_rand_range(-4.0, -8.0)
+		if _get_lut_rand() < 0.35: 
+			victim.vx = push_dir * _get_lut_rand_range(3.0, 5.0) * attacker.get("knockback_mult", 1.0)
+			if victim.vy == 0.0: victim.vy = _get_lut_rand_range(-4.0, -8.0)
 
 func _check_npc_environment_damage(npc) -> bool:
 	if npc.hp <= 0 or npc.invul_timer > 0: return false
