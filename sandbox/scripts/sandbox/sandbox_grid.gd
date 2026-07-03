@@ -972,27 +972,23 @@ const NPC_VISUALS = {
 	},
 	"zombie": {
 		"width": 5, "height": 7,
-		"palette": {
-			1: Color("5D9C36"), 2: Color("4B245C"), 3: Color("5D9C36"),
-			4: Color("717E80"), 5: Color("5D9C36")
-		},
+		"palette": {1: Color("5d9c36"), 2: Color("fa9f9f"), 3: Color("833838"), 4: Color("717e80"), 5: Color("36529c"), },
 		"frames": {
 			"standing": [
-				[1, 1, 1, 1, 0],
-				[1, 3, 2, 1, 0],
-				[1, 3, 3, 3, 0],
-				[4, 2, 4, 2, 0],
-				[3, 4, 2, 4, 3],
-				[5, 5, 5, 5, 0],
-				[5, 0, 0, 5, 0]
-			],
+					[2, 2, 1, 1, 0],
+					[2, 3, 1, 3, 0],
+					[1, 1, 1, 1, 0],
+					[4, 4, 1, 4, 0],
+					[1, 4, 4, 4, 1],
+					[5, 5, 5, 5, 0],
+					[5, 0, 0, 1, 0],
+				],
 			"lying": [
-				[0, 0, 0, 0, 3, 0, 0],
-				[1, 2, 3, 2, 4, 5, 5],
-				[1, 3, 3, 4, 2, 5, 0],
-				[1, 2, 3, 2, 4, 5, 0],
-				[1, 1, 1, 4, 3, 5, 5]
-			]
+					[1, 1, 1, 4, 1, 5, 1],
+					[1, 1, 1, 1, 4, 5, 0],
+					[2, 1, 1, 4, 4, 5, 0],
+					[2, 2, 1, 4, 1, 5, 5],
+				]
 		}
 	},
 	"zombie_tank": {
@@ -1622,7 +1618,10 @@ func _ready():
 	_register_material(1062, Color("#361B43"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Torso morado muy oscuro
 	_register_material(1063, Color("#555F61"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Pantalón gris oscuro
 	_register_material(1064, Color("#4E822E"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Pies descalzos
-	
+
+	# --- NPC SYSTEM: ZOMBIE MASTER (1080) ---
+	_register_material(1080, Color("#365C1F"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+
 	# --- SISTEMA DE DAÑO Y HIT (1030-1035) ---
 	_register_material(1030, npc_color_acid, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
 	_register_material(1031, npc_color_fire, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
