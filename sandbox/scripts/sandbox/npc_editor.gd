@@ -1,5 +1,56 @@
 extends Control
 
+class SwapButton extends Button:
+	var slot_index = -1
+	var editor = null
+	func _get_drag_data(at_position: Vector2) -> Variant:
+		var preview = Label.new()
+		preview.text = "Swapping Color " + str(slot_index)
+		set_drag_preview(preview)
+		return slot_index
+	func _can_drop_data(at_position: Vector2, data: Variant) -> bool:
+		return typeof(data) == TYPE_INT and data != slot_index
+	func _drop_data(at_position: Vector2, data: Variant):
+		editor._swap_colors(data, slot_index)
+
+func _swap_colors(a: int, b: int):
+	# Swap in base colors
+	if a <= 9 and b <= 9:
+		var col_a = custom_base_colors.get(a)
+		var col_b = custom_base_colors.get(b)
+		if custom_base_colors.has(b): custom_base_colors[a] = col_b
+		else: custom_base_colors.erase(a)
+		if col_a != null: custom_base_colors[b] = col_a
+		else: custom_base_colors.erase(b)
+	elif a >= 10 and b >= 10:
+		for t in range(4):
+			var col_a = custom_team_colors[t].get(a)
+			var col_b = custom_team_colors[t].get(b)
+			if custom_team_colors[t].has(b): custom_team_colors[t][a] = col_b
+			else: custom_team_colors[t].erase(a)
+			if col_a != null: custom_team_colors[t][b] = col_a
+			else: custom_team_colors[t].erase(b)
+			
+	# Swap in matrices
+	for mat in [data_matrix_stand, data_matrix_lie, data_matrix_act]:
+		for y in range(GRID_SIZE):
+			for x in range(GRID_SIZE):
+				if mat[y][x] == a: mat[y][x] = b
+				elif mat[y][x] == b: mat[y][x] = a
+	_update_palette_buttons()
+	_on_team_preview_changed(current_team_preview)
+
+func _erase_color_from_canvases(c_idx: int):
+	for mat in [data_matrix_stand, data_matrix_lie, data_matrix_act]:
+		for y in range(GRID_SIZE):
+			for x in range(GRID_SIZE):
+				if mat[y][x] == c_idx: mat[y][x] = 0
+	for y in range(GRID_SIZE):
+		for x in range(GRID_SIZE):
+			grid_cells_stand[y * GRID_SIZE + x].color = _get_display_color(data_matrix_stand[y][x], current_team_preview)
+			grid_cells_lie[y * GRID_SIZE + x].color = _get_display_color(data_matrix_lie[y][x], current_team_preview)
+			grid_cells_act[y * GRID_SIZE + x].color = _get_display_color(data_matrix_act[y][x], current_team_preview)
+
 const GRID_SIZE = 20
 
 var grid_cells_stand = []
@@ -8,6 +59,7 @@ var grid_cells_act = []
 var data_matrix_stand = []
 var data_matrix_lie = []
 var data_matrix_act = []
+var clipboard_matrix = []
 var undo_history = []
 var redo_history = []
 var current_brush = 1
@@ -92,6 +144,7 @@ func _toggle_grid(toggled_on: bool):
 	show_grid_lines = toggled_on
 	var grid_stand = find_child("CanvasGridStand", true, false)
 	var grid_lie = find_child("CanvasGridLie", true, false)
+	var grid_act = find_child("CanvasGridAct", true, false)
 	var sep = 2 if show_grid_lines else 0
 	if grid_stand:
 		grid_stand.add_theme_constant_override("h_separation", sep)
@@ -99,6 +152,9 @@ func _toggle_grid(toggled_on: bool):
 	if grid_lie:
 		grid_lie.add_theme_constant_override("h_separation", sep)
 		grid_lie.add_theme_constant_override("v_separation", sep)
+	if grid_act:
+		grid_act.add_theme_constant_override("h_separation", sep)
+		grid_act.add_theme_constant_override("v_separation", sep)
 
 func _save_state_for_undo():
 	undo_history.append(_get_matrices_snapshot())
@@ -208,7 +264,9 @@ func _build_ui():
 	
 	for i in range(1, 10):
 		var hbox_col = HBoxContainer.new()
-		var btn = Button.new()
+		var btn = SwapButton.new()
+		btn.slot_index = i
+		btn.editor = self
 		btn.text = "Color " + str(i)
 		btn.custom_minimum_size = Vector2(80, 35)
 		btn.pressed.connect(func(): _set_brush(i))
@@ -219,6 +277,17 @@ func _build_ui():
 		picker.color = _get_display_color(i, 0)
 		picker.color_changed.connect(func(c): _on_color_picked(i, c))
 		hbox_col.add_child(picker)
+		
+		var clear_c = Button.new()
+		clear_c.text = "X"
+		clear_c.pressed.connect(func():
+			_save_state_for_undo()
+			custom_base_colors.erase(i)
+			picker.color = Color(0.2, 0.2, 0.2)
+			_erase_color_from_canvases(i)
+			_on_team_preview_changed(current_team_preview)
+		)
+		hbox_col.add_child(clear_c)
 		
 		base_grid.add_child(hbox_col)
 		palette_buttons.append(btn)
@@ -235,7 +304,9 @@ func _build_ui():
 	
 	for i in range(10, 13):
 		var hbox_col = HBoxContainer.new()
-		var btn = Button.new()
+		var btn = SwapButton.new()
+		btn.slot_index = i
+		btn.editor = self
 		btn.text = "Team Slot " + str(i)
 		btn.custom_minimum_size = Vector2(120, 35)
 		btn.pressed.connect(func(): _set_brush(i))
@@ -246,6 +317,18 @@ func _build_ui():
 		picker.color = _get_display_color(i, 0)
 		picker.color_changed.connect(func(c): _on_color_picked(i, c))
 		hbox_col.add_child(picker)
+		
+		var clear_c = Button.new()
+		clear_c.text = "X"
+		clear_c.pressed.connect(func():
+			_save_state_for_undo()
+			for t in range(4):
+				custom_team_colors[t].erase(i)
+			picker.color = Color(0.2, 0.2, 0.2)
+			_erase_color_from_canvases(i)
+			_on_team_preview_changed(current_team_preview)
+		)
+		hbox_col.add_child(clear_c)
 		
 		team_grid.add_child(hbox_col)
 		palette_buttons.append(btn)
@@ -318,10 +401,31 @@ func _build_ui():
 	right_panel.add_theme_constant_override("separation", 20)
 	right_scroll.add_child(right_panel)
 	
-	var stand_lbl = Label.new()
-	stand_lbl.text = "Standing (De Pie)"
-	stand_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	right_panel.add_child(stand_lbl)
+	var header_0 = HBoxContainer.new()
+	header_0.alignment = BoxContainer.ALIGNMENT_CENTER
+	var lbl_0 = Label.new()
+	lbl_0.text = "Standing (De Pie)"
+	lbl_0.custom_minimum_size = Vector2(200, 0)
+	lbl_0.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var copy_0 = Button.new()
+	copy_0.text = "Copy"
+	copy_0.pressed.connect(func(): clipboard_matrix = _duplicate_matrix(data_matrix_stand if 0 == 0 else (data_matrix_lie if 0 == 1 else data_matrix_act)))
+	var paste_0 = Button.new()
+	paste_0.text = "Paste"
+	paste_0.pressed.connect(func():
+		if clipboard_matrix and clipboard_matrix.size() > 0:
+			_save_state_for_undo()
+			var target = data_matrix_stand if 0 == 0 else (data_matrix_lie if 0 == 1 else data_matrix_act)
+			var cells = grid_cells_stand if 0 == 0 else (grid_cells_lie if 0 == 1 else grid_cells_act)
+			for y in range(GRID_SIZE):
+				for x in range(GRID_SIZE):
+					target[y][x] = clipboard_matrix[y][x]
+					cells[y * GRID_SIZE + x].color = _get_display_color(target[y][x], current_team_preview)
+	)
+	header_0.add_child(lbl_0)
+	header_0.add_child(copy_0)
+	header_0.add_child(paste_0)
+	right_panel.add_child(header_0)
 	
 	var canvas_bg = ColorRect.new()
 	canvas_bg.color = Color(0.1, 0.1, 0.1)
@@ -337,10 +441,31 @@ func _build_ui():
 	grid.set_anchors_preset(PRESET_FULL_RECT)
 	canvas_bg.add_child(grid)
 	
-	var lie_lbl = Label.new()
-	lie_lbl.text = "Lying (Acostado / Muerto)"
-	lie_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	right_panel.add_child(lie_lbl)
+	var header_1 = HBoxContainer.new()
+	header_1.alignment = BoxContainer.ALIGNMENT_CENTER
+	var lbl_1 = Label.new()
+	lbl_1.text = "Lying (Acostado / Muerto)"
+	lbl_1.custom_minimum_size = Vector2(200, 0)
+	lbl_1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var copy_1 = Button.new()
+	copy_1.text = "Copy"
+	copy_1.pressed.connect(func(): clipboard_matrix = _duplicate_matrix(data_matrix_stand if 1 == 0 else (data_matrix_lie if 1 == 1 else data_matrix_act)))
+	var paste_1 = Button.new()
+	paste_1.text = "Paste"
+	paste_1.pressed.connect(func():
+		if clipboard_matrix and clipboard_matrix.size() > 0:
+			_save_state_for_undo()
+			var target = data_matrix_stand if 1 == 0 else (data_matrix_lie if 1 == 1 else data_matrix_act)
+			var cells = grid_cells_stand if 1 == 0 else (grid_cells_lie if 1 == 1 else grid_cells_act)
+			for y in range(GRID_SIZE):
+				for x in range(GRID_SIZE):
+					target[y][x] = clipboard_matrix[y][x]
+					cells[y * GRID_SIZE + x].color = _get_display_color(target[y][x], current_team_preview)
+	)
+	header_1.add_child(lbl_1)
+	header_1.add_child(copy_1)
+	header_1.add_child(paste_1)
+	right_panel.add_child(header_1)
 	
 	var canvas_bg_lie = ColorRect.new()
 	canvas_bg_lie.color = Color(0.1, 0.1, 0.1)
@@ -358,10 +483,31 @@ func _build_ui():
 	grid.add_theme_constant_override("v_separation", 1)
 	canvas_bg.add_child(grid)
 
-	var act_lbl = Label.new()
-	act_lbl.text = "Action (Atacar / Curar)"
-	act_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	right_panel.add_child(act_lbl)
+	var header_2 = HBoxContainer.new()
+	header_2.alignment = BoxContainer.ALIGNMENT_CENTER
+	var lbl_2 = Label.new()
+	lbl_2.text = "Action (Atacar / Curar)"
+	lbl_2.custom_minimum_size = Vector2(200, 0)
+	lbl_2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var copy_2 = Button.new()
+	copy_2.text = "Copy"
+	copy_2.pressed.connect(func(): clipboard_matrix = _duplicate_matrix(data_matrix_stand if 2 == 0 else (data_matrix_lie if 2 == 1 else data_matrix_act)))
+	var paste_2 = Button.new()
+	paste_2.text = "Paste"
+	paste_2.pressed.connect(func():
+		if clipboard_matrix and clipboard_matrix.size() > 0:
+			_save_state_for_undo()
+			var target = data_matrix_stand if 2 == 0 else (data_matrix_lie if 2 == 1 else data_matrix_act)
+			var cells = grid_cells_stand if 2 == 0 else (grid_cells_lie if 2 == 1 else grid_cells_act)
+			for y in range(GRID_SIZE):
+				for x in range(GRID_SIZE):
+					target[y][x] = clipboard_matrix[y][x]
+					cells[y * GRID_SIZE + x].color = _get_display_color(target[y][x], current_team_preview)
+	)
+	header_2.add_child(lbl_2)
+	header_2.add_child(copy_2)
+	header_2.add_child(paste_2)
+	right_panel.add_child(header_2)
 	
 	var canvas_bg_act = ColorRect.new()
 	canvas_bg_act.color = Color(0.1, 0.1, 0.1)
@@ -444,8 +590,10 @@ func _get_display_color(val: int, team: int) -> Color:
 	if val == 0: return Color(0.15, 0.15, 0.15)
 	if val >= 1 and val <= 9:
 		if custom_base_colors.has(val): return custom_base_colors[val]
+		return Color(0.2, 0.2, 0.2)
 	if val >= 10 and val <= 12:
 		if custom_team_colors[team].has(val): return custom_team_colors[team][val]
+		return Color(0.2, 0.2, 0.2)
 	return Color.MAGENTA
 
 func _on_cell_gui_input(event: InputEvent, x: int, y: int, mode: int = 0):
