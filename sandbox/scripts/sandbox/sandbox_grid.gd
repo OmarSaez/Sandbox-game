@@ -883,7 +883,7 @@ const NPC_PROFILES = {
 	},
 	"dinosaurio": {
 		"can_socialize": false,
-		"can_sleep": false,
+		"can_sleep": true,
 		"can_celebrate": true,
 		"can_flee": false,
 		"can_panic_disaster": false,
@@ -13262,6 +13262,9 @@ func _process_npcs(delta):
 								
 								if _get_lut_rand() < 0.1 and !_can_npc_fit(np.x, np.y + 1, npc):
 									npc.vy = -3.5 - (_get_lut_rand() * 1.5)
+									
+								if _get_lut_rand() < 0.15:
+									_set_npc_emoji(npc, "🥩" if _get_lut_rand() > 0.5 else "🦖", 2.0)
 
 					elif npc.type == "zombie":
 						if target:
