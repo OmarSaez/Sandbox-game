@@ -897,6 +897,7 @@ const NPC_VISUALS = {
 		"width": 15, "height": 11,
 		"palette": {1: Color("49c848"), 2: Color("f6cb37"), 3: Color("558b4a"), 4: Color("320606"), },
 		"frames": {
+			"action": [],
 			"standing": [
 					[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0],
 					[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 4, 1, 1],
@@ -1054,6 +1055,7 @@ const NPC_VISUALS = {
 		"width": 8, "height": 10,
 		"palette": {1: Color("f2f2f2"), 3: Color("ffd8b3"), 4: Color("68450f"), 5: Color("6d32ff"), 10: [Color("a83938"), Color("384ba8"), Color("c79b1e"), Color("74a838")], 11: [Color("ff0200"), Color("28fff5"), Color("f7ff00"), Color("38ff00")], },
 		"frames": {
+			"action": [],
 			"standing": [
 					[0, 0, 10, 10, 10, 0, 11, 4],
 					[0, 10, 10, 10, 10, 10, 4, 11],
@@ -12549,7 +12551,11 @@ func _draw_npc_pixels(npc, override_mat = -1):
 				
 	# 2. Dibujar Matriz (Data-Driven)
 	var frames = vis["frames"]
-	var matrix = frames["lying"] if is_lying else frames["standing"]
+	var matrix = frames.get("standing", [])
+	if is_lying:
+		matrix = frames.get("lying", [])
+	elif npc.get("action_timer", 0.0) > 0.0 and frames.has("action") and frames.get("action", []).size() > 0:
+		matrix = frames.get("action", [])
 	
 	var h = matrix.size()
 	var w = matrix[0].size() if h > 0 else 0
@@ -12713,6 +12719,8 @@ func _process_npcs(delta):
 		if npc.hp > 0:
 			# Update common timers
 			if npc.attack_cooldown > 0: npc.attack_cooldown -= 0.05
+			var a_t = npc.get("action_timer", 0.0)
+			if a_t > 0: npc["action_timer"] = a_t - 0.05
 			var s_cd = npc.get("social_cooldown", 0.0)
 			if s_cd > 0: npc["social_cooldown"] = s_cd - 0.05
 			var m_boost = npc.get("morale_boost_timer", 0.0)
@@ -12908,6 +12916,7 @@ func _process_npcs(delta):
 								if ally_dist < 25.0:
 									npc.dir = 0
 									if heal_cd <= 0:
+										npc["action_timer"] = 0.4
 										closest_ally.hp = min(closest_ally.hp + npc.get("heal_power", 20.0), closest_ally.get("max_hp", 100.0))
 										npc["attack_cooldown"] = 1.0; _play_action_sound("medic_heal")
 										_set_npc_emoji(npc, "💚", 1.0) 
@@ -13109,6 +13118,7 @@ func _process_npcs(delta):
 											if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
 										else: npc.dir = 0
 								if npc.attack_cooldown <= 0:
+									npc["action_timer"] = 0.4
 									_shoot_arrow(npc, target); npc.miss_counter += 1
 									if npc.miss_counter >= 3: npc.miss_counter = -40
 									npc.attack_cooldown = 1.1 if dx_abs > 50 else 1.5
@@ -13122,6 +13132,7 @@ func _process_npcs(delta):
 										if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
 									else: npc.dir = 0
 								if npc.attack_cooldown <= 0:
+									npc["action_timer"] = 0.4
 									_shoot_fireball(npc, target)
 									npc.attack_cooldown = 1.8
 					elif npc.type == "zombie_tank":
@@ -13327,6 +13338,7 @@ func _process_npcs(delta):
 						if npc.hit_flash == 5: npc.dir = -npc.dir
 						npc.dig_timer += dig_speed
 						if npc.dig_timer >= 0.15:
+							npc["action_timer"] = 0.4
 							npc.dig_timer = 0.0
 							if !_can_npc_fit(np.x, np.y + 1, npc):
 								if not (npc.has("mine_state") and npc.mine_state == "saboteur"): npc.state_steps -= 1
@@ -14354,6 +14366,8 @@ func _attack_npc(attacker, victim):
 	if attacker.hp <= 0 or victim.hp <= 0: return
 	if victim.invul_timer > 0: return # Converted protection
 	
+	attacker["action_timer"] = 0.4
+	
 	var a_profile = NPC_PROFILES.get(attacker.type, {})
 	var hit_emoji = a_profile.get("hit_emoji", "⚔️")
 	if !attacker.get("morale_broken", false): _set_npc_emoji(attacker, hit_emoji, 0.5)
@@ -14542,6 +14556,9 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 		h = vis["height"]
 		var frames = vis.get("frames", {})
 		matrix = frames.get("standing", null)
+		if moving_npc.get("action_timer", 0.0) > 0.0 and frames.has("action"):
+			var act = frames.get("action", [])
+			if act.size() > 0: matrix = act
 		face_dir = moving_npc.get("dir", 1)
 		if face_dir == 0: face_dir = moving_npc.get("last_dir", 1)
 		

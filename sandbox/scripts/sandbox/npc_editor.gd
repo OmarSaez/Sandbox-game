@@ -4,8 +4,10 @@ const GRID_SIZE = 20
 
 var grid_cells_stand = []
 var grid_cells_lie = []
+var grid_cells_act = []
 var data_matrix_stand = []
 var data_matrix_lie = []
+var data_matrix_act = []
 var undo_history = []
 var redo_history = []
 var current_brush = 1
@@ -107,7 +109,8 @@ func _save_state_for_undo():
 func _get_matrices_snapshot() -> Dictionary:
 	return {
 		"stand": _duplicate_matrix(data_matrix_stand),
-		"lie": _duplicate_matrix(data_matrix_lie)
+		"lie": _duplicate_matrix(data_matrix_lie),
+		"act": _duplicate_matrix(data_matrix_act)
 	}
 
 func _duplicate_matrix(matrix: Array) -> Array:
@@ -133,10 +136,12 @@ func _restore_snapshot(state: Dictionary):
 		for x in range(GRID_SIZE):
 			data_matrix_stand[y][x] = state["stand"][y][x]
 			data_matrix_lie[y][x] = state["lie"][y][x]
+			data_matrix_act[y][x] = state["act"][y][x]
 	for y in range(GRID_SIZE):
 		for x in range(GRID_SIZE):
 			grid_cells_stand[y * GRID_SIZE + x].color = _get_display_color(data_matrix_stand[y][x], current_team_preview)
 			grid_cells_lie[y * GRID_SIZE + x].color = _get_display_color(data_matrix_lie[y][x], current_team_preview)
+			grid_cells_act[y * GRID_SIZE + x].color = _get_display_color(data_matrix_act[y][x], current_team_preview)
 
 func _build_ui():
 	var hbox = HBoxContainer.new()
@@ -271,7 +276,7 @@ func _build_ui():
 	clear_s_btn.text = "Clear Standing"
 	clear_s_btn.pressed.connect(func():
 		_save_state_for_undo()
-		_clear_grid_data(false)
+		_clear_grid_data(0)
 	)
 	left_panel.add_child(clear_s_btn)
 	
@@ -279,9 +284,17 @@ func _build_ui():
 	clear_l_btn.text = "Clear Lying"
 	clear_l_btn.pressed.connect(func():
 		_save_state_for_undo()
-		_clear_grid_data(true)
+		_clear_grid_data(1)
 	)
 	left_panel.add_child(clear_l_btn)
+
+	var clear_a_btn = Button.new()
+	clear_a_btn.text = "Clear Action"
+	clear_a_btn.pressed.connect(func():
+		_save_state_for_undo()
+		_clear_grid_data(2)
+	)
+	left_panel.add_child(clear_a_btn)
 	
 	var undo_btn = Button.new()
 	undo_btn.text = "Undo"
@@ -345,46 +358,82 @@ func _build_ui():
 	grid.add_theme_constant_override("v_separation", 1)
 	canvas_bg.add_child(grid)
 
+	var act_lbl = Label.new()
+	act_lbl.text = "Action (Atacar / Curar)"
+	act_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	right_panel.add_child(act_lbl)
+	
+	var canvas_bg_act = ColorRect.new()
+	canvas_bg_act.color = Color(0.1, 0.1, 0.1)
+	canvas_bg_act.custom_minimum_size = Vector2(GRID_SIZE * 30, GRID_SIZE * 30)
+	canvas_bg_act.size_flags_horizontal = SIZE_SHRINK_CENTER
+	right_panel.add_child(canvas_bg_act)
+	
+	var grid_act = GridContainer.new()
+	grid_act.name = "CanvasGridAct"
+	grid_act.columns = GRID_SIZE
+	grid_act.add_theme_constant_override("h_separation", 2)
+	grid_act.add_theme_constant_override("v_separation", 2)
+	grid_act.set_anchors_preset(PRESET_FULL_RECT)
+	canvas_bg_act.add_child(grid_act)
+
 func _init_grid():
 	var grid_stand = find_child("CanvasGridStand", true, false)
 	var grid_lie = find_child("CanvasGridLie", true, false)
+	var grid_act = find_child("CanvasGridAct", true, false)
 	
 	if grid_stand:
 		for c in grid_stand.get_children(): c.queue_free()
 	if grid_lie:
 		for c in grid_lie.get_children(): c.queue_free()
+	if grid_act:
+		for c in grid_act.get_children(): c.queue_free()
 			
 	grid_cells_stand.clear(); data_matrix_stand.clear()
 	grid_cells_lie.clear(); data_matrix_lie.clear()
+	grid_cells_act.clear(); data_matrix_act.clear()
 	
 	for y in range(GRID_SIZE):
-		var r_stand = []; var r_lie = []
+		var r_stand = []; var r_lie = []; var r_act = []
 		for x in range(GRID_SIZE):
-			r_stand.append(0); r_lie.append(0)
+			r_stand.append(0); r_lie.append(0); r_act.append(0)
 			
 			var c_stand = ColorRect.new()
 			c_stand.custom_minimum_size = Vector2(28, 28)
 			c_stand.color = Color(0.15, 0.15, 0.15)
-			c_stand.gui_input.connect(_on_cell_gui_input.bind(x, y, false))
+			c_stand.gui_input.connect(_on_cell_gui_input.bind(x, y, 0))
 			if grid_stand: grid_stand.add_child(c_stand)
 			grid_cells_stand.append(c_stand)
 			
 			var c_lie = ColorRect.new()
 			c_lie.custom_minimum_size = Vector2(28, 28)
 			c_lie.color = Color(0.15, 0.15, 0.15)
-			c_lie.gui_input.connect(_on_cell_gui_input.bind(x, y, true))
+			c_lie.gui_input.connect(_on_cell_gui_input.bind(x, y, 1))
 			if grid_lie: grid_lie.add_child(c_lie)
 			grid_cells_lie.append(c_lie)
 			
+			var c_act = ColorRect.new()
+			c_act.custom_minimum_size = Vector2(28, 28)
+			c_act.color = Color(0.15, 0.15, 0.15)
+			c_act.gui_input.connect(_on_cell_gui_input.bind(x, y, 2))
+			if grid_act: grid_act.add_child(c_act)
+			grid_cells_act.append(c_act)
+			
 		data_matrix_stand.append(r_stand)
 		data_matrix_lie.append(r_lie)
+		data_matrix_act.append(r_act)
 
-func _clear_grid_data(is_lying: bool):
-	if is_lying:
+func _clear_grid_data(mode: int):
+	if mode == 1:
 		for y in range(GRID_SIZE):
 			for x in range(GRID_SIZE):
 				data_matrix_lie[y][x] = 0
 				grid_cells_lie[y * GRID_SIZE + x].color = _get_display_color(0, current_team_preview)
+	elif mode == 2:
+		for y in range(GRID_SIZE):
+			for x in range(GRID_SIZE):
+				data_matrix_act[y][x] = 0
+				grid_cells_act[y * GRID_SIZE + x].color = _get_display_color(0, current_team_preview)
 	else:
 		for y in range(GRID_SIZE):
 			for x in range(GRID_SIZE):
@@ -399,20 +448,23 @@ func _get_display_color(val: int, team: int) -> Color:
 		if custom_team_colors[team].has(val): return custom_team_colors[team][val]
 	return Color.MAGENTA
 
-func _on_cell_gui_input(event: InputEvent, x: int, y: int, is_lying: bool = false):
+func _on_cell_gui_input(event: InputEvent, x: int, y: int, mode: int = 0):
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed and not is_drawing:
 				_save_state_for_undo()
 			is_drawing = event.pressed
-			if is_drawing: _paint_cell(x, y, is_lying)
+			if is_drawing: _paint_cell(x, y, mode)
 	elif event is InputEventMouseMotion:
-		if is_drawing: _paint_cell(x, y, is_lying)
+		if is_drawing: _paint_cell(x, y, mode)
 
-func _paint_cell(x: int, y: int, is_lying: bool = false):
-	if is_lying:
+func _paint_cell(x: int, y: int, mode: int = 0):
+	if mode == 1:
 		data_matrix_lie[y][x] = current_brush
 		grid_cells_lie[y * GRID_SIZE + x].color = _get_display_color(current_brush, current_team_preview)
+	elif mode == 2:
+		data_matrix_act[y][x] = current_brush
+		grid_cells_act[y * GRID_SIZE + x].color = _get_display_color(current_brush, current_team_preview)
 	else:
 		data_matrix_stand[y][x] = current_brush
 		grid_cells_stand[y * GRID_SIZE + x].color = _get_display_color(current_brush, current_team_preview)
@@ -477,6 +529,7 @@ func _on_load_pressed():
 	var frames = vis.get("frames", {})
 	var standing = frames.get("standing", [])
 	var lying = frames.get("lying", [])
+	var act = frames.get("action", [])
 	
 	var h_s = standing.size()
 	var w_s = standing[0].size() if h_s > 0 else 0
@@ -508,7 +561,23 @@ func _on_load_pressed():
 					elif val == 8: val = 11
 					elif val == 9: val = 12
 				current_brush = val
-				_paint_cell(start_x_l + x, start_y_l + y, true)
+				_paint_cell(start_x_l + x, start_y_l + y, 1)
+				
+	var h_a = act.size()
+	var w_a = act[0].size() if h_a > 0 else 0
+	var start_x_a = (GRID_SIZE - w_a) / 2
+	var start_y_a = (GRID_SIZE - h_a) / 2
+	
+	for y in range(h_a):
+		for x in range(w_a):
+			var val = act[y][x]
+			if val != 0 and typeof(val) != TYPE_STRING:
+				if typeof(vis.get("palette", {}).get(val)) == TYPE_ARRAY:
+					if val == 4: val = 10
+					elif val == 8: val = 11
+					elif val == 9: val = 12
+				current_brush = val
+				_paint_cell(start_x_a + x, start_y_a + y, 2)
 				
 	_set_brush(1)
 
@@ -536,12 +605,24 @@ func _on_export_pressed():
 	var min_x_l = GRID_SIZE; var max_x_l = -1
 	var min_y_l = GRID_SIZE; var max_y_l = -1
 	
+	# Trim logic for Action
+	var min_x_a = GRID_SIZE; var max_x_a = -1
+	var min_y_a = GRID_SIZE; var max_y_a = -1
+	
 	for y in range(GRID_SIZE):
 		for x in range(GRID_SIZE):
 			var val = data_matrix_lie[y][x]
 			if val != 0:
 				min_x_l = min(min_x_l, x); max_x_l = max(max_x_l, x)
 				min_y_l = min(min_y_l, y); max_y_l = max(max_y_l, y)
+				used_indices[val] = true
+
+	for y in range(GRID_SIZE):
+		for x in range(GRID_SIZE):
+			var val = data_matrix_act[y][x]
+			if val != 0:
+				min_x_a = min(min_x_a, x); max_x_a = max(max_x_a, x)
+				min_y_a = min(min_y_a, y); max_y_a = max(max_y_a, y)
 				used_indices[val] = true
 				
 	if max_x_s == -1: 
@@ -565,6 +646,14 @@ func _on_export_pressed():
 			for x in range(min_x_l, max_x_l + 1):
 				row.append(data_matrix_lie[y][x])
 			out_matrix_l.append(row)
+
+	var out_matrix_a = []
+	if max_x_a != -1:
+		for y in range(min_y_a, max_y_a + 1):
+			var row = []
+			for x in range(min_x_a, max_x_a + 1):
+				row.append(data_matrix_act[y][x])
+			out_matrix_a.append(row)
 			
 	var str_matrix_s = "[\n"
 	for row in out_matrix_s: str_matrix_s += "\t\t\t\t" + str(row) + ",\n"
@@ -575,6 +664,12 @@ func _on_export_pressed():
 		str_matrix_l = "[\n"
 		for row in out_matrix_l: str_matrix_l += "\t\t\t\t" + str(row) + ",\n"
 		str_matrix_l += "\t\t\t]"
+		
+	var str_matrix_a = "[]"
+	if max_x_a != -1:
+		str_matrix_a = "[\n"
+		for row in out_matrix_a: str_matrix_a += "\t\t\t\t" + str(row) + ",\n"
+		str_matrix_a += "\t\t\t]"
 	
 	var pal_str = "{"
 	for i in range(1, 10):
@@ -595,7 +690,8 @@ func _on_export_pressed():
 	code += "\t\"palette\": %s,\n" % pal_str
 	code += "\t\"frames\": {\n"
 	code += "\t\t\"standing\": " + str_matrix_s + ",\n"
-	code += "\t\t\"lying\": " + str_matrix_l + "\n"
+	if max_x_l != -1: code += "\t\t\"lying\": " + str_matrix_l + ",\n"
+	if max_x_a != -1: code += "\t\t\"action\": " + str_matrix_a + "\n"
 	code += "\t}\n"
 	code += "}"
 	
