@@ -1012,7 +1012,17 @@ const NPC_VISUALS = {
 					[6, 3, 3, 10, 10, 10, 0],
 					[1, 3, 3, 1, 10, 1, 0],
 					[1, 3, 3, 1, 3, 1, 1],
-				]
+				],
+			"action": [
+				[1, 1, 6, 1, 0],
+				[3, 2, 3, 2, 0],
+				[3, 3, 3, 3, 0],
+				[1, 1, 10, 1, 3],
+				[3, 10, 10, 10, 0],
+				[1, 1, 10, 1, 0],
+				[1, 0, 0, 1, 0],
+			]
+
 		}
 	},
 	"zombie": {
@@ -1062,9 +1072,8 @@ const NPC_VISUALS = {
 	},
 	"mage": {
 		"width": 8, "height": 10,
-		"palette": {1: Color("f2f2f2"), 3: Color("ffd8b3"), 4: Color("68450f"), 5: Color("6d32ff"), 10: [Color("a83938"), Color("384ba8"), Color("c79b1e"), Color("74a838")], 11: [Color("ff0200"), Color("28fff5"), Color("f7ff00"), Color("38ff00")], },
+		"palette": {1: Color("f2f2f2"), 3: Color("ffd8b3"), 4: Color("68450f"), 5: Color("6d32ff"), 10: [Color("a83938"), Color("384ba8"), Color("c79b1e"), Color("74a838")], 11: [Color("ff0200"), Color("28fff5"), Color("f7ff00"), Color("38ff00")], 12: [Color("ff8383"), Color("aafaf1"), Color("fffb93"), Color("a7ff9d")], },
 		"frames": {
-			"action": [],
 			"standing": [
 					[0, 0, 10, 10, 10, 0, 11, 4],
 					[0, 10, 10, 10, 10, 10, 4, 11],
@@ -1082,6 +1091,20 @@ const NPC_VISUALS = {
 					[10, 10, 3, 3, 1, 1, 1, 1, 1],
 					[10, 10, 5, 3, 1, 1, 1, 1, 10],
 					[10, 10, 1, 1, 1, 10, 3, 10, 10],
+				],
+			"action": [
+					[0, 0, 0, 0, 0, 0, 12, 4],
+					[0, 0, 0, 0, 0, 0, 4, 12],
+					[0, 0, 10, 10, 10, 0, 0, 4],
+					[0, 10, 10, 10, 10, 10, 0, 4],
+					[10, 0, 10, 10, 10, 10, 0, 4],
+					[0, 0, 1, 5, 3, 5, 0, 4],
+					[0, 0, 1, 3, 3, 3, 0, 4],
+					[0, 0, 1, 1, 1, 1, 3, 4],
+					[0, 10, 10, 1, 1, 1, 0, 4],
+					[0, 10, 3, 1, 1, 1, 0, 4],
+					[0, 10, 10, 1, 1, 1, 0, 0],
+					[10, 10, 10, 10, 1, 10, 0, 0],
 				]
 		}
 	}
@@ -13916,6 +13939,7 @@ func _process_mage_rescue(npc):
 		# Within 15 pixels: stop and channel
 		npc.dir = 0
 		npc.attack_cooldown = 0.5
+		npc["action_timer"] = 0.4
 		_play_action_sound("mage_rescue", 0.5)
 		
 		# Alternate emojis
@@ -14178,7 +14202,9 @@ func _process_projectiles(delta):
 						if cx >= 0 and cx < grid_width and cy >= 0 and cy < dynamic_grid_height:
 							var tid = _get_cell(cx, cy)
 							if tid != 0 and tid != 15 and tid != 3 and tid != 17:
-								is_colliding_step = true; break
+								var tags = material_tags_raw[_get_tags_id(tid)]
+								if (tags & SandboxMaterial.Tags.NPC) == 0:
+									is_colliding_step = true; break
 					if is_colliding_step: break
 			elif p.type == "bomber_bomb":
 				for ox in range(-1, 1):
@@ -14191,7 +14217,9 @@ func _process_projectiles(delta):
 			else:
 				var tid = _get_cell(tx, ty)
 				if tid != 0 and tid != 15 and tid != 3 and tid != 17:
-					is_colliding_step = true
+					var tags = material_tags_raw[_get_tags_id(tid)]
+					if (tags & SandboxMaterial.Tags.NPC) == 0:
+						is_colliding_step = true
 					
 			if is_colliding_step:
 				collides_block = true
