@@ -895,16 +895,15 @@ const NPC_PROFILES = {
 const NPC_VISUALS = {
 	"dinosaurio": {
 		"width": 15, "height": 11,
-		"palette": {1: Color("49c848"), 2: Color("f6cb37"), 3: Color("558b4a"), 4: Color("320606"), },
+		"palette": {1: Color("49c848"), 2: Color("f6cb37"), 3: Color("558b4a"), 4: Color("320606"), 5: Color("1f6711"), },
 		"frames": {
-			"action": [],
 			"standing": [
 					[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0],
 					[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 4, 1, 1],
 					[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
 					[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
 					[0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 0, 0, 0],
-					[1, 0, 0, 0, 1, 1, 1, 1, 1, 3, 2, 2, 3, 0, 0],
+					[1, 0, 0, 0, 1, 1, 1, 1, 1, 5, 2, 2, 5, 0, 0],
 					[1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0, 0],
 					[0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 0, 0, 0, 0],
 					[0, 0, 1, 1, 1, 0, 1, 1, 0, 3, 3, 0, 0, 0, 0],
@@ -914,9 +913,19 @@ const NPC_VISUALS = {
 			"lying": [
 					[0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 					[0, 0, 0, 0, 0, 0, 1, 3, 3, 1, 1, 1, 0, 1, 1, 1, 1, 0],
-					[0, 0, 0, 0, 1, 1, 3, 3, 3, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+					[0, 0, 0, 0, 1, 1, 3, 3, 3, 1, 1, 1, 0, 1, 1, 4, 1, 1],
 					[0, 0, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-					[1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 3, 1, 1, 1, 1, 1, 1],
+					[1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 5, 1, 1, 1, 1, 1, 1],
+				],
+			"action": [
+					[0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0],
+					[1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 1, 1],
+					[1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1],
+					[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 0, 2, 1, 1, 1, 0, 0],
+					[0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 5, 0, 5, 0, 1, 1, 1, 1],
+					[0, 0, 0, 0, 0, 0, 1, 1, 0, 3, 3, 0, 0, 0, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 1, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0],
 				]
 		}
 	},
@@ -12566,10 +12575,8 @@ func _draw_npc_pixels(npc, override_mat = -1):
 			var mat_key = row[ox]
 			if mat_key != 0:
 				var px = sx + ox if face_dir > 0 else sx + (w - 1 - ox)
-				var py = sy + oy
-				if is_lying:
-					# Ajustar la altura al acostarse para que repose en el suelo
-					py = sy + (vis["height"] - h) + oy
+				# Siempre alinear desde abajo hacia arriba (pies al suelo)
+				var py = sy + (vis["height"] - h) + oy
 				_set_cell(px, py, master_mat_id)
 				var c = p.get(mat_key, Color.WHITE)
 				if typeof(c) == TYPE_COLOR:
@@ -14567,10 +14574,15 @@ func _can_npc_fit(gx, gy, moving_npc = null) -> bool:
 	
 	if igx < 0 or igx + w - 1 >= grid_width or igy < 0 or igy + h - 1 >= dynamic_grid_height: return false
 	
+	var mat_h = matrix.size() if matrix != null else 0
+	
 	# Chequeo de píxeles: Ignorar Plantas y NPCs para fluidez
 	for oy in range(h):
 		var row_offset = (igy + oy) * grid_width
-		var row = null if matrix == null else (matrix[oy] if oy < matrix.size() else null)
+		var mat_y = oy - (h - mat_h)
+		var row = null
+		if matrix != null and mat_y >= 0 and mat_y < mat_h:
+			row = matrix[mat_y]
 		for ox in range(w):
 			if row != null:
 				var check_ox = ox if face_dir > 0 else (w - 1 - ox)

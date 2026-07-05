@@ -623,6 +623,7 @@ func _on_team_preview_changed(index: int):
 		for x in range(GRID_SIZE):
 			grid_cells_stand[y * GRID_SIZE + x].color = _get_display_color(data_matrix_stand[y][x], current_team_preview)
 			grid_cells_lie[y * GRID_SIZE + x].color = _get_display_color(data_matrix_lie[y][x], current_team_preview)
+			grid_cells_act[y * GRID_SIZE + x].color = _get_display_color(data_matrix_act[y][x], current_team_preview)
 	_update_palette_buttons()
 
 func _on_color_picked(i: int, color: Color):
