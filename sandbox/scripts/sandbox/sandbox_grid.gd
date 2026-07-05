@@ -880,10 +880,45 @@ const NPC_PROFILES = {
 		"can_panic_disaster": false,
 		"attack_sound": "zombie_tank_melee",
 		"hit_emoji": "🧟"
+	},
+	"dinosaurio": {
+		"can_socialize": false,
+		"can_sleep": false,
+		"can_celebrate": true,
+		"can_flee": false,
+		"can_panic_disaster": false,
+		"attack_sound": "zombie_tank_melee",
+		"hit_emoji": "🦖"
 	}
 }
 
 const NPC_VISUALS = {
+	"dinosaurio": {
+		"width": 15, "height": 11,
+		"palette": {1: Color("49c848"), 2: Color("f6cb37"), 3: Color("558b4a"), 4: Color("320606"), },
+		"frames": {
+			"standing": [
+					[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0],
+					[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 4, 1, 1],
+					[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+					[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+					[0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 0, 0, 0],
+					[1, 0, 0, 0, 1, 1, 1, 1, 1, 3, 2, 2, 3, 0, 0],
+					[1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0, 0],
+					[0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 0, 0, 0, 0],
+					[0, 0, 1, 1, 1, 0, 1, 1, 0, 3, 3, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 1, 0, 0, 3, 0, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 3, 0, 0, 0, 0],
+				],
+			"lying": [
+					[0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+					[0, 0, 0, 0, 0, 0, 1, 3, 3, 1, 1, 1, 0, 1, 1, 1, 1, 0],
+					[0, 0, 0, 0, 1, 1, 3, 3, 3, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+					[0, 0, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+					[1, 1, 1, 1, 1, 1, 1, 3, 3, 1, 1, 3, 1, 1, 1, 1, 1, 1],
+				]
+		}
+	},
 	"warrior": {
 		"width": 5, "height": 7,
 	"palette": {1: Color("717e80"), 2: Color("2d2b24"), 3: Color("ffe2bd"), 5: Color("717e80"), 6: Color("a2a2a2"), 10: [Color("e00000"), Color("008ee6"), Color("ffd100"), Color("00e317")],},
@@ -1623,6 +1658,9 @@ func _ready():
 
 	# --- NPC SYSTEM: ZOMBIE MASTER (1080) ---
 	_register_material(1080, Color("#365C1F"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
+
+	# --- NPC SYSTEM: DINOSAURIO (1090) ---
+	_register_material(1090, Color("49c848"), SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC) # Master
 
 	# --- SISTEMA DE DAÑO Y HIT (1030-1035) ---
 	_register_material(1030, npc_color_acid, SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.GRAV_STATIC)
@@ -8681,6 +8719,8 @@ func _update_menu_highlights():
 				if selected_material == 1050 and not is_selecting_npc_to_control: is_active = true
 			elif key == "zombie_tank_btn":
 				if selected_material == 1060 and not is_selecting_npc_to_control: is_active = true
+			elif key == "dinosaurio_btn":
+				if selected_material == 1090 and not is_selecting_npc_to_control: is_active = true
 			
 			if btn.get_meta("is_currently_active", false) != is_active:
 				btn.set_meta("is_currently_active", is_active)
@@ -8702,7 +8742,7 @@ func _update_menu_highlights():
 					btn.remove_theme_color_override("font_color")
 	
 	# Ocultar o mostrar el selector de equipo según si el NPC seleccionado es neutral (Sin bando)
-	var is_neutral_npc = (selected_material == 1050 or selected_material == 1060)
+	var is_neutral_npc = (selected_material == 1050 or selected_material == 1060 or selected_material == 1090)
 	if ui_elements.has("team_lbl") and is_instance_valid(ui_elements["team_lbl"]):
 		ui_elements["team_lbl"].visible = not is_neutral_npc
 	if ui_elements.has("team_flow") and is_instance_valid(ui_elements["team_flow"]):
@@ -12249,6 +12289,7 @@ func _setup_npc_ui():
 		
 		create_npc_btn.call("zombie", 1050, neutral_flow)
 		create_npc_btn.call("zombie_tank", 1060, neutral_flow)
+		create_npc_btn.call("dinosaurio", 1090, neutral_flow)
 		
 		_add_ui_header(v_box, "coming_soon")
 		
@@ -12313,15 +12354,16 @@ func _place_npc(x, y):
 	elif selected_material == 1050 or selected_material == 1051: n_type = "zombie"
 	elif selected_material == 1060 or selected_material == 1061: n_type = "zombie_tank"
 	elif selected_material == 1070 or selected_material == 1071: n_type = "mage"
+	elif selected_material == 1090 or selected_material == 1091: n_type = "dinosaurio"
 
 	
 	# Register in entity list
 	var new_npc = {
 		"pos": Vector2i(start_x, start_y),
-		"team": -1 if (n_type == "zombie" or n_type == "zombie_tank") else selected_team,
+		"team": -1 if (n_type == "zombie" or n_type == "zombie_tank" or n_type == "dinosaurio") else selected_team,
 		"dir": 1 if _get_lut_rand() > 0.5 else -1,
 		"type": n_type,
-		"hp": _get_lut_rand_range(280.0, 320.0) if n_type == "zombie_tank" else _get_lut_rand_range(85.0, 115.0), # Variación en resistencia base
+		"hp": _get_lut_rand_range(500.0, 600.0) if n_type == "dinosaurio" else (_get_lut_rand_range(280.0, 320.0) if n_type == "zombie_tank" else _get_lut_rand_range(85.0, 115.0)), # Variación en resistencia base
 		"attack_cooldown": 0.0,
 		"hit_flash": 0,
 		"hit_type": "none",
@@ -12478,7 +12520,7 @@ func _draw_npc_pixels(npc, override_mat = -1):
 	if npc.type == "archer": master_mat_id = 1010
 	elif npc.type == "miner": master_mat_id = 1020
 	elif npc.type == "mage": master_mat_id = 1070
-	elif npc.type == "zombie" or npc.type == "zombie_tank": master_mat_id = 1080
+	elif npc.type == "zombie" or npc.type == "zombie_tank" or npc.type == "dinosaurio": master_mat_id = 1080
 	elif npc.type == "medic": master_mat_id = 1040 # Assume 1040 is medic master if exists, else it will use 1000 logic for physics
 	
 	var p = {}
@@ -13029,7 +13071,7 @@ func _process_npcs(delta):
 							var start_drop_x = np.x + (1 if npc.dir == -1 else 0)
 							if _get_cell(start_drop_x, np.y) == 0: _set_cell(start_drop_x, np.y, 2)
 					
-					if npc.type != "miner" and npc.type != "medic" and npc.type != "zombie" and npc.type != "zombie_tank":
+					if npc.type != "miner" and npc.type != "medic" and npc.type != "zombie" and npc.type != "zombie_tank" and npc.type != "dinosaurio":
 						if npc.get("is_fleeing", false):
 							if target: npc.dir = 1 if target.pos.x < np.x else -1
 							if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
@@ -13177,6 +13219,50 @@ func _process_npcs(delta):
 							if (npc.id + _ai_tick_count) % 4 != 0:
 								npc.dir = 0
 								
+					elif npc.type == "dinosaurio":
+						if target:
+							npc["recently_celebrated"] = false
+							npc["contagion_wait_timer"] = 0.0
+							npc["has_spotted_enemy"] = true
+							_world_peace_timer = 0.0
+							
+							var t_vis = NPC_VISUALS.get(target.type, NPC_VISUALS["warrior"])
+							var t_w = float(t_vis.get("width", 5))
+							var my_w = 15.0
+							var dx_center = (target.pos.x + t_w/2.0) - (np.x + my_w/2.0)
+							var dx_center_abs = abs(dx_center)
+							var attack_range = (my_w/2.0) + (t_w/2.0) + 3.0
+							
+							var dy_abs = abs(target.pos.y - np.y)
+							var target_below = target.pos.y > np.y + 8
+							
+							if target_below:
+								if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
+							else:
+								npc.dir = 1 if dx_center > 0 else -1
+							
+							if dx_center_abs <= attack_range and dy_abs < 14:
+								if npc.attack_cooldown <= 0:
+									var prev_dmg = npc.get("atk_dmg", 1.0)
+									npc["atk_dmg"] = prev_dmg * 4.0 # Daño masivo por mordisco
+									_attack_npc(npc, target)
+									npc["atk_dmg"] = prev_dmg
+									npc.attack_cooldown = 0.6
+									
+							if dx_center_abs <= (attack_range - 1.0) and not target_below:
+								npc.dir = 0
+						else:
+							npc["has_spotted_enemy"] = false
+							var rethink_chance = 0.04 if npc.dir == 0 else 0.015
+							if _get_lut_rand() < rethink_chance:
+								var r = _get_lut_rand()
+								if r < 0.4: npc.dir = 1
+								elif r < 0.8: npc.dir = -1
+								else: npc.dir = 0
+								
+								if _get_lut_rand() < 0.1 and !_can_npc_fit(np.x, np.y + 1, npc):
+									npc.vy = -3.5 - (_get_lut_rand() * 1.5)
+
 					elif npc.type == "zombie":
 						if target:
 							npc["recently_celebrated"] = false
@@ -14222,7 +14308,7 @@ func _find_closest_enemy(me, radar_range):
 	var nearby = _get_nearby_npcs(me.pos.x, me.pos.y, radar_range)
 	var has_zombies = _has_active_zombies()
 	for other in nearby:
-		if other.hp > 0:
+		if other.hp > 0 and other != me:
 			var is_enemy = not _is_ally(me, other, has_zombies)
 			if is_enemy:
 				var d_sq = me.pos.distance_squared_to(other.pos)
@@ -14250,6 +14336,9 @@ func _has_active_zombies() -> bool:
 	return _cached_has_zombies
 
 func _is_ally(me, other, has_zombies) -> bool:
+	if me == other: return true
+	if me.type == "dinosaurio" or other.type == "dinosaurio":
+		return false
 	if _is_zombie(me.type):
 		return _is_zombie(other.type)
 	else:
@@ -15181,9 +15270,10 @@ func _update_arcade_dynamic_button():
 		elif selected_material == 1070 or selected_material == 1071: active_name = tr("mage")
 		elif selected_material == 1050 or selected_material == 1051: active_name = tr("zombie")
 		elif selected_material == 1060 or selected_material == 1061: active_name = tr("zombie_tank")
+		elif selected_material == 1090 or selected_material == 1091: active_name = tr("dinosaurio")
 		
-		if selected_material == 1050 or selected_material == 1051 or selected_material == 1060 or selected_material == 1061:
-			active_color = Color("#4E822E") if (selected_material == 1060 or selected_material == 1061) else Color("#5D9C36")
+		if selected_material == 1050 or selected_material == 1051 or selected_material == 1060 or selected_material == 1061 or selected_material == 1090 or selected_material == 1091:
+			active_color = Color("#4E822E") if (selected_material == 1060 or selected_material == 1061 or selected_material == 1090 or selected_material == 1091) else Color("#5D9C36")
 			active_val = tr("factionless")
 		else:
 			var t_colors = [Color.RED, Color.CORNFLOWER_BLUE, Color.GOLD, Color.GREEN]

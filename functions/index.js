@@ -56,7 +56,7 @@ exports.updateWorkshopCaches = onSchedule("0 0,12 * * *", async (event) => {
 
     // 1. Top Histórico
     let topHistorico = allValidWorlds
-      .filter(w => w.downloads >= 100 && w.likes >= 10)
+      .filter(w => w.downloads >= 100 && w.likes >= 5)
       .sort((a, b) => b.historical_score - a.historical_score)
       .slice(0, 100);
 
