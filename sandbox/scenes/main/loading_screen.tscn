@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://da7no2duhexoj"]
 
-[ext_resource type="Script" path="res://scripts/main/loading_screen.gd" id="1_script"]
-[ext_resource type="Texture2D" path="res://assets/icon_game/icon.png" id="2_icon"]
+[ext_resource type="Script" uid="uid://qtwpwgk675pj" path="res://scripts/main/loading_screen.gd" id="1_script"]
+[ext_resource type="Texture2D" uid="uid://daoqt8u1d3hhs" path="res://assets/icon_game/icon.png" id="2_icon"]
 
-[node name="LoadingScreen" type="Control"]
+[node name="LoadingScreen" type="Control" unique_id=1639907067]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -12,7 +12,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="ColorRect" parent="." unique_id=990749860]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -21,7 +21,7 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.08, 0.08, 0.08, 1)
 
-[node name="Logo" type="TextureRect" parent="."]
+[node name="Logo" type="TextureRect" parent="." unique_id=58980574]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -38,7 +38,7 @@ texture = ExtResource("2_icon")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="ProgressBar" type="ProgressBar" parent="."]
+[node name="ProgressBar" type="ProgressBar" parent="." unique_id=1207441816]
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5
