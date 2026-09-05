@@ -14,7 +14,7 @@
 | Paso | Módulo | Archivo Destino | Estado | Líneas Aprox. | Fecha de Finalización |
 | :-: | :--- | :--- | :-: | :-: | :-: |
 | **1** | **`SandboxFontHelper`** | `modules/sandbox_font_helper.gd` | `[x] COMPLETADO` | ~510 | 2026-09-05 |
-| **2** | **`SandboxHistoryManager`** | `modules/sandbox_history.gd` | `[ ] PENDIENTE` | ~200 | — |
+| **2** | **`SandboxHistoryManager`** | `modules/sandbox_history.gd` | `[x] COMPLETADO` | ~200 | 2026-09-05 |
 | **3** | **`SandboxAchievementManager`** | `modules/sandbox_achievements.gd` | `[ ] PENDIENTE` | ~1.080 | — |
 | **4** | **`SandboxDialogManager`** | `modules/sandbox_dialogs.gd` | `[ ] PENDIENTE` | ~1.350 | — |
 | **5** | **`SandboxToolsPaintUI`** | `modules/sandbox_tools_ui.gd` | `[ ] PENDIENTE` | ~1.100 | — |
@@ -26,7 +26,7 @@
 | **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[ ] PENDIENTE` | ~850 | — |
 | **12** | **`SandboxMechanismsManager`** | `modules/sandbox_mechanisms.gd` | `[ ] PENDIENTE` | ~1.850 | — |
 
-**Progreso Actual**: **1 de 12 módulos completados (8.3%)**. Líneas extraídas/delegadas: ~510 líneas.
+**Progreso Actual**: **2 de 12 módulos completados (16.6%)**. Líneas extraídas/delegadas: ~710 líneas.
 
 ---
 
@@ -51,28 +51,26 @@
 
 ---
 
-### [ ] Paso 2: `SandboxHistoryManager` (Módulo 11)
-* **Estado**: **PENDIENTE (Siguiente a Ejecutar)**
+### [x] Paso 2: `SandboxHistoryManager` (Módulo 11)
+* **Estado**: **COMPLETADO**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_history.gd`
-* **Tipo de Objeto**: `RefCounted` o `Node` acoplado al árbol.
+* **Tipo de Objeto**: `RefCounted` (Instanciado e inyectado en `_ready()`).
 * **Qué hace**:
-  - Administra la pila circular de estados para Deshacer (`undo_history`) y Rehacer (`redo_history`).
+  - Administra la pila circular de estados para Deshacer (`undo`) y Rehacer (`redo`).
   - Realiza copias profundas de snapshots: celdas, pintura de píxeles (`cell_paint_colors`), NPCs (`_deep_copy_npcs`), compuertas lógicas (`_deep_copy_logic_gates`) y pistones (`_deep_copy_pistons`).
-  - Actualiza el estado visual habilitado/deshabilitado de los botones `↩️` y `↪️` del HUD.
+  - Actualiza el estado visual habilitado/deshabilitado de los botones `↩️` y `↪️` del HUD (`update_undo_redo_ui`).
 * **Consideraciones a Actualizar Pendientes en Próximos Módulos**:
-  - [ ] **Con Paso 5 (`SandboxToolsPaintUI`)**: Los botones de la cuadrícula de acciones rápidas (`qa_grid`) de deshacer y rehacer deberán conectarse a `history_manager.undo()` y `history_manager.redo()`.
-  - [ ] **Con Paso 6 (`SandboxSaveSystem`)**: Al cargar una partida nueva o importar un mapa, se debe llamar obligatoriamente a `history_manager.clear_history()` para evitar que el usuario haga "Undo" y mezcle dos mundos distintos.
+  - [ ] **Con Paso 5 (`SandboxToolsPaintUI`)**: Los botones de la cuadrícula de acciones rápidas (`qa_grid`) de deshacer y rehacer deberán conectarse a `grid.history_manager.undo()` y `grid.history_manager.redo()`.
+  - [ ] **Con Paso 6 (`SandboxSaveSystem`)**: Al cargar una partida nueva o importar un mapa, se debe llamar obligatoriamente a `grid.history_manager.clear_history()` para evitar que el usuario haga "Undo" y mezcle dos mundos distintos.
   - [ ] **Con Paso 12 (`SandboxMechanismsManager`)**: Cuando se extraiga la lógica de compuertas y pistones, la rutina de clonado profundo (`_deep_copy_logic_gates` y `_deep_copy_pistons`) deberá coordinarse con el nuevo módulo de mecanismos.
 * **Funciones Clave a Repasar**:
-  - `save_history_state()`, `undo_history()`, `redo_history()`
-  - `_deep_copy_npcs()`, `_deep_copy_logic_gates()`, `_deep_copy_pistons()`
-  - `_restore_npcs_from_snapshot()`, `_restore_logic_gates_from_snapshot()`
-  - `_update_undo_redo_ui()`
+  - `history_manager.save_state()`, `history_manager.undo()`, `history_manager.redo()`, `history_manager.clear_history()`
+  - Métodos puente en `sandbox_grid.gd`: `save_history_state()`, `undo_history()`, `redo_history()`, `_update_undo_redo_ui()`
 
 ---
 
 ### [ ] Paso 3: `SandboxAchievementManager` (Módulo 4)
-* **Estado**: **PENDIENTE**
+* **Estado**: **PENDIENTE (Siguiente a Ejecutar)**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_achievements.gd`
 * **Tipo de Objeto**: `Node` (requiere `Timer` o `_process` para polling cada 2s).
 * **Qué hace**:
@@ -274,3 +272,20 @@
   - Se eliminó la copia duplicada de `_get_safe_font()` (líneas 501-526 originales) y su variable estática `_combined_font`.
   - La función `_get_safe_font()` ahora delega en `SandboxFontHelper.get_safe_font()`.
 - **Pruebas Superadas**: Textos, fuentes y emojis verificados en pantalla sin errores de parser en Godot.
+
+### Hito 2 (2026-09-05): Paso 2 - `SandboxHistoryManager`
+- **Módulo Creado**: `res://sandbox/scripts/sandbox/modules/sandbox_history.gd`.
+- **Modificaciones en `sandbox_grid.gd`**:
+  - Se eliminaron las variables `history_buffer`, `history_max_steps` y `history_current_index` (líneas 584-586 originales).
+  - Se añadió la instancia `var history_manager: SandboxHistoryManager`.
+  - En `_ready()`: Se inicializa e inyecta la instancia con `history_manager = SandboxHistoryManager.new()`, `history_manager.setup(self)` y `history_manager.save_state()`.
+  - Se extrajeron ~180 líneas de código original (copia profunda de entidades, buffer de snapshots, lógica de restauración de celdas, pintura y electricidad) hacia el módulo.
+  - Se implementaron los 4 métodos puente en `sandbox_grid.gd`: `save_history_state()`, `undo_history()`, `redo_history()` y `_update_undo_redo_ui()`.
+  - **Reducción neta**: -171 líneas en `sandbox_grid.gd`.
+- **Pruebas Superadas y Corrección Validada**:
+  - Deshacer trazo de arena/piedra con `↩️` comprobado.
+  - Rehacer trazo con `↪️` comprobado.
+  - Persistencia de NPCs tras deshacer una barrera comprobada.
+  - Comprobación de límites de pila sin crasheos.
+  - **Corrección de cargas eléctricas en tránsito**: Se incorporó en el snapshot `charge_visual_buffer`, `active_charge_indices` y `powered_frame`, garantizando que la electricidad en movimiento por cables continúe su propagación intacta al hacer Undo/Redo.
+

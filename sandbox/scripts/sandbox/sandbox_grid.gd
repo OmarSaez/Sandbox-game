@@ -581,9 +581,7 @@ var is_blocking: bool = false
 var force_grid_visible: bool = false
 
 # History / Undo System
-var history_buffer = [] # Array of PackedInt32Array
-var history_max_steps: int = 6 # Store 6 snapshots to allow 5 undo steps
-var history_current_index: int = -1
+var history_manager: SandboxHistoryManager
 
 var is_grid_ready: bool = false # Guard against async _ready running early loops
 var current_is_landscape: bool = false # Tracks axis state to auto-reload on flip
@@ -1749,7 +1747,9 @@ func _ready():
 	
 	_load_rotation_cache() # Restore grid exactly as it was if we just flipped axis
 	
-	save_history_state() # Initialize first history step
+	history_manager = SandboxHistoryManager.new()
+	history_manager.setup(self)
+	history_manager.save_state() # Initialize first history step
 	
 	is_grid_ready = true # Allow _process and _draw to start now!
 	
@@ -9504,191 +9504,21 @@ func _process(delta):
 	queue_redraw()
 
 # --- HISTORY SYSTEM ---
-func _deep_copy_npcs() -> Array:
-	var result = []
-	for npc in active_npcs:
-		var copy = npc.duplicate()
-		copy["pos"] = Vector2i(npc.pos.x, npc.pos.y)
-		# Clear volatile references that shouldn't persist across undo
-		copy["social_target"] = null
-		copy["cached_target"] = null
-		copy["cached_closest_enemy"] = null
-		copy["cached_closest_ally"] = null
-		result.append(copy)
-	return result
+func save_history_state() -> void:
+	if history_manager:
+		history_manager.save_state()
 
-func _deep_copy_logic_gates() -> Array:
-	var result = []
-	for gate in active_logic_gates:
-		var copy = gate.duplicate()
-		if copy.has("grid_pos"):
-			copy["grid_pos"] = Vector2i(copy.grid_pos.x, copy.grid_pos.y)
-		result.append(copy)
-	return result
+func undo_history() -> void:
+	if history_manager:
+		history_manager.undo()
 
-func _deep_copy_pistons() -> Array:
-	var result = []
-	for p in active_pistons:
-		var copy = p.duplicate()
-		copy["pos"] = Vector2i(p.pos.x, p.pos.y)
-		result.append(copy)
-	return result
+func redo_history() -> void:
+	if history_manager:
+		history_manager.redo()
 
-func save_history_state():
-	# If we're not at the head of the buffer (we undid something), clear the "future"
-	if history_current_index < history_buffer.size() - 1:
-		history_buffer.resize(history_current_index + 1)
-
-	# OPTIMIZATION: Don't save identical consecutive states (e.g. clicking without drawing)
-	var current_snapshot = {
-		"cells": cells.duplicate(),
-		"charge": charge_array.duplicate(),
-		"tags": tags_array.duplicate(),
-		"chunks": chunks_active.duplicate(),
-		"next_chunks": next_chunks_active.duplicate(),
-		"npcs": _deep_copy_npcs(),
-		"logic_gates": _deep_copy_logic_gates(),
-		"active_pistons": _deep_copy_pistons(),
-		"cell_paint": cell_paint_colors.duplicate(),
-		"bg_paint": background_img.duplicate(),
-		"el_paint_img": element_paint_img.duplicate()
-	}
-	
-	if history_buffer.size() > 0:
-		var last = history_buffer.back()
-		# HIGH-PERFORMANCE CHANGE DETECTION
-		if last.cells == current_snapshot.cells and last.cell_paint == current_snapshot.cell_paint and not is_paint_tool_active:
-			return
-
-	history_buffer.append(current_snapshot)
-	
-	if history_buffer.size() > history_max_steps:
-		history_buffer.pop_front()
-	
-	history_current_index = history_buffer.size() - 1
-	_update_undo_redo_ui()
-
-func _restore_npcs_from_snapshot(snapshot):
-	# 1. Clear current NPC pixels from the grid
-	for npc in active_npcs:
-		_draw_npc_pixels(npc, 0)
-	active_npcs.clear()
-	controlled_npc = null
-	active_projectiles.clear()
-	
-	# 2. Restore NPCs from snapshot
-	if snapshot.has("npcs"):
-		for npc in snapshot.npcs:
-			var copy = npc.duplicate()
-			copy["pos"] = Vector2i(npc.pos.x, npc.pos.y)
-			copy["social_target"] = null
-			copy["cached_target"] = null
-			copy["cached_closest_enemy"] = null
-			copy["cached_closest_ally"] = null
-			copy["stuck_timer"] = 0.0
-			active_npcs.append(copy)
-
-func _restore_logic_gates_from_snapshot(snapshot):
-	active_logic_gates.clear()
-	if snapshot.has("logic_gates"):
-		for gate in snapshot.logic_gates:
-			var copy = gate.duplicate()
-			if copy.has("grid_pos"):
-				copy["grid_pos"] = Vector2i(copy.grid_pos.x, copy.grid_pos.y)
-			active_logic_gates.append(copy)
-
-func undo_history():
-	if history_current_index > 0:
-		history_current_index -= 1
-		var snapshot = history_buffer[history_current_index]
-		_restore_npcs_from_snapshot(snapshot)
-		_restore_logic_gates_from_snapshot(snapshot)
-		cells = snapshot.cells.duplicate()
-		charge_array = snapshot.charge.duplicate()
-		tags_array = snapshot.tags.duplicate()
-		chunks_active = snapshot.chunks.duplicate()
-		next_chunks_active = snapshot.next_chunks.duplicate()
-		
-		if snapshot.has("cell_paint"):
-			cell_paint_colors = snapshot.cell_paint.duplicate()
-			if snapshot.has("bg_paint"):
-				background_img.copy_from(snapshot.bg_paint)
-				background_dirty = true
-			if snapshot.has("el_paint_img"):
-				element_paint_img.copy_from(snapshot.el_paint_img)
-				element_paint_dirty = true
-		
-		# Reset electricity state so BFS rebuilds from scratch
-		# Zero out stale conductor charges but preserve explosive timers
-		for ci in range(charge_array.size()):
-			var cid = cells[ci] & 0xFFFF
-			if cid > 0 and _get_tags_id(cid) < material_tags_raw.size():
-				if not (material_tags_raw[_get_tags_id(cid)] & SandboxMaterial.Tags.EXPLOSIVE):
-					charge_array[ci] = 0
-			elif cid == 0:
-				charge_array[ci] = 0
-		charge_visual_buffer.fill(0)
-		active_charge_indices.clear()
-		powered_frame.fill(0)
-		charge_dirty = true
-		# Wake all chunks so electricity can re-propagate
-		for i in range(next_chunks_active.size()):
-			next_chunks_active[i] = 60
-		_reconstruct_sources_from_cells(snapshot)
-		_update_texture()
-		queue_redraw()
-		_update_undo_redo_ui()
-
-func redo_history():
-	if history_current_index < history_buffer.size() - 1:
-		history_current_index += 1
-		var snapshot = history_buffer[history_current_index]
-		_restore_npcs_from_snapshot(snapshot)
-		_restore_logic_gates_from_snapshot(snapshot)
-		cells = snapshot.cells.duplicate()
-		charge_array = snapshot.charge.duplicate()
-		tags_array = snapshot.tags.duplicate()
-		chunks_active = snapshot.chunks.duplicate()
-		next_chunks_active = snapshot.next_chunks.duplicate()
-		
-		if snapshot.has("cell_paint"):
-			cell_paint_colors = snapshot.cell_paint.duplicate()
-			if snapshot.has("bg_paint"):
-				background_img.copy_from(snapshot.bg_paint)
-				background_dirty = true
-			if snapshot.has("el_paint_img"):
-				element_paint_img.copy_from(snapshot.el_paint_img)
-				element_paint_dirty = true
-				
-		# Reset electricity state so BFS rebuilds from scratch
-		# Zero out stale conductor charges but preserve explosive timers
-		for ci in range(charge_array.size()):
-			var cid = cells[ci] & 0xFFFF
-			if cid > 0 and _get_tags_id(cid) < material_tags_raw.size():
-				if not (material_tags_raw[_get_tags_id(cid)] & SandboxMaterial.Tags.EXPLOSIVE):
-					charge_array[ci] = 0
-			elif cid == 0:
-				charge_array[ci] = 0
-		charge_visual_buffer.fill(0)
-		active_charge_indices.clear()
-		powered_frame.fill(0)
-		charge_dirty = true
-		# Wake all chunks so electricity can re-propagate
-		for i in range(next_chunks_active.size()):
-			next_chunks_active[i] = 60
-		_reconstruct_sources_from_cells(snapshot)
-		_update_texture()
-		queue_redraw()
-		_update_undo_redo_ui()
-
-func _update_undo_redo_ui():
-	if ui_elements.has("btn_undo") and is_instance_valid(ui_elements["btn_undo"]):
-		var can_undo = history_current_index > 0
-		ui_elements["btn_undo"].modulate.a = 1.0 if can_undo else 0.3
-	
-	if ui_elements.has("btn_redo") and is_instance_valid(ui_elements["btn_redo"]):
-		var can_redo = history_current_index < history_buffer.size() - 1
-		ui_elements["btn_redo"].modulate.a = 1.0 if can_redo else 0.3
+func _update_undo_redo_ui() -> void:
+	if history_manager:
+		history_manager.update_undo_redo_ui()
 
 func _draw():
 	if not is_grid_ready: return
