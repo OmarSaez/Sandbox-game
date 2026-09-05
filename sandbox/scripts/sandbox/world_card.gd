@@ -496,34 +496,9 @@ func _on_like_button_pressed() -> void:
 	else:
 		like_requested.emit(world_data)
 
-static var _combined_font: FontVariation = null
-
 func _get_safe_font() -> Font:
-	if not _combined_font:
-		_combined_font = FontVariation.new()
-		
-		# 1. FUENTE BASE (Texto estándar)
-		var base_font = SystemFont.new()
-		base_font.font_names = PackedStringArray(["sans-serif", "arial"])
-		_combined_font.base_font = base_font
-		
-		# 2. FUENTE DE ICONOS
-		var emoji_f: Font = null
-		var paths = [
-			"res://assets/fonts/Twemoji.Mozilla.ttf",
-			"res://assets/fonts/Twemoji.ttf",
-			"res://assets/fonts/NotoColorEmoji.ttf",
-			"res://assets/fonts/FluentEmoji.ttf"
-		]
-		for p in paths:
-			if ResourceLoader.exists(p):
-				emoji_f = load(p)
-				break
-				
-		if emoji_f:
-			_combined_font.set_fallbacks([emoji_f])
-			
-	return _combined_font
+	return SandboxFontHelper.get_safe_font()
+
 
 class ZoomHandler extends Node:
 	var blocker: Control
