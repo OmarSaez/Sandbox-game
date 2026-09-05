@@ -15,8 +15,8 @@
 | :-: | :--- | :--- | :-: | :-: | :-: |
 | **1** | **`SandboxFontHelper`** | `modules/sandbox_font_helper.gd` | `[x] COMPLETADO` | ~510 | 2026-09-05 |
 | **2** | **`SandboxHistoryManager`** | `modules/sandbox_history.gd` | `[x] COMPLETADO` | ~200 | 2026-09-05 |
-| **3** | **`SandboxAchievementManager`** | `modules/sandbox_achievements.gd` | `[ ] PENDIENTE` | ~1.080 | — |
-| **4** | **`SandboxDialogManager`** | `modules/sandbox_dialogs.gd` | `[ ] PENDIENTE` | ~1.350 | — |
+| **3** | **`SandboxAchievementManager`** | `modules/sandbox_achievements.gd` | `[x] COMPLETADO` | ~1.080 | 2026-09-05 |
+| **4** | **`SandboxDialogManager`** | `modules/sandbox_dialogs.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~1.350 | — |
 | **5** | **`SandboxToolsPaintUI`** | `modules/sandbox_tools_ui.gd` | `[ ] PENDIENTE` | ~1.100 | — |
 | **6** | **`SandboxSaveSystem`** | `modules/sandbox_save_system.gd` | `[ ] PENDIENTE` | ~1.500 | — |
 | **7** | **`SandboxWorkshopUI`** | `modules/sandbox_workshop_ui.gd` | `[ ] PENDIENTE` | ~2.780 | — |
@@ -26,7 +26,7 @@
 | **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[ ] PENDIENTE` | ~850 | — |
 | **12** | **`SandboxMechanismsManager`** | `modules/sandbox_mechanisms.gd` | `[ ] PENDIENTE` | ~1.850 | — |
 
-**Progreso Actual**: **2 de 12 módulos completados (16.6%)**. Líneas extraídas/delegadas: ~710 líneas.
+**Progreso Actual**: **3 de 12 módulos completados (25.0%)**. Líneas extraídas/delegadas del núcleo: **1.243 líneas** (de 21.844 a 20.601).
 
 ---
 
@@ -69,8 +69,8 @@
 
 ---
 
-### [ ] Paso 3: `SandboxAchievementManager` (Módulo 4)
-* **Estado**: **PENDIENTE (Siguiente a Ejecutar)**
+### [x] Paso 3: `SandboxAchievementManager` (Módulo 4)
+* **Estado**: **COMPLETADO Y VERIFICADO**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_achievements.gd`
 * **Tipo de Objeto**: `Node` (requiere `Timer` o `_process` para polling cada 2s).
 * **Qué hace**:
@@ -91,7 +91,7 @@
 ---
 
 ### [ ] Paso 4: `SandboxDialogManager` (Módulo 5)
-* **Estado**: **PENDIENTE**
+* **Estado**: **PENDIENTE (Siguiente a Ejecutar)**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_dialogs.gd`
 * **Tipo de Objeto**: `Node` (controla elementos visuales en `ui_root` y `CanvasLayer`).
 * **Qué hace**:
@@ -288,4 +288,19 @@
   - Persistencia de NPCs tras deshacer una barrera comprobada.
   - Comprobación de límites de pila sin crasheos.
   - **Corrección de cargas eléctricas en tránsito**: Se incorporó en el snapshot `charge_visual_buffer`, `active_charge_indices` y `powered_frame`, garantizando que la electricidad en movimiento por cables continúe su propagación intacta al hacer Undo/Redo.
+
+### Hito 3 (2026-09-05): Paso 3 - `SandboxAchievementManager`
+- **Módulo Creado**: `res://sandbox/scripts/sandbox/modules/sandbox_achievements.gd`.
+- **Modificaciones en `sandbox_grid.gd`**:
+  - Se añadió la instancia `var achievement_manager: SandboxAchievementManager`.
+  - En `_ready()`: Se inicializa con `achievement_manager = SandboxAchievementManager.new()`, se añade al árbol y se vincula con `setup(self)`.
+  - Se extrajo el bloque masivo de datos y polling distribuido (constantes `GOOGLE_PLAY_ACHIEVEMENTS`, `ACHIEVEMENT_ICONS`, diccionario maestro de 22 logros, temporizadores y máquina de estados de 13 pasos).
+  - Se extrajo el bloque masivo de interfaz y cinemáticas (`_trigger_achievement_reveal`, `_show_achievement_notification`, `_setup_achievement_menu`, `_on_achievement_item_clicked`).
+  - Se unificó el botón de logros en `_setup_action_buttons()` delegando a `achievement_manager.setup_achievement_button()`.
+  - Se mantuvieron getters/setters y métodos puente transparentes para preservar 100% de compatibilidad hacia atrás en todo el proyecto.
+- **Pruebas Superadas y Verificadas por el Desarrollador**:
+  - **Persistencia**: Carga y guardado de `user://achievements.cfg` verificado correctamente con logros preexistentes.
+  - **Menú de Trofeos**: Apertura fluida del panel modal con el botón dorado 🏆, scroll suave de las 22 tarjetas, iconos y popup de detalle centrada funcionando sin problemas.
+  - **Desbloqueo en Caliente**: Verificado el desbloqueo de `electrifying` (agua + electricidad) y `boom` (cadena de TNT).
+  - **Toast y Audio**: Notificación animada con borde dorado deslizante y reproducción de SFX (`achievement_unlock` / `achievement_menu_unlock`) funcionando sin micro-tirones ni errores de consola.
 

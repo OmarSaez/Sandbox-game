@@ -566,7 +566,9 @@ var is_lab_unlocked: bool = false
 var lab_unlock_expiry_unix: int = 0
 var disaster_panel: PanelContainer
 var npc_panel: PanelContainer
-var achievement_panel: PanelContainer
+var achievement_panel: PanelContainer:
+	get: return achievement_manager.achievement_panel if achievement_manager else null
+	set(v): if achievement_manager: achievement_manager.achievement_panel = v
 var paint_panel: PanelContainer
 var selected_team: int = 0 
 var mat_id_to_key = {} # ID -> Translation Key
@@ -582,6 +584,7 @@ var force_grid_visible: bool = false
 
 # History / Undo System
 var history_manager: SandboxHistoryManager
+var achievement_manager: SandboxAchievementManager
 
 var is_grid_ready: bool = false # Guard against async _ready running early loops
 var current_is_landscape: bool = false # Tracks axis state to auto-reload on flip
@@ -1172,7 +1175,9 @@ var _img_history: Array = [] # Retains old images for 3 frames to avoid Android 
 var game_volume: float = 1.2
 var pre_mute_volume: float = 1.0
 var is_muted: bool = false
-var achievement_pulse_tween: Tween = null
+var achievement_pulse_tween: Tween:
+	get: return achievement_manager.achievement_pulse_tween if achievement_manager else null
+	set(v): if achievement_manager: achievement_manager.achievement_pulse_tween = v
 
 # OPTIMIZATION TABLES
 var oval_lookup_10x5: PackedInt32Array = []
@@ -1259,23 +1264,13 @@ func _ready():
 	app_config.set_value("app", "session_count", _current_session_count)
 	app_config.save("user://achievements.cfg")
 
-	_load_global_achievements() # Load global state once at startup
+	achievement_manager = SandboxAchievementManager.new()
+	achievement_manager.name = "AchievementManager"
+	add_child(achievement_manager)
+	achievement_manager.setup(self)
 	
 	if FileAccess.file_exists("user://rating_popup_shown.save"):
 		rating_popup_shown = true
-
-
-
-	# Initialize Google Play Game Services on Android
-	if OS.has_feature("android") and Engine.has_singleton("GodotPlayGameServices"):
-		var gps = get_node_or_null("/root/GodotPlayGameServices")
-		if gps:
-			var init_status = gps.initialize()
-			if init_status == 0: # PlayGamesPluginError.OK
-				play_games_achievements_client = PlayGamesAchievementsClient.new()
-				add_child(play_games_achievements_client)
-				print("Google Play Games Services client successfully setup!")
-			
 	Engine.max_fps = 60 # Cierra la puerta al stutter en pantallas 120Hz/LTPO
 	is_grid_ready = false # Safeguard during async _ready
 	
@@ -2459,529 +2454,79 @@ func _setup_ui():
 var material_grid: HFlowContainer
 var action_hbox: HBoxContainer
 var action_scroll: ScrollContainer
-var achievement_btn: Button
+var achievement_btn: Button:
+	get: return achievement_manager.achievement_btn if achievement_manager else null
+	set(v): if achievement_manager: achievement_manager.achievement_btn = v
 static var is_achievement_menu_unlocked: bool = false
 var action_vbox: VBoxContainer
 
 var material_scroll: ScrollContainer
 var cached_hud_height: float = 362.0 # Performance optimization: Cached for panel alignment
 
-var play_games_achievements_client = null
 
-const GOOGLE_PLAY_ACHIEVEMENTS = {
-	"massive_fight": "CgkIx9-23rkFEAIQAA",
-	"electrifying": "CgkIx9-23rkFEAIQAQ",
-	"miner_plan": "CgkIx9-23rkFEAIQAg",
-	"god": "CgkIx9-23rkFEAIQAw",
-	"mad_scientist": "CgkIx9-23rkFEAIQBA",
-	"paint": "CgkIx9-23rkFEAIQBQ",
-	"party_rock": "CgkIx9-23rkFEAIQBg",
-	"wind_master": "CgkIx9-23rkFEAIQBw",
-	"compositor": "CgkIx9-23rkFEAIQCA",
-	"tsunami_master": "CgkIx9-23rkFEAIQCQ",
-	"retro_time": "CgkIx9-23rkFEAIQCg",
-	"good_night": "CgkIx9-23rkFEAIQCw",
-	"volcano_giant": "CgkIx9-23rkFEAIQDA",
-	"boom": "CgkIx9-23rkFEAIQDQ",
-	"special_boom": "CgkIx9-23rkFEAIQDg",
-	"short_circuit": "CgkIx9-23rkFEAIQDw",
-	"world_war": "CgkIx9-23rkFEAIQEA",
-	"supreme_alchemist": "CgkIx9-23rkFEAIQEQ",
-	"war-z": "CgkIx9-23rkFEAIQEw",
-	"patient-zero": "CgkIx9-23rkFEAIQFA",
-	"dancing-rain": "CgkIx9-23rkFEAIQFQ",
-	"great-bomber": "CgkIx9-23rkFEAIQFg"
-}
+# --- SCRIPT DELEGATORS: SISTEMA DE LOGROS (SandboxAchievementManager) ---
+var play_games_achievements_client:
+	get: return achievement_manager.play_games_achievements_client if achievement_manager else null
+	set(v): if achievement_manager: achievement_manager.play_games_achievements_client = v
 
-const ACHIEVEMENT_ICONS = {
-	"massive_fight": "res://assets/icon_ach/ach_massive_fight.png",
-	"electrifying": "res://assets/icon_ach/ach_electrifying.png",
-	"miner_plan": "res://assets/icon_ach/ach_miner_plan.png",
-	"god": "res://assets/icon_ach/ach_god.png",
-	"mad_scientist": "res://assets/icon_ach/ach_mad_scientist.png",
-	"paint": "res://assets/icon_ach/ach_pain.png",
-	"party_rock": "res://assets/icon_ach/ach_party_rock.png",
-	"wind_master": "res://assets/icon_ach/ach_wind_master.png",
-	"compositor": "res://assets/icon_ach/ach_compositor.png",
-	"tsunami_master": "res://assets/icon_ach/ach_tsunami_master.png",
-	"retro_time": "res://assets/icon_ach/ach_retro_time.png",
-	"good_night": "res://assets/icon_ach/ach_good_night.png",
-	"volcano_giant": "res://assets/icon_ach/ach_volcano.png",
-	"boom": "res://assets/icon_ach/ach_boom.png",
-	"special_boom": "res://assets/icon_ach/ach_special_boom.png",
-	"short_circuit": "res://assets/icon_ach/ach_short_circui.png",
-	"world_war": "res://assets/icon_ach/ach_world_war.png",
-	"supreme_alchemist": "res://assets/icon_ach/ach_alchemist.png",
-	"war-z": "res://assets/icon_ach/ach_war-z.png",
-	"patient-zero": "res://assets/icon_ach/ach_patient-zero.png",
-	"dancing-rain": "res://assets/icon_ach/ach_dancing-rain.png",
-	"great-bomber": "res://assets/icon_ach/ach_great-bomber.png"
-}
+var achievements: Dictionary:
+	get: return achievement_manager.achievements if achievement_manager else {}
 
-# --- ACHIEVEMENT SYSTEM DATA ---
-var achievements = {
-	"massive_fight": {
-		"id": "massive_fight",
-		"title": "ach_massive_fight_title",
-		"desc": "ach_massive_fight_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"electrifying": {
-		"id": "electrifying",
-		"title": "ach_electrifying_title",
-		"desc": "ach_electrifying_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"miner_plan": {
-		"id": "miner_plan",
-		"title": "ach_miner_plan_title",
-		"desc": "ach_miner_plan_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"god": {
-		"id": "god",
-		"title": "ach_god_title",
-		"desc": "ach_god_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"mad_scientist": {
-		"id": "mad_scientist",
-		"title": "ach_mad_scientist_title",
-		"desc": "ach_mad_scientist_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"paint": {
-		"id": "paint",
-		"title": "ach_paint_title",
-		"desc": "ach_paint_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"party_rock": {
-		"id": "party_rock",
-		"title": "ach_party_rock_title",
-		"desc": "ach_party_rock_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"wind_master": {
-		"id": "wind_master",
-		"title": "ach_wind_master_title",
-		"desc": "ach_wind_master_desc",
-		"unlocked": false,
-		"seen": true,
-		"discovered": []
-	},
-	"compositor": {
-		"id": "compositor",
-		"title": "ach_compositor_title",
-		"desc": "ach_compositor_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"tsunami_master": {
-		"id": "tsunami_master",
-		"title": "ach_tsunami_master_title",
-		"desc": "ach_tsunami_master_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"retro_time": {
-		"id": "retro_time",
-		"title": "ach_retro_time_title",
-		"desc": "ach_retro_time_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"good_night": {
-		"id": "good_night",
-		"title": "ach_good_night_title",
-		"desc": "ach_good_night_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"volcano_giant": {
-		"id": "volcano_giant",
-		"title": "ach_volcano_title",
-		"desc": "ach_volcano_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"boom": {
-		"id": "boom",
-		"title": "ach_boom_title",
-		"desc": "ach_boom_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"special_boom": {
-		"id": "special_boom",
-		"title": "ach_special_boom_title",
-		"desc": "ach_special_boom_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"short_circuit": {
-		"id": "short_circuit",
-		"title": "ach_short_circuit_title",
-		"desc": "ach_short_circuit_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"world_war": {
-		"id": "world_war",
-		"title": "ach_world_war_title",
-		"desc": "ach_world_war_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"supreme_alchemist": {
-		"id": "supreme_alchemist",
-		"title": "ach_alchemist_title",
-		"desc": "ach_alchemist_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"war-z": {
-		"id": "war-z",
-		"title": "ach_war-z_title",
-		"desc": "ach_war-z_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"patient-zero": {
-		"id": "patient-zero",
-		"title": "ach_patient-zero_title",
-		"desc": "ach_patient-zero_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"dancing-rain": {
-		"id": "dancing-rain",
-		"title": "ach_dancing-rain_title",
-		"desc": "ach_dancing-rain_desc",
-		"unlocked": false,
-		"seen": true
-	},
-	"great-bomber": {
-		"id": "great-bomber",
-		"title": "ach_great-bomber_title",
-		"desc": "ach_great-bomber_desc",
-		"unlocked": false,
-		"seen": true
-	}
-}
-var achievement_check_timer: float = 0.0
-var achievement_sequence_step: int = -1 # -1: Idle, 0+: Current group frame
+var _tnt_chain_count: int:
+	get: return achievement_manager._tnt_chain_count if achievement_manager else 0
+	set(v): if achievement_manager: achievement_manager._tnt_chain_count = v
 
-# TNT Chain Tracking
-var _tnt_chain_count: int = 0
-var _tnt_chain_flags: int = 0
-var _tnt_chain_timer: float = 0.0
+var _tnt_chain_flags: int:
+	get: return achievement_manager._tnt_chain_flags if achievement_manager else 0
+	set(v): if achievement_manager: achievement_manager._tnt_chain_flags = v
+
+var _tnt_chain_timer: float:
+	get: return achievement_manager._tnt_chain_timer if achievement_manager else 0.0
+	set(v): if achievement_manager: achievement_manager._tnt_chain_timer = v
+
 var _tnt_buckets_this_frame: Dictionary = {}
 
-# Music Achievement Tracking
-var composition_note_count: int = 0
-var last_note_play_time: float = 0.0
+var composition_note_count: int:
+	get: return achievement_manager.composition_note_count if achievement_manager else 0
+	set(v): if achievement_manager: achievement_manager.composition_note_count = v
+
+var last_note_play_time: float:
+	get: return achievement_manager.last_note_play_time if achievement_manager else 0.0
+	set(v): if achievement_manager: achievement_manager.last_note_play_time = v
 
 func _save_global_achievements():
-	var config = ConfigFile.new()
-	config.set_value("progression", "achievements_unlocked_menu", is_achievement_menu_unlocked)
-	
-	var unlocked_list = []
-	var seen_list = []
-	for id in achievements:
-		if achievements[id].unlocked:
-			unlocked_list.append(id)
-			if achievements[id].get("seen", false):
-				seen_list.append(id)
-		
-		# Save extra progress data (like discovered types)
-		if achievements[id].has("discovered"):
-			config.set_value("progression", "ach_data_" + id, achievements[id].discovered)
-			
-	config.set_value("progression", "unlocked_ids", unlocked_list)
-	config.set_value("progression", "seen_ids", seen_list)
-	config.save("user://achievements.cfg")
-	
-	# After saving, if everything is seen, kill pulse just in case
-	if not _has_unseen_achievements():
-		if is_instance_valid(achievement_pulse_tween):
-			achievement_pulse_tween.kill()
-			achievement_pulse_tween = null
-		if is_instance_valid(achievement_btn):
-			achievement_btn.modulate = Color.WHITE
+	if achievement_manager:
+		achievement_manager.save_global_achievements()
 
 func _has_unseen_achievements() -> bool:
-	for id in achievements:
-		if achievements[id].unlocked and not achievements[id].get("seen", false):
-			return true
+	if achievement_manager:
+		return achievement_manager.has_unseen_achievements()
 	return false
 
 func _load_global_achievements():
-	var config = ConfigFile.new()
-	var err = config.load("user://achievements.cfg")
-	if err == OK:
-		is_achievement_menu_unlocked = config.get_value("progression", "achievements_unlocked_menu", false)
-		var unlocked_list = config.get_value("progression", "unlocked_ids", [])
-		var seen_list = config.get_value("progression", "seen_ids", [])
-		for id in achievements:
-			if id in unlocked_list:
-				achievements[id].unlocked = true
-			if id in seen_list:
-				achievements[id].seen = true
-			elif achievements[id].unlocked:
-				achievements[id].seen = false # Was unlocked but never seen
-			
-			# Load extra progress data if exists
-			if achievements[id].has("discovered"):
-				achievements[id].discovered = config.get_value("progression", "ach_data_" + id, [])
-		
+	if achievement_manager:
+		achievement_manager.load_global_achievements()
 
 func _check_achievement_conditions(delta):
-	# --- ACHIEVEMENT POLLING SEQUENCE ---
-	achievement_check_timer += delta
-	
-	# Update TNT chain timer
-	if _tnt_chain_timer > 0:
-		_tnt_chain_timer -= delta
-		if _tnt_chain_timer <= 0:
-			_tnt_chain_timer = 0
-			_tnt_chain_count = 0
-			_tnt_chain_flags = 0
-	
-	if achievement_check_timer >= 2.0:
-		achievement_check_timer = 0.0
-		achievement_sequence_step = 0 # Start sequence
-	
-	if achievement_sequence_step != -1:
-		_check_achievement_step(achievement_sequence_step)
-		achievement_sequence_step += 1
-		if achievement_sequence_step >= 13: # 13 groups total (0-12)
-			achievement_sequence_step = -1 # End sequence
-	
+	if achievement_manager:
+		achievement_manager.check_achievement_conditions(delta)
+
 func _check_achievement_step(step: int):
-	match step:
-		0: # --- GROUP 0: COMBAT & INTERACTION ---
-			if not achievements["massive_fight"].unlocked:
-				var teams = {}
-				for npc in active_npcs:
-					if npc.hp > 0:
-						teams[npc.team] = teams.get(npc.team, 0) + 1
-				var valid_teams = 0
-				for t_id in teams:
-					if teams[t_id] >= 10: valid_teams += 1
-				if valid_teams >= 2: _unlock_achievement("massive_fight")
-			
-			# 3. PARTY ROCK (Celebrating NPCs - Victory only, same team)
-			if not achievements["party_rock"].unlocked:
-				var team_counts = {}
-				for npc in active_npcs:
-					if npc.hp > 0 and npc.get("dance_timer", 0.0) > 0 and npc.get("recently_celebrated", false):
-						var t = npc.team
-						team_counts[t] = team_counts.get(t, 0) + 1
-				for t_id in team_counts:
-					if team_counts[t_id] >= 20:
-						_unlock_achievement("party_rock")
-						break
-					
-			if not achievements["electrifying"].unlocked:
-				for y in range(0, dynamic_grid_height, 4):
-					for x in range(0, grid_width, 4):
-						var idx = y * grid_width + x
-						if (cells[idx] & 0xFF) == 2 and charge_array[idx] > 0:
-							_unlock_achievement("electrifying")
-							return 
-
-		1: # --- GROUP 1: THE HEAVY SCAN (GOD MODE) ---
-			if not achievements["god"].unlocked:
-				var req = [1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 13, 16, 4, 18, 20, 21, 24, 25, 26, 27, 70]
-				var found = {}
-				for y in range(0, dynamic_grid_height, 4):
-					for x in range(0, grid_width, 4):
-						var pid = cells[y * grid_width + x] & 0xFF
-						if pid in req:
-							found[pid] = true
-							if found.size() >= req.size():
-								_unlock_achievement("god")
-								return
-
-		2: # --- GROUP 2: ARTISTIC (PAINT) ---
-			if not achievements["paint"].unlocked:
-				var bg_colors = {}
-				var el_colors = {}
-				
-				# Sensitive 4x4 sampling to detect thin lines
-				for y in range(0, dynamic_grid_height, 4):
-					for x in range(0, grid_width, 4):
-						var idx = y * grid_width + x
-						# 1. Check Element Paint (ABGR32)
-						var el_c = cell_paint_colors[idx]
-						if el_c != 0: 
-							el_colors[el_c] = true
-						
-						# 2. Check Background Paint (Ignore near-black/transparent)
-						var bg_c = background_img.get_pixel(x, y)
-						if bg_c.a > 0.1 and (bg_c.r > 0.02 or bg_c.g > 0.02 or bg_c.b > 0.02):
-							# We use a rounded hex to avoid counting microscopic variations
-							bg_colors[bg_c.to_html(false).left(6)] = true
-						
-						if el_colors.size() >= 4 and bg_colors.size() >= 4:
-							_unlock_achievement("paint")
-							return
-		3: # --- GROUP 3: DISASTERS (TSUNAMI) ---
-			if not achievements["tsunami_master"].unlocked and tsunami_intensity > 0:
-				var target_liquids = [2, 4, 11, 13] # Water, Petro, Lava, Acid
-				var found = {}
-				for y in range(0, dynamic_grid_height, 4):
-					for x in range(0, grid_width, 4):
-						var pid = cells[y * grid_width + x] & 0xFFFF
-						if pid in target_liquids:
-							found[pid] = true
-							if found.size() >= 4:
-								_unlock_achievement("tsunami_master")
-								return
-		4: # --- GROUP 4: PEACEFUL (SLEEP) ---
-			if not achievements["good_night"].unlocked:
-				var sleep_count = 0
-				for npc in active_npcs:
-					if npc.hp > 0 and npc.get("is_lying", false) and npc.get("current_emoji", "") == "😴":
-						sleep_count += 1
-						if sleep_count >= 12:
-							_unlock_achievement("good_night")
-							return
-		5: # --- GROUP 5: VOLCANO (GIANT'S AWAKENING) ---
-			if not achievements["volcano_giant"].unlocked and is_volcano_active:
-				var volcano_pixels = 0
-				for y in range(0, dynamic_grid_height, 2):
-					for x in range(0, grid_width, 2):
-						var pid = cells[y * grid_width + x] & 0xFFFF
-						if pid == 27 or pid == 29:
-							volcano_pixels += 4 # Weighted for 2x2 sampling
-							if volcano_pixels >= 700:
-								_unlock_achievement("volcano_giant")
-								return
-		6: # --- GROUP 6: EXPLOSIONS (BOOM & SPECIAL) ---
-			if not achievements["boom"].unlocked and _tnt_chain_count >= 20:
-				_unlock_achievement("boom")
-			
-			if not achievements["special_boom"].unlocked and _tnt_chain_count >= 25:
-				var has_acid = (_tnt_chain_flags & 64) > 0
-				var has_elec = (_tnt_chain_flags & 128) > 0
-				if has_acid and has_elec:
-					_unlock_achievement("special_boom")
-					
-		7: # --- GROUP 7: ELECTRICITY (SHORT CIRCUIT) ---
-			if not achievements["short_circuit"].unlocked:
-				var electric_count = 0
-				for npc in active_npcs:
-					if npc.hp > 0 and npc.get("hit_flash", 0) > 0 and npc.get("hit_type", "") == "electric":
-						electric_count += 1
-						if electric_count >= 10:
-							_unlock_achievement("short_circuit")
-							return
-		8: # --- GROUP 8: SOCIAL (WORLD WAR) ---
-			if not achievements["world_war"].unlocked:
-				var team_counts = {0:0, 1:0, 2:0, 3:0}
-				for npc in active_npcs:
-					if npc.hp > 0:
-						team_counts[npc.team] = team_counts.get(npc.team, 0) + 1
-				if team_counts[0] >= 5 and team_counts[1] >= 5 and team_counts[2] >= 5 and team_counts[3] >= 5:
-					_unlock_achievement("world_war")
-		9: # --- GROUP 9: LABORATORY (SUPREME ALCHEMIST) ---
-			if not achievements["supreme_alchemist"].unlocked:
-				var lab_found = {}
-				for y in range(0, dynamic_grid_height, 4): # More sensitive scan
-					for x in range(0, grid_width, 4):
-						var pid = cells[y * grid_width + x] & 0xFFFF
-						if pid >= 900 and pid <= 902:
-							lab_found[pid] = true
-							if lab_found.size() >= 3:
-								_unlock_achievement("supreme_alchemist")
-								return
-		10: # --- GROUP 10: WAR-Z ---
-			if not achievements["war-z"].unlocked:
-				var zombie_count = 0
-				var zombie_tank_count = 0
-				var team_counts = {0: 0, 1: 0, 2: 0, 3: 0}
-				for npc in active_npcs:
-					if npc.hp > 0:
-						if npc.type == "zombie":
-							zombie_count += 1
-						elif npc.type == "zombie_tank":
-							zombie_tank_count += 1
-						elif npc.team >= 0 and npc.team < 4:
-							team_counts[npc.team] += 1
-				if zombie_count >= 3 and zombie_tank_count >= 3 and team_counts[0] >= 3 and team_counts[1] >= 3 and team_counts[2] >= 3 and team_counts[3] >= 3:
-					_unlock_achievement("war-z")
-		11: # --- GROUP 11: DANCING RAIN ---
-			if not achievements["dancing-rain"].unlocked and acid_rain_intensity > 0:
-				for npc in active_npcs:
-					if npc.hp > 0:
-						_unlock_achievement("dancing-rain")
-						break
-		12: # --- GROUP 12: GREAT BOMBER ---
-			if not achievements["great-bomber"].unlocked and bombardero_intensity == 3:
-				_unlock_achievement("great-bomber")
+	if achievement_manager:
+		achievement_manager.check_achievement_step(step)
 
 func _unlock_retro_time_delayed():
-	# Esperar 2 segundos para que el usuario vea el mando y se mueva
-	await get_tree().create_timer(2.0).timeout
-	if controlled_npc:
-		_stop_controlling_npc()
-	_unlock_achievement("retro_time")
+	if achievement_manager:
+		await achievement_manager.unlock_retro_time_delayed()
 
 func _unlock_achievement(id: String):
-	if not achievements.has(id) or achievements[id].unlocked: return
-	
-	achievements[id].unlocked = true
-	achievements[id].seen = false # Mark as NEW (unseen)
-	_save_global_achievements()
-	_show_achievement_notification(id)
-	
-	# Log to Firebase Analytics
-	AnalyticsManager.log_event("achievement_unlocked", {"id": id, "title": achievements[id].get("title", "")})
-	
-	# Check if all achievements are unlocked
-	var all_unlocked = true
-	for ach_id in achievements:
-		if not achievements[ach_id].unlocked:
-			all_unlocked = false
-			break
-			
-	if all_unlocked:
-		var config = ConfigFile.new()
-		config.load("user://achievements.cfg")
-		if not config.get_value("progression", "all_achievements_logged", false):
-			AnalyticsManager.log_event("all_achievements_unlocked", {})
-			config.set_value("progression", "all_achievements_logged", true)
-			config.save("user://achievements.cfg")
-	
-	# Sync unlock with Google Play Games Services if available on Android
-	if play_games_achievements_client and GOOGLE_PLAY_ACHIEVEMENTS.has(id):
-		play_games_achievements_client.unlock_achievement(GOOGLE_PLAY_ACHIEVEMENTS[id])
+	if achievement_manager:
+		achievement_manager.unlock_achievement(id)
 
 func _record_tornado_discovery(type: int):
-	if not achievements.has("wind_master"): return
-	
-	if typeof(achievements["wind_master"]["discovered"]) != TYPE_ARRAY:
-		achievements["wind_master"]["discovered"] = []
-		
-	var disc = achievements["wind_master"]["discovered"]
-	
-	if not (int(type) in disc):
-		disc.append(int(type))
-		_save_global_achievements()
+	if achievement_manager:
+		achievement_manager.record_tornado_discovery(type)
 
-	if disc.size() >= 4 and not achievements["wind_master"].unlocked:
-		_unlock_achievement("wind_master")
-
-# (Debug HUD removed)
 
 func _setup_main_ui_containers():
 	var s = _get_ui_scale()
@@ -3232,46 +2777,8 @@ func _setup_main_ui_containers():
 				child.size_flags_vertical = Control.SIZE_EXPAND_FILL
 
 		# Kill any existing pulse tween before replacing the reference
-		if is_instance_valid(achievement_btn):
-			if achievement_btn.has_meta("pulse_tween"):
-				var old_tw = achievement_btn.get_meta("pulse_tween")
-				if is_instance_valid(old_tw): old_tw.kill()
-			achievement_btn.modulate = Color(1,1,1,1)
-
-		achievement_btn = _create_vertical_category_btn("🏆", "achievement_btn")
-		achievement_btn.name = "AchievementBtn"
-		achievement_btn.custom_minimum_size = Vector2(fixed_w * 2.0, h_cat)
-		achievement_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		achievement_btn.visible = true
-		achievement_btn.pressed.connect(_setup_achievement_menu)
-		
-		var gold_style = StyleBoxFlat.new()
-		gold_style.bg_color = Color("#D4AF37")
-		gold_style.border_width_left = 2; gold_style.border_width_top = 2
-		gold_style.border_width_right = 2; gold_style.border_width_bottom = 2
-		gold_style.border_color = Color("#FFFACD")
-		gold_style.set_corner_radius_all(0)
-		gold_style.content_margin_top = 0; gold_style.content_margin_bottom = 0
-		
-		achievement_btn.add_theme_stylebox_override("normal", gold_style)
-		achievement_btn.add_theme_stylebox_override("hover", gold_style)
-		achievement_btn.add_theme_stylebox_override("pressed", gold_style)
-		achievement_btn.mouse_filter = Control.MOUSE_FILTER_PASS
-		
-		action_hbox.add_child(achievement_btn)
-		
-		var is_menu_open = is_instance_valid(achievement_panel) and achievement_panel.visible
-		if _has_unseen_achievements() and not is_menu_open:
-			if is_instance_valid(achievement_pulse_tween): 
-				achievement_pulse_tween.kill()
-			achievement_pulse_tween = achievement_btn.create_tween().set_loops()
-			achievement_pulse_tween.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-			achievement_pulse_tween.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
-		else:
-			if is_instance_valid(achievement_pulse_tween): 
-				achievement_pulse_tween.kill()
-				achievement_pulse_tween = null
-			achievement_btn.modulate = Color.WHITE
+		if achievement_manager:
+			achievement_btn = achievement_manager.setup_achievement_button(fixed_w, h_cat)
 
 
 # Helper for intelligent panel positioning above the HUD
@@ -18816,566 +18323,20 @@ func _restore_lab_data(lab_data: Array):
 	_update_custom_mats_in_material_grid()
 
 func _trigger_achievement_reveal():
-	# 1. Capture current button widths to prevent shrinking
-	var screen_w = get_viewport_rect().size.x
-	var s = _get_ui_scale()
-	var h_cat = 60 * s
-	var fixed_w = (screen_w - (5 * 2 * s)) / 6.0
-	
-	for child in action_hbox.get_children():
-		if child is Button:
-			child.custom_minimum_size = Vector2(fixed_w, h_cat)
-			child.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-			child.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
-	# 2. Unlock & Persist
-	is_achievement_menu_unlocked = true
-	_save_global_achievements()
-	
-	# 3. UI Implementation
-	var achievement_btn_new = _create_vertical_category_btn("🏆", "achievement_btn")
-	achievement_btn_new.name = "AchievementButton"
-	achievement_btn_new.custom_minimum_size = Vector2(fixed_w * 2.0, h_cat)
-	achievement_btn_new.modulate.a = 0
-	achievement_btn_new.pressed.connect(_setup_achievement_menu)
-	achievement_btn = achievement_btn_new
-	action_hbox.add_child(achievement_btn_new)
-	
-	var gold_style = StyleBoxFlat.new()
-	gold_style.bg_color = Color("#D4AF37")
-	gold_style.set_corner_radius_all(0)
-	achievement_btn_new.add_theme_stylebox_override("normal", gold_style)
-	achievement_btn_new.add_theme_stylebox_override("hover", gold_style)
-	achievement_btn_new.add_theme_stylebox_override("pressed", gold_style)
-	
-	# 4. Cinematic Sequence with Background Audio
-	var p = AudioStreamPlayer.new()
-	p.stream = _get_sfx_stream("achievement_menu_unlock")
-	p.bus = "Master"
-	p.volume_db = -80
-	get_tree().root.add_child(p)
-	p.play()
-	var audio_t = create_tween()
-	audio_t.tween_property(p, "volume_db", 5.0, 0.4)
-	audio_t.tween_interval(2.5)
-	audio_t.tween_property(p, "volume_db", -80.0, 1.2)
-	audio_t.finished.connect(p.queue_free)
-	var scroll_t = create_tween().set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
-	scroll_t.tween_property(action_scroll, "scroll_horizontal", 2000, 1.5)
-	await scroll_t.finished
-
-
-	
-	# After scroll, show button
-	var fade_t = create_tween().bind_node(achievement_btn_new).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	fade_t.tween_property(achievement_btn_new, "modulate:a", 1.0, 0.6)
-	
-	# Idle pulse
-	if is_instance_valid(achievement_pulse_tween): achievement_pulse_tween.kill()
-	achievement_pulse_tween = create_tween().set_loops().bind_node(achievement_btn_new)
-	achievement_pulse_tween.tween_property(achievement_btn_new, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-	achievement_pulse_tween.tween_property(achievement_btn_new, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
-	
-	await fade_t.finished
-
-
-
+	if achievement_manager:
+		await achievement_manager.trigger_achievement_reveal()
 
 func _show_achievement_notification(id: String):
-	var s = _get_ui_scale()
-	var viewport_w = get_viewport_rect().size.x
-	
-	var a = achievements[id]
-	var title = a.title
-	
-	# 1. Ensure menu is visible (Cinematic Chain for the first time)
-	if not is_achievement_menu_unlocked:
-		await _trigger_achievement_reveal()
-		await get_tree().create_timer(1.0).timeout # Pause for audio to breathe and impact
-	else:
-		var scroll_tween = create_tween().set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
-		scroll_tween.tween_property(action_scroll, "scroll_horizontal", 2000, 1.0)
-		await scroll_tween.finished
-	
-	# 2. Dimensions & UI Root
-	var icon_size = 75 * s
-	var origin_pos = Vector2(viewport_w - 100 * s, get_viewport_rect().size.y - 40 * s)
-	if is_instance_valid(achievement_btn):
-		origin_pos = achievement_btn.global_position + achievement_btn.size / 2.0
-		# Handle pulse logic
-		var is_menu_open = is_instance_valid(achievement_panel) and achievement_panel.visible
-		if not is_menu_open:
-			if is_instance_valid(achievement_pulse_tween): achievement_pulse_tween.kill()
-			achievement_pulse_tween = achievement_btn.create_tween().set_loops()
-			achievement_pulse_tween.tween_property(achievement_btn, "modulate", Color(1.3, 1.3, 1.1, 1.0), 0.8)
-			achievement_pulse_tween.tween_property(achievement_btn, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.8)
-	
-	var toast_layer = CanvasLayer.new()
-	toast_layer.layer = 100
-	ui_root.add_child(toast_layer)
-	
-	# --- 3. UI Construction ---
-	var icon_container = Control.new()
-	icon_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	toast_layer.add_child(icon_container)
-	
-	var icon_tex = TextureRect.new()
-	if ACHIEVEMENT_ICONS.has(id):
-		icon_tex.texture = load(ACHIEVEMENT_ICONS[id])
-	else:
-		icon_tex.texture = load("res://assets/icon_game/icono_google_sandbox.png")
-	icon_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon_tex.custom_minimum_size = Vector2(icon_size, icon_size)
-	icon_tex.position = -icon_tex.custom_minimum_size / 2.0
-	icon_container.add_child(icon_tex)
-	
-	var origin_x_right = origin_pos.x + icon_size / 2.0
-	var margin = viewport_w - origin_x_right
-	var final_w = viewport_w - 2.0 * margin
-	var target_x = margin
-	
-	var mask = Control.new()
-	mask.clip_contents = true
-	mask.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	toast_layer.add_child(mask)
-	toast_layer.move_child(mask, 0)
-	
-	var static_content = Control.new()
-	static_content.size = Vector2(final_w, icon_size)
-	mask.add_child(static_content)
-	
-	var bg = Panel.new()
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.05, 0.05, 0.05, 0.95)
-	style.border_width_left = 3 * s; style.border_width_top = 3 * s
-	style.border_width_right = 3 * s; style.border_width_bottom = 3 * s
-	style.border_color = Color("#D4AF37")
-	bg.add_theme_stylebox_override("panel", style)
-	bg.size = static_content.size
-	static_content.add_child(bg)
-	
-	var label = Label.new()
-	label.text = tr(title).to_upper()
-	label.add_theme_font_size_override("font_size", 24 * s)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.size = Vector2(final_w - icon_size, icon_size)
-	label.position = Vector2(icon_size, 0)
-	static_content.add_child(label)
-	
-	var target_y = origin_pos.y - 150 * s
-	icon_container.global_position = origin_pos
-	icon_container.scale = Vector2.ZERO
-	icon_container.modulate.a = 0
-	mask.visible = false
-	mask.size = Vector2(0, icon_size)
-	mask.global_position = Vector2(origin_x_right, target_y - icon_size/2.0)
-	
-	# --- 4. Animation Sequence ---
-	# Bind Tweens to toast_layer for automatic mobile cleanup
-	var t1 = create_tween().bind_node(toast_layer).set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	t1.tween_property(icon_container, "scale", Vector2.ONE, 0.5)
-	t1.tween_property(icon_container, "modulate:a", 1.0, 0.3)
-	t1.tween_property(icon_container, "global_position:y", target_y, 0.6)
-	_play_achievement_unlock_sfx(false) # Local boost +5dB
-	await t1.finished
-	
-	await get_tree().create_timer(0.2).timeout
-	mask.visible = true
-	
-	var t2 = create_tween().bind_node(toast_layer).set_parallel(true).set_trans(Tween.TRANS_EXPO)
-	t2.tween_property(icon_container, "global_position:x", target_x + icon_size/2.0, 1.0)
-	t2.tween_property(mask, "global_position:x", target_x, 1.0)
-	t2.tween_property(mask, "size:x", final_w, 1.0)
-	t2.tween_property(static_content, "position:x", 0, 1.0).from(final_w)
-	await t2.finished
-	
-	# Hold for readability
-	await get_tree().create_timer(1.5).timeout
-	
-	var t3 = create_tween().bind_node(toast_layer).set_parallel(true).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-	t3.tween_property(icon_container, "global_position:y", get_viewport_rect().size.y + 200 * s, 0.8)
-	t3.tween_property(mask, "global_position:y", get_viewport_rect().size.y + 200 * s, 0.8)
-	t3.tween_property(icon_container, "modulate:a", 0.0, 0.5)
-	t3.tween_property(mask, "modulate:a", 0.0, 0.5)
-	await t3.finished
-	
-	if is_instance_valid(toast_layer):
-		toast_layer.queue_free()
+	if achievement_manager:
+		await achievement_manager.show_achievement_notification(id)
 
 func _setup_achievement_menu():
-	_play_action_sound("ui_click")
-	
-	# KILL THE PULSE DEFINITIVELY
-	if is_instance_valid(achievement_pulse_tween):
-		achievement_pulse_tween.kill()
-		achievement_pulse_tween = null
-	
-	if is_instance_valid(achievement_btn):
-		# Aggressive Reset
-		var kill_tw = create_tween()
-		kill_tw.tween_property(achievement_btn, "modulate", Color(1, 1, 1, 1), 0.1)
-		achievement_btn.modulate = Color(1, 1, 1, 1)
-
-	var s = _get_ui_scale()
-	
-	# 1. Toggle Logic like other panels
-	if is_instance_valid(achievement_panel) and achievement_panel.visible:
-		achievement_panel.visible = false
-		_update_menu_highlights()
-		return
-		
-	# MARK ALL AS SEEN
-	var changed = false
-	for id in achievements:
-		if achievements[id].unlocked and not achievements[id].get("seen", false):
-			achievements[id].seen = true
-			changed = true
-	if changed:
-		_save_global_achievements()
-		
-	_toggle_category_panel(null) # Close others
-	
-	if not is_instance_valid(achievement_panel):
-		achievement_panel = PanelContainer.new()
-		ui_root.add_child(achievement_panel)
-		achievement_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
-		achievement_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
-		
-		var p_style = StyleBoxFlat.new()
-		p_style.bg_color = Color(0.12, 0.12, 0.14, 0.98)
-		p_style.corner_radius_top_left = 20 * s
-		p_style.corner_radius_top_right = 20 * s
-		p_style.corner_radius_bottom_left = 0
-		p_style.corner_radius_bottom_right = 0
-		p_style.set_border_width_all(4 * s)
-		p_style.border_color = Color(0.35, 0.35, 0.4)
-		achievement_panel.add_theme_stylebox_override("panel", p_style)
-		
-		# Position it exactly like tools/npcs
-		_align_panel_to_hud(achievement_panel, 600 * s, 500 * s)
-		
-		var margin = MarginContainer.new()
-		margin.add_theme_constant_override("margin_left", int(35 * s))
-		margin.add_theme_constant_override("margin_right", int(35 * s))
-		margin.add_theme_constant_override("margin_top", int(20 * s))
-		margin.add_theme_constant_override("margin_bottom", int(20 * s))
-		achievement_panel.add_child(margin)
-		
-		var vbox = VBoxContainer.new()
-		vbox.add_theme_constant_override("separation", 15 * s)
-		margin.add_child(vbox)
-		
-		# Header
-		var title = Label.new()
-		title.name = "AchievementMenuTitle"
-		title.text = tr("achievement_menu_title")
-		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		title.add_theme_font_override("font", _get_safe_font())
-		title.add_theme_font_size_override("font_size", 32 * s)
-		title.add_theme_color_override("font_color", Color(1, 0.85, 0.4))
-		vbox.add_child(title)
-		
-		var scroll = ScrollContainer.new()
-		scroll.name = "AchieveScroll"
-		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		scroll.mouse_filter = Control.MOUSE_FILTER_PASS # Allow dragging from background
-		vbox.add_child(scroll)
-		
-		var item_vbox = VBoxContainer.new()
-		item_vbox.name = "AchieveList"
-		item_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		item_vbox.add_theme_constant_override("separation", 10 * s)
-		scroll.add_child(item_vbox)
-
-	# REFRESH LIST (Reuse existing nodes to avoid stutter)
-	achievement_panel.visible = true
-	
-	# Update Title Language
-	var menu_title = achievement_panel.find_child("AchievementMenuTitle", true, false)
-	if is_instance_valid(menu_title):
-		menu_title.text = tr("achievement_menu_title")
-
-	var list = achievement_panel.find_child("AchieveList", true, false)
-	
-	var existing_items = list.get_children()
-	var idx = 0
-	for id in achievements:
-		var a = achievements[id]
-		var item: PanelContainer
-		
-		if idx < existing_items.size():
-			item = existing_items[idx]
-		else:
-			# CREATE ONLY IF MISSING
-			item = PanelContainer.new()
-			item.custom_minimum_size.y = 100 * s
-			item.mouse_filter = Control.MOUSE_FILTER_PASS
-			item.gui_input.connect(func(event):
-				if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-					if event.pressed:
-						item.set_meta("press_pos", event.global_position)
-					else:
-						var start_pos = item.get_meta("press_pos", event.global_position)
-						var dist = start_pos.distance_to(event.global_position)
-						if dist < 12 * s: # Small threshold in screen pixels to count as tap
-							var ach_id = item.get_meta("achievement_id", "")
-							if ach_id != "":
-								_on_achievement_item_clicked(ach_id)
-			)
-			list.add_child(item)
-			
-			var i_margin = MarginContainer.new()
-			var im_val = int(12 * s)
-			i_margin.add_theme_constant_override("margin_left", int(20 * s))
-			i_margin.add_theme_constant_override("margin_right", im_val)
-			i_margin.add_theme_constant_override("margin_top", im_val)
-			i_margin.add_theme_constant_override("margin_bottom", im_val)
-			item.add_child(i_margin)
-			
-			var i_hbox = HBoxContainer.new()
-			i_hbox.add_theme_constant_override("separation", 22 * s)
-			i_margin.add_child(i_hbox)
-			
-			var icon_container = Control.new()
-			icon_container.name = "IconContainer"
-			icon_container.custom_minimum_size = Vector2(75 * s, 75 * s)
-			i_hbox.add_child(icon_container)
-			
-			var new_icon_tex = TextureRect.new()
-			new_icon_tex.name = "IconTexture"
-			new_icon_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			new_icon_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			new_icon_tex.size = Vector2(75 * s, 75 * s)
-			icon_container.add_child(new_icon_tex)
-			
-			var new_lock_label = Label.new()
-			new_lock_label.name = "LockLabel"
-			new_lock_label.text = "🔒"
-			new_lock_label.add_theme_font_override("font", _get_safe_font())
-			new_lock_label.add_theme_font_size_override("font_size", 24 * s)
-			new_lock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			new_lock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			new_lock_label.size = Vector2(75 * s, 75 * s)
-			icon_container.add_child(new_lock_label)
-			
-			var text_vbox = VBoxContainer.new()
-			text_vbox.name = "TextVBox"
-			text_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			text_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-			text_vbox.add_theme_constant_override("separation", 2 * s)
-			i_hbox.add_child(text_vbox)
-			
-			var new_title = Label.new()
-			new_title.name = "Title"
-			new_title.add_theme_font_override("font", _get_safe_font())
-			text_vbox.add_child(new_title)
-			
-			var new_desc = Label.new()
-			new_desc.name = "Desc"
-			new_desc.add_theme_font_override("font", _get_safe_font())
-			text_vbox.add_child(new_desc)
-		
-		# UPDATE VISUAL STATE (Cheap)
-		item.set_meta("achievement_id", id)
-		var icon_tex = item.find_child("IconTexture", true, false)
-		var lock_label = item.find_child("LockLabel", true, false)
-		var a_title = item.find_child("Title", true, false)
-		var a_desc = item.find_child("Desc", true, false)
-		
-		if icon_tex and ACHIEVEMENT_ICONS.has(id):
-			icon_tex.texture = load(ACHIEVEMENT_ICONS[id])
-			if a.unlocked:
-				icon_tex.modulate = Color.WHITE
-				if lock_label: lock_label.visible = false
-			else:
-				icon_tex.modulate = Color(0.08, 0.08, 0.08, 0.85) # Dark silhouette for organic mystery
-				if lock_label: lock_label.visible = true
-		
-		a_title.text = tr(a.title)
-		a_title.add_theme_font_size_override("font_size", 22 * s)
-		
-		var i_style = StyleBoxFlat.new()
-		i_style.set_corner_radius_all(12 * s)
-		
-		if a.unlocked:
-			i_style.bg_color = Color(0.85, 0.65, 0.2, 0.15)
-			i_style.set_border_width_all(2 * s)
-			i_style.border_color = Color(0.9, 0.75, 0.3, 0.8)
-			a_title.add_theme_color_override("font_color", Color(1.0, 0.9, 0.6))
-			a_title.modulate.a = 1.0
-			
-			a_desc.text = tr(a.desc)
-			a_desc.visible = true
-			a_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			a_desc.add_theme_font_size_override("font_size", 16 * s)
-			a_desc.modulate = Color(1, 0.95, 0.8, 0.9)
-		else:
-			i_style.bg_color = Color(0.18, 0.18, 0.2, 0.6)
-			i_style.set_border_width_all(1 * s)
-			i_style.border_color = Color(0.3, 0.3, 0.35, 0.4)
-			a_title.remove_theme_color_override("font_color")
-			a_title.modulate.a = 0.4
-			
-			# Show subtle hint for locked achievements instead of hiding description
-			var hint_key = a.desc.replace("_desc", "_hint")
-			a_desc.text = tr(hint_key)
-			a_desc.visible = true
-			a_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			a_desc.add_theme_font_size_override("font_size", 16 * s)
-			a_desc.modulate = Color(0.55, 0.55, 0.6, 0.65) # Dark and mysterious gray
-			
-		item.add_theme_stylebox_override("panel", i_style)
-		idx += 1
-
-	_update_menu_highlights()
+	if achievement_manager:
+		achievement_manager.setup_achievement_menu()
 
 func _on_achievement_item_clicked(ach_id: String):
-	if not achievements.has(ach_id) or not achievements[ach_id].unlocked:
-		return
-	
-	_play_action_sound("ui_click")
-	
-	var s = _get_ui_scale()
-	var screen_size = get_viewport_rect().size
-	
-	# Full-screen overlay
-	var overlay = Control.new()
-	overlay.name = "AchievementDetailPopup"
-	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	ui_root.add_child(overlay)
-	
-	var dim = ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.75)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	overlay.add_child(dim)
-	
-	# Close on tap/click outside/anywhere on dim
-	dim.gui_input.connect(func(event):
-		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			_play_action_sound("ui_click")
-			overlay.queue_free()
-	)
-	
-	# Panel
-	var panel = PanelContainer.new()
-	var p_style = StyleBoxFlat.new()
-	p_style.bg_color = Color(0.1, 0.1, 0.15, 0.96)
-	p_style.set_border_width_all(int(4 * s))
-	p_style.border_color = Color("#D4AF37") # Gold border
-	p_style.set_corner_radius_all(20 * s)
-	panel.add_theme_stylebox_override("panel", p_style)
-	overlay.add_child(panel)
-	
-	var marg = MarginContainer.new()
-	var m_val = int(30 * s)
-	marg.add_theme_constant_override("margin_top", m_val)
-	marg.add_theme_constant_override("margin_bottom", m_val + int(20 * s)) # Extra bottom margin for position label
-	marg.add_theme_constant_override("margin_left", m_val)
-	marg.add_theme_constant_override("margin_right", m_val)
-	panel.add_child(marg)
-	
-	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", int(18 * s))
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	marg.add_child(vbox)
-	
-	var a = achievements[ach_id]
-	
-	# 1. Icon (Large)
-	var icon_rect = TextureRect.new()
-	icon_rect.custom_minimum_size = Vector2(180 * s, 180 * s)
-	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	if ACHIEVEMENT_ICONS.has(ach_id):
-		icon_rect.texture = load(ACHIEVEMENT_ICONS[ach_id])
-	icon_rect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	vbox.add_child(icon_rect)
-	
-	# 2. Title (Gold)
-	var title_lbl = Label.new()
-	title_lbl.text = tr(a.title)
-	title_lbl.add_theme_font_override("font", _get_safe_font())
-	title_lbl.add_theme_font_size_override("font_size", int(26 * s))
-	title_lbl.add_theme_color_override("font_color", Color("#D4AF37"))
-	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title_lbl.custom_minimum_size = Vector2(320 * s, 0)
-	vbox.add_child(title_lbl)
-	
-	# 3. Hint (Gray)
-	var hint_lbl = Label.new()
-	var hint_key = a.desc.replace("_desc", "_hint")
-	hint_lbl.text = tr(hint_key)
-	hint_lbl.add_theme_font_override("font", _get_safe_font())
-	hint_lbl.add_theme_font_size_override("font_size", int(18 * s))
-	hint_lbl.add_theme_color_override("font_color", Color(0.65, 0.65, 0.65))
-	hint_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint_lbl.custom_minimum_size = Vector2(320 * s, 0)
-	vbox.add_child(hint_lbl)
-	
-	# 4. Description (Gold)
-	var desc_lbl = Label.new()
-	desc_lbl.text = tr(a.desc)
-	desc_lbl.add_theme_font_override("font", _get_safe_font())
-	desc_lbl.add_theme_font_size_override("font_size", int(22 * s))
-	desc_lbl.add_theme_color_override("font_color", Color("#D4AF37"))
-	desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc_lbl.custom_minimum_size = Vector2(320 * s, 0)
-	vbox.add_child(desc_lbl)
-	
-	# Close / OK Button (Premium styled)
-	var close_btn = Button.new()
-	close_btn.text = "OK"
-	close_btn.custom_minimum_size = Vector2(120 * s, 50 * s)
-	close_btn.add_theme_font_override("font", _get_safe_font())
-	close_btn.add_theme_font_size_override("font_size", int(22 * s))
-	var btn_style = StyleBoxFlat.new()
-	btn_style.bg_color = Color(0.2, 0.2, 0.25, 0.9)
-	btn_style.set_border_width_all(int(2 * s))
-	btn_style.border_color = Color("#D4AF37")
-	btn_style.set_corner_radius_all(10 * s)
-	close_btn.add_theme_stylebox_override("normal", btn_style)
-	close_btn.add_theme_stylebox_override("hover", btn_style)
-	close_btn.add_theme_stylebox_override("pressed", btn_style)
-	close_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	close_btn.pressed.connect(func():
-		_play_action_sound("ui_click")
-		overlay.queue_free()
-	)
-	vbox.add_child(close_btn)
-	
-	# Position Label (Bottom-right corner)
-	var keys = achievements.keys()
-	var total = keys.size()
-	var pos = keys.find(ach_id) + 1
-	
-	var corner_margin = MarginContainer.new()
-	corner_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	corner_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	corner_margin.add_theme_constant_override("margin_right", int(15 * s))
-	corner_margin.add_theme_constant_override("margin_bottom", int(10 * s))
-	panel.add_child(corner_margin)
-	
-	var pos_lbl = Label.new()
-	pos_lbl.text = tr("ACHIEVEMENT_POSITION_FORMAT").format([pos, total])
-	pos_lbl.add_theme_font_override("font", _get_safe_font())
-	pos_lbl.add_theme_font_size_override("font_size", int(14 * s))
-	pos_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
-	pos_lbl.size_flags_horizontal = Control.SIZE_SHRINK_END
-	pos_lbl.size_flags_vertical = Control.SIZE_SHRINK_END
-	corner_margin.add_child(pos_lbl)
-	
-	# Center panel on screen
-	await get_tree().process_frame
-	var p_size = panel.get_combined_minimum_size()
-	panel.position = (screen_size - p_size) / 2.0
+	if achievement_manager:
+		achievement_manager.on_achievement_item_clicked(ach_id)
 
 
 func _show_thank_you_popup(prev_paused: bool):
