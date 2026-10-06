@@ -64,10 +64,14 @@ var material_tags_raw = PackedInt64Array()
 var selected_material: int = 1
 var current_weather: int = 0 
 var is_paused: bool = false
-var is_unpausing: bool = false
+var is_unpausing: bool:
+	get: return tools_ui.is_unpausing if tools_ui else false
+	set(v): if tools_ui: tools_ui.is_unpausing = v
 # UI State
 var is_mouse_over_ui: bool = false
-var brush_radius: int = 2 
+var brush_radius: int:
+	get: return tools_ui.brush_radius if tools_ui else 2
+	set(v): if tools_ui: tools_ui.brush_radius = v
 var current_language: String = "es" # Controlled by TranslationServer
 var ui_scale_level: int = 4 # Fixed at 1.7x (index 4 of the old scales array)
 var sim_camera: Camera2D
@@ -440,7 +444,9 @@ func _get_ui_scale() -> float:
 	return base_scale
 
 var ui_elements = {} # To track nodes for re-labeling
-var tools_panel: PanelContainer
+var tools_panel: PanelContainer:
+	get: return tools_ui.tools_panel if tools_ui else null
+	set(v): if tools_ui: tools_ui.tools_panel = v
 var workshop_panel: PanelContainer
 var lab_panel: PanelContainer
 var lab_selected_slot: int = 0
@@ -456,7 +462,9 @@ var npc_panel: PanelContainer
 var achievement_panel: PanelContainer:
 	get: return achievement_manager.achievement_panel if achievement_manager else null
 	set(v): if achievement_manager: achievement_manager.achievement_panel = v
-var paint_panel: PanelContainer
+var paint_panel: PanelContainer:
+	get: return tools_ui.paint_panel if tools_ui else null
+	set(v): if tools_ui: tools_ui.paint_panel = v
 var selected_team: int = 0 
 var mat_id_to_key = {} # ID -> Translation Key
 var controlled_npc = null
@@ -473,6 +481,7 @@ var force_grid_visible: bool = false
 var history_manager: SandboxHistoryManager
 var achievement_manager: SandboxAchievementManager
 var dialog_manager: SandboxDialogManager
+var tools_ui: SandboxToolsPaintUI
 
 var is_grid_ready: bool = false # Guard against async _ready running early loops
 var current_is_landscape: bool = false # Tracks axis state to auto-reload on flip
@@ -577,11 +586,19 @@ const MUSIC_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#",
 const MUSIC_NOTES_LATIN = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"]
 const MUSIC_PITCHES = [1.0, 1.05946, 1.12246, 1.18921, 1.25992, 1.33483, 1.41421, 1.49831, 1.58740, 1.68179, 1.78180, 1.88775]
 
-# --- PAINT SYSTEM ---
-var selected_paint_color: Color = Color.WHITE
-var paint_mode: int = 0 # 0: Elements, 1: Background
-var recent_paint_colors: Array[Color] = [Color.WHITE, Color.BLACK, Color.GRAY, Color.RED, Color.GREEN, Color.BLUE]
-var paint_brush_radius_idx: int = 2 # Index for [1, 3, 5, 10, 15, 25]
+# --- PAINT SYSTEM (SandboxToolsPaintUI) ---
+var selected_paint_color: Color:
+	get: return tools_ui.selected_paint_color if tools_ui else Color.WHITE
+	set(v): if tools_ui: tools_ui.selected_paint_color = v
+var paint_mode: int:
+	get: return tools_ui.paint_mode if tools_ui else 0
+	set(v): if tools_ui: tools_ui.paint_mode = v
+var recent_paint_colors: Array[Color]:
+	get: return tools_ui.recent_paint_colors if tools_ui else []
+	set(v): if tools_ui: tools_ui.recent_paint_colors = v
+var paint_brush_radius_idx: int:
+	get: return tools_ui.paint_brush_radius_idx if tools_ui else 2
+	set(v): if tools_ui: tools_ui.paint_brush_radius_idx = v
 var is_paint_tool_active: bool = false
 
 @export var custom_emoji_font: Font 
@@ -1081,10 +1098,16 @@ var powered_frame := PackedInt32Array()
 var img: Image
 var _img_history: Array = [] # Retains old images for 3 frames to avoid Android RenderThread crashes
 
-# VOLUME SYSTEM
-var game_volume: float = 1.2
-var pre_mute_volume: float = 1.0
-var is_muted: bool = false
+# VOLUME SYSTEM (SandboxToolsPaintUI)
+var game_volume: float:
+	get: return tools_ui.game_volume if tools_ui else 1.2
+	set(v): if tools_ui: tools_ui.game_volume = v
+var pre_mute_volume: float:
+	get: return tools_ui.pre_mute_volume if tools_ui else 1.0
+	set(v): if tools_ui: tools_ui.pre_mute_volume = v
+var is_muted: bool:
+	get: return tools_ui.is_muted if tools_ui else false
+	set(v): if tools_ui: tools_ui.is_muted = v
 var achievement_pulse_tween: Tween:
 	get: return achievement_manager.achievement_pulse_tween if achievement_manager else null
 	set(v): if achievement_manager: achievement_manager.achievement_pulse_tween = v
@@ -1104,52 +1127,12 @@ const TAGS_INTERACTIVE = SandboxMaterial.Tags.INCENDIARY | SandboxMaterial.Tags.
 	SandboxMaterial.Tags.MUSIC
 
 func _save_tool_settings():
-	var settings = {
-		"brush_radius": brush_radius,
-		"paint_brush_radius_idx": paint_brush_radius_idx,
-		"game_volume": game_volume,
-		"is_muted": is_muted,
-		"current_language": current_language,
-		"show_music_notes_popup": show_music_notes_popup,
-		"is_logic_gate_tutorial_done": is_logic_gate_tutorial_done,
-		"is_grid_tutorial_done": is_grid_tutorial_done,
-		"is_phase_block_tutorial_done": is_phase_block_tutorial_done,
-		"is_zoom_tutorial_done": is_zoom_tutorial_done,
-		"is_cannon_tutorial_done": is_cannon_tutorial_done,
-		"is_piston_tutorial_done": is_piston_tutorial_done
-	}
-	var f = FileAccess.open("user://tools_settings.json", FileAccess.WRITE)
-	if f:
-		f.store_string(JSON.stringify(settings))
+	if tools_ui:
+		tools_ui.save_tool_settings()
 
 func _load_tool_settings():
-	if FileAccess.file_exists("user://tools_settings.json"):
-		var f = FileAccess.open("user://tools_settings.json", FileAccess.READ)
-		if f:
-			var dict = JSON.parse_string(f.get_as_text())
-			if typeof(dict) == TYPE_DICTIONARY:
-				if dict.has("brush_radius"): brush_radius = dict["brush_radius"]
-				if dict.has("paint_brush_radius_idx"): paint_brush_radius_idx = dict["paint_brush_radius_idx"]
-				if dict.has("game_volume"): 
-					game_volume = dict["game_volume"]
-					_update_game_volume(game_volume)
-				if dict.has("is_muted"): is_muted = dict["is_muted"]
-				if dict.has("current_language"): 
-					current_language = dict["current_language"]
-					TranslationServer.set_locale(current_language)
-				if dict.has("show_music_notes_popup"): show_music_notes_popup = dict["show_music_notes_popup"]
-				if dict.has("is_logic_gate_tutorial_done"):
-					is_logic_gate_tutorial_done = dict["is_logic_gate_tutorial_done"]
-				if dict.has("is_grid_tutorial_done"):
-					is_grid_tutorial_done = dict["is_grid_tutorial_done"]
-				if dict.has("is_phase_block_tutorial_done"):
-					is_phase_block_tutorial_done = dict["is_phase_block_tutorial_done"]
-				if dict.has("is_zoom_tutorial_done"):
-					is_zoom_tutorial_done = dict["is_zoom_tutorial_done"]
-				if dict.has("is_cannon_tutorial_done"):
-					is_cannon_tutorial_done = dict["is_cannon_tutorial_done"]
-				if dict.has("is_piston_tutorial_done"):
-					is_piston_tutorial_done = dict["is_piston_tutorial_done"]
+	if tools_ui:
+		tools_ui.load_tool_settings()
 
 func _on_auth_changed(_is_auth: bool):
 	if is_instance_valid(workshop_panel) and workshop_panel.visible:
@@ -1183,6 +1166,11 @@ func _ready():
 	dialog_manager.name = "DialogManager"
 	add_child(dialog_manager)
 	dialog_manager.setup(self)
+
+	tools_ui = SandboxToolsPaintUI.new()
+	tools_ui.name = "ToolsPaintUI"
+	add_child(tools_ui)
+	tools_ui.setup(self)
 	
 	if FileAccess.file_exists("user://rating_popup_shown.save"):
 		rating_popup_shown = true
@@ -2208,745 +2196,12 @@ func _create_vertical_category_btn(emoji: String, text_key: String) -> Button:
 	return btn
 
 func _setup_tools_ui():
-	var s = _get_ui_scale()
-	ui_root = get_parent().get_node("UI")
-	
-	var tools_btn = _create_vertical_category_btn("🛠️", "tools")
-	tools_btn.name = "ToolsBtn"
-	ui_elements["tools_btn"] = tools_btn
-	tools_btn.add_theme_font_override("font", _get_safe_font())
-	tools_btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
-	tools_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	
-	# --- QUICK ACTIONS GRID ---
-	var qa_grid = GridContainer.new()
-	qa_grid.columns = 2
-	qa_grid.name = "QuickActionsGrid"
-	ui_elements["quick_actions_grid"] = qa_grid
-	qa_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	qa_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	qa_grid.custom_minimum_size = Vector2(150 * s, 0)
-	qa_grid.add_theme_constant_override("h_separation", 0)
-	qa_grid.add_theme_constant_override("v_separation", 0)
-	
-	var qa_style = StyleBoxFlat.new()
-	qa_style.bg_color = Color(0.15, 0.15, 0.2, 1.0)
-	qa_style.border_width_left = 1; qa_style.border_width_top = 1
-	qa_style.border_width_right = 1; qa_style.border_width_bottom = 1
-	qa_style.border_color = Color(0.4, 0.4, 0.5)
-
-	var qa_style_active = qa_style.duplicate()
-	qa_style_active.bg_color = Color(0.3, 0.5, 0.8, 1.0) # Highlight active Pan Mode
-	
-	var create_qa_btn = func(icon: String):
-		var btn = Button.new()
-		btn.text = icon
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		btn.add_theme_font_override("font", _get_safe_font())
-		btn.add_theme_font_size_override("font_size", 26 * s) # Bigger buttons
-		btn.mouse_filter = Control.MOUSE_FILTER_PASS
-		btn.add_theme_stylebox_override("normal", qa_style)
-		btn.add_theme_stylebox_override("hover", qa_style)
-		btn.add_theme_stylebox_override("pressed", qa_style)
-		qa_grid.add_child(btn)
-		return btn
-		
-	var btn_pan = create_qa_btn.call("🔍")
-	var btn_save = create_qa_btn.call("💾")
-	var btn_undo = create_qa_btn.call("↩️")
-	var btn_redo = create_qa_btn.call("↪️")
-	
-	ui_elements["btn_pan"] = btn_pan
-	ui_elements["btn_undo"] = btn_undo
-	ui_elements["btn_redo"] = btn_redo
-	_set_panning_mode(is_panning_mode)
-	_update_zoom_ui()
-	
-	btn_pan.pressed.connect(func(): 
-		if btn_pan.get_meta("long_pressed", false): return
-		_play_action_sound("ui_click")
-		_set_panning_mode(!is_panning_mode)
-	)
-	btn_save.pressed.connect(func(): 
-		if btn_save.get_meta("long_pressed", false): return
-		_play_action_sound("ui_click")
-		if is_instance_valid(save_panel): save_panel.queue_free()
-		else: _setup_save_ui()
-	)
-	btn_undo.pressed.connect(func():
-		if btn_undo.get_meta("long_pressed", false): return
-		_play_action_sound("ui_click")
-		undo_history()
-	)
-	btn_redo.pressed.connect(func():
-		if btn_redo.get_meta("long_pressed", false): return
-		_play_action_sound("ui_click")
-		redo_history()
-	)
-	
-	_update_undo_redo_ui()
-	
-	_setup_long_press_tooltip(btn_pan, "tooltip_zoom")
-	_setup_long_press_tooltip(btn_save, "tooltip_save")
-	_setup_long_press_tooltip(btn_undo, "tooltip_undo")
-	_setup_long_press_tooltip(btn_redo, "tooltip_redo")
-	
-	action_vbox.add_child(qa_grid)
-	# -------------------------
-	
-	action_hbox.add_child(tools_btn)
-	
-	var btn_style = StyleBoxFlat.new()
-	btn_style.bg_color = Color(0.2, 0.2, 0.25, 1.0) # SOLID dark blue-grey
-	btn_style.border_width_left = 1; btn_style.border_width_top = 1
-	btn_style.border_width_right = 1; btn_style.border_width_bottom = 1
-	btn_style.border_color = Color(0.4, 0.4, 0.5)
-	btn_style.corner_radius_top_left = 0; btn_style.corner_radius_top_right = 0
-	btn_style.corner_radius_bottom_left = 0; btn_style.corner_radius_bottom_right = 0
-	tools_btn.add_theme_stylebox_override("normal", btn_style)
-	tools_btn.add_theme_stylebox_override("hover", btn_style)
-	tools_btn.add_theme_stylebox_override("pressed", btn_style)
-
-	
-	# CREATE FRESH PANEL WITH STYLE
-	tools_panel = PanelContainer.new()
-	tools_panel.name = "ToolsPanel"
-	ui_root.add_child(tools_panel)
-	
-	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.1, 0.1, 0.15, 0.98) # Original "Tools" blue-grey personality
-	panel_style.border_width_left = 3; panel_style.border_width_top = 3
-	panel_style.border_width_right = 3; panel_style.border_width_bottom = 3
-	panel_style.border_color = Color(0.4, 0.4, 0.5) # Original border blue-grey
-	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
-	tools_panel.add_theme_stylebox_override("panel", panel_style)
-	tools_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	
-	tools_btn.set_meta("base_style", btn_style)
-	
-	# RESTORE STATE
-	tools_panel.visible = ui_root.get_meta("tools_v", false)
-	
-	_align_panel_to_hud(tools_panel, 530 * s, 570 * s)
-	
-	# DYNAMIC BOX (NOW INSIDE SCROLL)
-	var scroll = ScrollContainer.new()
-	scroll.name = "ToolsScroll"
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.scroll_deadzone = 25
-	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
-	
-	var main_vbox = VBoxContainer.new()
-	main_vbox.add_theme_constant_override("separation", 10 * s)
-	tools_panel.add_child(main_vbox)
-	
-	# Title
-	var title = Label.new()
-	title.text = tr("tools")
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_override("font", _get_safe_font())
-	title.add_theme_font_size_override("font_size", 34 * s)
-	ui_elements["tools_panel_title"] = title
-	main_vbox.add_child(title)
-	
-	tools_btn.pressed.connect(_on_tools_btn_pressed)
-	
-	main_vbox.add_child(scroll)
-	
-	tools_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
-	tools_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
-	
-
-	# DYNAMIC BOX (NOW INSIDE SCROLL)
-	var v_box = VBoxContainer.new()
-	v_box.add_theme_constant_override("separation", 15 * s)
-	v_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(v_box)
-	
-	var create_row = func(label_key: String, options: Array, callback: Callable, is_upcoming: bool = false):
-		var lbl = Label.new()
-		lbl.text = tr(label_key) + ":"
-		lbl.add_theme_font_size_override("font_size", 22.0 * s)
-		lbl.add_theme_font_override("font", _get_safe_font())
-		lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9))
-		ui_elements[label_key + "_lbl"] = lbl
-		v_box.add_child(lbl)
-		
-		# ROW CONTAINER WITH 2PX MARGINS
-		var row_margin = MarginContainer.new()
-		row_margin.add_theme_constant_override("margin_left", 2 * s)
-		row_margin.add_theme_constant_override("margin_right", 2 * s)
-		v_box.add_child(row_margin)
-		
-		# Use HBoxContainer for perfect equal distribution (fills side-to-side)
-		var flow = HBoxContainer.new()
-		flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		flow.add_theme_constant_override("h_separation", 6 * s)
-		row_margin.add_child(flow)
-		
-		if is_upcoming:
-			lbl.modulate = Color(0.5, 0.5, 0.5, 0.7)
-			flow.modulate = Color(0.5, 0.5, 0.5, 0.7)
-		
-		for i in range(options.size()):
-			var btn = Button.new()
-			btn.text = str(options[i])
-			# AUTO-FILL: This makes all buttons share the row width equally
-			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			btn.custom_minimum_size = Vector2(0, 45.0 * s)
-			btn.add_theme_font_size_override("font_size", 20.0 * s)
-			btn.add_theme_font_override("font", _get_safe_font())
-			btn.mouse_filter = Control.MOUSE_FILTER_PASS
-			
-			# PREMIUM BASE STYLE
-			var b_style = StyleBoxFlat.new()
-			b_style.bg_color = Color(0.12, 0.12, 0.15, 0.8)
-			b_style.border_width_left = 1; b_style.border_width_top = 1
-			b_style.border_width_right = 1; b_style.border_width_bottom = 1
-			b_style.border_color = Color(0.3, 0.3, 0.4)
-			b_style.set_corner_radius_all(10 * s)
-			btn.add_theme_stylebox_override("normal", b_style)
-			btn.add_theme_stylebox_override("hover", b_style)
-			btn.add_theme_stylebox_override("pressed", b_style)
-			btn.set_meta("base_style", b_style)
-			
-			if is_upcoming:
-				btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				btn.modulate = Color(0.6, 0.6, 0.6)
-			else:
-				var level = i
-				btn.pressed.connect(func(): 
-					_play_action_sound("ui_click")
-					if is_selecting_npc_to_control or is_instance_valid(controlled_npc): _stop_controlling_npc()
-					callback.call(level)
-				)
-			flow.add_child(btn)
-			ui_elements[label_key + "_btn_" + str(i)] = btn 
-
-	# Language Row (First Tool)
-	var lang_options = ["Español", "English", "Italiano", "Français", "Deutsch", "Português"]
-	var lang_codes = ["es", "en", "it", "fr", "de", "pt"]
-	create_row.call("lang", lang_options, func(l):
-		current_language = lang_codes[l]
-		TranslationServer.set_locale(current_language)
-		_save_tool_settings()
-		# Rebuilding the UI is the most robust way to ensure all "premium" formatting
-		# and spacing is preserved identically across different languages.
-		call_deferred("_setup_main_ui_containers")
-	)
-
-	# ORIENTATION ROW
-	var orient_options = [tr("ORIENT_AUTO"), tr("ORIENT_PORTRAIT"), tr("ORIENT_LANDSCAPE")]
-	create_row.call("orient", orient_options, func(l):
-		var f = FileAccess.open("user://orientation.save", FileAccess.WRITE)
-		f.store_string(str(l))
-		f.close()
-		
-		current_orientation_setting = l
-		_update_menu_highlights()
-		
-		if OS.has_feature("mobile"):
-			if l == 1: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_PORTRAIT)
-			elif l == 2: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR_LANDSCAPE)
-			else: DisplayServer.screen_set_orientation(DisplayServer.SCREEN_SENSOR)
-	)
-
-	# GRID SNAP ROW
-	var grid_options = [tr("active"), tr("inactive")]
-	create_row.call("GRID_SNAP_LBL", grid_options, func(l):
-		force_grid_visible = (l == 0)
-		_save_tool_settings()
-		_update_menu_highlights()
-		queue_redraw()
-	)
-
-
-	# BRUSH SIZE ROW (Now 3rd)
-	var brush_sizes = [0, 1, 2, 5, 7, 12]
-	var brush_labels = ["1", "3", "5", "10", "15", "25"]
-	create_row.call("brush", brush_labels, func(l): 
-		brush_radius = brush_sizes[l]
-		_save_tool_settings()
-		_update_menu_highlights()
-		_on_arcade_selection_made(true) # Real-time update for Arcade HUD (don't close menu)
-	)
-
-	
-	# ACTION ROW (Undo, Redo, Eraser, Save)
-	var func_lbl = Label.new()
-	func_lbl.text = tr("func")
-	func_lbl.add_theme_font_size_override("font_size", 22 * s)
-	func_lbl.add_theme_font_override("font", _get_safe_font())
-	func_lbl.add_theme_color_override("font_color", Color(0.6, 0.8, 1.0)) # Soft blue
-	v_box.add_child(func_lbl)
-	ui_elements["func_lbl"] = func_lbl
-
-	var community_btn = Button.new()
-	community_btn.text = "🌐 " + tr("btn_comunidad")
-	community_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	community_btn.custom_minimum_size = Vector2(0, 60 * s)
-	community_btn.add_theme_font_override("font", _get_safe_font())
-	community_btn.add_theme_font_size_override("font_size", 21 * s)
-	community_btn.mouse_filter = Control.MOUSE_FILTER_PASS
-	
-	var c_style = StyleBoxFlat.new()
-	c_style.bg_color = Color(0.15, 0.15, 0.18, 0.9)
-	c_style.border_width_left = 2; c_style.border_width_top = 2
-	c_style.border_width_right = 2; c_style.border_width_bottom = 2
-	c_style.border_color = Color("#48dbfb").lerp(Color.BLACK, 0.3)
-	c_style.corner_radius_top_left = 12 * s
-	c_style.corner_radius_top_right = 12 * s
-	c_style.corner_radius_bottom_left = 12 * s
-	c_style.corner_radius_bottom_right = 12 * s
-	community_btn.add_theme_stylebox_override("normal", c_style)
-	
-	var c_hover = c_style.duplicate()
-	c_hover.bg_color = Color("#48dbfb").lerp(Color.BLACK, 0.7)
-	c_hover.border_color = Color("#48dbfb")
-	community_btn.add_theme_stylebox_override("hover", c_hover)
-	community_btn.add_theme_stylebox_override("pressed", c_hover)
-	
-	community_btn.pressed.connect(func():
-		_play_action_sound("ui_click")
-		_stop_pulse(community_btn)
-		
-		is_daily_workshop_pulse_ready = false
-		var today_str = str(Time.get_date_dict_from_system().day)
-		var f = FileAccess.open("user://workshop_daily_pulse.save", FileAccess.WRITE)
-		if f:
-			f.store_string(today_str)
-			f.close()
-		
-		var save_path = "user://workshop_discovery_shown.save"
-		if not FileAccess.file_exists(save_path):
-			var file = FileAccess.open(save_path, FileAccess.WRITE)
-			if file:
-				file.store_string("shown")
-				file.close()
-				
-		if ui_elements.has("workshop_discovery_bubble"):
-			var b = ui_elements["workshop_discovery_bubble"]
-			if is_instance_valid(b):
-				b.queue_free()
-			ui_elements.erase("workshop_discovery_bubble")
-				
-		_toggle_category_panel(workshop_panel)
-	)
-	v_box.add_child(community_btn)
-	ui_elements["btn_comunidad"] = community_btn
-	
-	var rotate_timer = Timer.new()
-	rotate_timer.wait_time = 3.0
-	rotate_timer.autostart = true
-	rotate_timer.timeout.connect(func():
-		if not is_instance_valid(community_btn): return
-		var states = ["btn_comunidad", "btn_top_semanal", "btn_recien_subidos"]
-		var current_idx = community_btn.get_meta("state_idx", 0)
-		current_idx = (current_idx + 1) % states.size()
-		community_btn.set_meta("state_idx", current_idx)
-		community_btn.text = "🌐 " + tr(states[current_idx])
-	)
-	community_btn.add_child(rotate_timer)
-	
-	var c_spacer = Control.new()
-	c_spacer.custom_minimum_size = Vector2(0, 10 * s)
-	v_box.add_child(c_spacer)
-
-	var action_row = GridContainer.new()
-	action_row.columns = 2
-	action_row.add_theme_constant_override("h_separation", 10 * s)
-	action_row.add_theme_constant_override("v_separation", 10 * s)
-	action_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	v_box.add_child(action_row)
-
-	var create_action_btn = func(text_key: String, accent_color: Color, callback: Callable):
-		var btn = Button.new()
-		btn.text = tr(text_key)
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.custom_minimum_size = Vector2(0, 60 * s)
-		btn.add_theme_font_override("font", _get_safe_font())
-		btn.add_theme_font_size_override("font_size", 21 * s)
-		btn.mouse_filter = Control.MOUSE_FILTER_PASS
-		
-		# PREMIUM STYLE
-		var style = StyleBoxFlat.new()
-		style.bg_color = Color(0.15, 0.15, 0.18, 0.9)
-		style.border_width_left = 2; style.border_width_top = 2
-		style.border_width_right = 2; style.border_width_bottom = 2
-		style.border_color = accent_color.lerp(Color.BLACK, 0.3) # Subtle darkened accent
-		style.corner_radius_top_left = 12 * s
-		style.corner_radius_top_right = 12 * s
-		style.corner_radius_bottom_left = 12 * s
-		style.corner_radius_bottom_right = 12 * s
-		btn.add_theme_stylebox_override("normal", style)
-		btn.set_meta("base_style", style)
-		
-		var hover = style.duplicate()
-		hover.bg_color = accent_color.lerp(Color.BLACK, 0.7) # Dark tint on hover
-		hover.border_color = accent_color # Brighter border on hover
-		btn.add_theme_stylebox_override("hover", hover)
-		btn.add_theme_stylebox_override("pressed", hover)
-		
-		btn.pressed.connect(func():
-			_play_action_sound("ui_click")
-			callback.call()
-		)
-		action_row.add_child(btn)
-		ui_elements[text_key + "_btn"] = btn # Register for highlights
-		return btn
-
-	create_action_btn.call("eraser_tool", Color("#ff6b6b"), func(): 
-		selected_material = 0
-		brush_radius = 3 
-		_save_tool_settings()
-		_update_material_highlights()
-		_update_menu_highlights()
-		_on_arcade_selection_made(true)
-	)
-	create_action_btn.call("save_btn_ui", Color("#feca57"), func(): 
-		if is_instance_valid(save_panel):
-			save_panel.queue_free()
-		else:
-			_setup_save_ui()
-	)
-
-	# 1. SUPPORT CREATOR BUTTON (AD)
-	var support_btn = Button.new()
-	support_btn.text = tr("support")
-	support_btn.custom_minimum_size = Vector2(0, 60 * s) 
-	support_btn.add_theme_font_size_override("font_size", 24 * s) 
-	support_btn.add_theme_font_override("font", _get_safe_font())
-	
-	var support_style = StyleBoxFlat.new()
-	support_style.bg_color = Color(0.1, 0.35, 0.2, 0.9) # Elegant dark emerald
-	support_style.border_width_left = 2; support_style.border_width_top = 2
-	support_style.border_width_right = 2; support_style.border_width_bottom = 2
-	support_style.border_color = Color(0.3, 0.6, 0.4)
-	support_style.corner_radius_top_left = 12 * s; support_style.corner_radius_top_right = 12 * s
-	support_style.corner_radius_bottom_left = 12 * s; support_style.corner_radius_bottom_right = 12 * s
-	
-	support_btn.add_theme_stylebox_override("normal", support_style)
-	support_btn.add_theme_stylebox_override("hover", support_style)
-	support_btn.add_theme_stylebox_override("pressed", support_style)
-	support_btn.add_theme_color_override("font_color", Color.GOLD)
-	support_btn.mouse_filter = Control.MOUSE_FILTER_PASS
-
-	support_btn.pressed.connect(func():
-		_play_action_sound("ui_click")
-		
-		# Log to Firebase Analytics
-		AnalyticsManager.log_event("support_creator_clicked", {})
-		
-		# Guardar el estado de pausa original
-		var prev_paused = is_paused
-		
-		# Pausar el juego si no está pausado
-		if not is_paused:
-			is_paused = true
-			var p_btn = ui_elements.get("pause_btn")
-			if is_instance_valid(p_btn):
-				p_btn.text = tr("play")
-			
-			var players = [weather_player, quake_player, tornado_player, tsunami_player, firework_player, ascent_player, volcano_loop_player, fire_loop_player, bombardero_player]
-			for p in players:
-				if is_instance_valid(p):
-					p.stream_paused = true
-		
-		if Engine.has_singleton("PoingGodotAdMob"):
-			# Conectarse a ad_dismissed como ONE_SHOT para abrir el popup de agradecimiento cuando vuelva
-			var on_ad_dismissed_callable = func():
-				AnalyticsManager.log_event("support_creator_completed", {})
-				_show_thank_you_popup(prev_paused)
-			
-			AdMobManager.ad_dismissed.connect(on_ad_dismissed_callable, CONNECT_ONE_SHOT)
-			
-			var ad_shown = await AdMobManager.show_rewarded()
-			if not ad_shown:
-				# Si el anuncio no se pudo mostrar (no cargó, etc.), desconectamos y restauramos la pausa previa
-				if AdMobManager.ad_dismissed.is_connected(on_ad_dismissed_callable):
-					AdMobManager.ad_dismissed.disconnect(on_ad_dismissed_callable)
-				
-				# Restaurar pausa previa si no estaba pausado
-				if not prev_paused:
-					is_paused = false
-					var p_btn = ui_elements.get("pause_btn")
-					if is_instance_valid(p_btn):
-						p_btn.text = tr("pause")
-					
-					var players = [weather_player, quake_player, tornado_player, tsunami_player, firework_player, ascent_player, volcano_loop_player, fire_loop_player, bombardero_player]
-					for p in players:
-						if is_instance_valid(p):
-							p.stream_paused = false
-		else:
-			print("DEBUG: Anuncio apoyo (PC)")
-			# En PC simulamos la vuelta del anuncio tras 1.0 segundos
-			await get_tree().create_timer(1.0).timeout
-			AnalyticsManager.log_event("support_creator_completed", {})
-			_show_thank_you_popup(prev_paused)
-	)
-	ui_elements["support_btn"] = support_btn
-	v_box.add_child(support_btn)
-
-	# 2. PAUSE BUTTON
-	var pause_btn = Button.new()
-	pause_btn.text = tr("play") if is_paused else tr("pause")
-	pause_btn.custom_minimum_size = Vector2(0, 50 * s) # SCALED
-	pause_btn.add_theme_font_size_override("font_size", 24 * s) # SCALED
-	pause_btn.add_theme_font_override("font", _get_safe_font())
-	
-	var pause_style = StyleBoxFlat.new()
-	pause_style.bg_color = Color(0.15, 0.15, 0.18, 0.9)
-	pause_style.border_width_left = 2; pause_style.border_width_top = 2
-	pause_style.border_width_right = 2; pause_style.border_width_bottom = 2
-	pause_style.border_color = Color(0.25, 0.5, 0.8) # Blue border for control
-	pause_style.corner_radius_top_left = 12 * s; pause_style.corner_radius_top_right = 12 * s
-	pause_style.corner_radius_bottom_left = 12 * s; pause_style.corner_radius_bottom_right = 12 * s
-	
-	pause_btn.add_theme_stylebox_override("normal", pause_style)
-	pause_btn.add_theme_stylebox_override("hover", pause_style)
-	pause_btn.add_theme_stylebox_override("pressed", pause_style)
-	pause_btn.add_theme_color_override("font_color", Color.WHITE)
-	pause_btn.mouse_filter = Control.MOUSE_FILTER_PASS
-	
-	pause_btn.pressed.connect(func():
-		_play_action_sound("ui_click")
-		
-		if is_paused:
-			if is_unpausing:
-				# --- CANCEL COUNTDOWN ---
-				is_unpausing = false
-				pause_btn.text = tr("play")
-				return
-				
-			# --- START RESUMING WITH COUNTDOWN ---
-			is_unpausing = true
-			
-			var ad_shown = false
-			if Engine.has_singleton("PoingGodotAdMob"):
-				ad_shown = AdMobManager.check_and_show_interstitial("pause")
-			
-			if ad_shown:
-				await AdMobManager.ad_dismissed
-				
-			# If unpausing was cancelled while ad was showing, abort
-			if not is_unpausing: return
-			
-			# ALWAYS DO COUNTDOWN
-			for i in range(3, 0, -1):
-				pause_btn.text = tr("resume_in") + str(i) + "..."
-				await get_tree().create_timer(1.0).timeout
-				if not is_unpausing: return # Abort if cancelled during countdown
-				
-			# FINISH RESUMING
-			is_unpausing = false
-			is_paused = false
-			pause_btn.text = tr("pause")
-		else:
-			# --- PAUSING ---
-			is_paused = true
-			is_unpausing = false
-			pause_btn.text = tr("play")
-			if Engine.has_singleton("PoingGodotAdMob"):
-				AdMobManager.check_and_show_interstitial("pause")
-		
-		var players = [weather_player, quake_player, tornado_player, tsunami_player, firework_player, ascent_player, volcano_loop_player, fire_loop_player, bombardero_player]
-		for p in players:
-			if is_instance_valid(p):
-				p.stream_paused = is_paused
-	)
-	ui_elements["pause_btn"] = pause_btn
-	
-	# Wrap pause button in a MarginContainer to add lateral spacing
-	var pause_margin = MarginContainer.new()
-	pause_margin.add_theme_constant_override("margin_left", 32 * s)
-	pause_margin.add_theme_constant_override("margin_right", 32 * s)
-	pause_margin.add_theme_constant_override("margin_top", 4 * s)
-	pause_margin.add_theme_constant_override("margin_bottom", 4 * s)
-	v_box.add_child(pause_margin)
-	pause_margin.add_child(pause_btn)
-
-	# 3. DIRECT RESET BUTTON (Bottom of Tools)
-	var reset_btn_node = Button.new() # Named local variable to avoid conflict with field
-	reset_btn_node.text = tr("reset")
-	reset_btn_node.custom_minimum_size = Vector2(0, 50 * s)
-	reset_btn_node.add_theme_font_size_override("font_size", 24 * s)
-	reset_btn_node.add_theme_font_override("font", _get_safe_font())
-	
-	var reset_style = StyleBoxFlat.new()
-	reset_style.bg_color = Color(0.15, 0.15, 0.18, 0.9)
-	reset_style.border_width_left = 2; reset_style.border_width_top = 2
-	reset_style.border_width_right = 2; reset_style.border_width_bottom = 2
-	reset_style.border_color = Color(0.8, 0.35, 0.35) # Reddish border for reset
-	reset_style.corner_radius_top_left = 12 * s; reset_style.corner_radius_top_right = 12 * s
-	reset_style.corner_radius_bottom_left = 12 * s; reset_style.corner_radius_bottom_right = 12 * s
-	
-	reset_btn_node.add_theme_stylebox_override("normal", reset_style)
-	reset_btn_node.add_theme_stylebox_override("hover", reset_style)
-	reset_btn_node.add_theme_stylebox_override("pressed", reset_style)
-	reset_btn_node.add_theme_color_override("font_color", Color.WHITE)
-	reset_btn_node.mouse_filter = Control.MOUSE_FILTER_PASS
-	
-	reset_btn_node.pressed.connect(func():
-		_play_action_sound("ui_click")
-		# RESET FIRST
-		_clear_all()
-		# THEN AD
-		if Engine.has_singleton("PoingGodotAdMob"):
-			AdMobManager.check_and_show_interstitial("reset")
-	)
-	ui_elements["reset_btn"] = reset_btn_node
-	
-	# Wrap reset button in a MarginContainer to add lateral spacing
-	var reset_margin = MarginContainer.new()
-	reset_margin.add_theme_constant_override("margin_left", 32 * s)
-	reset_margin.add_theme_constant_override("margin_right", 32 * s)
-	reset_margin.add_theme_constant_override("margin_top", 4 * s)
-	reset_margin.add_theme_constant_override("margin_bottom", 4 * s)
-	v_box.add_child(reset_margin)
-	reset_margin.add_child(reset_btn_node)
-	
-	# 4. VOLUME CONTROL ROW
-	var vol_lbl = Label.new()
-	vol_lbl.text = tr("volumen")
-	vol_lbl.add_theme_font_size_override("font_size", 22 * s)
-	vol_lbl.add_theme_font_override("font", _get_safe_font())
-	vol_lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9))
-	v_box.add_child(vol_lbl)
-	
-	var vol_hbox = HBoxContainer.new()
-	vol_hbox.add_theme_constant_override("separation", 15 * s)
-	v_box.add_child(vol_hbox)
-	
-	var vol_slider = HSlider.new()
-	vol_slider.min_value = 0.0
-	vol_slider.max_value = 1.5
-	vol_slider.step = 0.01
-	vol_slider.value = game_volume
-	vol_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vol_slider.custom_minimum_size = Vector2(0, 50 * s)
-	vol_hbox.add_child(vol_slider)
-	
-	var mute_btn = Button.new()
-	mute_btn.custom_minimum_size = Vector2(60 * s, 60 * s)
-	mute_btn.add_theme_font_size_override("font_size", 30 * s)
-	mute_btn.add_theme_font_override("font", _get_safe_font())
-	vol_hbox.add_child(mute_btn)
-	
-	var update_mute_icon = func(val):
-		if val == 0: mute_btn.text = "🔇"
-		elif val <= 0.5: mute_btn.text = "🔈"
-		elif val <= 1.0: mute_btn.text = "🔉"
-		else: mute_btn.text = "🔊"
-	
-	update_mute_icon.call(game_volume)
-	
-	vol_slider.value_changed.connect(func(val):
-		game_volume = val
-		if val > 0: 
-			is_muted = false
-			pre_mute_volume = val
-		else:
-			is_muted = true
-		_update_game_volume(val)
-		update_mute_icon.call(val)
-		_save_tool_settings()
-	)
-	
-	mute_btn.pressed.connect(func():
-		_play_action_sound("ui_click")
-		if is_muted:
-			is_muted = false
-			game_volume = pre_mute_volume if pre_mute_volume > 0 else 1.0
-		else:
-			is_muted = true
-			pre_mute_volume = game_volume
-			game_volume = 0.0
-		
-		vol_slider.value = game_volume
-		_update_game_volume(game_volume)
-		update_mute_icon.call(game_volume)
-		_save_tool_settings()
-	)
-
-	# 5. PRIVACY / GDPR CONSENT BUTTON (Only for mobile)
-	if OS.get_name() == "Android" or OS.get_name() == "iOS":
-		var privacy_btn = Button.new()
-		privacy_btn.text = tr("privacy_settings")
-		privacy_btn.custom_minimum_size = Vector2(0, 50 * s)
-		privacy_btn.add_theme_font_size_override("font_size", 24 * s)
-		privacy_btn.add_theme_font_override("font", _get_safe_font())
-		
-		var privacy_style = StyleBoxFlat.new()
-		privacy_style.bg_color = Color(0.15, 0.4, 0.75, 0.9) # Elegant informative blue
-		privacy_style.border_width_left = 2; privacy_style.border_width_top = 2
-		privacy_style.border_width_right = 2; privacy_style.border_width_bottom = 2
-		privacy_style.border_color = Color(0.3, 0.6, 0.9)
-		privacy_style.corner_radius_top_left = 12 * s; privacy_style.corner_radius_top_right = 12 * s
-		privacy_style.corner_radius_bottom_left = 12 * s; privacy_style.corner_radius_bottom_right = 12 * s
-		
-		privacy_btn.add_theme_stylebox_override("normal", privacy_style)
-		privacy_btn.add_theme_stylebox_override("hover", privacy_style)
-		privacy_btn.add_theme_stylebox_override("pressed", privacy_style)
-		privacy_btn.add_theme_color_override("font_color", Color.WHITE)
-		privacy_btn.mouse_filter = Control.MOUSE_FILTER_PASS
-		
-		privacy_btn.pressed.connect(func():
-			_play_action_sound("ui_click")
-			if Engine.has_singleton("PoingGodotAdMob"):
-				AdMobManager.show_consent_options()
-		)
-		
-		# Wrap in a MarginContainer to detach it from the left/right boundaries of the tools panel
-		var btn_margin = MarginContainer.new()
-		btn_margin.add_theme_constant_override("margin_left", 24 * s)
-		btn_margin.add_theme_constant_override("margin_right", 24 * s)
-		btn_margin.add_theme_constant_override("margin_top", 8 * s)
-		btn_margin.add_theme_constant_override("margin_bottom", 8 * s)
-		v_box.add_child(btn_margin)
-		btn_margin.add_child(privacy_btn)
-		
-		# Set initial visibility (only show if privacy options are actually required/available)
-		btn_margin.visible = AdMobManager.is_privacy_button_required()
-		
-		# Connect to dynamic updates of the consent information
-		AdMobManager.consent_info_updated.connect(func():
-			if is_instance_valid(btn_margin):
-				btn_margin.visible = AdMobManager.is_privacy_button_required()
-		)
-
-	_add_ui_header(v_box, "coming_soon")
-	
-	create_row.call("speed", ["x0.2", "x0.5", "x0.8", "x1", "x2", "x4"], func(_l): pass, true)
-	create_row.call("shapes", [
-		tr("line"),
-		tr("rect"),
-		tr("circ"),
-		tr("tria")
-	], func(_l): pass, true)
-	
-	var current_ver = str(ProjectSettings.get_setting("application/config/version", "1.2.0"))
-	var version_lbl = Label.new()
-	version_lbl.text = "Version-game: " + current_ver
-	version_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	version_lbl.add_theme_font_override("font", _get_safe_font())
-	version_lbl.add_theme_font_size_override("font_size", 16 * s)
-	version_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.4))
-	
-	var ver_margin = MarginContainer.new()
-	ver_margin.add_theme_constant_override("margin_top", 15 * s)
-	ver_margin.add_theme_constant_override("margin_bottom", 20 * s)
-	ver_margin.add_child(version_lbl)
-	v_box.add_child(ver_margin)
+	if tools_ui:
+		tools_ui.setup_tools_ui()
 
 func _update_game_volume(value: float):
-	# Convert linear 0.0 - 1.5 to dB. Master is bus index 0.
-	# Boosted by +12dB to compensate for extremely low base recordings
-	var db = linear_to_db(value) + 12.0
-	AudioServer.set_bus_volume_db(0, db)
-	# Mute completely if 0 to save processing
-	AudioServer.set_bus_mute(0, value <= 0)
+	if tools_ui:
+		tools_ui.update_game_volume(value)
 
 func _setup_workshop_ui():
 	var s = _get_ui_scale()
@@ -6282,21 +5537,10 @@ func _toggle_category_panel(target_panel: Control):
 		_save_tool_settings()
 
 func _on_tools_btn_pressed():
-	_toggle_category_panel(tools_panel)
-	if is_instance_valid(tools_panel) and tools_panel.visible:
-		_show_menu_reminder("tools", tools_panel.get_child(0), "TUTORIAL_STEP_2")
-		
-		# Workshop discovery logic
-		if is_workshop_discovery_ready:
-			_trigger_workshop_discovery()
-		elif is_daily_workshop_pulse_ready:
-			_stop_pulse(ui_elements["tools_btn"])
-			if ui_elements.has("btn_comunidad"):
-				_start_pulse(ui_elements["btn_comunidad"])
-	
-	# Update tutorial highlight if we just opened/closed tools
-	if lab_tutorial_step == 6:
-		_update_lab_tutorial_highlight()
+	if tools_ui:
+		tools_ui.on_tools_btn_pressed()
+	else:
+		_toggle_category_panel(tools_panel)
 
 func _trigger_workshop_discovery():
 	if not FileAccess.file_exists("user://workshop_discovery_shown.save") and ui_elements.has("tools_btn"):
@@ -9970,321 +9214,20 @@ func _process_interactions(x, y, idx, _raw_id, pure_id, tags):
 		if charge_array[idx] <= 1: _set_cell(x, y, 26) 
 		
 func _setup_paint_ui():
-	_set_panning_mode(false)
-	var s = _get_ui_scale()
-	var paint_btn = _create_vertical_category_btn("🎨", "paint")
-	paint_btn.name = "PaintBtn"
-	ui_elements["paint_btn"] = paint_btn
-	paint_btn.add_theme_font_override("font", _get_safe_font())
-	paint_btn.mouse_filter = Control.MOUSE_FILTER_PASS
-	paint_btn.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	action_hbox.add_child(paint_btn)
-	
-	var btn_style = StyleBoxFlat.new()
-	btn_style.bg_color = Color(0.2, 0.2, 0.15, 1.0) # Dark yellow-grey
-	btn_style.border_width_left = 1; btn_style.border_width_top = 1
-	btn_style.border_width_right = 1; btn_style.border_width_bottom = 1
-	btn_style.border_color = Color(0.6, 0.6, 0.3)
-	paint_btn.add_theme_stylebox_override("normal", btn_style)
-	paint_btn.add_theme_stylebox_override("hover", btn_style)
-	paint_btn.add_theme_stylebox_override("pressed", btn_style)
-	paint_btn.set_meta("base_style", btn_style)
-	
-	ui_root = get_parent().get_node("UI")
-	paint_panel = PanelContainer.new()
-	paint_panel.name = "PaintPanel"
-	ui_root.add_child(paint_panel)
-	
-	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.15, 0.15, 0.05, 0.95) # Near opaque dark yellow
-	panel_style.border_width_left = 2; panel_style.border_width_top = 2
-	panel_style.border_width_right = 2; panel_style.border_width_bottom = 2
-	panel_style.border_color = Color(0.6, 0.6, 0.3)
-	panel_style.corner_radius_top_left = 30; panel_style.corner_radius_top_right = 30
-	paint_panel.add_theme_stylebox_override("panel", panel_style)
-	
-	# COMPACT DYNAMIC POSITIONING
-	var p_width = 540 * s
-	var p_height = 680 * s
-	
-	# Limit height in landscape to avoid ad overlap
-	if is_inside_tree() and get_viewport_rect().size.x > get_viewport_rect().size.y:
-		p_height = 570 * s
-		
-	_align_panel_to_hud(paint_panel, p_width, p_height)
-	paint_panel.visible = ui_root.get_meta("paint_v", false)
-	
-	paint_btn.pressed.connect(func():
-		_toggle_category_panel(paint_panel)
-		if is_instance_valid(paint_panel) and paint_panel.visible:
-			var inner_vbox = paint_panel.find_child("PaintVBox", true, false)
-			if inner_vbox:
-				_show_menu_reminder("paint", inner_vbox, "TUTORIAL_STEP_6")
-			selected_material = -1
-			_update_material_highlights()
-			_update_paint_recent_ui()
-	)
-	
-	paint_panel.mouse_entered.connect(func(): is_mouse_over_ui = true)
-	paint_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
-	
-	# SETUP SCROLL FOR PAINT PANEL (Prevention for small screens/landscape)
-	var scroll = ScrollContainer.new()
-	scroll.name = "PaintScroll"
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.scroll_deadzone = 25
-	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
-	paint_panel.add_child(scroll)
-	
-	var main_vbox = VBoxContainer.new()
-	main_vbox.name = "PaintVBox"
-	main_vbox.add_theme_constant_override("separation", 15 * s)
-	main_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(main_vbox)
-	
-	# Title
-	var title = Label.new()
-	title.text = tr("paint")
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_override("font", _get_safe_font())
-	title.add_theme_font_size_override("font_size", 34 * s)
-	title.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
-	main_vbox.add_child(title)
-	
-	# Mode Buttons
-	var mode_margin = MarginContainer.new()
-	mode_margin.add_theme_constant_override("margin_left", 15 * s)
-	mode_margin.add_theme_constant_override("margin_right", 15 * s)
-	main_vbox.add_child(mode_margin)
-	
-	var mode_hbox = HBoxContainer.new()
-	mode_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	mode_hbox.add_theme_constant_override("separation", 20 * s)
-	mode_margin.add_child(mode_hbox)
-	
-	var create_mode_btn = func(text_key: String, mode_idx: int):
-		var btn = Button.new()
-		btn.text = tr(text_key)
-		btn.toggle_mode = true
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.custom_minimum_size = Vector2(0, 50 * s)
-		btn.add_theme_font_override("font", _get_safe_font())
-		btn.add_theme_font_size_override("font_size", 22 * s)
-		btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
-		
-		var st_n = StyleBoxFlat.new()
-		st_n.bg_color = Color(0.12, 0.12, 0.15, 0.8)
-		st_n.border_width_left = 1; st_n.border_width_top = 1
-		st_n.border_width_right = 1; st_n.border_width_bottom = 1
-		st_n.border_color = Color(0.3, 0.3, 0.4)
-		st_n.set_corner_radius_all(12 * s)
-		btn.add_theme_stylebox_override("normal", st_n)
-		
-		var st_p = StyleBoxFlat.new()
-		st_p.bg_color = Color(0.2, 0.5, 1.0) # Premium Blue
-		st_p.set_corner_radius_all(12 * s)
-		st_p.border_width_bottom = 4 * s
-		st_p.border_color = Color(0.5, 0.8, 1.0) # Light blue accent
-		btn.add_theme_stylebox_override("pressed", st_p)
-		btn.add_theme_stylebox_override("hover", st_p) # Keep highlight on hover if active
-		
-		btn.pressed.connect(func():
-			_play_action_sound("ui_click")
-			paint_mode = mode_idx
-			# Refresh highlights
-			for b in mode_hbox.get_children():
-				if b != btn: b.button_pressed = false
-			btn.button_pressed = true
-		)
-		
-		btn.button_pressed = (paint_mode == mode_idx)
-		mode_hbox.add_child(btn)
-		return btn
-		
-	create_mode_btn.call("paint_elements", 0)
-	create_mode_btn.call("paint_background", 1)
-	
-	# Color Grid 6x4
-	var color_grid = GridContainer.new()
-	color_grid.columns = 6
-	color_grid.add_theme_constant_override("h_separation", 10 * s)
-	color_grid.add_theme_constant_override("v_separation", 10 * s)
-	color_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	main_vbox.add_child(color_grid)
-	
-	var base_colors = [
-		Color("#ffffff"), Color("#616161"), Color("#000000"), Color("#FF0000"), Color("#FF4C00"), Color("#FF8800"),
-		Color("#FFE900"), Color("#E1FF00"), Color("#A5FF00"), Color("#55FF00"), Color("#00FF61"), Color("#00FFC3"),
-		Color("#00EEFF"), Color("#00BFFF"), Color("#0083FF"), Color("#005DFF"), Color("#003cffff"), Color("#4c00ffff"),
-		Color("#A900FF"), Color("#DD00FF"), Color("#FF00C3"), Color("#FF0083"), Color("#FF79A1"), Color("#FFA579")
-	]
-	
-	for c in base_colors:
-		var btn = Button.new()
-		btn.custom_minimum_size = Vector2(70 * s, 70 * s)
-		var st = StyleBoxFlat.new()
-		st.bg_color = c
-		st.set_corner_radius_all(10 * s)
-		# NO BORDERS AS REQUESTED
-		btn.add_theme_stylebox_override("normal", st)
-		btn.add_theme_stylebox_override("hover", st)
-		btn.add_theme_stylebox_override("pressed", st)
-		btn.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
-		
-		btn.pressed.connect(func():
-			_play_action_sound("ui_click")
-			selected_paint_color = c
-			_update_paint_slider_grabber()
-			_add_recent_paint_color(c)
-		)
-		color_grid.add_child(btn)
-	
-	# Custom Color Picker
-	var custom_hbox = HBoxContainer.new()
-	custom_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	main_vbox.add_child(custom_hbox)
-	
-	var custom_cp = ColorPickerButton.new()
-	custom_cp.text = "Color Personalizado"
-	custom_cp.custom_minimum_size = Vector2(300 * s, 50 * s)
-	custom_cp.add_theme_font_override("font", _get_safe_font())
-	custom_cp.add_theme_font_size_override("font_size", 20 * s)
-	custom_cp.mouse_filter = Control.MOUSE_FILTER_PASS # ALLOW MOBILE SCROLL DRAG
-	custom_cp.color_changed.connect(func(c):
-		selected_paint_color = c
-		_update_paint_slider_grabber()
-	)
-	custom_cp.popup_closed.connect(func():
-		_add_recent_paint_color(custom_cp.color)
-	)
-	custom_hbox.add_child(custom_cp)
-	
-	# Recent Colors
-	var recent_hbox = HBoxContainer.new()
-	recent_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	recent_hbox.add_theme_constant_override("separation", 15 * s)
-	main_vbox.add_child(recent_hbox)
-	ui_elements["paint_recent_colors"] = recent_hbox
-	_update_paint_recent_ui()
-	
-	# Brush Slider
-	var slider_vbox = VBoxContainer.new()
-	slider_vbox.add_theme_constant_override("separation", 5 * s)
-	main_vbox.add_child(slider_vbox)
-	
-	var slider_label = Label.new()
-	slider_label.text = tr("brush")
-	slider_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	slider_label.add_theme_font_override("font", _get_safe_font())
-	slider_label.add_theme_font_size_override("font_size", 20 * s)
-	slider_vbox.add_child(slider_label)
-	
-	var slider = HSlider.new()
-	slider.min_value = 0
-	slider.max_value = 5
-	slider.step = 1
-	slider.value = paint_brush_radius_idx
-	slider.custom_minimum_size = Vector2(400 * s, 40 * s)
-	slider.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	
-	# Stylized Slider
-	var slider_style = StyleBoxFlat.new()
-	slider_style.bg_color = Color(0.3, 0.3, 0.3)
-	slider_style.content_margin_top = 8 * s
-	slider_style.content_margin_bottom = 8 * s
-	slider_style.set_corner_radius_all(8 * s)
-	slider.add_theme_stylebox_override("slider", slider_style)
-	
-	var grabber_style = StyleBoxFlat.new()
-	grabber_style.bg_color = selected_paint_color
-	grabber_style.border_width_left = 2; grabber_style.border_width_top = 2
-	grabber_style.border_width_right = 2; grabber_style.border_width_bottom = 2
-	grabber_style.border_color = Color.BLACK
-	grabber_style.set_corner_radius_all(15 * s)
-	grabber_style.expand_margin_left = 10 * s; grabber_style.expand_margin_right = 10 * s
-	grabber_style.expand_margin_top = 10 * s; grabber_style.expand_margin_bottom = 10 * s
-	
-	ui_elements["paint_grabber_style"] = grabber_style
-	slider.add_theme_stylebox_override("grabber_area", StyleBoxEmpty.new())
-	slider.add_theme_stylebox_override("grabber_area_highlight", StyleBoxEmpty.new())
-	
-	slider.value_changed.connect(func(v):
-		_play_action_sound("ui_click")
-		paint_brush_radius_idx = int(v)
-		var _sizes = [1, 3, 5, 10, 15, 25]
-		slider_label.text = tr("brush") + ": " + str(_sizes[paint_brush_radius_idx])
-		_save_tool_settings()
-	)
-	slider_vbox.add_child(slider)
-	
-	var sizes = [1, 3, 5, 10, 15, 25]
-	slider_label.text = tr("brush") + ": " + str(sizes[paint_brush_radius_idx])
+	if tools_ui:
+		tools_ui.setup_paint_ui()
 
 func _add_recent_paint_color(c: Color):
-	if recent_paint_colors.has(c):
-		recent_paint_colors.erase(c)
-	recent_paint_colors.insert(0, c)
-	if recent_paint_colors.size() > 6:
-		recent_paint_colors.pop_back()
-	_update_paint_recent_ui()
+	if tools_ui:
+		tools_ui.add_recent_paint_color(c)
 
 func _update_paint_recent_ui():
-	var s = _get_ui_scale()
-	var hbox = ui_elements.get("paint_recent_colors")
-	if not is_instance_valid(hbox): return
-	
-	for child in hbox.get_children():
-		child.queue_free()
-		
-	# Show 5 colors + 1 Eraser
-	for i in range(6):
-		var btn = Button.new()
-		btn.custom_minimum_size = Vector2(60 * s, 60 * s)
-		var st = StyleBoxFlat.new()
-		st.set_corner_radius_all(30 * s)
-		
-		if i < 5:
-			var c = recent_paint_colors[i]
-			st.bg_color = c
-			if c.to_html() == selected_paint_color.to_html() and selected_paint_color.a > 0:
-				st.border_width_left = 8 * s; st.border_width_top = 8 * s
-				st.border_width_right = 8 * s; st.border_width_bottom = 8 * s
-				st.border_color = Color(0.2, 0.6, 1.0)
-			
-			btn.pressed.connect(func():
-				_play_action_sound("ui_click")
-				selected_paint_color = c
-				_update_paint_slider_grabber()
-				_update_paint_recent_ui()
-			)
-		else: # THE ERASER 🧼
-			btn.text = "🧼"
-			btn.add_theme_font_size_override("font_size", 30 * s)
-			st.bg_color = Color(0.1, 0.1, 0.12)
-			if selected_paint_color.a == 0:
-				st.border_width_left = 8 * s; st.border_width_top = 8 * s
-				st.border_width_right = 8 * s; st.border_width_bottom = 8 * s
-				st.border_color = Color(0.2, 0.6, 1.0)
-				
-			btn.pressed.connect(func():
-				_play_action_sound("ui_click")
-				selected_paint_color = Color(0, 0, 0, 0) # Transparent = Erase
-				_update_paint_slider_grabber()
-				_update_paint_recent_ui()
-			)
-			
-		btn.add_theme_stylebox_override("normal", st)
-		btn.add_theme_stylebox_override("hover", st)
-		btn.add_theme_stylebox_override("pressed", st)
-		hbox.add_child(btn)
+	if tools_ui:
+		tools_ui.update_paint_recent_ui()
 
 func _update_paint_slider_grabber():
-	var st = ui_elements.get("paint_grabber_style")
-	if st is StyleBoxFlat:
-		st.bg_color = selected_paint_color
-	# Refresh recent UI to update borders if needed
-	_update_paint_recent_ui()
+	if tools_ui:
+		tools_ui.update_paint_slider_grabber()
 
 func _setup_npc_panel_node():
 	# If it exists but was lost during a UI refresh, we need to ensure it's in the tree

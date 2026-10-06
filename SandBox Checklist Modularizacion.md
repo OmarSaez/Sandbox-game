@@ -17,8 +17,8 @@
 | **2** | **`SandboxHistoryManager`** | `modules/sandbox_history.gd` | `[x] COMPLETADO` | ~200 | 2026-09-05 |
 | **3** | **`SandboxAchievementManager`** | `modules/sandbox_achievements.gd` | `[x] COMPLETADO` | ~1.080 | 2026-09-05 |
 | **4** | **`SandboxDialogManager`** | `modules/sandbox_dialogs.gd` | `[x] COMPLETADO` | ~1.350 | 2026-10-06 |
-| **5** | **`SandboxToolsPaintUI`** | `modules/sandbox_tools_ui.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~1.100 | — |
-| **6** | **`SandboxSaveSystem`** | `modules/sandbox_save_system.gd` | `[ ] PENDIENTE` | ~1.500 | — |
+| **5** | **`SandboxToolsPaintUI`** | `modules/sandbox_tools_ui.gd` | `[x] COMPLETADO` | ~1.100 | 2026-10-06 |
+| **6** | **`SandboxSaveSystem`** | `modules/sandbox_save_system.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~1.500 | — |
 | **7** | **`SandboxWorkshopUI`** | `modules/sandbox_workshop_ui.gd` | `[ ] PENDIENTE` | ~2.780 | — |
 | **8** | **`SandboxLabUI`** | `modules/sandbox_lab.gd` | `[ ] PENDIENTE` | ~1.400 | — |
 | **9** | **`SandboxMusicSystem`** | `modules/sandbox_music.gd` | `[ ] PENDIENTE` | ~1.200 | — |
@@ -26,7 +26,7 @@
 | **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[ ] PENDIENTE` | ~850 | — |
 | **12** | **`SandboxMechanismsManager`** | `modules/sandbox_mechanisms.gd` | `[ ] PENDIENTE` | ~1.850 | — |
 
-**Progreso Actual**: **4 de 12 módulos completados (33.3%)**. Líneas extraídas/delegadas del núcleo: **2.464 líneas** (de 21.844 a 19.380).
+**Progreso Actual**: **5 de 12 módulos completados (41.6%)**. Líneas extraídas/delegadas del núcleo: **3.520 líneas** (de 21.844 a 18.324).
 
 ---
 
@@ -113,20 +113,21 @@
 
 ---
 
-### [ ] Paso 5: `SandboxToolsPaintUI` (Módulo 7)
-* **Estado**: **PENDIENTE**
+### [x] Paso 5: `SandboxToolsPaintUI` (Módulo 7)
+* **Estado**: **COMPLETADO (Listo para Verificación)**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_tools_ui.gd`
 * **Tipo de Objeto**: `Node` (gestiona los paneles `tools_panel` y `paint_panel`).
 * **Qué hace**:
   - Panel 🛠️ Herramientas: Slider de tamaño de pincel, slider de volumen master, conmutador de idiomas (ES/EN/etc.), botón de pausa con cuenta regresiva de 3 segundos y botón de reinicio.
   - Panel 🎨 Pintura: Selector de color RGBA/HSV, conmutador entre teñir fondo (`background_tex`) y elementos (`element_paint_tex`), historial dinámico de colores recientes.
+  - Almacena y persiste la configuración del jugador en `user://tools_settings.json`.
 * **Consideraciones a Actualizar Pendientes en Próximos Módulos**:
-  - [ ] **Con Paso 2 (`SandboxHistoryManager`)**: Conectar los botones de deshacer/rehacer de la zona de acciones rápidas a las funciones del historial.
-  - [ ] **Con Paso 4 (`SandboxDialogManager`)**: Llamar al modal de confirmación antes de vaciar la cuadrícula al presionar el botón "Clear".
+  - [x] **Con Paso 2 (`SandboxHistoryManager`)**: Los botones de deshacer/rehacer de la cuadrícula de acciones rápidas invocan limpiamente `grid.undo_history()` y `grid.redo_history()`.
+  - [ ] **Con Paso 4 (`SandboxDialogManager`)**: Llamar al modal de confirmación antes de vaciar la cuadrícula al presionar el botón "Clear/Reset".
   - [ ] **Con Paso 8 (`SandboxLabUI`)**: Sincronizar el panel de pintura para que no interfiera con los colores de paleta de laboratorio.
 * **Funciones Clave a Repasar**:
   - `_setup_tools_ui()`, `_update_game_volume()`, `_save_tool_settings()`, `_load_tool_settings()`
-  - `_setup_paint_ui()`, `_add_recent_paint_color()`, `_update_paint_recent_ui()`
+  - `_setup_paint_ui()`, `_add_recent_paint_color()`, `_update_paint_recent_ui()`, `_update_paint_slider_grabber()`
 
 ---
 
@@ -318,5 +319,16 @@
   - Se reemplazaron todas las llamadas tipográficas locales por `SandboxFontHelper.get_safe_font()`.
   - Se mantuvieron 19 métodos puente y 15 propiedades proxy con getters/setters en `sandbox_grid.gd` para garantizar 100% de compatibilidad hacia atrás en todo el código preexistente.
   - **Reducción neta**: -1.221 líneas en `sandbox_grid.gd` (de 20.601 a 19.380 líneas).
+
+### Hito 5 (2026-10-06): Paso 5 - `SandboxToolsPaintUI`
+- **Módulo Creado**: `res://sandbox/scripts/sandbox/modules/sandbox_tools_ui.gd`.
+- **Modificaciones en `sandbox_grid.gd`**:
+  - Se añadió la instancia `var tools_ui: SandboxToolsPaintUI`.
+  - En `_ready()`: Se inicializa con `tools_ui = SandboxToolsPaintUI.new()`, se añade al árbol con `add_child(tools_ui)` y se vincula con `tools_ui.setup(self)`.
+  - Se extrajo el bloque completo de configuración de herramientas (`_setup_tools_ui`, `_save_tool_settings`, `_load_tool_settings`, `_update_game_volume`).
+  - Se extrajo el bloque completo del sistema de pintura cromática (`_setup_paint_ui`, `_add_recent_paint_color`, `_update_paint_recent_ui`, `_update_paint_slider_grabber`).
+  - Se encapsuló la delegación del botón de herramientas (`_on_tools_btn_pressed`).
+  - Se crearon propiedades proxy transparentes para `tools_panel`, `paint_panel`, `brush_radius`, `paint_brush_radius_idx`, `game_volume`, `pre_mute_volume`, `is_muted`, `selected_paint_color`, `paint_mode`, `recent_paint_colors` e `is_unpausing`.
+  - **Reducción neta**: -1.057 líneas en `sandbox_grid.gd` (de 19.381 a 18.324 líneas).
 
 
