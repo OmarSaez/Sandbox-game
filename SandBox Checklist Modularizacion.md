@@ -16,8 +16,8 @@
 | **1** | **`SandboxFontHelper`** | `modules/sandbox_font_helper.gd` | `[x] COMPLETADO` | ~510 | 2026-09-05 |
 | **2** | **`SandboxHistoryManager`** | `modules/sandbox_history.gd` | `[x] COMPLETADO` | ~200 | 2026-09-05 |
 | **3** | **`SandboxAchievementManager`** | `modules/sandbox_achievements.gd` | `[x] COMPLETADO` | ~1.080 | 2026-09-05 |
-| **4** | **`SandboxDialogManager`** | `modules/sandbox_dialogs.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~1.350 | — |
-| **5** | **`SandboxToolsPaintUI`** | `modules/sandbox_tools_ui.gd` | `[ ] PENDIENTE` | ~1.100 | — |
+| **4** | **`SandboxDialogManager`** | `modules/sandbox_dialogs.gd` | `[x] COMPLETADO` | ~1.350 | 2026-10-06 |
+| **5** | **`SandboxToolsPaintUI`** | `modules/sandbox_tools_ui.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~1.100 | — |
 | **6** | **`SandboxSaveSystem`** | `modules/sandbox_save_system.gd` | `[ ] PENDIENTE` | ~1.500 | — |
 | **7** | **`SandboxWorkshopUI`** | `modules/sandbox_workshop_ui.gd` | `[ ] PENDIENTE` | ~2.780 | — |
 | **8** | **`SandboxLabUI`** | `modules/sandbox_lab.gd` | `[ ] PENDIENTE` | ~1.400 | — |
@@ -26,7 +26,7 @@
 | **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[ ] PENDIENTE` | ~850 | — |
 | **12** | **`SandboxMechanismsManager`** | `modules/sandbox_mechanisms.gd` | `[ ] PENDIENTE` | ~1.850 | — |
 
-**Progreso Actual**: **3 de 12 módulos completados (25.0%)**. Líneas extraídas/delegadas del núcleo: **1.243 líneas** (de 21.844 a 20.601).
+**Progreso Actual**: **4 de 12 módulos completados (33.3%)**. Líneas extraídas/delegadas del núcleo: **2.464 líneas** (de 21.844 a 19.380).
 
 ---
 
@@ -42,7 +42,8 @@
   - Provee `SandboxFontHelper.get_safe_font(custom_emoji_font)` combinando `SystemFont` (`sans-serif`, `arial`) con los fallbacks locales de emojis (`Twemoji`, `NotoColorEmoji`, `FluentEmoji`) y fuentes del sistema.
   - Mantiene un único `FontVariation` en memoria para no recalcular fuentes en tiempo de ejecución.
 * **Consideraciones a Actualizar Pendientes en Próximos Módulos**:
-  - [ ] **En todos los módulos de UI (Pasos 3, 4, 5, 7, 8, 9, 10, 12)**: Al extraer cada panel, sustituir cualquier llamado indirecto a `grid._get_safe_font()` por llamadas directas a `SandboxFontHelper.get_safe_font()`.
+  - [x] **En Paso 4 (`SandboxDialogManager`)**: Todas las etiquetas y botones de UI consumen directamente `SandboxFontHelper.get_safe_font()`.
+  - [ ] **En los restantes módulos de UI (Pasos 5, 7, 8, 9, 10, 12)**: Al extraer cada panel, sustituir cualquier llamado indirecto a `grid._get_safe_font()` por llamadas directas a `SandboxFontHelper.get_safe_font()`.
   - [ ] **En `sandbox_grid.gd`**: Cuando se finalice la extracción de todos los paneles de UI, comprobar cuántas llamadas a `_get_safe_font()` restan en el archivo central; si ya no quedan, eliminar el método puente temporal.
 * **Funciones Clave a Repasar**:
   - `SandboxFontHelper.get_safe_font()`
@@ -79,7 +80,7 @@
   - Ejecuta la animación cinemática del botón 🏆 (`_trigger_achievement_reveal`) y el cartel flotante deslizante (`_show_achievement_notification`).
   - Despliega el menú modal de logros con tarjetas deslizables.
 * **Consideraciones a Actualizar Pendientes en Próximos Módulos**:
-  - [ ] **Con Paso 4 (`SandboxDialogManager`)**: El toast de notificación de logros utiliza `CanvasLayer` con Z-index 100. Debe coordinarse con los diálogos y tutoriales para no solaparse en pantalla.
+  - [x] **Con Paso 4 (`SandboxDialogManager`)**: El toast de notificación de logros utiliza `CanvasLayer` con Z-index 100. Coordinado con diálogos y tutoriales para no solaparse en pantalla.
   - [ ] **Con Paso 8 (`SandboxLabUI`)**: Cuando el usuario guarde su primer elemento custom o use los 3 slots a la vez, el laboratorio debe emitir la señal para desbloquear `mad_scientist` y `supreme_alchemist`.
   - [ ] **Con Paso 9 (`SandboxMusicSystem`)**: Cuando el jugador toque 5 notas seguidas, el sistema musical debe notificar al logro `compositor`.
   - [ ] **Con Paso 10 (`SandboxNpcControlManager`)**: Al poseer a un NPC en modo arcade, el mando debe disparar el logro `retro_time`.
@@ -90,21 +91,25 @@
 
 ---
 
-### [ ] Paso 4: `SandboxDialogManager` (Módulo 5)
-* **Estado**: **PENDIENTE (Siguiente a Ejecutar)**
+### [x] Paso 4: `SandboxDialogManager` (Módulo 5)
+* **Estado**: **COMPLETADO (Listo para Verificación)**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_dialogs.gd`
 * **Tipo de Objeto**: `Node` (controla elementos visuales en `ui_root` y `CanvasLayer`).
 * **Qué hace**:
   - Orquesta el tutorial guiado interactivo paso a paso y los efectos de pulso visual (`_start_pulse`, `_stop_pulse`).
-  - Controla el popup de calificación de Google Play con sistema de estrellas (`_show_rating_popup`).
+  - Controla el popup de calificación de Google Play con sistema de estrellas (`_show_rating_popup`) y temporizador de sesión.
   - Genera las burbujas contextuales flotantes explicativas para compuertas, celdas, cañones y pistones (`_show_unified_tutorial_bubble`).
-  - Presenta el diálogo especial de agradecimiento con shader multicolor neón (`_show_thank_you_popup`) y el visor de pantalla completa.
+  - Presenta el diálogo especial de agradecimiento con shader multicolor neón (`_show_thank_you_popup`) y el visor de pantalla completa con zoom.
+  - Presenta la burbuja informativa flotante centrada (`_show_centered_bubble`).
 * **Consideraciones a Actualizar Pendientes en Próximos Módulos**:
-  - [ ] **Con Paso 5 (`SandboxToolsPaintUI`)**: Cuando el usuario pulse "Limpiar Todo" (`Clear`), pedir confirmación a través de un modal de este manager.
-  - [ ] **Con Paso 12 (`SandboxMechanismsManager`)**: Los disparadores `_show_cannon_tutorial_bubble`, `_show_piston_tutorial_bubble`, `_show_logic_gate_tutorial_bubble` deben ser invocados desde las herramientas de colocación hacia este manager.
+  - [ ] **Con Paso 5 (`SandboxToolsPaintUI`)**: Cuando el usuario pulse "Limpiar Todo" (`Clear`), solicitar confirmación a través de un modal de este manager. Las aperturas de menús de herramientas y pintura llaman a `show_menu_reminder`.
+  - [ ] **Con Paso 6 (`SandboxSaveSystem`)**: Los mensajes de confirmación de sobrescritura de ranura y avisos de éxito/error al importar `.sbu` usarán `show_centered_bubble`.
+  - [ ] **Con Paso 7 (`SandboxWorkshopUI`)**: Los 8 avisos emergentes del taller ya llaman a `_show_centered_bubble`, enlazados mediante el método puente en `sandbox_grid.gd`.
+  - [ ] **Con Paso 12 (`SandboxMechanismsManager`)**: Los disparadores `_show_cannon_tutorial_bubble`, `_show_piston_tutorial_bubble`, `_show_logic_gate_tutorial_bubble` se invocarán desde las herramientas de colocación hacia este manager.
 * **Funciones Clave a Repasar**:
-  - `_start_interactive_tutorial()`, `_show_main_tutorial_step()`
-  - `_show_unified_tutorial_bubble()`, `_show_rating_popup()`, `_show_thank_you_popup()`
+  - `dialog_manager.start_interactive_tutorial()`, `dialog_manager.show_main_tutorial_step()`
+  - `dialog_manager.show_unified_tutorial_bubble()`, `dialog_manager.show_rating_popup()`, `dialog_manager.show_thank_you_popup()`
+  - `dialog_manager.show_centered_bubble()`
 
 ---
 
@@ -303,4 +308,15 @@
   - **Menú de Trofeos**: Apertura fluida del panel modal con el botón dorado 🏆, scroll suave de las 22 tarjetas, iconos y popup de detalle centrada funcionando sin problemas.
   - **Desbloqueo en Caliente**: Verificado el desbloqueo de `electrifying` (agua + electricidad) y `boom` (cadena de TNT).
   - **Toast y Audio**: Notificación animada con borde dorado deslizante y reproducción de SFX (`achievement_unlock` / `achievement_menu_unlock`) funcionando sin micro-tirones ni errores de consola.
+
+### Hito 4 (2026-10-06): Paso 4 - `SandboxDialogManager`
+- **Módulo Creado**: `res://sandbox/scripts/sandbox/modules/sandbox_dialogs.gd`.
+- **Modificaciones en `sandbox_grid.gd`**:
+  - Se añadió la instancia `var dialog_manager: SandboxDialogManager`.
+  - En `_ready()`: Se inicializa con `dialog_manager = SandboxDialogManager.new()`, se añade al árbol con `add_child(dialog_manager)` y se vincula con `dialog_manager.setup(self)`.
+  - Se extrajo el bloque completo de tutoriales interactivos, onboarding de zoom, popups de bienvenida y calificación en Google Play, efectos de atención visual (`start_pulse` / `stop_pulse`), recordatorios en menús, burbujas flotantes de mecanismos, diálogo de agradecimiento con shader multicolor neón, visor modal de imágenes y burbujas centradas.
+  - Se reemplazaron todas las llamadas tipográficas locales por `SandboxFontHelper.get_safe_font()`.
+  - Se mantuvieron 19 métodos puente y 15 propiedades proxy con getters/setters en `sandbox_grid.gd` para garantizar 100% de compatibilidad hacia atrás en todo el código preexistente.
+  - **Reducción neta**: -1.221 líneas en `sandbox_grid.gd` (de 20.601 a 19.380 líneas).
+
 
