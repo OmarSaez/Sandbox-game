@@ -18,15 +18,15 @@
 | **3** | **`SandboxAchievementManager`** | `modules/sandbox_achievements.gd` | `[x] COMPLETADO` | ~1.080 | 2026-09-05 |
 | **4** | **`SandboxDialogManager`** | `modules/sandbox_dialogs.gd` | `[x] COMPLETADO` | ~1.350 | 2026-10-06 |
 | **5** | **`SandboxToolsPaintUI`** | `modules/sandbox_tools_ui.gd` | `[x] COMPLETADO` | ~1.100 | 2026-10-06 |
-| **6** | **`SandboxSaveSystem`** | `modules/sandbox_save_system.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~1.500 | — |
-| **7** | **`SandboxWorkshopUI`** | `modules/sandbox_workshop_ui.gd` | `[ ] PENDIENTE` | ~2.780 | — |
+| **6** | **`SandboxSaveSystem`** | `modules/sandbox_save_system.gd` | `[x] COMPLETADO` | ~1.400 | 2026-10-09 |
+| **7** | **`SandboxWorkshopUI`** | `modules/sandbox_workshop_ui.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~2.780 | — |
 | **8** | **`SandboxLabUI`** | `modules/sandbox_lab.gd` | `[ ] PENDIENTE` | ~1.400 | — |
 | **9** | **`SandboxMusicSystem`** | `modules/sandbox_music.gd` | `[ ] PENDIENTE` | ~1.200 | — |
 | **10** | **`SandboxNpcControlManager`**| `modules/sandbox_npc_control.gd` | `[ ] PENDIENTE` | ~800 | — |
 | **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[ ] PENDIENTE` | ~850 | — |
 | **12** | **`SandboxMechanismsManager`** | `modules/sandbox_mechanisms.gd` | `[ ] PENDIENTE` | ~1.850 | — |
 
-**Progreso Actual**: **5 de 12 módulos completados (41.6%)**. Líneas extraídas/delegadas del núcleo: **3.520 líneas** (de 21.844 a 18.324).
+**Progreso Actual**: **6 de 12 módulos completados (50.0%)**. Líneas extraídas/delegadas del núcleo: **4.800 líneas** (de 21.844 a 17.044).
 
 ---
 
@@ -131,22 +131,24 @@
 
 ---
 
-### [ ] Paso 6: `SandboxSaveSystem` (Módulo 2)
-* **Estado**: **PENDIENTE**
+### [x] Paso 6: `SandboxSaveSystem` (Módulo 2)
+* **Estado**: **COMPLETADO (Listo para Verificación)**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_save_system.gd`
-* **Tipo de Objeto**: `RefCounted` / `Node` (I/O, permisos de almacenamiento y compresión).
+* **Tipo de Objeto**: `Node` (I/O, compresión ZSTD, slots locales, thumbnails y modales de confirmación).
 * **Qué hace**:
   - Serializa y deserializa el universo en formato `.sbu` comprimido (metadatos, celdas, tags, colores de pintura, NPCs, circuitos y ranuras de laboratorio).
-  - Gestiona las ranuras de guardado local en `user://`, comprobación de versiones de guardado y nombres seguros.
+  - Gestiona las 10 ranuras de guardado local en `user://`, comprobación de versiones de guardado y nombres seguros.
+  - Genera capturas de pantalla miniaturas WebP lossless y gestiona caché de rotación (`user://rotation_cache.dat`).
   - Controla la exportación y carga con el explorador nativo en Android/PC y solicitud de permisos en runtime.
 * **Consideraciones a Actualizar Pendientes en Próximos Módulos**:
-  - [ ] **CRÍTICO PARA PASO 7 (`SandboxWorkshopUI`)**: El Taller en línea consumirá directamente `save_system.serialize_world_to_dict()` para subir mundos a Firebase y `save_system.load_world_from_dict()` al pulsar "Jugar" en un mapa descargado.
-  - [ ] **Con Paso 2 (`SandboxHistoryManager`)**: Al cargar cualquier ranura o archivo externo, invocar `history_manager.clear_history()`.
-  - [ ] **Con Paso 8 (`SandboxLabUI`)**: Asegurar que las funciones `_get_cleaned_lab_data()` y `_restore_lab_data()` sincronicen los slots 900..902 con el laboratorio.
-* **Funciones Clave a Repasar**:
-  - `_save_to_slot()`, `_load_from_slot()`, `_load_world_from_path()`
-  - `_import_sbu_file()`, `_execute_import_data()`, `_on_share_pressed()`
-  - `_get_slot_data()`, `_save_rotation_cache()`, `_load_rotation_cache()`
+  - [x] **CRÍTICO PARA PASO 7 (`SandboxWorkshopUI`)**: Métodos públicos `save_system.serialize_world_to_dict()` y `save_system.load_world_from_dict()` implementados y listos para ser consumidos por el Taller.
+  - [x] **Con Paso 2 (`SandboxHistoryManager`)**: Al cargar cualquier ranura o archivo externo, se invoca `history_manager.clear_history()` para evitar historial inconsistente.
+  - [ ] **Con Paso 8 (`SandboxLabUI`)**: `get_cleaned_lab_data()` y `restore_lab_data()` ya serializan la estructura de laboratorio; en Paso 8 se afinará la reactividad directa si se añaden más campos.
+* **Funciones Clave Implementadas**:
+  - `save_to_slot()`, `load_from_slot()`, `load_world_from_path()`, `serialize_world_to_dict()`, `load_world_from_dict()`
+  - `import_sbu_file()`, `execute_import_data()`, `on_share_pressed()`, `on_import_pressed()`
+  - `get_slot_data()`, `save_rotation_cache()`, `load_rotation_cache()`, `generate_thumbnail_image()`
+  - `setup_save_ui()`, `confirm_save()`, `confirm_load()`, `show_confirm_dialog()`, `show_modal_message()`
 
 ---
 
