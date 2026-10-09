@@ -19,14 +19,14 @@
 | **4** | **`SandboxDialogManager`** | `modules/sandbox_dialogs.gd` | `[x] COMPLETADO` | ~1.350 | 2026-10-06 |
 | **5** | **`SandboxToolsPaintUI`** | `modules/sandbox_tools_ui.gd` | `[x] COMPLETADO` | ~1.100 | 2026-10-06 |
 | **6** | **`SandboxSaveSystem`** | `modules/sandbox_save_system.gd` | `[x] COMPLETADO` | ~1.400 | 2026-10-09 |
-| **7** | **`SandboxWorkshopUI`** | `modules/sandbox_workshop_ui.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~2.780 | — |
-| **8** | **`SandboxLabUI`** | `modules/sandbox_lab.gd` | `[ ] PENDIENTE` | ~1.400 | — |
+| **7** | **`SandboxWorkshopUI`** | `modules/sandbox_workshop_ui.gd` | `[x] COMPLETADO (Listo para Verificación)` | ~2.713 | 2026-10-09 |
+| **8** | **`SandboxLabUI`** | `modules/sandbox_lab.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~1.400 | — |
 | **9** | **`SandboxMusicSystem`** | `modules/sandbox_music.gd` | `[ ] PENDIENTE` | ~1.200 | — |
 | **10** | **`SandboxNpcControlManager`**| `modules/sandbox_npc_control.gd` | `[ ] PENDIENTE` | ~800 | — |
 | **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[ ] PENDIENTE` | ~850 | — |
 | **12** | **`SandboxMechanismsManager`** | `modules/sandbox_mechanisms.gd` | `[ ] PENDIENTE` | ~1.850 | — |
 
-**Progreso Actual**: **6 de 12 módulos completados (50.0%)**. Líneas extraídas/delegadas del núcleo: **4.800 líneas** (de 21.844 a 17.044).
+**Progreso Actual**: **7 de 12 módulos completados (58.3%)**. Líneas extraídas/delegadas del núcleo: **7.513 líneas** (de 21.844 a 14.331).
 
 ---
 
@@ -152,23 +152,26 @@
 
 ---
 
-### [ ] Paso 7: `SandboxWorkshopUI` (Módulo 1)
-* **Estado**: **PENDIENTE**
+### [x] Paso 7: `SandboxWorkshopUI` (Módulo 1)
+* **Estado**: **COMPLETADO (Listo para Verificación)**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_workshop_ui.gd`
 * **Tipo de Objeto**: `Node` (panel visual completo `workshop_panel`).
 * **Qué hace**:
   - Gestiona la comunidad en línea vía Firebase Firestore y Storage.
-  - Pestañas Top Semanal, Recientes, Mis Mundos, Mis Descargas y paginación asíncrona.
-  - Búsqueda por código de 6 caracteres con dígito verificador hash.
-  - Sistema de likes, votos y reportes de contenido.
+  - Pestañas Top Semanal (con subcategorías Histórico, Tendencias, Joyas Ocultas, Ruleta), Recientes, Mis Mundos, Mis Descargas y paginación asíncrona.
+  - Búsqueda por código de 8 caracteres con dígito verificador hash (Base 36).
+  - Sistema de likes, votos, buffer diferido (RTDB) y reportes de contenido.
   - Diálogos de subida y edición de mapas, cuotas de descargas gratuitas diarias y recompensas AdMob.
+  - Temporizador de cuenta regresiva en vivo sincronizado con los ciclos de actualización UTC.
 * **Consideraciones a Actualizar Pendientes en Próximos Módulos**:
-  - [ ] **Revisar enlace con Paso 6 (`SandboxSaveSystem`)**: Verificar que la llamada al empaquetar mapas para subir y la llamada al cargar mapas descargados apunten al nuevo `SandboxSaveSystem`.
-  - [ ] **Verificar `world_card.gd`**: Las tarjetas de previsualización deben mantenerse comunicadas con este módulo mediante sus señales `download_requested`, `play_requested`, etc.
-* **Funciones Clave a Repasar**:
-  - `_setup_workshop_ui()`, `_fetch_top_async()`, `_fetch_recientes_async()`, `_fetch_mis_descargas_async()`
-  - `_on_search_world_requested()`, `_verify_map_code()`, `_on_world_play_requested()`
-  - `_show_upload_world_dialog()`, `_show_edit_world_dialog()`, `_load_workshop_economy()`
+  - [x] **Enlace con Paso 6 (`SandboxSaveSystem`)**: `load_world_from_path(path)` integrado para ejecutar mundos descargados sin inconsistencias. Diálogos modales y overlays enlazados a `save_system`. Selector de ranuras de subida consume `save_system.get_slot_data()`.
+  - [x] **Compatibilidad con `world_card.gd`**: Las tarjetas de previsualización se comunican limpiamente mediante sus señales `download_requested`, `play_requested`, `delete_requested`, `like_requested`, `unlike_requested`, `report_requested`, `edit_requested`.
+  - [ ] **Con Paso 8 (`SandboxLabUI`)**: Cuando se carguen o descarguen mundos de la comunidad que contengan materiales de laboratorio, `SandboxSaveSystem` restaura los datos del laboratorio manteniendo la consistencia de paleta.
+* **Funciones Clave Implementadas**:
+  - `setup_workshop_ui()`, `fetch_top_async()`, `fetch_recientes_async()`, `fetch_mis_descargas_async()`, `fetch_mis_mundos_async()`
+  - `on_search_world_requested()`, `verify_map_code()`, `on_world_play_requested()`, `on_world_download_requested()`
+  - `show_upload_world_dialog()`, `show_edit_world_dialog()`, `show_world_manager_dialog()`, `show_upload_slot_selector()`
+  - `load_workshop_economy()`, `save_workshop_economy()`, `get_next_update_unix()`, `update_day_check()`, `process_countdown()`
 
 ---
 
