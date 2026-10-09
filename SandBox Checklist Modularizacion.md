@@ -18,15 +18,15 @@
 | **3** | **`SandboxAchievementManager`** | `modules/sandbox_achievements.gd` | `[x] COMPLETADO` | ~1.080 | 2026-09-05 |
 | **4** | **`SandboxDialogManager`** | `modules/sandbox_dialogs.gd` | `[x] COMPLETADO` | ~1.350 | 2026-10-06 |
 | **5** | **`SandboxToolsPaintUI`** | `modules/sandbox_tools_ui.gd` | `[x] COMPLETADO` | ~1.100 | 2026-10-06 |
-| **6** | **`SandboxSaveSystem`** | `modules/sandbox_save_system.gd` | `[x] COMPLETADO` | ~1.400 | 2026-10-09 |
-| **7** | **`SandboxWorkshopUI`** | `modules/sandbox_workshop_ui.gd` | `[x] COMPLETADO (Listo para Verificación)` | ~2.713 | 2026-10-09 |
-| **8** | **`SandboxLabUI`** | `modules/sandbox_lab.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~1.400 | — |
-| **9** | **`SandboxMusicSystem`** | `modules/sandbox_music.gd` | `[ ] PENDIENTE` | ~1.200 | — |
-| **10** | **`SandboxNpcControlManager`**| `modules/sandbox_npc_control.gd` | `[ ] PENDIENTE` | ~800 | — |
+| **6** | **`SandboxSaveSystem`** | `modules/sandbox_save_system.gd` | `[x] COMPLETADO Y VERIFICADO` | ~1.400 | 2026-10-09 |
+| **7** | **`SandboxWorkshopUI`** | `modules/sandbox_workshop_ui.gd` | `[x] COMPLETADO Y VERIFICADO` | ~2.713 | 2026-10-09 |
+| **8** | **`SandboxLabUI`** | `modules/sandbox_lab.gd` | `[x] COMPLETADO Y VERIFICADO` | ~1.400 | 2026-10-09 |
+| **9** | **`SandboxMusicSystem`** | `modules/sandbox_music.gd` | `[x] COMPLETADO (Listo para Verificación)` | ~1.200 | 2026-10-09 |
+| **10** | **`SandboxNpcControlManager`**| `modules/sandbox_npc_control.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~800 | — |
 | **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[ ] PENDIENTE` | ~850 | — |
 | **12** | **`SandboxMechanismsManager`** | `modules/sandbox_mechanisms.gd` | `[ ] PENDIENTE` | ~1.850 | — |
 
-**Progreso Actual**: **7 de 12 módulos completados (58.3%)**. Líneas extraídas/delegadas del núcleo: **7.513 líneas** (de 21.844 a 14.331).
+**Progreso Actual**: **9 de 12 módulos completados (75.0%)**. Líneas extraídas/delegadas del núcleo: **9.452 líneas** (de 21.844 a 12.392).
 
 ---
 
@@ -197,21 +197,24 @@
 
 ---
 
-### [ ] Paso 9: `SandboxMusicSystem` (Módulo 6)
-* **Estado**: **PENDIENTE**
+### [x] Paso 9: `SandboxMusicSystem` (Módulo 6)
+* **Estado**: **COMPLETADO (Listo para Verificación)**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_music.gd`
-* **Tipo de Objeto**: `Node` (gestiona UI musical y pool de reproductores de audio).
+* **Tipo de Objeto**: `Node` (gestiona UI musical y pool de polifonía de audio de 32 canales).
 * **Qué hace**:
-  - Mapea 5 instrumentos con escalas cromáticas afinadas y calcula semitonos y frecuencias en tiempo real.
-  - Genera la interfaz de pentagrama, teclado y selector de instrumentos.
-  - Detecta taps sobre bloques musicales y muestra el popup de tono.
-  - Reproduce las notas al ser tocadas por corriente eléctrica y activa la coreografía de baile en los NPCs cercanos (`_trigger_npc_dance`).
+  - Mapea 5 instrumentos con escalas cromáticas afinadas (4 pianos, batería acústica, metrónomo) y calcula semitonos y frecuencias en tiempo real.
+  - Administra el bus dedicado `MusicBus` con `AudioEffectLimiter` para prevenir saturación y distorsión digital en acordes densos.
+  - Genera la interfaz gráfica dual `music_panel` con sub-pestañas: `⚡ Circuitos` (mecanismos, compuertas, pistones) y `🎵 Música` (instrumentos, teclado, slider/input numérico de BPM y conmutador de visualización de notas).
+  - Detecta taps sobre bloques musicales y muestra el popup contextual de nota musical y octava (`update_music_note_popup`).
+  - Reproduce las notas al ser tocadas por corriente eléctrica y activa la coreografía de baile en los NPCs cercanos (`trigger_npc_dance`).
 * **Consideraciones a Actualizar Pendientes en Próximos Módulos**:
-  - [ ] **Con el Núcleo Eléctrico (`sandbox_grid.gd`)**: En `_process_electricity`, la activación de cualquier celda con tag `MUSIC` debe llamar a `music_system.play_note(cell_id, charge)`.
-  - [ ] **Con Paso 3 (`SandboxAchievementManager`)**: Al tocar 5 notas consecutivas en menos de 1s, reportar el logro `compositor`.
-* **Funciones Clave a Repasar**:
-  - `_register_musical_materials()`, `_place_music_block()`, `_play_music_note()`
-  - `_setup_music_ui()`, `_trigger_npc_dance()`
+  - [x] **Con el Núcleo Eléctrico (`sandbox_grid.gd`)**: En `_process_electricity`, la activación de cualquier celda con tag `MUSIC` invoca `_play_music_note(inst, note, ...)`, delegada limpiamente a `music_system`.
+  - [x] **Con Paso 3 (`SandboxAchievementManager`)**: Al tocar 5 notas consecutivas en menos de 1s, reporta el logro `compositor`.
+  - [ ] **Con Paso 12 (`SandboxMechanismsManager`)**: La sub-pestaña de Circuitos en `music_panel` interactúa con compuertas, pistones y cañones; al modularizar mecanismos, se coordinará el acceso a sus propiedades.
+* **Funciones Clave Implementadas**:
+  - `init_audio_bus_and_pool()`, `register_musical_materials()`, `place_music_block()`, `play_music_note()`
+  - `get_music_data()`, `encode_music_id()`, `is_music_mat()`, `trigger_npc_dance()`
+  - `setup_music_ui()`, `close_music_menu()`, `setup_music_button()`, `is_music_active()`, `update_music_note_popup()`
 
 ---
 
@@ -339,5 +342,45 @@
   - Se encapsuló la delegación del botón de herramientas (`_on_tools_btn_pressed`).
   - Se crearon propiedades proxy transparentes para `tools_panel`, `paint_panel`, `brush_radius`, `paint_brush_radius_idx`, `game_volume`, `pre_mute_volume`, `is_muted`, `selected_paint_color`, `paint_mode`, `recent_paint_colors` e `is_unpausing`.
   - **Reducción neta**: -1.057 líneas en `sandbox_grid.gd` (de 19.381 a 18.324 líneas).
+
+### Hito 6 (2026-10-09): Paso 6 - `SandboxSaveSystem`
+- **Módulo Creado**: `res://sandbox/scripts/sandbox/modules/sandbox_save_system.gd`.
+- **Modificaciones en `sandbox_grid.gd`**:
+  - Se añadió la instancia `var save_system: SandboxSaveSystem`.
+  - En `_ready()`: Inicialización con `save_system = SandboxSaveSystem.new()`, inyección con `save_system.setup(self)`.
+  - Se extrajo la serialización/deserialización binaria comprimida `.sbu`, 10 slots locales, snapshots WebP y modales de confirmación.
+  - Se implementaron delegadores públicos `save_world_to_path`, `load_world_from_path`, `serialize_world_to_dict`, `load_world_from_dict`.
+  - **Reducción neta**: -1.280 líneas en `sandbox_grid.gd` (de 18.324 a 17.044 líneas).
+
+### Hito 7 (2026-10-09): Paso 7 - `SandboxWorkshopUI`
+- **Módulo Creado**: `res://sandbox/scripts/sandbox/modules/sandbox_workshop_ui.gd`.
+- **Modificaciones en `sandbox_grid.gd`**:
+  - Se añadió la instancia `var workshop_ui: SandboxWorkshopUI`.
+  - En `_ready()`: Inicialización con `workshop_ui = SandboxWorkshopUI.new()`, inyección con `workshop_ui.setup(self)`.
+  - Se extrajo el sistema completo del Taller en la nube (Firestore/Storage, Top Semanal, Recientes, Mis Mundos, Mis Descargas, likes diferidos, reportes, buscador Base 36, economía AdMob y temporizador en vivo).
+  - Coordinado con `SandboxSaveSystem` y `world_card.gd`.
+  - **Reducción neta**: -2.713 líneas en `sandbox_grid.gd` (de 17.044 a 14.331 líneas).
+
+### Hito 8 (2026-10-09): Paso 8 - `SandboxLabUI`
+- **Módulo Creado**: `res://sandbox/scripts/sandbox/modules/sandbox_lab.gd`.
+- **Modificaciones en `sandbox_grid.gd`**:
+  - Se añadió la instancia `var lab_ui: SandboxLabUI`.
+  - En `_ready()`: Inicialización con `lab_ui = SandboxLabUI.new()`, inyección con `lab_ui.setup(self)`.
+  - Se extrajo el diseñador de 3 materiales experimentales (IDs 900, 901, 902), sincronización con `palette_tex` (2048x3) para shaders, desbloqueo AdMob por 12 horas y tutorial con máscaras.
+  - Enlazado bidireccionalmente con `SandboxSaveSystem` para persistencia en `.sbu`.
+  - **Reducción neta**: -1.090 líneas en `sandbox_grid.gd` (de 14.331 a 13.241 líneas).
+
+### Hito 9 (2026-10-09): Paso 9 - `SandboxMusicSystem`
+- **Módulo Creado**: `res://sandbox/scripts/sandbox/modules/sandbox_music.gd`.
+- **Modificaciones en `sandbox_grid.gd`**:
+  - Se añadió la instancia `var music_system: SandboxMusicSystem`.
+  - En `_ready()`: Inicialización con `music_system = SandboxMusicSystem.new()`, inyección con `music_system.setup(self)`.
+  - Se extrajo la configuración de bus `MusicBus` con `AudioEffectLimiter` y pool de 32 `AudioStreamPlayer`.
+  - Se extrajo el registro de materiales musicales (5 instrumentos afinados + metrónomo ID 600) y colocación de bloques 2x2.
+  - Se extrajo la interfaz visual dual `music_panel` (`⚡ Circuitos` y `🎵 Música`) con selector de instrumentos, teclado cromático, slider numérico de BPM y conmutador de etiquetas.
+  - Se extrajo el popup contextual de nota al tocar bloques en la cuadrícula (`update_music_note_popup`).
+  - Se conservaron 13 métodos delegadores y 12 propiedades proxy con getters/setters en `sandbox_grid.gd` para 100% compatibilidad hacia atrás.
+  - **Reducción neta**: -849 líneas en `sandbox_grid.gd` (de 13.241 a 12.392 líneas).
+
 
 
