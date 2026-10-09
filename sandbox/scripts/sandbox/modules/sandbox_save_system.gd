@@ -392,6 +392,8 @@ func get_slot_data(idx: int) -> Dictionary:
 
 func get_cleaned_lab_data() -> Array:
 	if not is_instance_valid(grid): return []
+	if "lab_ui" in grid and is_instance_valid(grid.lab_ui) and grid.lab_ui.has_method("get_cleaned_lab_data"):
+		return grid.lab_ui.get_cleaned_lab_data()
 	var clean_lab = []
 	for i in range(3):
 		var data = grid.lab_custom_data[i]
@@ -410,6 +412,9 @@ func get_cleaned_lab_data() -> Array:
 
 func restore_lab_data(lab_data: Array) -> void:
 	if not is_instance_valid(grid): return
+	if "lab_ui" in grid and is_instance_valid(grid.lab_ui) and grid.lab_ui.has_method("restore_lab_data"):
+		grid.lab_ui.restore_lab_data(lab_data)
+		return
 	for i in range(min(3, lab_data.size())):
 		var data = lab_data[i]
 		grid.lab_custom_data[i]["name"] = data.get("name", "Name")
@@ -419,7 +424,7 @@ func restore_lab_data(lab_data: Array) -> void:
 		grid.lab_custom_data[i]["mix"] = data.get("mix", 0)
 		grid.lab_custom_data[i]["grav"] = data.get("grav", 0)
 		grid.lab_custom_data[i]["state"] = data.get("state", 0)
-		grid.lab_custom_data[i]["tags"] = data.get("tags", 0)
+		grid.lab_custom_data[i]["tags"] = data.get("tags", {})
 		
 		grid._apply_custom_material_to_engine(i)
 		

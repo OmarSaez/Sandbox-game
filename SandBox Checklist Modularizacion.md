@@ -175,21 +175,25 @@
 
 ---
 
-### [ ] Paso 8: `SandboxLabUI` (Módulo 3)
-* **Estado**: **PENDIENTE**
+### [x] Paso 8: `SandboxLabUI` (Módulo 3)
+* **Estado**: **COMPLETADO (Listo para Verificación)**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_lab.gd`
 * **Tipo de Objeto**: `Node` (panel `lab_panel`).
 * **Qué hace**:
   - Permite al usuario diseñar 3 materiales experimentales (IDs 900, 901, 902).
   - Configura estados físicos (sólido, líquido, gas, polvo), gravedades, tags de reacción (ácido, virus, explosiones, vórtice) y colores primario, secundario y terciario.
   - Sincroniza las filas de la textura de 2048x3 (`palette_tex`) que alimentan el fragment shader `sandbox_render.gdshader`.
-  - Controla el desbloqueo temporal de 12 horas mediante anuncios recompensados de AdMob.
+  - Controla el desbloqueo temporal de 12 horas mediante anuncios recompensados de AdMob y procesa la cuenta regresiva en vivo.
+  - Gestiona el tutorial guiado con máscaras oscuras dinámicas (`update_lab_tutorial_highlight()`).
 * **Consideraciones a Actualizar Pendientes en Próximos Módulos**:
-  - [ ] **Con Paso 6 (`SandboxSaveSystem`)**: Al restaurar una ranura local o mapa descargado, `SandboxSaveSystem` debe actualizar los slots del laboratorio invocando `lab_system.restore_lab_data(...)`.
-  - [ ] **Con Paso 3 (`SandboxAchievementManager`)**: Al guardar un material personalizado, invocar `achievement_manager.notify_lab_saved()`.
-* **Funciones Clave a Repasar**:
-  - `_setup_lab_ui()`, `_sync_palette_to_shader()`, `_apply_custom_material_to_engine()`
-  - `_save_lab_state()`, `_load_lab_state()`, `_update_custom_mats_in_material_grid()`
+  - [x] **Con Paso 6 (`SandboxSaveSystem`)**: `lab_ui.get_cleaned_lab_data()` y `lab_ui.restore_lab_data(...)` integrados y enlazados bidireccionalmente con `SandboxSaveSystem`.
+  - [x] **Con Paso 3 (`SandboxAchievementManager`)**: Al equipar el primer material experimental diseñado se desbloquea el logro `mad_scientist`.
+  - [ ] **Con Paso 9 (`SandboxMusicSystem`)**: Asegurar que los materiales de laboratorio no interfieran con las notas musicales registradas.
+* **Funciones Clave Implementadas**:
+  - `setup_lab_ui()`, `sync_palette_to_shader()`, `apply_custom_material_to_engine()`
+  - `save_lab_state()`, `load_lab_state()`, `update_custom_mats_in_material_grid()`
+  - `update_lab_inspector()`, `update_lab_preview()`, `process_lab()`
+  - `get_cleaned_lab_data()`, `restore_lab_data()`, `connect_admob_signals()`
 
 ---
 
