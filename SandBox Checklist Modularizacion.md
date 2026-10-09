@@ -176,7 +176,7 @@
 ---
 
 ### [x] Paso 8: `SandboxLabUI` (Módulo 3)
-* **Estado**: **COMPLETADO (Listo para Verificación)**
+* **Estado**: **COMPLETADO Y VERIFICADO**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_lab.gd`
 * **Tipo de Objeto**: `Node` (panel `lab_panel`).
 * **Qué hace**:
