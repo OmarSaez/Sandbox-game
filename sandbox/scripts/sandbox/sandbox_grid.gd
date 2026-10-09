@@ -1,4 +1,4 @@
-﻿extends SandboxGridNode
+extends SandboxGridNode
 class_name SandboxGrid
 
 # Grid config
@@ -455,9 +455,27 @@ var paint_panel: PanelContainer:
 	set(v): if tools_ui: tools_ui.paint_panel = v
 var selected_team: int = 0 
 var mat_id_to_key = {} # ID -> Translation Key
-var controlled_npc = null
-var is_selecting_npc_to_control: bool = false
-var npc_control_gui: Control
+var controlled_npc:
+	get: return npc_control_manager.controlled_npc if npc_control_manager else _controlled_npc
+	set(v):
+		if npc_control_manager: npc_control_manager.controlled_npc = v
+		_controlled_npc = v
+var _controlled_npc = null
+
+var is_selecting_npc_to_control: bool:
+	get: return npc_control_manager.is_selecting_npc_to_control if npc_control_manager else _is_selecting_npc_to_control
+	set(v):
+		if npc_control_manager: npc_control_manager.is_selecting_npc_to_control = v
+		_is_selecting_npc_to_control = v
+var _is_selecting_npc_to_control: bool = false
+
+var npc_control_gui: Control:
+	get: return npc_control_manager.npc_control_gui if npc_control_manager else _npc_control_gui
+	set(v):
+		if npc_control_manager: npc_control_manager.npc_control_gui = v
+		_npc_control_gui = v
+var _npc_control_gui: Control = null
+
 var main_controls: Control
 var ui_root: CanvasLayer
 var mouse_was_pressed: bool = false
@@ -472,6 +490,7 @@ var tools_ui: SandboxToolsPaintUI
 var save_system: SandboxSaveSystem
 var workshop_ui: SandboxWorkshopUI
 var music_system: SandboxMusicSystem = null
+var npc_control_manager: SandboxNpcControlManager = null
 
 var is_grid_ready: bool = false # Guard against async _ready running early loops
 var current_is_landscape: bool = false # Tracks axis state to auto-reload on flip
@@ -744,7 +763,12 @@ var action_sfx = {
 var last_action_times = {} # Para controlar la saturación de sonidos
 var is_volcano_active = false 
 var is_fire_active = false 
-var is_npc_mode_menu_open: bool = false
+var is_npc_mode_menu_open: bool:
+	get: return npc_control_manager.is_npc_mode_menu_open if npc_control_manager else _is_npc_mode_menu_open
+	set(v):
+		if npc_control_manager: npc_control_manager.is_npc_mode_menu_open = v
+		_is_npc_mode_menu_open = v
+var _is_npc_mode_menu_open: bool = false
 var is_lab_tutorial_done: bool:
 	get: return lab_ui.is_lab_tutorial_done if lab_ui else false
 	set(v): if lab_ui: lab_ui.is_lab_tutorial_done = v
@@ -1339,6 +1363,12 @@ func _ready():
 	music_system.name = "SandboxMusicSystem"
 	add_child(music_system)
 	music_system.setup(self)
+	
+	# --- NPC CONTROL MANAGER INITIALIZATION ---
+	npc_control_manager = SandboxNpcControlManager.new()
+	npc_control_manager.name = "SandboxNpcControlManager"
+	add_child(npc_control_manager)
+	npc_control_manager.setup(self)
 	
 	# Calculate grid size (Smart Height: Exactly above the UI)
 	var viewport_size = get_viewport_rect().size
@@ -3400,39 +3430,7 @@ func _process(delta):
 				var m_pos = get_local_mouse_position()
 				var gx = int(m_pos.x / grid_scale)
 				var gy = int(m_pos.y / grid_scale)
-				var nearby = _get_nearby_npcs(gx, gy, 12.0)
-				if nearby.size() > 0:
-					controlled_npc = nearby[0]
-					
-					# Log to Firebase Analytics
-					AnalyticsManager.log_event("npc_controlled", {"npc_type": controlled_npc.get("type", "unknown")})
-					
-					# Boost HP for player control (Hero unit)
-					controlled_npc.hp = max(controlled_npc.hp, 160.0)
-					controlled_npc["max_hp"] = max(controlled_npc.get("max_hp", 100.0), 160.0)
-					controlled_npc.dir = 0 # Detener movimiento autónomo
-					controlled_npc["is_fleeing"] = false # Quitar miedo si lo tenía
-					is_selecting_npc_to_control = false
-					_play_action_sound("ui_click")
-					
-					# Update UI
-					if is_instance_valid(npc_panel): npc_panel.visible = false
-					ui_root = get_parent().get_node("UI")
-					main_controls = ui_root.get_node("Controls")
-					main_controls.visible = false
-					
-					if is_instance_valid(npc_control_gui):
-						npc_control_gui.visible = true
-						_update_arcade_dynamic_button()
-						
-						var action_btn = npc_control_gui.find_child("ActionBtn", true, false)
-						if action_btn:
-							action_btn.text = tr("action") # Siempre "ACCIÓN" (Genérico)
-						
-					# LOGRO: Tiempo Retro - Ejecutar en segundo plano para no bloquear la entrada
-					if not achievements["retro_time"].unlocked:
-						_unlock_retro_time_delayed()
-					
+				if _try_select_npc_at(gx, gy):
 					mouse_was_pressed = true
 					touch_started_on_ui = true # BLOCK drawing for the rest of this touch session
 					return # Stop processing
@@ -5389,464 +5387,33 @@ func _setup_npc_panel_node():
 	npc_panel.mouse_exited.connect(func(): is_mouse_over_ui = false)
 
 func _setup_npc_control_gui():
-	var s = 1.25 # FIXED SCALE: Unified size for movement/action pads (Increased for mobile)
-	ui_root = get_parent().get_node("UI")
-	main_controls = ui_root.get_node("Controls")
-	
-	if is_instance_valid(npc_control_gui):
-		# Avoid duplicate connections or nodes
-		npc_control_gui.get_parent().remove_child(npc_control_gui)
-		npc_control_gui.queue_free()
-		
-	npc_control_gui = Control.new()
-	npc_control_gui.name = "NPCControlGUI"
-	npc_control_gui.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	npc_control_gui.offset_top = -cached_hud_height
-	npc_control_gui.mouse_filter = Control.MOUSE_FILTER_PASS 
-	
-	# Visibility based on Control State + Menu Toggle
-	var in_control = is_instance_valid(controlled_npc)
-	npc_control_gui.visible = in_control and not is_npc_mode_menu_open
-	if is_instance_valid(main_controls):
-		main_controls.visible = not in_control or is_npc_mode_menu_open
-		
-	ui_root.add_child(npc_control_gui)
-	
-	# Block interaction with game world below UI
-	npc_control_gui.mouse_entered.connect(func(): is_mouse_over_ui = true)
-	npc_control_gui.mouse_exited.connect(func(): is_mouse_over_ui = false)
-	
-	# Translucent background for the bar
-	var bg = Panel.new()
-	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var bg_style = StyleBoxFlat.new()
-	bg_style.bg_color = Color(0.08, 0.08, 0.08, 0.6)
-	bg.add_theme_stylebox_override("panel", bg_style)
-	bg.mouse_filter = Control.MOUSE_FILTER_STOP # IMPORTANT: Block clicks
-	npc_control_gui.add_child(bg)
-	
-	# Common Auto-Closer for any arcade control touch
-	var arcade_closer = func(event: InputEvent):
-		if event is InputEventMouseButton and event.pressed and is_npc_mode_menu_open:
-			_toggle_npc_mode_menu(false)
-	
-	bg.gui_input.connect(arcade_closer)
-	
-	# Left: Virtual PAD (Arcade Style - Circular)
-	var pad = Panel.new()
-	npc_control_gui.set_meta("pad_node", pad)
-	pad.custom_minimum_size = Vector2(240 * s, 240 * s)
-	pad.anchor_top = 0.5; pad.anchor_bottom = 0.5
-	pad.offset_left = 60 * s; pad.offset_right = 300 * s
-	pad.offset_top = -120 * s; pad.offset_bottom = 120 * s
-	var pad_style = StyleBoxFlat.new()
-	pad_style.bg_color = Color("#141313")
-	pad_style.set_corner_radius_all(120 * s)
-	pad_style.border_width_left = 4 * s; pad_style.border_width_right = 4 * s
-	pad_style.border_width_top = 4 * s; pad_style.border_width_bottom = 4 * s
-	pad_style.border_color = Color("#222222")
-	pad.add_theme_stylebox_override("panel", pad_style)
-	pad.mouse_filter = Control.MOUSE_FILTER_STOP
-	pad.gui_input.connect(func(event):
-		if event is InputEventMouseButton:
-			npc_control_gui.set_meta("is_pad_active", event.pressed)
-		elif event is InputEventScreenTouch:
-			npc_control_gui.set_meta("is_pad_active", event.pressed)
-		arcade_closer.call(event)
-	)
-	npc_control_gui.set_meta("is_pad_active", false) # Initial state
-	npc_control_gui.add_child(pad)
-	
-	# Visual Cross inside PAD (Thicker)
-	var cross_color = Color("#706A6A")
-	var v_bar = ColorRect.new()
-	v_bar.color = cross_color
-	v_bar.custom_minimum_size = Vector2(60 * s, 160 * s)
-	v_bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	v_bar.offset_left = -30 * s; v_bar.offset_right = 30 * s
-	v_bar.offset_top = -80 * s; v_bar.offset_bottom = 80 * s
-	v_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pad.add_child(v_bar)
-	
-	var h_bar = ColorRect.new()
-	h_bar.color = cross_color
-	h_bar.custom_minimum_size = Vector2(160 * s, 60 * s)
-	h_bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	h_bar.offset_left = -80 * s; h_bar.offset_right = 80 * s
-	h_bar.offset_top = -30 * s; h_bar.offset_bottom = 30 * s
-	h_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pad.add_child(h_bar)
-
-	# Center buttons (Vertically stacked)
-	# 1. MENU Button (Toggle HUD)
-	var menu_btn = Button.new()
-	menu_btn.name = "MenuBtn"
-	menu_btn.text = tr("menu")
-	menu_btn.custom_minimum_size = Vector2(300 * s, 72 * s)
-	menu_btn.anchor_left = 0.5; menu_btn.anchor_right = 0.5; menu_btn.anchor_top = 0.5; menu_btn.anchor_bottom = 0.5
-	menu_btn.offset_left = -150 * s; menu_btn.offset_right = 150 * s
-	menu_btn.offset_top = -120 * s; menu_btn.offset_bottom = -48 * s
-	var menu_style = StyleBoxFlat.new()
-	menu_style.bg_color = Color(0.2, 0.2, 0.2, 0.8)
-	menu_style.border_width_left = 8 * s; menu_style.border_width_top = 8 * s
-	menu_style.border_width_right = 8 * s; menu_style.border_width_bottom = 8 * s
-	menu_style.border_color = Color(0.4, 0.4, 0.4)
-	menu_btn.add_theme_stylebox_override("normal", menu_style)
-	menu_btn.add_theme_stylebox_override("hover", menu_style)
-	menu_btn.add_theme_stylebox_override("pressed", menu_style)
-	menu_btn.add_theme_font_override("font", _get_safe_font())
-	menu_btn.add_theme_font_size_override("font_size", 22 * s)
-	menu_btn.pressed.connect(func():
-		_toggle_npc_mode_menu(!is_npc_mode_menu_open)
-	)
-	npc_control_gui.add_child(menu_btn)
-	ui_elements["arcade_menu_btn"] = menu_btn
-	
-	# 1b. EXTERNAL LABELS (Below the Menu Button)
-	var arcade_labels = HBoxContainer.new()
-	arcade_labels.name = "ArcadeLabels"
-	arcade_labels.custom_minimum_size = Vector2(300 * s, 40 * s)
-	arcade_labels.anchor_left = 0.5; arcade_labels.anchor_right = 0.5; arcade_labels.anchor_top = 0.5; arcade_labels.anchor_bottom = 0.5
-	arcade_labels.offset_left = -150 * s; arcade_labels.offset_right = 150 * s
-	arcade_labels.offset_top = -60 * s; arcade_labels.offset_bottom = 12 * s # Positioned starting at MenuBtn bottom
-	arcade_labels.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	arcade_labels.add_theme_constant_override("separation", 0)
-	npc_control_gui.add_child(arcade_labels)
-
-	# 2. EXIT Button (Circle, shifted down)
-	var exit_btn = Button.new()
-	exit_btn.text = "X"
-	exit_btn.custom_minimum_size = Vector2(100 * s, 100 * s)
-	exit_btn.anchor_left = 0.5; exit_btn.anchor_right = 0.5; exit_btn.anchor_top = 0.5; exit_btn.anchor_bottom = 0.5
-	exit_btn.offset_left = -50 * s; exit_btn.offset_right = 50 * s
-	exit_btn.offset_top = 20 * s; exit_btn.offset_bottom = 120 * s
-	var exit_style = StyleBoxFlat.new()
-	exit_style.bg_color = Color(0.8, 0.15, 0.15, 1.0)
-	exit_style.set_corner_radius_all(50 * s)
-	exit_style.border_width_left = 15 * s; exit_style.border_width_right = 15 * s
-	exit_style.border_width_top = 15 * s; exit_style.border_width_bottom = 15 * s
-	exit_style.border_color = Color(0.4, 0.05, 0.05)
-	exit_btn.add_theme_stylebox_override("normal", exit_style)
-	exit_btn.add_theme_stylebox_override("hover", exit_style)
-	exit_btn.add_theme_stylebox_override("pressed", exit_style)
-	exit_btn.add_theme_font_override("font", _get_safe_font())
-	exit_btn.add_theme_font_size_override("font_size", 34 * s)
-	exit_btn.add_theme_constant_override("outline_size", 6 * s)
-	exit_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	exit_btn.pressed.connect(func():
-		_stop_controlling_npc()
-	)
-	npc_control_gui.add_child(exit_btn)
-
-	# Right: Action Button
-	var action_btn = Button.new()
-	action_btn.name = "ActionBtn"
-	action_btn.text = tr("action")
-	action_btn.custom_minimum_size = Vector2(200 * s, 200 * s)
-	action_btn.anchor_left = 1.0; action_btn.anchor_right = 1.0
-	action_btn.anchor_top = 0.5; action_btn.anchor_bottom = 0.5
-	action_btn.offset_left = -280 * s; action_btn.offset_right = -80 * s
-	action_btn.offset_top = -100 * s; action_btn.offset_bottom = 100 * s
-	npc_control_gui.set_meta("action_btn", action_btn)
-	var action_style = StyleBoxFlat.new()
-	action_style.bg_color = Color(0.1, 0.4, 0.8, 1.0)
-	action_style.set_corner_radius_all(100 * s)
-	action_style.border_width_left = 18 * s; action_style.border_width_right = 18 * s
-	action_style.border_width_top = 18 * s; action_style.border_width_bottom = 18 * s
-	action_style.border_color = Color(0.04, 0.15, 0.4) # Much darker blue border
-	action_btn.add_theme_stylebox_override("normal", action_style)
-	action_btn.add_theme_font_override("font", _get_safe_font())
-	action_btn.add_theme_font_size_override("font_size", 32 * s)
-	action_btn.add_theme_constant_override("outline_size", 7 * s)
-	action_btn.mouse_filter = Control.MOUSE_FILTER_STOP
-	action_btn.gui_input.connect(arcade_closer)
-	action_btn.pressed.connect(func():
-		_trigger_controlled_npc_action()
-	)
-	npc_control_gui.add_child(action_btn)
-	ui_elements["arcade_action_btn"] = action_btn
+	if npc_control_manager:
+		npc_control_manager.setup_npc_control_gui()
 
 func _stop_controlling_npc(keep_menus_open: bool = false):
-	_play_action_sound("ui_click")
-	controlled_npc = null
-	is_selecting_npc_to_control = false
-	is_npc_mode_menu_open = false
-	
-	if is_instance_valid(npc_control_gui):
-		# Just hide the pad, the HUD itself might transition back
-		npc_control_gui.visible = false
-	
-	ui_root = get_parent().get_node("UI")
-	main_controls = ui_root.get_node("Controls")
-	if is_instance_valid(main_controls):
-		main_controls.visible = true
-		main_controls.offset_top = -cached_hud_height
-		main_controls.offset_bottom = 0
-	
-	if not keep_menus_open:
-		# Close all floating menus
-		if is_instance_valid(tools_panel): tools_panel.visible = false
-		if is_instance_valid(disaster_panel): disaster_panel.visible = false
-		if is_instance_valid(npc_panel): npc_panel.visible = false
-	
-	# Always reset mouse over ui state when stopping control to avoid stuck pointer logic
-	is_mouse_over_ui = false 
-	_update_menu_highlights() 
-	_update_arcade_dynamic_button()
+	if npc_control_manager:
+		npc_control_manager.stop_controlling_npc(keep_menus_open)
 
 func _toggle_npc_mode_menu(p_show: bool):
-	ui_root = get_parent().get_node("UI")
-	main_controls = ui_root.get_node("Controls")
-	if not is_instance_valid(main_controls) or not is_instance_valid(ui_root): return
-	_play_action_sound("ui_click")
-	is_npc_mode_menu_open = p_show
-	
-	# SWAP VISIBILITY: Building Menu vs Arcade HUD
-	main_controls.visible = p_show
-	if is_instance_valid(npc_control_gui):
-		npc_control_gui.visible = !p_show
-	
-	if !p_show:
-		# Close floating sub-panels
-		if is_instance_valid(tools_panel): tools_panel.visible = false
-		if is_instance_valid(disaster_panel): disaster_panel.visible = false
-		if is_instance_valid(npc_panel): npc_panel.visible = false
-		
-		# PROTECTOR
-		touch_started_on_ui = true 
-		
-		# Remove Full-screen protector
-		var blocker = ui_root.get_node_or_null("ArcadeMenuBlocker")
-		if blocker: blocker.queue_free()
-	else:
-		# Create Full-screen protector (Block all workspace clicks)
-		var blocker = ui_root.get_node_or_null("ArcadeMenuBlocker")
-		if not blocker:
-			blocker = Control.new()
-			blocker.name = "ArcadeMenuBlocker"
-			blocker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-			blocker.mouse_filter = Control.MOUSE_FILTER_STOP
-			ui_root.add_child(blocker)
-			# Ensure it's behind the panels but above the world
-			ui_root.move_child(blocker, 0)
-			blocker.gui_input.connect(func(event):
-				if event is InputEventMouseButton and event.pressed:
-					_toggle_npc_mode_menu(false) # Close if touching outside
-			)
+	if npc_control_manager:
+		npc_control_manager.toggle_npc_mode_menu(p_show)
 
 func _handle_controlled_npc_input(delta):
-	if not controlled_npc or not is_instance_valid(npc_control_gui) or not npc_control_gui.visible: return
-	
-	# Detect if dead
-	if controlled_npc.hp <= 0:
-		_stop_controlling_npc()
-		return
-	
-	var s = _get_ui_scale()
-	var pad = npc_control_gui.get_meta("pad_node")
-	var action_btn = npc_control_gui.get_meta("action_btn")
-	
-	# Detect ground state
-	var is_on_ground = !_can_npc_fit(controlled_npc.pos.x, controlled_npc.pos.y + 1, controlled_npc)
-	
-	# --- MOVEMENT (PAD) ---
-	var move_dir = 0
-	var want_jump = false
-	var want_down = false
-	var pad_active = npc_control_gui.get_meta("is_pad_active") if npc_control_gui.has_meta("is_pad_active") else false
-	
-	if pad_active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		var m_pos = get_viewport().get_mouse_position()
-		if is_instance_valid(pad):
-			var pad_center = pad.get_global_rect().get_center()
-			# Horizontal
-			if m_pos.x < pad_center.x - (25 * s): move_dir = -1
-			elif m_pos.x > pad_center.x + (25 * s): move_dir = 1
-			# Vertical
-			if m_pos.y < pad_center.y - (40 * s): want_jump = true
-			elif m_pos.y > pad_center.y + (40 * s): want_down = true
-	elif not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		npc_control_gui.set_meta("is_pad_active", false) # Safety: ensure release reset
-	
-	# Apply physics movement (Inertia)
-	var target_vel = float(move_dir) * 2.1 # Reduced speed to half
-	var accel = 0.5 if is_on_ground else 0.15 # Air control is lower
-	controlled_npc.vx = lerp(controlled_npc.vx, target_vel, accel)
-	
-	if move_dir != 0:
-		controlled_npc.dir = move_dir
-		controlled_npc["last_dir"] = move_dir
-		
-		# --- MINER SPECIAL TUNNELING ---
-		if controlled_npc.type == "miner":
-			var tx = controlled_npc.pos.x + move_dir
-			var blocked = !_can_npc_fit(tx, controlled_npc.pos.y, controlled_npc)
-			
-			if want_down or blocked:
-				# Use a timer to limit dig speed
-				var dig_timer = controlled_npc.get("manual_dig_timer", 0.0)
-				dig_timer += delta
-				if dig_timer >= 0.14:
-					dig_timer = 0.0
-					_miner_dig(controlled_npc, want_down)
-					
-					# Smoothly advance into the tunnel
-					var next_x = controlled_npc.pos.x + move_dir
-					var next_y = controlled_npc.pos.y + (1 if want_down else 0)
-					if _can_npc_fit(next_x, next_y, controlled_npc):
-						# MANDATORY CLEANUP: Pre-erase old position at 60Hz before snap
-						_draw_npc_pixels(controlled_npc, 0)
-						controlled_npc.pos = Vector2i(next_x, next_y)
-						controlled_npc.vx = 0.0 
-						controlled_npc.vy = 0.0
-				controlled_npc["manual_dig_timer"] = dig_timer
-	else:
-		controlled_npc.dir = 0 # No autonomous movement
-	
-	# --- JUMP ---
-	if want_jump and is_on_ground:
-		controlled_npc.vy = -5.5 # Reduced jump height (approx half of previous)
-		_play_action_sound("ui_click") # Subtle feedback
-	
-	# --- ACTION ---
-	if is_instance_valid(action_btn) and action_btn.is_pressed() and controlled_npc.attack_cooldown <= 0:
-		_trigger_controlled_npc_action()
+	if npc_control_manager:
+		npc_control_manager.handle_controlled_npc_input(delta)
 
 func _trigger_controlled_npc_action():
-	if not controlled_npc: return
-	
-	match controlled_npc.type:
-		"warrior":
-			# Find closest enemy to attack
-			var target = _find_closest_enemy(controlled_npc, 30.0)
-			if target:
-				_attack_npc(controlled_npc, target)
-				controlled_npc.attack_cooldown = 0.6
-			else:
-				# Swing at air
-				_play_action_sound("warrior_attack")
-				controlled_npc.attack_cooldown = 0.4
-		"zombie":
-			var target = _find_closest_enemy(controlled_npc, 30.0)
-			if target:
-				_attack_npc(controlled_npc, target)
-				controlled_npc.attack_cooldown = 0.8
-			else:
-				var p_scale = 0.65 + float((controlled_npc.id * 23) % 40) / 40.0 * 0.40
-				_play_action_sound("zombie_attack", 0.08, 0.0, p_scale)
-				controlled_npc.attack_cooldown = 0.5
-		"zombie_tank":
-			var target = _find_closest_enemy(controlled_npc, 30.0)
-			if target and controlled_npc.pos.distance_to(target.pos) < 20.0:
-				_attack_npc(controlled_npc, target)
-				controlled_npc.attack_cooldown = 1.0
-			else:
-				var face_dir = controlled_npc.get("last_dir", 1)
-				var found_x = -1; var found_y = -1; var found_mat = 2
-				for dy in range(-4, 7):
-					for dx in range(-5, 6):
-						var tx = controlled_npc.pos.x + dx; var ty = controlled_npc.pos.y + dy
-						if tx >= 0 and tx < grid_width and ty >= 0 and ty < dynamic_grid_height:
-							var tid = _get_cell(tx, ty)
-							if tid > 0 and tid != 1 and not (material_tags_raw[_get_tags_id(tid)] & SandboxMaterial.Tags.NPC):
-								found_x = tx; found_y = ty; found_mat = tid; break
-					if found_x != -1: break
-					
-				if found_x != -1:
-					_set_cell(found_x, found_y, 0)
-					for _s in range(5):
-						_add_spark(float(found_x), float(found_y), _get_lut_rand_range(-30, 30), _get_lut_rand_range(-50, -10), mat_colors_1[found_mat] if found_mat < mat_colors_1.size() else Color.GRAY, 0.4)
-						
-				var aim_target = _find_controlled_aim_target(controlled_npc, face_dir, 150.0)
-				var vx = face_dir * 120.0
-				var vy = -80.0
-				if aim_target:
-					var target_x = float(aim_target.pos.x)
-					var target_y = float(aim_target.pos.y)
-					var dir = 1 if (target_x - controlled_npc.pos.x) > 0 else -1
-					controlled_npc["last_dir"] = dir
-					controlled_npc.dir = dir
-					face_dir = dir
-					target_x += _get_lut_rand_range(-10.0, 10.0)
-					target_y += _get_lut_rand_range(-6.0, 6.0)
-					var dist_x = abs(target_x - controlled_npc.pos.x)
-					if dist_x < 2.0: dist_x = 2.0
-					var time_to_target = dist_x / 120.0
-					time_to_target = clamp(time_to_target, 0.4, 2.5)
-					vx = dir * dist_x / time_to_target
-					vy = (target_y - controlled_npc.pos.y) / time_to_target - (0.5 * 200.0 * time_to_target)
-				
-				active_projectiles.append({
-					"pos": Vector2(controlled_npc.pos.x + face_dir * 3, controlled_npc.pos.y + 1),
-					"vel": Vector2(vx, vy),
-					"team": controlled_npc.team,
-					"type": "thrown_rock",
-					"life": 3.0,
-					"block_material": found_mat,
-					"atk_dmg": 1.5
-				})
-				
-				var p_scale = 0.65 + float((controlled_npc.id * 23) % 40) / 40.0 * 0.40
-				_play_action_sound("zombie_tank_throw", 0.08, 0.0, p_scale)
-				_set_npc_emoji(controlled_npc, "🪨", 1.2)
-				controlled_npc.attack_cooldown = 2.0
-		"archer":
-			# Shoot arrow in current face direction
-			var face_dir = controlled_npc.get("last_dir", 1)
-			var target = _find_controlled_aim_target(controlled_npc, face_dir, 160.0)
-			if target:
-				var target_dir = 1 if (target.pos.x - controlled_npc.pos.x) > 0 else -1
-				controlled_npc["last_dir"] = target_dir
-				controlled_npc.dir = target_dir
-				_shoot_arrow(controlled_npc, target)
-			else:
-				var dummy_target = {"pos": Vector2i(controlled_npc.pos.x + face_dir * 100, controlled_npc.pos.y)}
-				_shoot_arrow(controlled_npc, dummy_target)
-			controlled_npc.attack_cooldown = 1.0
-		"medic":
-			# Simple AOE heal
-			var nearby = _get_nearby_npcs(controlled_npc.pos.x, controlled_npc.pos.y, 60.0)
-			var healed_somebody = false
-			var has_z = _has_active_zombies()
-			for other in nearby:
-				if _is_ally(controlled_npc, other, has_z) and other != controlled_npc and other.hp > 0:
-					var mhp = other.get("max_hp", 100.0)
-					if other.hp < mhp:
-						other.hp = min(other.hp + controlled_npc.get("heal_power", 25.0), mhp)
-						healed_somebody = true
-						_set_npc_emoji(other, "😊", 1.0)
-						for _f in range(4): _add_spark(float(other.pos.x), float(other.pos.y-2), 0.0, -20.0, Color.GREEN, 0.5)
-			
-			if healed_somebody:
-				_play_action_sound("medic_heal")
-				_set_npc_emoji(controlled_npc, "💚", 1.0)
-				controlled_npc.attack_cooldown = 0.8
-		"mage":
-			# Shoot fireball in current face direction
-			var face_dir = controlled_npc.get("last_dir", 1)
-			var target = _find_controlled_aim_target(controlled_npc, face_dir, 150.0)
-			if target:
-				var target_dir = 1 if (target.pos.x - controlled_npc.pos.x) > 0 else -1
-				controlled_npc["last_dir"] = target_dir
-				controlled_npc.dir = target_dir
-				_shoot_fireball(controlled_npc, target)
-			else:
-				var dummy_target = {"pos": Vector2i(controlled_npc.pos.x + face_dir * 90, controlled_npc.pos.y)}
-				_shoot_fireball(controlled_npc, dummy_target)
-			controlled_npc.attack_cooldown = 1.5
-		"miner":
-			# Place TNT in front
-			var face_dir = controlled_npc.get("last_dir", 1)
-			var tx = controlled_npc.pos.x + (face_dir * 3)
-			var ty = controlled_npc.pos.y + 2
-			# Boundary check
-			if tx >= 1 and tx < grid_width - 1 and ty >= 1 and ty < dynamic_grid_height - 1:
-				_set_cell(tx, ty, 5) # 5 = TNT
-				_set_cell(tx+1, ty, 5)
-				_set_cell(tx, ty+1, 5)
-				_set_cell(tx+1, ty+1, 5)
-				_play_action_sound("npc_place")
-				controlled_npc.attack_cooldown = 1.5
+	if npc_control_manager:
+		npc_control_manager.trigger_controlled_npc_action()
+
+func _start_controlling_npc(npc: Variant) -> void:
+	if npc_control_manager:
+		npc_control_manager.start_controlling_npc(npc)
+
+func _try_select_npc_at(gx: int, gy: int) -> bool:
+	if npc_control_manager:
+		return npc_control_manager.try_select_npc_at(gx, gy)
+	return false
 
 func _setup_npc_ui():
 	_set_panning_mode(false)
@@ -8075,18 +7642,9 @@ func _find_closest_enemy(me, radar_range):
 	return closest
 
 func _find_controlled_aim_target(me, face_dir, radar_range):
-	var closest = null; var min_dist_sq = radar_range * radar_range
-	var nearby = _get_nearby_npcs(me.pos.x, me.pos.y, radar_range)
-	var has_zombies = _has_active_zombies()
-	for other in nearby:
-		if other.hp > 0 and other != me:
-			var is_enemy = not _is_ally(me, other, has_zombies)
-			if is_enemy:
-				var dx = other.pos.x - me.pos.x
-				if dx * face_dir >= -8:
-					var d_sq = me.pos.distance_squared_to(other.pos)
-					if d_sq < min_dist_sq: min_dist_sq = d_sq; closest = other
-	return closest
+	if npc_control_manager:
+		return npc_control_manager.find_controlled_aim_target(me, face_dir, radar_range)
+	return null
 
 func _is_zombie(type: String) -> bool:
 	return type == "zombie" or type == "zombie_tank"
@@ -8989,159 +8547,12 @@ func _reset_all_disasters():
 	bombardero_pending_checks.clear()
 
 func _on_arcade_selection_made(is_team_change = false):
-	# Removed "npc_control_gui.visible" AND "controlled_npc" guards.
-	# If the Arcade menu is open at all, selecting an item MUST force it to close and update!
-	if is_instance_valid(npc_control_gui):
-		if not is_team_change and is_npc_mode_menu_open:
-			_toggle_npc_mode_menu(false)
-		_update_arcade_dynamic_button()
+	if npc_control_manager:
+		npc_control_manager.on_arcade_selection_made(is_team_change)
 
 func _update_arcade_dynamic_button():
-	if not is_instance_valid(npc_control_gui): return
-	var menu_btn = npc_control_gui.find_child("MenuBtn", true, false)
-	if not is_instance_valid(menu_btn): return
-	var s = 1.1 # FIXED SCALE: Must match the Arcade UI scale for alignment
-	
-	# Clear children of the menu button's container
-	for child in menu_btn.get_children(): 
-		if is_instance_valid(child): child.queue_free()
-	
-	menu_btn.text = tr("menu")
-	menu_btn.modulate = Color.WHITE
-	
-	# Determine if something is "Selected"
-	var active_name = ""
-	var active_val = ""
-	var active_color = Color.WHITE
-	var is_disaster = false
-	
-	var intensity_labels = ["off", "light", "med", "heavy", "violent"]
-	
-	# Check Disasters (Priority)
-	if current_weather > 0:
-		active_name = tr("weather"); active_val = tr(intensity_labels[current_weather]); active_color = Color.SKY_BLUE; is_disaster = true
-	elif acid_rain_intensity > 0:
-		active_name = tr("acid_rain"); active_val = tr(intensity_labels[acid_rain_intensity]); active_color = Color("#7ae267"); is_disaster = true
-	elif earthquake_intensity > 0:
-		active_name = tr("quake"); active_val = tr(intensity_labels[earthquake_intensity]); active_color = Color.GOLD; is_disaster = true
-	elif tornado_intensity > 0:
-		active_name = tr("tornado"); active_val = tr(intensity_labels[tornado_intensity]); active_color = Color.GRAY; is_disaster = true
-	elif tsunami_intensity > 0:
-		active_name = tr("tsunami"); active_val = tr(intensity_labels[tsunami_intensity]); active_color = Color.ROYAL_BLUE; is_disaster = true
-	elif bombardero_intensity > 0:
-		active_name = tr("bomber"); active_val = tr(intensity_labels[bombardero_intensity]); active_color = Color.INDIAN_RED; is_disaster = true
-	# Check NPCs
-	elif selected_material >= 1000:
-		if selected_material == 1000 or selected_material == 1001: active_name = tr("warrior")
-		elif selected_material == 1010 or selected_material == 1011: active_name = tr("archer")
-		elif selected_material == 1020 or selected_material == 1021: active_name = tr("miner")
-		elif selected_material == 1040 or selected_material == 1041: active_name = tr("medic")
-		elif selected_material == 1070 or selected_material == 1071: active_name = tr("mage")
-		elif selected_material == 1050 or selected_material == 1051: active_name = tr("zombie")
-		elif selected_material == 1060 or selected_material == 1061: active_name = tr("zombie_tank")
-		elif selected_material == 1090 or selected_material == 1091: active_name = tr("dinosaurio")
-		
-		if selected_material == 1050 or selected_material == 1051 or selected_material == 1060 or selected_material == 1061 or selected_material == 1090 or selected_material == 1091:
-			active_color = Color("#4E822E") if (selected_material == 1060 or selected_material == 1061 or selected_material == 1090 or selected_material == 1091) else Color("#5D9C36")
-			active_val = tr("factionless")
-		else:
-			var t_colors = [Color.RED, Color.CORNFLOWER_BLUE, Color.GOLD, Color.GREEN]
-			active_color = t_colors[selected_team] if selected_team < 4 else Color.WHITE
-			active_val = "T." + str(selected_team + 1)
-	# Check Material
-	elif selected_material > 0:
-		if mat_id_to_key.has(selected_material):
-			active_name = tr(mat_id_to_key[selected_material])
-		else:
-			active_name = "Mat." + str(selected_material)
-		active_val = "S." + str(brush_radius)
-		active_color = mat_colors_1[selected_material]
-	
-	if active_name != "":
-		menu_btn.text = "" # Hide base text
-		
-		# 1. INTERNAL CONTENT
-		var hbox = HBoxContainer.new()
-		hbox.name = "DynamicContent"
-		hbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hbox.add_theme_constant_override("separation", 0)
-		menu_btn.add_child(hbox)
-		
-		# --- LEFT SIDE ---
-		var left_side = CenterContainer.new()
-		left_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		left_side.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hbox.add_child(left_side)
-		
-		if is_disaster:
-			# Disaster Name
-			var name_lbl = Label.new()
-			name_lbl.text = active_name
-			name_lbl.add_theme_font_override("font", _get_safe_font())
-			name_lbl.add_theme_font_size_override("font_size", 22 * s) # LARGE
-			name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			left_side.add_child(name_lbl)
-		else:
-			# Material Color
-			var color_box = ColorRect.new()
-			color_box.custom_minimum_size = Vector2(50 * s, 30 * s)
-			color_box.color = active_color
-			color_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			left_side.add_child(color_box)
-		
-		# Divider
-		var div = ColorRect.new()
-		div.custom_minimum_size = Vector2(4 * s, 0)
-		div.color = Color(1, 1, 1, 0.2)
-		div.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hbox.add_child(div)
-		
-		# --- RIGHT SIDE ---
-		var right_side = CenterContainer.new()
-		right_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		right_side.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hbox.add_child(right_side)
-		
-		var val_lbl = Label.new()
-		val_lbl.text = active_val
-		val_lbl.add_theme_font_override("font", _get_safe_font())
-		val_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		
-		if is_disaster:
-			val_lbl.add_theme_font_size_override("font_size", 28 * s) # LARGE
-			val_lbl.add_theme_color_override("font_color", Color.WHITE) # More legible
-		else:
-			# Material Size (with Brush Emoji)
-			var brush_sizes = [0, 1, 2, 5, 7, 12]
-			var brush_labels = ["1", "3", "5", "10", "15", "25"]
-			var brush_idx = brush_sizes.find(brush_radius)
-			var display_val = brush_labels[brush_idx] if brush_idx != -1 else str(brush_radius)
-			val_lbl.text = "🖌️:" + display_val
-			val_lbl.add_theme_font_size_override("font_size", 28 * s)
-			val_lbl.add_theme_color_override("font_color", Color.YELLOW)
-		
-		right_side.add_child(val_lbl)
-		
-		# 2. EXTERNAL LABELS (Below the button)
-		var ext_labels = npc_control_gui.get_node_or_null("ArcadeLabels")
-		if ext_labels:
-			for child in ext_labels.get_children(): child.queue_free()
-			
-			# ONLY add external labels if NOT a disaster (to avoid redundant names)
-			if not is_disaster:
-				var name_lbl = Label.new()
-				name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-				name_lbl.text = active_name
-				name_lbl.add_theme_font_override("font", _get_safe_font())
-				name_lbl.add_theme_font_size_override("font_size", 30 * s)
-				name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-				ext_labels.add_child(name_lbl)
-	else:
-		# CLEAR external labels when in "MENU" mode
-		var ext_labels = npc_control_gui.get_node_or_null("ArcadeLabels")
-		if ext_labels:
-			for child in ext_labels.get_children(): child.queue_free()
+	if npc_control_manager:
+		npc_control_manager.update_arcade_dynamic_button()
 
 # --- MUSIC SYSTEM IMPLEMENTATION (SandboxMusicSystem) ---
 

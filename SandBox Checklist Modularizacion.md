@@ -22,11 +22,11 @@
 | **7** | **`SandboxWorkshopUI`** | `modules/sandbox_workshop_ui.gd` | `[x] COMPLETADO Y VERIFICADO` | ~2.713 | 2026-10-09 |
 | **8** | **`SandboxLabUI`** | `modules/sandbox_lab.gd` | `[x] COMPLETADO Y VERIFICADO` | ~1.400 | 2026-10-09 |
 | **9** | **`SandboxMusicSystem`** | `modules/sandbox_music.gd` | `[x] COMPLETADO Y VERIFICADO` | ~1.200 | 2026-10-09 |
-| **10** | **`SandboxNpcControlManager`**| `modules/sandbox_npc_control.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~800 | — |
-| **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[ ] PENDIENTE` | ~850 | — |
+| **10** | **`SandboxNpcControlManager`**| `modules/sandbox_npc_control.gd` | `[x] COMPLETADO (Listo para Verificación)` | ~640 | 2026-10-09 |
+| **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~850 | — |
 | **12** | **`SandboxMechanismsManager`** | `modules/sandbox_mechanisms.gd` | `[ ] PENDIENTE` | ~1.850 | — |
 
-**Progreso Actual**: **9 de 12 módulos completados (75.0%)**. Líneas extraídas/delegadas del núcleo: **9.452 líneas** (de 21.844 a 12.392).
+**Progreso Actual**: **10 de 12 módulos completados (83.3%)**. Líneas extraídas/delegadas del núcleo: **10.042 líneas** (de 21.844 a 11.802).
 
 ---
 
@@ -218,21 +218,24 @@
 
 ---
 
-### [ ] Paso 10: `SandboxNpcControlManager` (Módulo 10)
-* **Estado**: **PENDIENTE**
+### [x] Paso 10: `SandboxNpcControlManager` (Módulo 10)
+* **Estado**: **COMPLETADO (Listo para Verificación)**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_npc_control.gd`
 * **Tipo de Objeto**: `Node` (controla la capa visual `NPCControlGUI` y procesa inputs táctiles).
 * **Qué hace**:
-  - Despliega el joystick circular virtual y los botones de salto y acción para poseer a cualquier personaje del mapa.
-  - Adapta contextualmente el botón de acción según la clase del personaje (el minero pica túneles, el arquero tensa el arco, el guerrero asesta tajos, el mago conjura fuego).
-  - Gestiona la entrada táctil analógica y el desposeer al personaje devolviendo el control a la IA autónoma.
+  - Despliega el joystick circular virtual y los botones de salto y acción para poseer a cualquier personaje del mapa (Hero Unit).
+  - Adapta contextualmente el botón de acción según la clase del personaje (el minero pica túneles y coloca TNT, el arquero tensa el arco, el guerrero asesta tajos, el mago conjura fuego, el médico cura en área, el zombi muerde y el tanque arroja bloques de roca).
+  - Gestiona la entrada táctil analógica, físicas con inercia, y el desposeer al personaje devolviendo el control a la IA autónoma.
+  - Gestiona el botón dinámico central `MenuBtn` con indicador en tiempo real de material/desastre/NPC seleccionado y etiquetas externas `ArcadeLabels`.
 * **Consideraciones a Actualizar Pendientes en Próximos Módulos**:
-  - [ ] **Con Paso 3 (`SandboxAchievementManager`)**: Al poseer un NPC por primera vez, desbloquear el logro `retro_time`.
-  - [ ] **Con Paso 4 (`SandboxDialogManager`)**: Asegurar que mientras el Gamepad táctil esté activo, se oculten burbujas tutoriales que puedan interferir en la visión.
-  - [ ] **Con el Núcleo de NPCs (`sandbox_grid.gd`)**: Las acciones de excavación o disparo invocan las rutinas especializadas del grid (`_miner_dig`, `_shoot_arrow`, `_shoot_fireball`).
-* **Funciones Clave a Repasar**:
-  - `_setup_npc_control_gui()`, `_handle_controlled_npc_input()`, `_trigger_controlled_npc_action()`
-  - `_stop_controlling_npc()`, `_update_arcade_dynamic_button()`
+  - [x] **Con Paso 3 (`SandboxAchievementManager`)**: Al poseer un NPC por primera vez, desbloquea el logro `retro_time` en segundo plano.
+  - [x] **Con Paso 4 (`SandboxDialogManager`)**: Mientras el Gamepad táctil esté activo, se mantiene el bloqueo de clicks al mundo (`MOUSE_FILTER_STOP`) y alternancia de menús.
+  - [x] **Con el Núcleo de NPCs (`sandbox_grid.gd`)**: Las acciones invocan las rutinas especializadas del grid (`_miner_dig`, `_shoot_arrow`, `_shoot_fireball`, `_attack_npc`, etc.).
+* **Funciones Clave Implementadas**:
+  - `setup()`, `setup_npc_control_gui()`, `start_controlling_npc()`, `try_select_npc_at()`
+  - `stop_controlling_npc()`, `toggle_npc_mode_menu()`, `handle_controlled_npc_input()`
+  - `trigger_controlled_npc_action()`, `find_controlled_aim_target()`
+  - `on_arcade_selection_made()`, `update_arcade_dynamic_button()`
 
 ---
 
@@ -381,6 +384,20 @@
   - Se extrajo el popup contextual de nota al tocar bloques en la cuadrícula (`update_music_note_popup`).
   - Se conservaron 13 métodos delegadores y 12 propiedades proxy con getters/setters en `sandbox_grid.gd` para 100% compatibilidad hacia atrás.
   - **Reducción neta**: -849 líneas en `sandbox_grid.gd` (de 13.241 a 12.392 líneas).
+
+### Hito 10 (2026-10-09): Paso 10 - `SandboxNpcControlManager`
+- **Módulo Creado**: `res://sandbox/scripts/sandbox/modules/sandbox_npc_control.gd`.
+- **Modificaciones en `sandbox_grid.gd`**:
+  - Se añadió la instancia `var npc_control_manager: SandboxNpcControlManager = null`.
+  - En `_ready()`: Inicialización con `npc_control_manager = SandboxNpcControlManager.new()`, inyección con `npc_control_manager.setup(self)`.
+  - Se extrajo el mando virtual circular táctil (`NPCControlGUI`) con pad circular, cruz direccional, botón `MenuBtn`, etiquetas `ArcadeLabels`, botón de salida `X` y botón de acción.
+  - Se extrajo la posesión de NPCs (incremento de salud Hero Unit, freno de IA autónoma, analytics y logro `retro_time`).
+  - Se extrajo el bucle de físicas e inputs analógicos con inercia (`handle_controlled_npc_input`).
+  - Se extrajo la ejecución contextual de acciones de clase (`trigger_controlled_npc_action`) para guerrero, arquero, minero (tunelado y dinamita), médico (cura de área), mago (bolas de fuego), zombi y tanque zombi (lanzamiento balístico de rocas).
+  - Se extrajo el buscador de objetivo de puntería frontal (`find_controlled_aim_target`).
+  - Se extrajo la actualización dinámica del botón de menú en modo arcade (`update_arcade_dynamic_button`).
+  - Se mantuvieron 8 métodos delegadores y 4 propiedades proxy con getters/setters en `sandbox_grid.gd` para 100% compatibilidad hacia atrás.
+  - **Reducción neta**: -590 líneas en `sandbox_grid.gd` (de 12.392 a 11.802 líneas). Total acumulado extraído del núcleo: **10.042 líneas**.
 
 
 
