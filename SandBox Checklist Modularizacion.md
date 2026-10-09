@@ -21,7 +21,7 @@
 | **6** | **`SandboxSaveSystem`** | `modules/sandbox_save_system.gd` | `[x] COMPLETADO Y VERIFICADO` | ~1.400 | 2026-10-09 |
 | **7** | **`SandboxWorkshopUI`** | `modules/sandbox_workshop_ui.gd` | `[x] COMPLETADO Y VERIFICADO` | ~2.713 | 2026-10-09 |
 | **8** | **`SandboxLabUI`** | `modules/sandbox_lab.gd` | `[x] COMPLETADO Y VERIFICADO` | ~1.400 | 2026-10-09 |
-| **9** | **`SandboxMusicSystem`** | `modules/sandbox_music.gd` | `[x] COMPLETADO (Listo para Verificación)` | ~1.200 | 2026-10-09 |
+| **9** | **`SandboxMusicSystem`** | `modules/sandbox_music.gd` | `[x] COMPLETADO Y VERIFICADO` | ~1.200 | 2026-10-09 |
 | **10** | **`SandboxNpcControlManager`**| `modules/sandbox_npc_control.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~800 | — |
 | **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[ ] PENDIENTE` | ~850 | — |
 | **12** | **`SandboxMechanismsManager`** | `modules/sandbox_mechanisms.gd` | `[ ] PENDIENTE` | ~1.850 | — |
@@ -198,7 +198,7 @@
 ---
 
 ### [x] Paso 9: `SandboxMusicSystem` (Módulo 6)
-* **Estado**: **COMPLETADO (Listo para Verificación)**
+* **Estado**: **COMPLETADO Y VERIFICADO**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_music.gd`
 * **Tipo de Objeto**: `Node` (gestiona UI musical y pool de polifonía de audio de 32 canales).
 * **Qué hace**:
