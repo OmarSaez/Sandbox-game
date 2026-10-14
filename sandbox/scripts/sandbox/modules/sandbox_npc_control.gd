@@ -613,9 +613,9 @@ func trigger_controlled_npc_action() -> void:
 			
 		"miner":
 			var face_dir = controlled_npc.get("last_dir", 1)
-			var tx = controlled_npc.pos.x + (face_dir * 3)
-			var ty = controlled_npc.pos.y + 2
-			if tx >= 1 and tx < grid.grid_width - 1 and ty >= 1 and ty < grid.dynamic_grid_height - 1:
+			var tx = (controlled_npc.pos.x + 5) if face_dir == 1 else (controlled_npc.pos.x - 2)
+			var ty = controlled_npc.pos.y + 4
+			if tx >= 1 and tx < grid.grid_width - 2 and ty >= 1 and ty < grid.dynamic_grid_height - 2:
 				grid._set_cell(tx, ty, 5) # 5 = TNT
 				grid._set_cell(tx + 1, ty, 5)
 				grid._set_cell(tx, ty + 1, 5)

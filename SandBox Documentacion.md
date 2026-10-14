@@ -1,453 +1,439 @@
-# Manual de Arquitectura y Contexto Técnico: Sandbox Game
-> **Propósito del Documento**: Este archivo sirve como la **fuente de verdad y contexto integral** tanto para desarrolladores como para modelos de inteligencia artificial (LLMs). Permite entender, localizar, modificar y extender cualquier subsistema del proyecto de forma rápida y segura, sin depender de números de línea estáticos que cambian con cada edición.
+# Manual de Arquitectura y Documentación Técnica Maestra: Sandbox Game
+> **Propósito del Documento**: Este archivo constituye la **fuente de verdad definitiva y ancla técnico integral** para desarrolladores y modelos de inteligencia artificial (LLMs). Documenta de forma exhaustiva la arquitectura cuádruple del proyecto, el catálogo técnico completo de los **12 submódulos especializados**, el núcleo orquestador `sandbox_grid.gd`, los sistemas de simulación celular en C++, los shaders en GPU, y las guías prácticas para extender cualquier subsistema sin riesgo de regresiones.
 
 ---
 
 ## 1. Visión General del Proyecto
 
 ### 1.1 Naturaleza del Proyecto
-**Sandbox Game** es un simulador de física de partículas / autómata celular interactivo ("falling-sand game") en 2D desarrollado para dispositivos móviles y PC sobre **Godot Engine (versión 4.x)**. Permite al usuario interactuar con materiales elementales, fluidos, gases, circuitos lógicos, mecanismos de pistones y cañones, desastres naturales, bloques musicales y personajes inteligentes (NPCs) con emociones y personalidades dinámicas.
+**Sandbox Game** es un simulador de física de partículas y autómata celular interactivo ("falling-sand game") en 2D desarrollado para dispositivos móviles (Android/iOS) y PC sobre **Godot Engine (versión 4.x)**. Permite a los jugadores experimentar en tiempo real con cientos de miles de partículas de materiales elementales, fluidos, gases, circuitos lógicos integrados, mecanismos mecánicos (pistones, cañones, tuberías neumáticas), desastres naturales reactivos, instrumentos musicales afinados y personajes inteligentes (NPCs) dotados de máquinas de estados, emociones reactivas y control manual estilo arcade.
 
-### 1.2 Arquitectura Híbrida (C++ GDExtension + GDScript + GL Shaders)
-Debido a la alta exigencia computacional de simular hasta cientos de miles de celdas por segundo en dispositivos móviles, el juego implementa una arquitectura en tres capas:
+### 1.2 Arquitectura en 4 Capas (C++ + GDScript Core + Módulos + GPU Shaders)
+Para conciliar la demanda computacional extrema de la simulación de partículas con la alta modularidad y mantenibilidad del código, el proyecto se estructura en **cuatro capas cooperativas**:
 
 ```mermaid
 graph TD
-    A[GPU Shader: sandbox_render.gdshader] <-->|Texturas de Paleta, Carga y Fondo| B[GDScript: sandbox_grid.gd]
-    B -->|Lógica de alto nivel, UI, NPCs, Audio, Eventos| B
-    B <-->|process_physics / process_electricity / process_pistons| C[C++ GDExtension: SandboxGridNode]
-    C -->|Cálculos optimizados de arrays de memoria| C
+    subgraph Capa 1: GPU Shaders
+        S1[sandbox_render.gdshader: Renderizado 60 FPS]
+        S2[tornado_visual.gdshader: Distorsión cinemática]
+    end
+
+    subgraph Capa 2: Motor C++ GDExtension
+        CPP[SandboxGridNode: C++ Nativo]
+        CPP -->|process_physics: Gravedad, dispersión y colisiones| CPP
+        CPP -->|process_electricity: Propagación BFS acelerada| CPP
+        CPP -->|process_pistons: Cálculo de empuje masivo| CPP
+        CPP -->|map_grid_data: Mapeo binario de arrays| CPP
+    end
+
+    subgraph Capa 3: Orquestador Central GDScript
+        Core[sandbox_grid.gd: SandboxGrid ~8.450 líneas]
+        Core <-->|Memoria compartida / Arrays de celdas| CPP
+        Core <-->|palette_tex, charge_tex, background_tex| S1
+        Core -->|Bucles calientes HOT: Step, interacciones, dibujo| Core
+    end
+
+    subgraph Capa 4: Subsistemas Modulares COLD
+        M1[FontHelper: sandbox_font_helper.gd]
+        M2[HistoryManager: sandbox_history.gd]
+        M3[AchievementManager: sandbox_achievements.gd]
+        M4[DialogManager: sandbox_dialogs.gd]
+        M5[ToolsPaintUI: sandbox_tools_ui.gd]
+        M6[SaveSystem: sandbox_save_system.gd]
+        M7[WorkshopUI: sandbox_workshop_ui.gd]
+        M8[LabUI: sandbox_lab.gd]
+        M9[MusicSystem: sandbox_music.gd]
+        M10[NpcControlManager: sandbox_npc_control.gd]
+        M11[DisasterManager: sandbox_disasters.gd]
+        M12[MechanismsManager: sandbox_mechanisms.gd]
+    end
+
+    Core <--> M1
+    Core <--> M2
+    Core <--> M3
+    Core <--> M4
+    Core <--> M5
+    Core <--> M6
+    Core <--> M7
+    Core <--> M8
+    Core <--> M9
+    Core <--> M10
+    Core <--> M11
+    Core <--> M12
 ```
 
-1. **Capa C++ (GDExtension - `SandboxGridNode`)**:
+1. **Capa 1: GPU Shaders (`sandbox_render.gdshader`, `tornado_visual.gdshader`)**:
+   - Transforma los arreglos crudos de enteros (material IDs, carga eléctrica, variantes) en píxeles coloreados, iluminación dinámica de cables y texturas procedurales a 60 FPS sin cargar la CPU.
+2. **Capa 2: C++ GDExtension (`SandboxGridNode`)**:
    - Código fuente en `sandbox/gdextension/src/` (`sandbox_grid_node.cpp`, `sandbox_grid_node.h`).
-   - Procesa la física pesada de partículas (`process_physics`), la propagación rápida de electricidad (`process_electricity`), el cálculo de empuje de pistones (`process_pistons`) y el mapeo acelerado de datos de guardado (`map_grid_data`).
-2. **Capa GDScript (Controlador Monolítico - `SandboxGrid`)**:
-   - Archivo: `sandbox/scripts/sandbox/sandbox_grid.gd` (clase `SandboxGrid` que hereda de `SandboxGridNode`).
-   - Centraliza la orquestación general: interfaz de usuario (HUD), eventos táctiles/ratón, inteligencia artificial de NPCs, sistema de sonido, logros, taller en línea (Workshop), laboratorio de alquimia y guardado/carga.
-3. **Capa GPU (Fragment Shader - `sandbox_render.gdshader`)**:
-   - Convierte los IDs lógicos de material y cargas eléctricas en gráficos coloreados con texturas procedurales a través de una paleta de 2048x3 píxeles (`palette_tex`), una textura de carga (`charge_tex`) y capas de pintura (`background_tex`, `element_color_tex`).
+   - Ejecuta en memoria nativa la caída de partículas de alta frecuencia, la propagación BFS de corriente eléctrica y las operaciones masivas de memoria.
+3. **Capa 3: Orquestador Central GDScript (`sandbox_grid.gd` ~8.450 líneas)**:
+   - Hereda directamente de `SandboxGridNode`.
+   - Mantiene los bucles críticos por cuadro (*HOT loops*): interacción táctil continua, dibujo sobre el lienzo, actualización de texturas en GPU, ciclo de vida de la cámara y orquestación general.
+4. **Capa 4: Subsistemas Modulares Especializados (`res://sandbox/scripts/sandbox/modules/`)**:
+   - 12 clases autónomas que encapsulan la lógica de menús, persistencia, red, audio, desastres y mecanismos (*COLD / Event-Driven*), reduciendo el núcleo original de 21.844 a 8.450 líneas (13.394 líneas extraídas).
 
 ### 1.3 Estructura del Árbol de Directorios
-- `sandbox/`: Raíz del proyecto de Godot.
-  - `project.godot`: Configuración principal del motor, autoloads, ventana y extensiones.
-  - `gdextension/`: Código fuente en C++ y scripts de compilación SCons para Windows y Android.
+- `sandbox/`: Raíz del proyecto Godot.
+  - `project.godot`: Archivo maestro de configuración, autoloads y plugins.
+  - `gdextension/`: Fuentes C++ y scripts de compilación SCons (Windows x86_64, Android arm64/arm32).
   - `scenes/`:
-    - `main/loading_screen.tscn`: Escena de arranque del juego.
-    - `main/main_scene.tscn`: Escena principal donde se aloja el nodo de la cuadrícula y el HUD.
-    - `main/world_card.tscn`: Tarjeta UI para previsualizar mundos del Workshop.
-    - `npc_editor.tscn`: Escena del editor visual de píxeles para NPCs personalizados.
-  - `scripts/`:
-    - `sandbox/sandbox_grid.gd`: **Controlador central monolítico**.
-    - `sandbox/material.gd`: Recurso `SandboxMaterial` y definición canónica de `Tags`.
-    - `sandbox/npc_editor.gd`: Lógica del editor de sprites/estados de NPCs (20x20 píxeles).
-    - `sandbox/workshop_manager.gd`: Gestor de red, Firebase y subida/descarga de mundos.
-    - `sandbox/world_card.gd`: Lógica de interacción con tarjetas de mundos (Likes, reportes, descargas).
-    - `sandbox/sandbox_render.gdshader`: Shader principal de dibujado de la cuadrícula.
-    - `sandbox/tornado_visual.gdshader`: Shader de distorsión visual para el vórtice del tornado.
-    - `admob_manager.gd`: Autoload para banners, anuncios intersticiales y recompensados (AdMob).
-    - `version_manager.gd`: Autoload de verificación de versión remota vía JSON en GitHub.
-    - `analytics_manager.gd`: Autoload para registro de eventos en Firebase Analytics.
-    - `notification_manager.gd`: Autoload para notificaciones push locales en móviles.
-  - `assets/`: Texturas, iconos de logros (`icon_ach/`), fuentes seguras y audio SFX (`audio/sfx/`).
-  - `translations/`: Tablas de traducción CSV y archivos `.translation` (ES, EN, IT, FR, DE, PT).
-
-### 1.4 Singletons y Autoloads (`project.godot`)
-- `VersionManager`: Comprueba actualizaciones requeridas o sugeridas consultando `version_config.json`.
-- `AdMobManager`: Gestiona ciclos de vida de anuncios, política de privacidad GDPR/UMP y señales de desbloqueo.
-- `AnalyticsManager`: Envía eventos telemétricos a Firebase.
-- `NotificationScheduler` y `NotificationManager`: Planifican recordatorios locales para el jugador.
-- `GodotPlayGameServices`: Integra inicio de sesión y sincronización de logros con Google Play Games.
-- `WorkshopManager`: Conecta el cliente con Firebase Firestore/Storage y la autenticación del usuario.
-- `Firebase`: Plugin base para REST API de Firebase.
-
----
-
-## 2. Convenciones para Navegar `sandbox_grid.gd`
-
-> [!WARNING]
-> **REGLA FUNDAMENTAL: NUNCA USAR NÚMEROS DE LÍNEA ABSOLUTOS**  
-> `sandbox_grid.gd` cuenta con más de 21.800 líneas de código en continuo desarrollo. Cualquier número de línea quedará desactualizado con futuras modificaciones.  
-> Para ubicar o referenciar código, utilice **siempre**:
-> 1. El **nombre exacto de la función** (ej. `_setup_main_ui_containers`, `_process_npcs`, `_step_simulation`).
-> 2. Las **constantes o variables clave** (ej. `NPC_PROFILES`, `GOOGLE_PLAY_ACHIEVEMENTS`, `lab_custom_data`).
-> 3. La **sección lógica relativa** guiada por los comentarios bandera (ej. `# --- RAW MATERIALS ---`, `# --- MUSIC SYSTEM ---`, `# --- SFX SYSTEM ---`).
-
-### Mapa de Ubicación Relativa de Funciones en `sandbox_grid.gd`
-
-| Sección Lógica | Banderas de Búsqueda en el Código | Funciones y Variables Clave |
-| :--- | :--- | :--- |
-| **Cabecera y Búferes** | `# Simulation Data`, `# Simulation Chunking`, `# GPU Rendering Data` | `cells`, `tags_array`, `charge_array`, `CHUNK_SIZE`, `grid_scale`, `MAX_PIXELS_PER_FRAME` |
-| **Cámara y Zoom** | `# --- SIMULATION CAMERA ---` | `_zoom_camera`, `_set_panning_mode`, `_clamp_camera_position`, `_update_zoom_ui` |
-| **Constantes de Datos** | `# --- MUSIC SYSTEM ---`, `NPC_PROFILES`, `NPC_VISUALS` | `MUSIC_INSTRUMENTS`, `NPC_PROFILES`, `NPC_VISUALS`, `SPATIAL_CELL_SIZE`, `SFX_POOL_SIZE` |
-| **Ciclo de Vida** | `func _ready()`, `# --- ORIENTATION INITIALIZATION ---` | `_ready()`, `_save_tool_settings()`, `_load_tool_settings()`, `_on_window_resized()` |
-| **Registro de Materiales** | `# --- RAW MATERIALS (0-20) ---`, `# --- LOGIC GATES ---`, `# --- BIOLOGICALS ---` | `_register_material()`, `material_tags_raw`, `mat_colors_1`, `mat_colors_2`, `mat_colors_3` |
-| **Tutoriales y Ayuda** | `# --- MAIN TUTORIAL ---`, `_start_interactive_tutorial` | `_show_main_tutorial_step()`, `_show_unified_tutorial_bubble()`, `_start_pulse()` |
-| **Logros (Achievements)** | `# --- ACHIEVEMENT SYSTEM DATA ---`, `# --- ACHIEVEMENT POLLING SEQUENCE ---` | `GOOGLE_PLAY_ACHIEVEMENTS`, `_check_achievement_conditions()`, `_check_achievement_step()`, `_unlock_achievement()` |
-| **Construcción del HUD** | `func _setup_main_ui_containers()`, `# --- QUICK ACTIONS GRID ---` | `_setup_main_ui_containers()`, `_create_vertical_category_btn()`, `_align_panel_to_hud()`, `action_hbox`, `action_vbox`, `material_grid` |
-| **Panel de Herramientas** | `func _setup_tools_ui()` | `_setup_tools_ui()`, `_on_tools_btn_pressed()`, `_update_game_volume()`, fila de pincel, idiomas, pausa y reinicio |
-| **Panel de Workshop** | `func _setup_workshop_ui()`, `# --- WORKSHOP UI ---` | `_fetch_top_async()`, `_fetch_recientes_async()`, `_on_world_download_requested()`, `_show_upload_world_dialog()` |
-| **Panel de Laboratorio** | `func _setup_lab_ui()`, `_apply_custom_material_to_engine` | `_apply_custom_material_to_engine()`, `_update_lab_inspector()`, `_sync_palette_to_shader()`, `_save_lab_state()`, `_load_lab_state()` |
-| **Panel de Desastres** | `func _setup_disaster_ui()` | `_setup_disaster_ui()`, `_reset_all_disasters()`, botones de volcán, tornado, terremoto, tsunami, bombardero |
-| **Sistema de Audio (SFX)** | `# --- SFX SYSTEM ---`, `# --- AUDIO POOL INITIALIZATION ---` | `_play_sfx()`, `_play_action_sound()`, `_play_material_sound()`, `_manage_looping_player()`, `_get_sfx_stream()` |
-| **Bucle Principal del Frame** | `func _process(delta)`, `func _draw()` | `_process()`, `_draw()`, interacción con el ratón, trazado de trazos, actualización de temporizadores de desastres |
-| **Historial (Undo/Redo)** | `# --- HISTORY SYSTEM ---` | `save_history_state()`, `undo_history()`, `redo_history()`, `_deep_copy_npcs()`, `_deep_copy_logic_gates()` |
-| **Lógica de Desastres** | `_process_tsunami`, `_process_tornado`, `_process_earthquake` | `_process_tsunami()`, `_process_tornado()`, `_process_earthquake()`, `_process_bombardero()`, `_process_weather()`, `_strike_lightning()` |
-| **Pintura y Dibujo** | `func _draw_circle`, `func _paint_background_circle` | `_draw_circle()`, `_paint_background_circle()`, `_paint_elements_circle()`, `_set_cell()`, `_get_cell()` |
-| **Simulación Celular (Step)** | `func _step_simulation()` | `_step_simulation()`, `_move_particle()`, `_swap_cells()`, `_process_interactions()`, `_process_electricity()` |
-| **Pintura UI** | `func _setup_paint_ui()` | `_setup_paint_ui()`, `_add_recent_paint_color()`, selectores de color |
-| **NPCs: Lógica e IA** | `func _process_npcs(delta)`, `NPC_PROFILES` | `_process_npcs()`, `_place_npc()`, `_attack_npc()`, `_check_npc_environment_damage()`, `_set_npc_emoji()`, `_find_closest_enemy()` |
-| **NPCs: Control Manual** | `func _setup_npc_control_gui()` | `_setup_npc_control_gui()`, `_handle_controlled_npc_input()`, `_trigger_controlled_npc_action()`, `_stop_controlling_npc()` |
-| **Explosiones** | `func _explode(...)` | `_explode()`, `_prime_explosive()`, `_trigger_electric_devices()` |
-| **Circuitos y Compuertas** | `func _simulate_logic_gates()` | `_simulate_logic_gates()`, `_draw_logic_gate_shape()`, `_place_circuit_block()`, `_load_active_logic_gates()` |
-| **Pistones** | `func _simulate_pistons()` | `_place_piston()`, `_simulate_pistons()`, `_get_piston_head_pixels()`, `_get_piston_base_pixels()` |
-| **Cañones y Tuberías** | `func _simulate_cannons()`, `func _simulate_pipes()` | `_place_cannon()`, `_place_pipe()`, `_place_pipe_x2()`, `_fire_cannon()`, `_simulate_cannons()`, `_simulate_pipes()`, `_eject_npc_from_pipe()` |
-| **Sistema Musical** | `# --- MUSIC SYSTEM IMPLEMENTATION ---` | `_register_musical_materials()`, `_place_music_block()`, `_play_music_note()`, `_setup_music_ui()` |
-| **Guardado / Carga Local** | `# --- SAVE / LOAD SYSTEM ---` | `_setup_save_ui()`, `_save_to_slot()`, `_load_from_slot()`, `_import_sbu_file()`, `_on_share_pressed()` |
-| **Menú de Logros UI** | `func _setup_achievement_menu()` | `_setup_achievement_menu()`, `_on_achievement_item_clicked()`, `_show_achievement_notification()` |
+    - `sandbox_main.tscn`: Escena jugable principal con la cuadrícula de simulación y el HUD.
+    - `main/loading_screen.tscn`: Pantalla inicial de carga con verificación de versión.
+    - `main/world_card.tscn`: Tarjeta UI de mundos comunitarios para el Workshop.
+    - `npc_editor.tscn`: Editor de sprites y estados de NPCs personalizados.
+  - `scripts/sandbox/`:
+    - `sandbox_grid.gd`: **Orquestador central** del simulador.
+    - `material.gd`: Recurso `SandboxMaterial` y definición canónica de `Tags`.
+    - `sandbox_render.gdshader`: Shader de renderizado de la cuadrícula celular.
+    - `tornado_visual.gdshader`: Shader de distorsión del vórtice de tornados.
+    - `workshop_manager.gd`: Autoload gestor de APIs de Firebase (Firestore y Storage).
+    - `world_card.gd`: Controlador de tarjetas de mundos (Likes, descargas, reportes).
+    - **`modules/` (Los 12 Submódulos Especializados)**:
+      - `sandbox_font_helper.gd`: `SandboxFontHelper` (Caché tipográfica universal y fallbacks de emojis).
+      - `sandbox_history.gd`: `SandboxHistoryManager` (Historial circular de Undo/Redo y snapshots profundos).
+      - `sandbox_achievements.gd`: `SandboxAchievementManager` (Motor de 22 logros, polling escalonado y UI modal).
+      - `sandbox_dialogs.gd`: `SandboxDialogManager` (Tutorial guiado, popups de calificación y efectos visuales de pulso).
+      - `sandbox_tools_ui.gd`: `SandboxToolsPaintUI` (Ajustes de herramientas, volumen, pausa y paleta de pintura).
+      - `sandbox_save_system.gd`: `SandboxSaveSystem` (Serialización binaria `.sbu`, 10 slots locales y WebP).
+      - `sandbox_workshop_ui.gd`: `SandboxWorkshopUI` (Taller en la nube, Top Semanal, buscador Base-36 y descargas).
+      - `sandbox_lab.gd`: `SandboxLabUI` (Laboratorio de alquimia de 3 materiales custom IDs 900-902).
+      - `sandbox_music.gd`: `SandboxMusicSystem` (Bus de audio con limitador, 5 instrumentos cromáticos y metrónomo).
+      - `sandbox_npc_control.gd`: `SandboxNpcControlManager` (Mando virtual táctil arcade para posesión de NPCs).
+      - `sandbox_disasters.gd`: `SandboxDisasterManager` (Simulación de tornado, tsunami, terremoto, bombardero y clima).
+      - `sandbox_mechanisms.gd`: `SandboxMechanismsManager` (Compuertas lógicas, pistones, cañones, tuberías y LEDs).
+  - `assets/`: Fuentes (`fonts/`), iconos de logros (`icon_ach/`), SFX (`audio/sfx/`).
+  - `translations/`: Tablas de traducción CSV y recursos compilados (ES, EN, IT, FR, DE, PT).
 
 ---
 
-## 3. Sistema de Materiales y Etiquetas (`Tags`)
+## 2. Catálogo Técnico y Manual de los 12 Módulos Especializados
 
-Todos los materiales y celdas del mundo se definen a través de una máscara de bits de 64 bits (`int` en GDScript / `uint64_t` en C++) que especifica cómo reacciona física, química y lógicamente cada píxel.
+Cada módulo se instancia e inyecta en `sandbox_grid.gd` durante `_ready()`, recibiendo la referencia del orquestador mediante `setup(self)`. A continuación se detalla cada componente:
 
-### 3.1 Definición de Tags (`material.gd` y `sandbox_grid_node.h`)
-
-```gdscript
-# Enumeración SandboxMaterial.Tags (Ubicada en sandbox/scripts/sandbox/material.gd)
-enum Tags {
-    NONE               = 0,
-    # Estados de la materia
-    SOLID              = 1 << 0,  # Bloque rígido, no cae a menos que colapse
-    LIQUID             = 1 << 1,  # Fluye horizontalmente y busca huecos inferiores
-    GAS                = 1 << 2,  # Se expande aleatoriamente y tiende a ascender
-    POWDER             = 1 << 3,  # Cae y forma montículos inclinados (resbala)
-    
-    # Propiedades térmicas y de combustión
-    FLAMMABLE          = 1 << 4,  # Arde al contacto con calor/INCENDIARY
-    INCENDIARY         = 1 << 5,  # Fuente de calor activo; prende fuego o detona explosivos
-    EXPLOSIVE          = 1 << 6,  # Detona liberando onda expansiva y proyectiles
-    
-    # Red eléctrica
-    ELECTRICITY        = 1 << 7,  # Energía eléctrica pura
-    CONDUCTOR          = 1 << 8,  # Permite que la electricidad fluya a través de él
-    ELECTRIC_ACTIVATED = 1 << 9,  # Reacciona activándose o detonando al recibir corriente
-    
-    # Comportamientos de gravedad
-    GRAV_NORMAL        = 1 << 10, # Cae 1 píxel por cuadro (Arena, Agua)
-    GRAV_SLOW          = 1 << 11, # Cae 1 píxel cada 3 cuadros (Tierra)
-    GRAV_UP            = 1 << 12, # Gravedad inversa, asciende (Humo, Gases)
-    GRAV_STATIC        = 1 << 13, # Posición estática e inmóvil (Metal, Piedra, Paredes)
-    
-    # Corrosión química
-    ACID               = 1 << 14, # Disuelve materiales que no sean ANTI_ACID
-    ANTI_ACID          = 1 << 15, # Inmune a la disolución por ácido
-    
-    # Residuos de combustión
-    BURN_SMOKE         = 1 << 16, # Emite humo negro al arder
-    BURN_COAL          = 1 << 17, # Se transmuta en carbón/brasas al quemarse
-    BURN_NONE          = 1 << 18, # Se consume sin dejar residuos (Alcohol, Gas)
-    ANTI_EXPLOSIVE     = 1 << 19, # Inmune al empuje y destrucción por explosiones
-    
-    # Reino vegetal
-    PLANT              = 1 << 20, # Vegetación viva; busca agua para expandirse
-    EXP_ELECTRIC       = 1 << 21, # Genera chispas eléctricas al explotar
-    FERTILE            = 1 << 22, # Suelo apto para que germinen semillas (Tierra/Arena)
-    
-    # NPCs y Entidades
-    NPC                = 1 << 23, # Píxel perteneciente al cuerpo de un NPC
-    VOLATILE           = 1 << 24, # Proyectil cinético a alta velocidad
-    
-    # Texturizado procedural shader
-    TEXTURE_DOUBLE     = 1 << 25, # Combina Color 1 y Color 2
-    TEXTURE_TRIPLE     = 1 << 26, # Combina Color 1, Color 2 y Color 3
-    MIX_LOW            = 1 << 27, # ~15% de color secundario (sutil)
-    MIX_MEDIUM         = 1 << 28, # ~35% de color secundario (balanceado)
-    MIX_HIGH           = 1 << 29, # ~50% de color secundario (caótico)
-    
-    # Audio y Mecánica Musical
-    MUSIC              = 1 << 30, # Bloque musical que reproduce notas al energizarse
-    EXP_ACID           = 1 << 31, # Lluvia de ácido tras la explosión
-    
-    # Sub-efectos de explosión extendidos
-    EXP_WATER          = 1 << 32, # Inundación de agua tras la explosión
-    EXP_LAVA           = 1 << 33, # Cráter de lava y fuego tras la explosión
-    EXP_NPC            = 1 << 34, # Spawneo de personajes tras la detonación
-    EXP_LIFE           = 1 << 35, # Generación de pasto y flores al estallar
-    
-    # Equipos de NPCs en explosiones
-    EXP_TEAM_RED       = 1 << 36,
-    EXP_TEAM_BLUE      = 1 << 37,
-    EXP_TEAM_GREEN     = 1 << 38,
-    EXP_TEAM_YELLOW    = 1 << 39,
-    EXP_TEAM_MIXED     = 1 << 40,
-    
-    # Laboratorio Alquímico Experimental
-    VIRUS              = 1 << 41, # Consume y transmuta materia colindante
-    RADIOACTIVE        = 1 << 42, # Pulsa radiación y descargas periódicas
-    INVINCIBLE         = 1 << 43, # Totalmente indestructible (inmune a todo)
-    VORTEX             = 1 << 44, # Succiona píxeles y NPCs hacia su núcleo
-    EXP_GAS            = 1 << 45, # Genera cortina densa de humo al estallar
-    EXP_QUAKE          = 1 << 46, # Gatilla un sismo al detonar
-    EXP_PINATA         = 1 << 47, # Lanza fuegos artificiales en cadena al estallar
-    REPEL              = 1 << 48  # Campo de repulsión gravitatoria
-}
+```
++---------------------------------------------------------------------------------------------------+
+| RESUMEN DE LA ARQUITECTURA MODULAR                                                                |
++----+-----------------------------+-------------------------------+-------------------+------------+
+| #  | Clase                       | Archivo en modules/           | Instancia en grid | Líneas     |
++----+-----------------------------+-------------------------------+-------------------+------------+
+| 1  | SandboxFontHelper           | sandbox_font_helper.gd        | (Estática/Caché)  | ~42        |
+| 2  | SandboxHistoryManager       | sandbox_history.gd            | history_manager   | ~212       |
+| 3  | SandboxAchievementManager   | sandbox_achievements.gd       | achievement_mgr   | ~1.188     |
+| 4  | SandboxDialogManager        | sandbox_dialogs.gd            | dialog_manager    | ~1.444     |
+| 5  | SandboxToolsPaintUI         | sandbox_tools_ui.gd           | tools_ui          | ~1.176     |
+| 6  | SandboxSaveSystem           | sandbox_save_system.gd        | save_system       | ~1.510     |
+| 7  | SandboxWorkshopUI           | sandbox_workshop_ui.gd        | workshop_ui       | ~3.109     |
+| 8  | SandboxLabUI                | sandbox_lab.gd                | lab_ui            | ~1.363     |
+| 9  | SandboxMusicSystem          | sandbox_music.gd              | music_system      | ~1.148     |
+| 10 | SandboxNpcControlManager    | sandbox_npc_control.gd        | npc_control_mgr   | ~808       |
+| 11 | SandboxDisasterManager      | sandbox_disasters.gd          | disaster_manager  | ~898       |
+| 12 | SandboxMechanismsManager    | sandbox_mechanisms.gd         | mechanisms_mgr    | ~3.219     |
++----+-----------------------------+-------------------------------+-------------------+------------+
 ```
 
-### 3.2 Tabla Maestra de Materiales y Rangos de ID
+---
 
-Todos los materiales se registran en `_ready()` mediante la función `_register_material(id, color1, tags, color2, color3)`:
-
-| Rango de IDs | Categoría | Elementos / Nombres Clave | Comportamiento Principal |
-| :--- | :--- | :--- | :--- |
-| **0** | **Vacío / Aire** | Aire | Píxel transparente. Permite ver el fondo o pintar sobre él (`background_tex`). |
-| **1 - 20** | **Elementos Base** | 1: Arena, 2: Agua, 3: Fuego, 4: Petróleo, 5: TNT, 6: Tierra, 8: Metal, 9: Electricidad, 10: Rocas, 11: Lava, 12: Obsidiana, 13: Ácido, 14: Carbón, 15: Humo, 16: Madera, 17: Vapor/Nube, 18: Mecha, 19: Destello, 20: Pólvora, 30: Piedra | Física de arena, propagación de líquidos, fluidodinámica simple, combustión, conductividad y corrosión ácida. |
-| **21 - 34** | **Biológicos y Vegetales** | 21: Pasto, 22: Arena Mojada, 23: Tierra Mojada, 24: Enredadera, 31: Flor Rosa, 32: Flor Roja, 33: Flor Amarilla, 34: Flor Violeta | Germinan en suelos `FERTILE` con agua. Se consumen con fuego produciendo carbón (`BURN_COAL`). |
-| **25 - 29** | **Construcción y Volcanes** | 25: Cemento Fresco (Líquido), 26: Cemento Sólido, 27: Volcán Bloque, 28: Proyectil Volcán, 29: Base de Volcán Activa | El cemento fresco se solidifica al reposar. La base de volcán expulsa lava y proyectiles `GRAV_UP`. |
-| **43 - 44, 7, 77**| **Estados y Proyectiles** | 7: TNT Flashing (Blanco), 77: TNT Flashing (Rojo), 43: Chispa Eléctrica, 44: Proyectil Ácido | Estados transitorios de ignición pre-explosión y proyectiles volátiles con vida útil. |
-| **70 - 72** | **Criogenia** | 70: Hielo Criogénico, 71: Flash Congelante, 72: Detonador Criogénico | Congelan agua circundante y ralentizan reacciones térmicas. |
-| **81 - 87** | **Compuertas Lógicas** | 81: NOT, 82: AND, 83: OR, 84: NAND, 85: NOR, 86: XOR, 87: XNOR | Bloques de 4x4 o 8x8 con pines de entrada y salida orientables. Conmutan según álgebra booleana. |
-| **88 - 92** | **Componentes Eléctricos** | 88: Batería (Fuente 5V), 89: LED Multicolor, 90: Placa Activadora de NPC, 91: Puerta de NPC (se abre con corriente), 92: Bloque de Fase | La batería energiza continuamente. El bloque de fase se vuelve intangible al energizarse. |
-| **93 - 94, 193 - 194** | **Pistones** | 93: Base Pistón Normal, 94: Cabeza Pistón Normal, 193: Base Aislada, 194: Cabeza Aislada | Al recibir electricidad extienden el vástago hasta 4 celdas empujando materiales móviles. |
-| **95 - 795** | **Cañones Orientables** | 95 (0°), 195 (45°), 295 (90°), 395 (135°), 495 (180°), 595 (225°), 695 (270°), 795 (315°) | Disparan proyectiles de partículas o NPCs impulsados por aire cuando reciben carga eléctrica o señal de tubería. |
-| **96 - 97** | **Tuberías Neumáticas** | 96: Tubería Simple (1 carril), 97: Tubería X2 (Doble carril de transporte) | Absorben partículas y NPCs en un extremo y los eyectan por el extremo opuesto o hacia un cañón conectado. |
-| **600+** | **Música y Metrónomos** | 600: Metrónomo Pulsante. IDs 601 a 680+: 5 sets de instrumentos (4 tipos de piano + batería) con escalas cromáticas | Emiten notas musicales vía SFX al ser tocados por electricidad o NPCs. |
-| **900 - 902** | **Slots de Laboratorio** | 900: Elemento Personalizado 1, 901: Elemento 2, 902: Elemento 3 | Materiales creados por el jugador en la pestaña 🧪 con combinaciones libres de estado, gravedad, colores y tags. |
-| **1000 - 1090** | **Personajes (NPCs)** | 1000: Guerrero Master, 1010: Arquero, 1020: Minero, 1040: Médico, 1050: Zombie, 1060: Zombie Tank, 1070: Mago, 1080: Zombie Master, 1090: Dinosaurio | Entidades con IA autónoma, equipos (1004 Rojo, 1005 Azul, 1006 Amarillo, 1007 Verde) y colores de daño (1030-1035). |
+### Módulo 1: `SandboxFontHelper`
+* **Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_font_helper.gd`
+* **Tipo**: `RefCounted` (Clase utilitaria con caché estática en memoria).
+* **Propósito**: Resolver de manera robusta y sin asignaciones repetidas las fuentes del sistema con soporte nativo de emojis multicolor (Twemoji, NotoColorEmoji, FluentEmoji, Apple Color Emoji) en todas las plataformas (Windows, Linux, Android, iOS).
+* **Métodos Principales**:
+  * `SandboxFontHelper.get_safe_font(custom_emoji_font = null) -> Font`: Retorna una instancia singleton de `FontVariation` con fallbacks configurados.
+* **Integración en `sandbox_grid.gd`**:
+  * Método puente: `_get_safe_font()` que delega directamente a `SandboxFontHelper.get_safe_font()`.
 
 ---
 
-## 4. Pipeline de Renderizado y Shaders
+### Módulo 2: `SandboxHistoryManager`
+* **Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_history.gd`
+* **Tipo**: `RefCounted` (Instancia inyectada: `grid.history_manager`).
+* **Propósito**: Gestionar la pila circular de estados para Deshacer (`Undo`) y Rehacer (`Redo`), capturando snapshots profundos del mundo sin corromper la memoria.
+* **Estructura del Snapshot**:
+  * `cells`: Clón exacto de `PackedInt32Array` con los IDs de celdas.
+  * `cell_paint_colors`: Diccionario de colores teñidos por píxel.
+  * `charge_visual_buffer`, `active_charge_indices`, `powered_frame`: Estado eléctrico en tránsito para evitar interrupciones al deshacer.
+  * `npcs`: Copia profunda mediante `_deep_copy_npcs()` (coordenadas, vida, equipo, estados).
+  * `logic_gates`, `pistons`: Estado estructural de mecanismos.
+* **Métodos Principales**:
+  * `save_state()`: Captura un fotograma y limpia la rama de rehacer.
+  * `undo()`: Retrocede un paso y restaura celdas, pintura, NPCs y circuitos.
+  * `redo()`: Avanza un paso en la pila.
+  * `clear_history()`: Resetea el búfer (requerido al cargar partidas o limpiar el mundo).
+  * `update_undo_redo_ui()`: Habilita o deshabilita los botones `↩️` y `↪️` del HUD.
+* **Métodos Puente en `sandbox_grid.gd`**:
+  * `save_history_state()`, `undo_history()`, `redo_history()`, `_update_undo_redo_ui()`.
 
-El renderizado no utiliza nodos individuales de Godot por píxel (lo que colapsaría el rendimiento), sino una superficie continua mapeada por un shader de alto rendimiento:
+---
 
-### 4.1 Formato de Búfer Híbrido (`Image` / `ImageTexture`)
-- Cada celda en `color_buffer` almacena 4 bytes (RGBA8):
-  - **Canal Rojo (R) y Verde (G)**: Codifican el ID del material como un entero de 16 bits:
-    $$\text{ID} = \text{round}(R \times 255) + (\text{round}(G \times 255) \times 256)$$
-  - **Canal Azul (B)**: **Marcador directo de color**. Si $B > 0.005$, el píxel omite la paleta y se renderiza directamente como color RGBA (utilizado para fuegos artificiales, chispas y trazados directos).
-  - **Canal Alfa (A)**: Codifica la **variante** de texturizado procedural (0, 1 o 2 para mezclas de color en materiales naturales; o la orientación/sub-tile en compuertas, cañones y pistones).
+### Módulo 3: `SandboxAchievementManager`
+* **Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_achievements.gd`
+* **Tipo**: `Node` (Instancia inyectada: `grid.achievement_manager`, añadido como hijo).
+* **Propósito**: Administrar los 22 logros del juego, la sincronización con Google Play Games Services, la persistencia en `user://achievements.cfg` y las animaciones de notificación y menú modal 🏆.
+* **Técnica de Optimización (Polling Escalonado)**:
+  * Para evitar caídas de FPS, no escanea toda la cuadrícula en cada fotograma. Ejecuta un ciclo distribuido en 13 pasos (`_check_achievement_step(step)`), evaluando una condición cada 2 segundos.
+* **Métodos Principales**:
+  * `setup(grid)`: Inicializa y carga logros guardados.
+  * `unlock_achievement(id: String)`: Desbloquea un trofeo, reproduce SFX, dispara la animación deslizante del banner y notifica a Google Play Games.
+  * `setup_achievement_button(parent_container)`: Construye el botón interactivo dorado 🏆 en la barra de categorías.
+  * `setup_achievement_menu()`: Abre la ventana modal con las 22 tarjetas deslizables y vista de detalles.
+* **Métodos Puente en `sandbox_grid.gd`**:
+  * `_check_achievement_step(step)`, `_unlock_achievement(id)`, `_show_achievement_notification(id)`.
 
-### 4.2 Texturas Auxiliares del Shader (`sandbox_render.gdshader`)
-1. `palette_tex` (2048 x 3 píxeles, formato RGBA8):
-   - Fila 0: Color Primario (`mat_colors_1`).
-   - Fila 1: Color Secundario (`mat_colors_2`).
-   - Fila 2: Color Terciario (`mat_colors_3`).
-   - La coordenada X es $(\text{render\_id} + 0.5) / 2048.0$.
-2. `charge_tex` (Textura formato L8):
-   - Almacena el nivel de carga eléctrica activa en cada celda para iluminar compuertas lógicas, cables y bloques de fase en tiempo real.
-3. `background_tex`:
-   - Textura que se muestra cuando la celda es aire ($\text{ID} = 0$). Permite que el jugador pinte el cielo o fondo del escenario con la herramienta de pincel de fondo.
-4. `element_color_tex`:
-   - Capa de sobreescritura de color (`cell_paint_colors`) para teñir elementos existentes sin alterar su comportamiento físico.
+---
 
-### 4.3 Tratamiento de Nodos Especiales en el Shader
-- **Compuertas Lógicas (81-87)**: Dibuja bordes cian (#40FFFF) en pines de salida activos y grises en pines inactivos según el valor de `charge_tex`.
-- **Placa de Presión / Activador NPC (90)**: Cambia a violeta neón brillante (#E0A8FF) cuando un NPC o peso la presiona.
-- **Puerta NPC (91)**: Se desvanece con un marco discontinuo verde semitransparente cuando recibe corriente, permitiendo visualmente ver el paso libre.
-- **Cañones (95-795)**: Dibuja el cuerpo metálico, el pivote y la recámara orientada en 8 ángulos distintos según el sub-ID.
+### Módulo 4: `SandboxDialogManager`
+* **Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_dialogs.gd`
+* **Tipo**: `Node` (Instancia inyectada: `grid.dialog_manager`, añadido como hijo).
+* **Propósito**: Orquestar todos los tutoriales interactivos paso a paso, recordatorios contextuales, efectos visuales de pulso en botones del HUD (`start_pulse`/`stop_pulse`), modales de calificación en Google Play con estrellas y popups centrados informativos.
+* **Métodos Principales**:
+  * `start_interactive_tutorial(tutorial_id)`: Inicia el tutorial con máscaras oscuras y punteros dinámicos.
+  * `show_unified_tutorial_bubble(grid_pos, text_key, callback)`: Muestra globos flotantes guiados sobre mecanismos.
+  * `show_rating_popup()`: Presenta el diálogo de valoración con sistema interactivo de 1 a 5 estrellas.
+  * `start_pulse(control_node)`, `stop_pulse(control_node)`: Efectos de atención mediante tweens continuos.
+* **Métodos Puente en `sandbox_grid.gd`**:
+  * `_show_main_tutorial_step()`, `_start_pulse()`, `_stop_pulse()`, `_show_rating_popup()`, `_show_unified_tutorial_bubble()`.
+
+---
+
+### Módulo 5: `SandboxToolsPaintUI`
+* **Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_tools_ui.gd`
+* **Tipo**: `Node` (Instancia inyectada: `grid.tools_ui`, añadido como hijo).
+* **Propósito**: Gestionar el panel de herramientas (`tools_panel`) y la interfaz de pintura artística (`paint_panel`). Controla el radio del pincel, volumen maestro con mute/desmute, selector de idiomas, guardado en `user://tool_settings.cfg` y la paleta cromática con selector HSV, colores recientes e historial de pintura.
+* **Métodos Principales**:
+  * `setup_tools_ui()`: Construye el panel flotante de herramientas universales.
+  * `setup_paint_ui()`: Construye el panel de pintura con sliders de radio, selector de color y conmutador Fondo/Elementos.
+  * `add_recent_paint_color(color)`: Mantiene la barra de colores usados recientemente.
+  * `update_game_volume(volume, save)`: Aplica volumen al bus `Master` de Godot.
+* **Propiedades Proxy en `sandbox_grid.gd`**:
+  * `tools_panel`, `paint_panel`, `brush_radius`, `paint_brush_radius_idx`, `game_volume`, `is_muted`, `selected_paint_color`, `paint_mode`.
+
+---
+
+### Módulo 6: `SandboxSaveSystem`
+* **Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_save_system.gd`
+* **Tipo**: `Node` (Instancia inyectada: `grid.save_system`).
+* **Propósito**: Serialización, compresión binaria, guardado local en 10 slots y exportación de archivos `.sbu` (*Sandbox Universe*).
+* **Estructura del Archivo `.sbu`**:
+  * Formato binario comprimido con `FileAccess.COMPRESSION_DEFLATE`.
+  * Contiene diccionarios tipados con metadatos (versión, autor, fecha, checksum), arrays de celdas (`cells`), capas de pintura (`cell_paint_colors`), etiquetas (`tags_array`), entidades vivas (NPCs con vida y equipo), mecanismos (compuertas, pistones, cañones, tuberías) y slots del laboratorio alquímico (IDs 900-902).
+  * Genera miniaturas optimizadas en WebP (`slot_X.webp`) para la vista previa en el menú de guardado.
+* **Métodos Principales**:
+  * `save_to_slot(slot_index: int)`: Guarda la partida en `user://saves/slot_X.sbu` y captura miniatura.
+  * `load_from_slot(slot_index: int)`: Carga y reconstruye el mundo limpiando el historial previo.
+  * `serialize_world_to_dict() -> Dictionary`: Genera la estructura de datos lista para exportar o subir al Workshop.
+  * `load_world_from_dict(data: Dictionary) -> bool`: Reconstruye el universo desde un diccionario deserializado.
+  * `import_sbu_file(file_path: String) -> bool`: Importa mundos compartidos externamente.
+* **Métodos Puente en `sandbox_grid.gd`**:
+  * `_setup_save_ui()`, `save_world_to_path()`, `load_world_from_path()`, `serialize_world_to_dict()`.
+
+---
+
+### Módulo 7: `SandboxWorkshopUI`
+* **Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_workshop_ui.gd`
+* **Tipo**: `Node` (Instancia inyectada: `grid.workshop_ui`).
+* **Propósito**: Conectar con el Taller en línea comunitario impulsado por **Firebase Firestore** y **Firebase Storage**. Administra las secciones de mundos (*Top Semanal*, *Recién Subidos*, *Mis Mundos*, *Mis Descargas*), el buscador alfanumérico en Base-36 con dígito verificador, la subida de universos, el sistema de likes diferidos, reportes y la economía de descargas gratuitas diarias sincronizadas con anuncios recompensados AdMob.
+* **Métodos Principales**:
+  * `setup_workshop_ui()`: Despliega la interfaz modal completa del Workshop con pestañas y paginación.
+  * `fetch_top_async()`, `fetch_recientes_async()`: Consultas paginadas a Cloud Firestore.
+  * `on_world_download_requested(world_data)`: Descarga el archivo binario desde Firebase Storage e invoca a `save_system.load_world_from_dict()`.
+  * `show_upload_world_dialog()`: Abre el modal para titular, describir y publicar el mundo activo.
+* **Integración**: Coordina directamente con el singleton global `WorkshopManager` y con las tarjetas visuales `res://scenes/main/world_card.tscn`.
+
+---
+
+### Módulo 8: `SandboxLabUI`
+* **Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_lab.gd`
+* **Tipo**: `Node` (Instancia inyectada: `grid.lab_ui`).
+* **Propósito**: Gestionar el Laboratorio de Alquimia Experimental donde el jugador diseña hasta 3 materiales propios (IDs **900, 901 y 902**), combinando libremente estados de la materia (Gas, Líquido, Polvo, Sólido), comportamientos de gravedad, paletas de color procedurales primario/secundario/terciario y máscaras de bits avanzadas (`Tags`: Virus, Radiactivo, Invencible, Vórtice, Gas, Sismo, Piñata, Repulsión). Sincroniza dinámicamente los colores con `palette_tex` para que el shader GPU los dibuje al instante.
+* **Métodos Principales**:
+  * `setup_lab_ui()`: Abre el panel interactivo del laboratorio.
+  * `apply_custom_material_to_engine(slot_idx)`: Compila las propiedades seleccionadas y las registra en el motor de simulación.
+  * `sync_palette_to_shader()`: Vuelca los píxeles de color al buffer de textura de la GPU.
+  * `save_lab_state()`, `load_lab_state()`: Persistencia de los 3 slots en `user://lab_custom_elements.json`.
+* **Propiedades Proxy en `sandbox_grid.gd`**:
+  * `lab_panel`, `lab_custom_data`, `lab_active_slot`, `lab_unlock_expiry_unix`.
+
+---
+
+### Módulo 9: `SandboxMusicSystem`
+* **Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_music.gd`
+* **Tipo**: `Node` (Instancia inyectada: `grid.music_system`).
+* **Propósito**: Orquestar el sistema musical interactivo y el secuenciador automático:
+  * Configura el bus de audio dedicado `MusicBus` con un limitador dinámico (`AudioEffectLimiter`) para evitar distorsión acústica por polifonía masiva.
+  * Administra un pool de 32 reproductores `AudioStreamPlayer` optimizados.
+  * Registra 5 sets de instrumentos afinados en escalas cromáticas (Piano Suave, Piano Brillante, Órgano, Sintetizador y Batería) y el metrónomo rítmico (ID 600).
+  * Panel dual interactivo: Selector de instrumentos con teclado cromático, slider numérico de BPM y conmutador visual de etiquetas de notas.
+  * Popup contextual flotante al tocar bloques musicales en el escenario.
+  * Desencadena el baile colectivo de NPCs (`_trigger_npc_dance`) cuando se ejecutan melodías rápidas.
+* **Métodos Principales**:
+  * `play_music_note(instrument: int, note_idx: int, is_sharp: bool, octave: int)`: Reproduce la frecuencia exacta asignada.
+  * `setup_music_ui()`: Construye y despliega el panel de control musical.
+  * `update_music_note_popup(grid_pos: Vector2i)`: Muestra nota e instrumento sobre la celda seleccionada.
+* **Métodos Puente en `sandbox_grid.gd`**:
+  * `_play_music_note()`, `_setup_music_ui()`, `_get_music_data()`, `_register_musical_materials()`.
+
+---
+
+### Módulo 10: `SandboxNpcControlManager`
+* **Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_npc_control.gd`
+* **Tipo**: `Node` (Instancia inyectada: `grid.npc_control_manager`).
+* **Propósito**: Implementar el modo de control manual arcade (🎮):
+  * Despliega en pantalla el Gamepad táctil flotante con joystick analógico virtual, botón de salto, botón de menú dinámico y botón de acción principal.
+  * Permite "poseer" a cualquier NPC del escenario, otorgándole condición de héroe (mayor salud, resistencia a empuje y desactivación temporal de la IA automática).
+  * Mapea acciones de clase exclusivas:
+    * **Guerrero**: Golpe de espada frontal con empuje.
+    * **Arquero**: Puntería frontal y disparo de flechas balísticas.
+    * **Mago**: Conjuración de bolas de fuego.
+    * **Minero**: Piqueta destructora de celdas sólidas y colocación de dinamita.
+    * **Médico**: Pulso de curación en área.
+    * **Zombie / Tanque Zombie**: Zarpazo infeccioso y lanzamiento de bloques de roca.
+* **Métodos Principales**:
+  * `start_controlling_npc(npc)`: Entra en modo arcade, vincula la cámara al personaje y muestra el Gamepad.
+  * `stop_controlling_npc()`: Restaura la autonomía del NPC y oculta los controles.
+  * `handle_controlled_npc_input(delta)`: Procesa inercia, aceleración lateral y saltos.
+  * `trigger_controlled_npc_action()`: Ejecuta la habilidad especial según el tipo de unidad.
+* **Propiedades Proxy en `sandbox_grid.gd`**:
+  * `controlled_npc`, `is_controlling_npc`, `is_npc_mode_active`.
+
+---
+
+### Módulo 11: `SandboxDisasterManager`
+* **Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_disasters.gd`
+* **Tipo**: `Node` (Instancia inyectada: `grid.disaster_manager`).
+* **Propósito**: Controlar y simular los fenómenos meteorológicos y desastres mundiales:
+  * **Tornado**: Vórtice cinético con física de succión vertical, detección de suelo, absorción y transmutación elemental (fuego, ácido, electricidad) y control dinámico del shader `tornado_visual.gdshader`.
+  * **Tsunami**: Simulación física gaussiana de olas gigantes sobre cualquier líquido presente en el mapa (agua, lava, petróleo, ácido).
+  * **Bombardero**: Vuelo cinemático horizontal de un avión militar que arroja bombas con mecha temporizada y radio de impacto masivo.
+  * **Terremoto**: Sacudidas sísmicas con desplazamiento de celdas, desprendimientos de rocas, licuefacción y pánico colectivo de NPCs con emojis.
+  * **Clima / Tormentas**: Formación de nubes, precipitación de lluvia o lluvia ácida, crecimiento de vegetación y caída de relámpagos con chispas de plasma destructivas.
+  * **Parada Global**: `reset_all_disasters()` para limpiar inmediatamente cualquier evento activo.
+* **Métodos Principales**:
+  * `setup_disaster_ui()`: Construye el panel interactivo de desastres con selector de intensidades (Off, Light, Med, Heavy/Storm).
+  * `process_tornado(delta)`, `process_tsunami(delta)`, `process_earthquake(delta)`, `process_bombardero(delta)`, `process_weather()`.
+  * `strike_lightning_at(x)`: Descarga un rayo en la coordenada X seleccionada.
+* **Propiedades Proxy en `sandbox_grid.gd`**:
+  * `disaster_panel`, `tornado_intensity`, `tsunami_intensity`, `earthquake_intensity`, `weather_intensity`, `bombardero_intensity`, `acid_rain_intensity`.
+
+---
+
+### Módulo 12: `SandboxMechanismsManager`
+* **Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_mechanisms.gd`
+* **Tipo**: `Node` (Instancia inyectada: `grid.mechanisms_manager`).
+* **Propósito**: Gestionar la automatización, circuitos y maquinaria del simulador:
+  * **Compuertas Lógicas (IDs 81-87)**: AND, OR, XOR, NOT, NAND, NOR, XNOR, Timer, Buffer, Clock y SR Latch con renderizado de pines de entrada/salida y simulación booleana en red.
+  * **Pistones (IDs 93, 94, 193, 194)**: Pistones estándar y aislados; extensión y retracción mecánica con desplazamiento físico de bloques y polvo.
+  * **Bloques de Fase y Puertas de NPCs (IDs 91, 92)**: Desactivación de colisiones al recibir corriente.
+  * **Cañones Orientables (IDs 95..795)**:
+    * 8 orientaciones cardinales y diagonales (0°, 45°, 90°, 135°, 180°, 225°, 270°, 315°).
+    * Detección de energización por cables o batería.
+    * Conexión estanca con tuberías neumáticas para recarga de munición desde el puerto de entrada configurado.
+    * Disparo balístico con potencia ajustable (Min, Med, Max) de bolas de fuego, partículas o proyectiles sólidos.
+    * **Panel de Configuración (`CannonSettingsPanel`)**: Previsualización vectorial idéntica al shader del juego, selector de dirección con flechas `◀` (contra-horario) y `▶` (horario), selección táctil de entrada directamente en la previsualización y botones sincronizados en tiempo real.
+  * **Tuberías Neumáticas (IDs 96 y 97)**:
+    * Tuberías estándar 4x4 y dobles X2 8x8.
+    * Flujo dinámico bidireccional de fluidos, polvos y partículas sin fugas.
+    * **Transporte Fluido de NPCs**: Succión de personajes en extremos abiertos, transporte suave a 60 FPS visualizado como emoji `😮` viajando por el interior transparente del tubo (sin bloques sólidos ni distorsiones rosas), y eyección balística con velocidad de escape y emoji `😎` al salir.
+  * **Selector de Color de LEDs (`_open_led_color_panel`)**: Paleta de 8 colores y modo arcoíris animado para LEDs (ID 89).
+* **Métodos Principales**:
+  * `simulate_cannons(delta)`, `fire_cannon(c, mat1, mat2, stream)`, `open_cannon_settings_panel(c)`.
+  * `simulate_pipes(delta)`, `update_pipe_visuals(p, pass)`, `update_pipe_x2_visuals(p, pass)`.
+  * `try_absorb_npc_at_endpoint(p, end_idx, dir, is_x2)`, `eject_npc_from_pipe(p, end_idx, npc_id)`.
+  * `simulate_logic_gates()`, `simulate_pistons()`, `update_phase_blocks()`, `update_npc_doors(delta)`.
+* **Propiedades Proxy en `sandbox_grid.gd`**:
+  * `active_cannons`, `active_pipes`, `active_pipes_x2`, `active_pistons`, `cannon_settings_panel`, `led_color_panel`.
+
+---
+
+## 3. El Orquestador Central: `sandbox_grid.gd` (~8.450 líneas)
+
+Tras la modularización, `sandbox_grid.gd` dejó de ser un monolito inmanejable y pasó a cumplir su rol arquitectónico ideal: **el orquestador central de alta velocidad**.
+
+### 3.1 Responsabilidades Exclusivas del Núcleo
+1. **Bucles Críticos de Simulación (*HOT Loops*)**:
+   * `_step_simulation()`: Ejecución por cuadro de las reglas celulares de partículas.
+   * `_process_interactions()`: Reacciones químicas directas (combustión, corrosión, solidificación, evaporación).
+   * `_process_electricity()`: Conducción de chispas y pulsos en conductores.
+2. **Pipeline de Renderizado**:
+   * `_update_texture()`: Empaquetado RGBA8 hacia `cells` y texturas de la GPU (`palette_tex`, `charge_tex`).
+   * `_draw()`: Dibujado de emojis faciales de NPCs, trazado de bombas aéreas, indicadores de selección y geometrías en coordenadas de pantalla.
+3. **Gestión de la Cámara y Viewport**:
+   * Sistema de navegación táctil con zoom suave (*pinch-to-zoom*), límites de paneo y centrado en héroes.
+4. **Construcción y Coordinación del HUD Principal**:
+   * Inicialización de la barra horizontal inferior (`ActionButtons`), cuadrícula de materiales (`MaterialGrid`) y botones universales de acción rápida (`QuickActionsZone`).
+5. **Capa de Delegación Transparente**:
+   * Expone métodos puente y propiedades proxy con getters/setters hacia los 12 módulos para garantizar que cualquier llamada heredada o externa continúe funcionando sin interrupciones.
+
+---
+
+## 4. Sistema de Materiales y Etiquetas (`Tags`)
+
+Cada celda en la simulación posee una combinación de propiedades físicas y reactivas codificadas en una máscara de bits de 64 bits (`SandboxMaterial.Tags` en `material.gd`):
+
+### 4.1 Categorías Principales de Tags
+* **Estados**: `SOLID` (1<<0), `LIQUID` (1<<1), `GAS` (1<<2), `POWDER` (1<<3).
+* **Térmicos**: `FLAMMABLE` (1<<4), `INCENDIARY` (1<<5), `EXPLOSIVE` (1<<6).
+* **Eléctricos**: `ELECTRICITY` (1<<7), `CONDUCTOR` (1<<8), `ELECTRIC_ACTIVATED` (1<<9).
+* **Gravedad**: `GRAV_NORMAL` (1<<10), `GRAV_SLOW` (1<<11), `GRAV_UP` (1<<12), `GRAV_STATIC` (1<<13).
+* **Química**: `ACID` (1<<14), `ANTI_ACID` (1<<15), `BURN_COAL` (1<<17), `ANTI_EXPLOSIVE` (1<<19).
+* **Biológicos y NPCs**: `PLANT` (1<<20), `FERTILE` (1<<22), `NPC` (1<<23), `VOLATILE` (1<<24).
+* **Alquimia Avanzada**: `VIRUS` (1<<41), `RADIOACTIVE` (1<<42), `INVINCIBLE` (1<<43), `VORTEX` (1<<44), `REPEL` (1<<48).
+
+### 4.2 Rangos Canónicos de Identificadores (IDs)
+* `0`: **Vacío / Aire** (Píxel transparente interactivo).
+* `1 - 20`: **Elementos Base** (Arena, Agua, Fuego, Petróleo, TNT, Tierra, Metal, Electricidad, Rocas, Lava, Obsidiana, Ácido, Carbón, Humo, Madera, Vapor, Mecha, Destello, Pólvora, Piedra).
+* `21 - 34`: **Biológicos y Flores** (Pasto, Arena/Tierra mojada, Enredadera, Flores rosa/roja/amarilla/violeta).
+* `25 - 29`: **Construcción y Volcanes** (Cemento líquido/sólido, Bloque volcán, Proyectil de lava, Núcleo activo).
+* `70 - 72`: **Criogenia** (Hielo criogénico, Flash congelante, Detonador criogénico).
+* `81 - 87`: **Compuertas Lógicas** (NOT, AND, OR, NAND, NOR, XOR, XNOR).
+* `88 - 92`: **Componentes Eléctricos** (Batería 5V, LED multicolor, Placa activadora, Puerta de NPC, Bloque de fase).
+* `93 - 94, 193 - 194`: **Pistones** (Bases y cabezas estándar y aisladas).
+* `95 - 795`: **Cañones Balísticos** (8 orientaciones: 95, 195, 295, 395, 495, 595, 695, 795).
+* `96 - 97`: **Tuberías Neumáticas** (Simple 4x4 y Doble X2 8x8).
+* `600+`: **Música** (Metrónomo 600 y escalas cromáticas de 5 instrumentos 601..680+).
+* `900 - 902`: **Materiales Alquímicos del Laboratorio** (Custom Elements 1, 2 y 3).
+* `1000 - 1090`: **Personajes (NPCs)** (Guerrero, Arquero, Minero, Médico, Zombie, Zombie Tanque, Mago, Dinosaurio).
 
 ---
 
 ## 5. Inteligencia Artificial de NPCs y Sistema Emocional
 
-Los personajes del juego combinan simulación física por píxeles en el mundo con una máquina de estados de comportamiento inteligente en GDScript.
-
 ### 5.1 Perfiles de IA (`NPC_PROFILES`)
-En la cabecera de `sandbox_grid.gd`, la constante `NPC_PROFILES` define las capacidades de cada tipo de NPC:
-- `can_socialize`: Posibilidad de detenerse a charlar con aliados cuando no hay enemigos cerca.
-- `can_sleep`: Acostarse a dormir (`😴`) si no hay combates durante más de 120 segundos (`_world_peace_timer > 120.0`).
-- `can_flee`: Huir con pánico (`😭`) si la vida cae por debajo del 30%.
-- `can_celebrate`: Saltar y festejar (`🎉`) al eliminar a la facción enemiga.
-*(Nota: Los Zombies tienen estas capacidades sociales desactivadas).*
+Definidos en `sandbox_grid.gd`, establecen la personalidad de cada unidad:
+* `can_socialize`: Charlar con aliados cercanos cuando no hay enemigos visibles.
+* `can_sleep`: Acostarse a dormir con emoji `😴` tras periodos prolongados de paz (`_world_peace_timer > 120.0`).
+* `can_flee`: Huida con pánico (`😭`) cuando la salud cae por debajo del 30%.
+* `can_celebrate`: Saltar con festejo (`🎉`) al erradicar a las facciones adversarias.
 
 ### 5.2 Clases y Roles de Combate
-- **Guerrero (`warrior`)**: Carga frontal cuerpo a cuerpo. Rango de ataque: 6 píxeles (`_attack_npc`). Cooldown: 0.6s.
-- **Arquero (`archer`)**: Mantiene distancia táctica (50px a 120px). Dispara proyectiles de flecha balísticos (`_shoot_arrow`). Tiene contador de fallos para simular puntería humana.
-- **Mago (`mage`)**: Dispara bolas de fuego con parábola (`_shoot_fireball`). Posee la rutina altruista `_process_mage_rescue(npc)`: detecta si un aliado se asfixia bajo la arena, se aproxima y levanta los bloques con magia para liberarlo.
-- **Minero (`miner`)**: Detecta obstáculos sólidos y los destruye con su pico (`_miner_dig`). En modo saboteador busca estructuras clave enemigas para dinamitarlas.
-- **Médico (`medic`)**: No combate. Escanea aliados heridos en su radio de visión y proyecta curación en área.
-- **Zombie (`zombie`)**: Movimiento torpe (avanza 1 de cada 3 frames). Contagia e infecta a los humanos al matarlos (`_convert_to_zombie`).
-- **Zombie Tanque (`zombie_tank`)**: Masa pesada. Si el enemigo está entre 35px y 150px, arranca un fragmento de suelo sólido real del mapa y lo lanza como proyectil mortal (`_launch_flying_block`).
+* **Guerrero (`warrior`)**: Combate cuerpo a cuerpo (alcance 6 celdas, cooldown 0.6s).
+* **Arquero (`archer`)**: Distancia táctica (50-120 celdas), disparo balístico de flechas con contador de fallos para simular precisión humana.
+* **Mago (`mage`)**: Bolas de fuego parabólicas y rescate mágico de aliados enterrados o en asfixia (`_process_mage_rescue`).
+* **Minero (`miner`)**: Tunelado activo de roca con pico y sabotaje táctico mediante dinamita.
+* **Médico (`medic`)**: Soporte pasivo; escaneo y curación en área de unidades heridas.
+* **Zombie (`zombie`)**: Horda infecciosa que transforma a las bajas humanas en nuevos no-muertos.
+* **Zombie Tanque (`zombie_tank`)**: Masa colosal que arranca bloques sólidos del escenario y los lanza como proyectiles.
 
-### 5.3 Motor de Emociones (`EmojiLayer`)
-- Implementado en `_set_npc_emoji(npc, emoji, duration)`.
-- El renderizado se realiza mediante etiquetas visuales sincronizadas con *Pixel Snapping* para evitar desenfoques en pantalla.
-- **Buffer de Alternancia**: Si un soldado experimenta varios estímulos (ej. vigilancia `👀` y trauma previo `😭`), alterna el emoji cada segundo. Las alertas críticas (ataque `😡`, peligro de fuego `😨`, muerte `💀`) tienen prioridad absoluta y bloquean el ciclo normal.
-
-### 5.4 Control Manual del Jugador (Modo Arcade 🎮)
-- Funciones: `_setup_npc_control_gui()`, `_handle_controlled_npc_input()`, `_stop_controlling_npc()`.
-- Permite al usuario "poseer" a cualquier NPC del mapa: despliega un pad direccional virtual táctil, botón de salto y botón de acción contextual (el minero cava, el arquero apunta y dispara, el mago conjura fuego, el guerrero blande su espada).
+### 5.3 Motor de Emojis (`EmojiLayer`)
+* Gestionado por `_set_npc_emoji(npc, emoji, duration)` y dibujado directamente en `_draw()` con escala y centrado vectorial.
+* Dentro de tuberías de transporte (`is_in_pipe == true`), el emoji se centra automáticamente dentro del conducto neumático y viaja como representación visual del personaje a 60 FPS.
 
 ---
 
-## 6. Mecanismos, Automatización y Circuitos
+## 6. Guía Práctica de Extensión y Mantenimiento
 
-### 6.1 Red Eléctrica y Cargas
-- La propagación eléctrica corre a través de un algoritmo BFS optimizado tanto en C++ (`process_electricity`) como en GDScript (`_process_electricity`).
-- Los conductores transportan carga sin pérdida (Metal, Agua, Cables).
-- El agua electrificada electrifica toda la masa de fluido y transmite daño letal instantáneo a cualquier entidad sumergida (desbloquea logros específicos).
+### 6.1 Cómo Añadir una Nueva Herramienta o Panel UI
+1. **Crear o ubicar el módulo**: Si es un panel de configuración o utilidad, integrarlo en el módulo correspondiente (ej. `sandbox_tools_ui.gd` o `sandbox_dialogs.gd`).
+2. **Anclar al HUD**: Utilizar siempre `grid._align_panel_to_hud(panel, width, height)` para posicionarlo automáticamente sobre la barra inferior sin solapamientos en pantallas móviles.
+3. **Filtro de Ratón**: Configurar siempre `panel.mouse_filter = Control.MOUSE_FILTER_STOP` para evitar trazos involuntarios sobre la simulación al tocar botones.
 
-### 6.2 Compuertas Lógicas (IDs 81-87)
-- Formas geométricas definidas en `LOGIC_GATE_SHAPES`.
-- `_simulate_logic_gates()` escanea los pines de entrada definidos por su orientación cardinal. Si la condición lógica se cumple, deposita energía eléctrica en los pines de salida para propagarla por la cuadrícula.
+### 6.2 Cómo Añadir un Nuevo Mecanismo
+1. **Definir IDs y Celdas Activas**: Asignar los IDs de material en `material.gd` y calcular sus variantes de celda en `sandbox_mechanisms.gd`.
+2. **Renderizado en Shader**: Si el mecanismo requiere dibujo vectorial o iluminación procedural (como cañones o compuertas), registrar su lógica de color en `sandbox_render.gdshader`.
+3. **Simulación en el Bucle**: Implementar su función de ciclo (ej. `simulate_custom_machine`) e invocarla dentro de `_step_simulation()` o en el bucle principal de `sandbox_grid.gd`.
 
-### 6.3 Pistones (IDs 93, 94, 193, 194)
-- `_simulate_pistons()`: Cuando la base del pistón se energiza, la cabeza avanza desplazando todas las celdas sólidas y de polvo que encuentre a su paso, siempre que no superen el límite de peso o choquen contra materiales `ANTI_EXPLOSIVE` o `INVINCIBLE`.
-
-### 6.4 Cañones y Tuberías Neumáticas (IDs 95-97 y 95..795)
-- `_simulate_pipes()`: Transporta materiales o entidades celda a celda a lo largo de un trazado continuo de tubería. Si una tubería desemboca en la recámara trasera de un cañón (`_find_connected_cannon`), alimenta la munición directamente.
-- `_simulate_cannons()`: Al activarse por pulso eléctrico o alimentación por tubería, dispara la carga acumulada (Arena, Fuego, Ácido, TNT o incluso soldados vivos) con un vector de fuerza proporcional a su orientación en ángulo (`_fire_cannon`).
-
-### 6.5 Sistema Musical (IDs 600+)
-- Funciones: `_register_musical_materials()`, `_play_music_note()`, `_setup_music_ui()`.
-- 5 sets de instrumentos musicales (4 pianos y 1 juego de percusión) mapeados en frecuencias sonoras reales.
-- El metrónomo (ID 600) pulsa electricidad a intervalos rítmicos para secuenciar melodías autómatas. Al tocar 5 o más notas en secuencia rápida, los NPCs cercanos comienzan a bailar (`_trigger_npc_dance`).
-
----
-
-## 7. Desastres Mundiales y Eventos
-
-Todos los desastres se controlan desde `_setup_disaster_ui()` y se procesan frame a frame en sus funciones dedicadas:
-1. **Volcán (`_process_volcano`)**: Genera una erupción masiva con columna de humo, expulsión de magma y bombas de lava con trayectoria parabólica.
-2. **Tornado (`_process_tornado`)**: Genera un vórtice cinético que deforma visualmente la pantalla con `tornado_visual.gdshader`. Absorbe materiales circundantes y transmuta su naturaleza: si absorbe fuego se convierte en tornado ígneo, si absorbe ácido se vuelve corrosivo, y si absorbe electricidad genera tormentas de relámpagos.
-3. **Terremoto (`_process_earthquake`)**: Sacude el suelo, agrietando estructuras rígidas y transformando bloques de piedra/tierra estáticos en fragmentos con gravedad activa.
-4. **Tsunami (`_process_tsunami`)**: Desplaza una ola titánica de agua (o mezcla de líquidos presentes: petróleo, ácido, lava) barriendo el mapa.
-5. **Bombardero (`_process_bombardero`)**: Hace sobrevolar un avión militar en la parte superior que suelta una hilera de bombas explosivas de alta potencia.
-6. **Clima y Tormentas (`_process_weather`, `_strike_lightning`)**: Lluvias continuas, granizo y descargas eléctricas directas desde el cielo que buscan puntos metálicos o húmedos.
-
----
-
-## 8. Arquitectura de Interfaz de Usuario (HUD y Paneles)
-
-La interfaz de usuario está optimizada para pantallas táctiles de cualquier relación de aspecto (vertical y horizontal):
-
-```
-+-------------------------------------------------------------+
-|                                                             |
-|                 ÁREA DE SIMULACIÓN Y JUEGO                  |
-|                 (TextureRect con Shader GPU)                |
-|                                                             |
-+-------------------------------------------------------------+
-| [Paneles Flotantes Anclados: Tools, Lab, Disasters, etc.]   |
-+-------------------------------------------------------------+
-| BARRA DE CATEGORÍAS (ActionButtons / action_hbox):          |
-| [🛠️ Tools] [🧪 Lab] [🌋 Desastres] [🎨 Paint] [👥 NPC] [🎹 Música] [🏆 Logros] |
-+-------------------------------------------------------------+
-| LISTA DE MATERIALES          | ACCIONES RÁPIDAS (qa_grid):  |
-| (MaterialScroll / Grid)      | [🔍 Zoom/Pan]   [💾 Guardar]  |
-| [Arena] [Agua] [Fuego] ...   | [↩️ Deshacer]   [↪️ Rehacer]  |
-+-------------------------------------------------------------+
-```
-
-### 8.1 Componentes Principales
-1. `HUD_Footer_BG`: Fondo oscuro en la base de la pantalla que captura eventos táctiles para evitar pintar accidentalmente en el mundo al tocar los botones.
-2. `ActionButtons` (`action_hbox` en `action_scroll`): Menú horizontal con los botones verticales de las 6 categorías principales + el botón de logros `🏆` (que se desbloquea dinámicamente).
-3. `MaterialScroll` y `MaterialGrid`: Rejilla con scroll horizontal/vertical que lista todos los materiales elegibles según el modo actual.
-4. `QuickActionsZone` (`action_vbox` y `qa_grid`): Cuadrícula de 2 columnas con las herramientas universales:
-   - `🔍` Pan/Zoom: Conmuta entre dibujar y mover la cámara con gestos pinch-to-zoom.
-   - `💾` Guardar/Cargar: Abre el menú de gestión de universos.
-   - `↩️` Deshacer y `↪️` Rehacer: Historial de estados (`save_history_state`, `undo_history`, `redo_history`).
-
-### 8.2 Anclaje Inteligente de Paneles (`_align_panel_to_hud`)
-Para evitar que los paneles flotantes (Herramientas, Laboratorio, Desastres, Pintura, NPCs) se solapen sobre la barra de selección de materiales, se utiliza la función `_align_panel_to_hud(panel, width, height)`. Esta función toma la variable calculada `cached_hud_height` (392px escalado) y posiciona el panel exactamente pegado al borde superior del menú horizontal inferior.
-
----
-
-## 9. Laboratorio de Alquimia y Materiales Custom (Pestaña 🧪)
-
-- Permite al usuario diseñar 3 materiales experimentales propios guardados en las ranuras `lab_custom_data[0..2]` correspondientes a los IDs **900, 901 y 902**.
-- Funciones: `_setup_lab_ui()`, `_apply_custom_material_to_engine()`, `_sync_palette_to_shader()`, `_save_lab_state()`, `_load_lab_state()`.
-- **Propiedades Configurables**:
-  - Estado: Gas, Líquido, Polvo o Sólido.
-  - Gravedad: Lenta, Normal, Inversa (sube) o Estática.
-  - Colores: Color Base (C1), Color Secundario (C2), Color Terciario (C3) y porcentaje de mezcla (`MIX_LOW`, `MIX_MEDIUM`, `MIX_HIGH`).
-  - Tags Especiales: Inflamable, Incendiario, Explosivo (con sub-tipo: eléctrico, ácido, agua, lava, NPCs, vida), Blindado, Virus, Radiactivo, Invencible, Vórtice, Gas, Sismo, Piñata, Repulsión.
-- **Desbloqueo Temporal (Monetización)**: El laboratorio requiere desbloqueo de 12 horas visualizando un anuncio recompensado de AdMob (`lab_unlock_expiry_unix`), o permanente según el estado de la cuenta.
-
----
-
-## 10. Guardado, Formato `.sbu` y Taller en Línea (Workshop)
-
-### 10.1 Formato Sandbox Universe (`.sbu`)
-- Los mundos se serializan como diccionarios comprimidos que contienen:
-  - Metadatos: versión del juego, fecha, nombre del autor, código de verificación de 6 caracteres.
-  - Cuadrícula: Arrays de celdas (`cells`), capas de pintura (`cell_paint_colors`), etiquetas (`tags_array`).
-  - Entidades: Lista completa de NPCs serializados con vida, inventario, personalidad y coordenadas.
-  - Circuitos: Estado de compuertas lógicas, pistones, cañones y tuberías instaladas.
-  - Laboratorio: Definición completa de los 3 slots de materiales personalizados para que funcionen idénticamente en el dispositivo receptor.
-
-### 10.2 Workshop / Comunidad (`workshop_manager.gd` y `_setup_workshop_ui`)
-- Conexión con **Firebase Firestore** y **Firebase Storage**.
-- Secciones: Top Semanal (ordenado por likes y descargas), Recién Subidos, Mis Mundos y Mis Descargas.
-- Búsqueda directa por código alfanumérico único con dígito verificador (`_verify_map_code`).
-- Economía del Taller: Los usuarios disponen de descargas gratuitas diarias (`free_downloads_remaining`); al agotarse, pueden obtener más viendo anuncios de recompensa.
-
----
-
-## 11. Sistema de Logros (22 Logros)
-
-El juego cuenta con 22 logros integrados con **Google Play Games Services**. Para evitar congelamientos o micro-tirones durante el juego, las condiciones no se comprueban en cada fotograma, sino mediante un polling distribuido en pasos (`_check_achievement_step(step)`):
-
-| # | Clave Interna | Título en Español | Título en Inglés | ID Google Play Console | Condición Técnica de Desbloqueo |
-| :-: | :--- | :--- | :--- | :--- | :--- |
-| **1** | `massive_fight` | **Pelea Masiva** | Massive Fight | `CgkIx9-23rkFEAIQAA` | $\ge 10$ NPCs en cada equipo en al menos 2 bandos luchando a la vez. |
-| **2** | `electrifying` | **Electrificante** | Electrifying | `CgkIx9-23rkFEAIQAQ` | Contacto entre electricidad o cable conductor y agua. |
-| **3** | `miner_plan` | **El Plan del Minero** | The Miner's Plan | `CgkIx9-23rkFEAIQAg` | Observar el ciclo completo de sabotaje y detonación de un Minero. |
-| **4** | `god` | **Dios todo poderoso** | Almighty God | `CgkIx9-23rkFEAIQAw` | Colocar al menos 1 píxel de cada material base en la misma partida. |
-| **5** | `mad_scientist` | **Científico Loco** | Mad Scientist | `CgkIx9-23rkFEAIQBA` | Completar el tutorial del laboratorio y guardar el primer elemento custom. |
-| **6** | `paint` | **Pinta algo bonito** | Paint something beautiful | `CgkIx9-23rkFEAIQBQ` | Usar $\ge 4$ colores en el fondo y $\ge 4$ colores en elementos con la herramienta de pintura. |
-| **7** | `party_rock` | **Party Rock** | Party Rock | `CgkIx9-23rkFEAIQBg` | $\ge 20$ NPCs de una misma facción celebrando juntos tras la victoria. |
-| **8** | `wind_master` | **Maestro de vientos** | Master of Winds | `CgkIx9-23rkFEAIQBw` | Descubrir las 4 variantes de tornado (Normal, Fuego, Ácido y Eléctrico). |
-| **9** | `compositor` | **Compositor** | Composer | `CgkIx9-23rkFEAIQCA` | Tocar una melodía de $\ge 5$ notas musicales seguidas con $\le 1$s de intervalo. |
-| **10** | `tsunami_master` | **Tsunami variado** | Varied Tsunami | `CgkIx9-23rkFEAIQCQ` | Lanzar un tsunami mientras hay agua, lava, petróleo y ácido simultáneamente. |
-| **11** | `retro_time` | **Tiempo retro** | Retro Time | `CgkIx9-23rkFEAIQCg` | Entrar al modo control manual arcade (🎮) y poseer a un NPC. |
-| **12** | `good_night` | **Buenas noches** | Good Night | `CgkIx9-23rkFEAIQCw` | $\ge 12$ NPCs durmiendo pacíficamente al mismo tiempo tras 120s de paz. |
-| **13** | `volcano_giant` | **Erupción Colosal** | Colossal Eruption | `CgkIx9-23rkFEAIQDA` | Generar un volcán de gran escala en erupción continua. |
-| **14** | `boom` | **¡BOOM!** | BOOM! | `CgkIx9-23rkFEAIQDQ` | Reacción en cadena de $\ge 20$ detonaciones consecutivas de TNT. |
-| **15** | `special_boom` | **¡BOOM Especial!** | Special BOOM! | `CgkIx9-23rkFEAIQDg` | Reacción en cadena de $\ge 25$ detonaciones mezclando TNT con pólvora o gases. |
-| **16** | `short_circuit` | **Cortocircuito Masivo** | Massive Short Circuit | `CgkIx9-23rkFEAIQDw` | Electrocutar a $\ge 10$ NPCs simultáneamente mediante corriente eléctrica. |
-| **17** | `world_war` | **Guerra Mundial** | World War | `CgkIx9-23rkFEAIQEA` | Tener a las 4 facciones (Rojo, Azul, Verde, Amarillo) con $\ge 5$ miembros combatiendo. |
-| **18** | `supreme_alchemist` | **Alquimista Supremo** | Supreme Alchemist | `CgkIx9-23rkFEAIQEQ` | Desbloquear y colocar en el mundo celdas de los 3 slots de laboratorio a la vez. |
-| **19** | `war-z` | **Guerra mundial Z** | World War Z | `CgkIx9-23rkFEAIQEw` | La plaga zombie infecta a todas las facciones activas al mismo tiempo. |
-| **20** | `patient-zero` | **Paciente cero** | Patient Zero | `CgkIx9-23rkFEAIQFA` | Un humano descuidado cae ante el primer zombie dando inicio a la infección. |
-| **21** | `dancing-rain` | **Bailando en la lluvia** | Dancing in the rain | `CgkIx9-23rkFEAIQFQ` | NPCs expuestos a tormentas corrosivas de lluvia ácida. |
-| **22** | `great-bomber` | **El gran bombardero** | The Great Bomber | `CgkIx9-23rkFEAIQFg` | Desatar un ataque aéreo utilizando el nivel máximo del avión bombardero. |
-
----
-
-## 12. Sistema de Sonido (SFX) y Audio
-
-- **Pool de Reproductores (`AudioStreamPlayer`)**: 8 reproductores pre-inicializados en array (`sfx_players`) ejecutándose en round-robin para evitar que los sonidos de explosiones o golpes se silencien entre sí.
-- **Caché en Memoria**: `_get_sfx_stream(sfx_name)` carga los recursos de audio de `res://assets/audio/sfx/` en un diccionario solo la primera vez que se ejecutan.
-- **Pincel Inteligente Anti-Saturación**: `_play_material_sound(id)` solo se dispara en el clic/toque inicial sobre la pantalla. Arrastrar el dedo no repite el sonido, evitando ruidos molestos.
-- **Reproductores en Bucle (`_manage_looping_player`)**: Nodos dedicados para sonidos ambientales continuos (viento de tornado, borboteo de lava del volcán, lluvia de tormenta, motores del bombardero).
-
----
-
-## 13. Guía Práctica para Desarrolladores y Modelos de IA
-
-### 13.1 Cómo Registrar un Nuevo Material
-1. **Asignar ID**: Elige un ID libre que corresponda a su categoría (ej. 35 para un nuevo vegetal o 50 para un mineral).
-2. **Definir Tags**: En `_ready()` de `sandbox_grid.gd`, en el bloque correspondiente a su categoría (ej. `# --- RAW MATERIALS ---`), agrega la llamada:
-   ```gdscript
-   _register_material(NUEVO_ID, ColorBase, Tags.SOLID | Tags.GRAV_NORMAL | Tags.FLAMMABLE, ColorSecundario)
-   ```
-3. **Agregar el Botón en la UI**: En `_setup_materials_within_grid()`, busca la categoría apropiada y llama a:
-   ```gdscript
-   _add_button("tr_key_nombre", NUEVO_ID)
-   ```
-4. **Agregar Traducción**: Añade `tr_key_nombre` con sus traducciones en `translations.csv`.
-5. **Comportamiento Específico (si aplica)**: Si tiene interacciones químicas especiales, edita la función `_process_interactions(x, y, idx, _raw_id, pure_id, tags)`.
-
-### 13.2 Cómo Agregar un Nuevo Comportamiento o Clase de NPC
-1. **Perfil de IA**: Añade la nueva clase en la constante `NPC_PROFILES` especificando sus banderas sociales (`can_socialize`, `can_sleep`, `can_flee`, etc.).
-2. **Registro de Materiales**: Registra sus IDs de cuerpo en `_ready()` bajo la sección `# --- NPC SYSTEM ---`.
-3. **Lógica en el Bucle**: En la función `_process_npcs(delta)`, localiza la bifurcación `match npc.type:` o los bloques `if/elif` y programa su ataque, distancia de confort y animación de sprites.
-
-### 13.3 Trampas Comunes y Prevención de Bugs Críticos
-- **Copy-On-Write (COW) de Godot 4**: Nunca iterar y reasignar directamente arrays empaquetados (`PackedInt32Array`) entre subprocesos (threads) concurrentes sin sincronizar. Utiliza los búferes dobles implementados (`cells` y `next_cells` / mutex de chunks).
-- **Límite de Explosiones por Frame**: Las detonaciones en cadena deben respetar la constante `MAX_EXPLOSIONS_PER_FRAME` para impedir que el motor se cuelgue ante explosiones masivas de TNT.
-- **Coordenadas de la Cuadrícula**: Recuerda que la simulación física utiliza coordenadas de celda entera (`gx, gy`), mientras que la pantalla utiliza coordenadas de viewport con escalado (`grid_scale = 8`).
-- **Capas de Dibujado (Z-Index)**: Las expresiones faciales y emojis se dibujan en el método `_draw()` de `SandboxGrid`, mientras que los píxeles de simulación residen en `TextureRect` que debe mantener `show_behind_parent = true`.
+### 6.3 Reglas de Oro para Desarrolladores y Modelos LLM
+* **NUNCA volver a centralizar lógica en `sandbox_grid.gd`**: Si una funcionalidad pertenece a desastres, mecanismos, audio, guardado o UI, debe programarse dentro de su respectivo módulo en `modules/`.
+* **Respetar la distinción HOT vs COLD**: La física por partícula y la escritura directa en arreglos de memoria van en el Core o en C++. La gestión de menús, botones, eventos y animaciones va en los submódulos.
+* **Preservar los Puentes de Compatibilidad**: Si se refactoriza un método público, mantener el método delegador en `sandbox_grid.gd` para no romper llamadas externas preexistentes.
+* **Uso de Tipos Vectoriales en Godot 4**: Las posiciones de celdas y entidades en cuadrícula física son estrictamente enteros (`Vector2i`). No sumar `Vector2` (flotante) con `Vector2i` directamente; aplicar siempre `Vector2i(...)` para prevenir errores de tipo en tiempo de ejecución.

@@ -23,10 +23,10 @@
 | **8** | **`SandboxLabUI`** | `modules/sandbox_lab.gd` | `[x] COMPLETADO Y VERIFICADO` | ~1.400 | 2026-10-09 |
 | **9** | **`SandboxMusicSystem`** | `modules/sandbox_music.gd` | `[x] COMPLETADO Y VERIFICADO` | ~1.200 | 2026-10-09 |
 | **10** | **`SandboxNpcControlManager`**| `modules/sandbox_npc_control.gd` | `[x] COMPLETADO Y VERIFICADO` | ~780 | 2026-10-14 |
-| **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~850 | — |
-| **12** | **`SandboxMechanismsManager`** | `modules/sandbox_mechanisms.gd` | `[ ] PENDIENTE` | ~1.850 | — |
+| **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[x] COMPLETADO Y VERIFICADO` | ~898 | 2026-10-14 |
+| **12** | **`SandboxMechanismsManager`** | `modules/sandbox_mechanisms.gd` | `[x] COMPLETADO Y VERIFICADO` | ~3.219 | 2026-10-14 |
 
-**Progreso Actual**: **10 de 12 módulos completados (83.3%)**. Líneas extraídas/delegadas del núcleo: **10.042 líneas** (de 21.844 a 11.802).
+**Progreso Actual**: **12 de 12 módulos completados (100.0%)**. Líneas extraídas/delegadas del núcleo: **13.394 líneas** (de 21.844 a 8.450). ¡Modularización Finalizada con Éxito!
 
 ---
 

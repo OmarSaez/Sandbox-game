@@ -6116,11 +6116,11 @@ func _process_npcs(delta):
 							npc.dig_timer = 0.0
 							if !_can_npc_fit(np.x, np.y + 1, npc):
 								if not (npc.has("mine_state") and npc.mine_state == "saboteur"): npc.state_steps -= 1
-								if !(_get_cell(np.x, np.y - 4) != 0) and npc.mine_state == "gallery":
+								if !(_get_cell(np.x + 2, np.y - 5) != 0) and npc.mine_state == "gallery":
 									npc.mine_state = "ramp"; npc.state_steps = 25
 								if npc.state_steps <= 0:
 									if npc.mine_state == "saboteur":
-										_set_cell(np.x, np.y + 5, 3); npc.hp = 0; npc.hit_flash = 10
+										_set_cell(np.x + 2, np.y + 8, 3); npc.hp = 0; npc.hit_flash = 10
 										_unlock_achievement("miner_plan")
 									elif npc.mine_state == "ramp": npc.mine_state = "gallery"; npc.state_steps = _get_lut_rand_range(60, 100)
 									else: npc.mine_state = "ramp"; npc.state_steps = _get_lut_rand_range(15, 25)
@@ -6135,26 +6135,26 @@ func _process_npcs(delta):
 										next_y = np.y; next_x = np.x + npc.dir
 									
 									if npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 3:
-										for fx in range(-2, 3):
+										for fx in range(-2, 7):
 											var f_idx = np.x + fx
 											if f_idx >= 0 and f_idx < grid_width: 
-												_set_cell(f_idx, np.y + 5, 3) 
-												_set_cell(f_idx, np.y - 1, 3)
+												_set_cell(f_idx, np.y + 8, 3) 
+												_set_cell(f_idx, np.y - 3, 3)
 										npc.hp = 0
 										npc.hit_flash = 10
 										_unlock_achievement("miner_plan")
 										npc.hp = 0; npc.hit_flash = 10
 									else:
 										var old_dir = npc.dir
-										if next_x < 5 or next_x > grid_width - 5: hit_wall = true; npc.dir = -npc.dir
+										if next_x < 5 or next_x > grid_width - 8: hit_wall = true; npc.dir = -npc.dir
 										elif _can_npc_fit(next_x, next_y, npc): np.x = next_x ; np.y = next_y
 										elif !dig_down and _can_npc_fit(next_x, np.y - 1, npc): np.x = next_x ; np.y -= 1
 										else: hit_wall = true; npc.dir = -npc.dir
 										if hit_wall:
-											if not (npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2) and (next_x <= 5 or next_x >= grid_width - 5):
-												var wall_x1 = np.x + 2 if old_dir == 1 else np.x - 1
-												var wall_x2 = np.x + 3 if old_dir == 1 else np.x - 2
-												for wy in range(np.y - 1, np.y + 6):
+											if not (npc.has("mine_state") and npc.mine_state == "saboteur" and npc.has("saboteur_bounces") and npc.saboteur_bounces >= 2) and (next_x <= 5 or next_x >= grid_width - 8):
+												var wall_x1 = np.x + 5 if old_dir == 1 else np.x - 1
+												var wall_x2 = np.x + 6 if old_dir == 1 else np.x - 2
+												for wy in range(np.y - 3, np.y + 9):
 													if wy >= 0 and wy < dynamic_grid_height:
 														if wall_x1 >= 0 and wall_x1 < grid_width: _set_cell(wall_x1, wy, 16)
 														if wall_x2 >= 0 and wall_x2 < grid_width: _set_cell(wall_x2, wy, 16)
@@ -6370,9 +6370,9 @@ func _process_npcs(delta):
 				_set_npc_emoji(npc, "💀", 2.0)
 				_draw_npc_pixels(npc, 0); _play_action_sound("npc_death")
 				if npc.type == "miner" and npc.has("mine_state") and npc.mine_state == "saboteur":
-					for fx in range(-2, 3):
+					for fx in range(-2, 7):
 						var f_idx = np.x + fx
-						if f_idx >= 0 and f_idx < grid_width: _set_cell(f_idx, np.y + 5, 3); _set_cell(f_idx, np.y - 1, 3)
+						if f_idx >= 0 and f_idx < grid_width: _set_cell(f_idx, np.y + 8, 3); _set_cell(f_idx, np.y - 3, 3)
 				npc.current_emoji = ""
 				dead_indices.append(i)
 	dead_indices.sort(); dead_indices.reverse()
@@ -6384,15 +6384,17 @@ func _miner_dig(npc, dig_down=false):
 	var now = Time.get_ticks_msec()
 	if now - npc.last_dig_time >= 3000: _play_action_sound("miner_dig"); npc.last_dig_time = now
 	
-	# RESTORED MISSING LOGIC
 	var dy_offset = 1 if dig_down else 0
-	var ty_start = npc.pos.y - 2 + dy_offset
-	var ty_end = npc.pos.y + 5 + dy_offset
-	var beam_len = 3 if dig_down else 6
+	# Dimensiones del túnel: altura interior de 10 píxeles (techo en pos.y - 3, suelo en pos.y + 8)
+	var ty_start = npc.pos.y - 3 + dy_offset
+	var ty_end = npc.pos.y + 8 + dy_offset
+	var beam_len = 4 if dig_down else 7
 	var is_saboteur = npc.has("mine_state") and npc.mine_state == "saboteur"
 	var c_mat = 16 
 
-	var tx_c = npc.pos.x + (npc.dir * 3)
+	# 1. VIGAS DE TECHO: Soporte de madera hacia adelante si hay terreno sólido encima
+	var front_x = (npc.pos.x + 4) if npc.dir == 1 else npc.pos.x
+	var tx_c = front_x + npc.dir
 	for ox in range(0, beam_len):
 		var wx = tx_c + (ox * npc.dir)
 		if wx < 0 or wx >= grid_width: continue
@@ -6406,22 +6408,29 @@ func _miner_dig(npc, dig_down=false):
 			if mountain_ahead or is_saboteur:
 				_set_cell(wx, ty_start, c_mat)
 				if !dig_down and ty_start - 1 >= 0: _set_cell(wx, ty_start - 1, c_mat)
+
+	# 2. PISO DEL TÚNEL: Madera o TNT debajo de los pies (pos.y + 8), cubriendo atrás, cuerpo y adelante
 	var f_mat = 5 if is_saboteur else 16 # Piso TNT o Madera normal
-	var tx_f = npc.pos.x - (npc.dir * 2) 
-	var f_len = 6
+	var back_x = npc.pos.x if npc.dir == 1 else (npc.pos.x + 4)
+	var tx_f = back_x - (npc.dir * 2) 
+	var f_len = 10
 	for ox in range(0, f_len):
 		var wx = tx_f + (ox * npc.dir)
 		if wx < 0 or wx >= grid_width: continue
 		if ty_end < dynamic_grid_height:
 			_set_cell(wx, ty_end, f_mat)
 			if !dig_down and ty_end + 1 < dynamic_grid_height: _set_cell(wx, ty_end + 1, f_mat)
-	for dx in range(0, 4):
+
+	# 3. EXCAVACIÓN DE AIRE: Despeja espacio de ~6-7 x 10 píxeles para que quepa y avance el minero (cuerpo 5x8)
+	var clear_ahead = 2
+	var min_x = min(npc.pos.x, front_x + (npc.dir * clear_ahead))
+	var max_x = max(npc.pos.x + 4, front_x + (npc.dir * clear_ahead))
+	for cx in range(min_x, max_x + 1):
 		for dy in range(ty_start + 1, ty_end):
-			var cx = npc.pos.x + (dx * npc.dir); var cy = dy 
-			if cx < 0 or cx >= grid_width or cy < 0 or cy >= dynamic_grid_height: continue
-			var tid = _get_cell(cx, cy)
+			if cx < 0 or cx >= grid_width or dy < 0 or dy >= dynamic_grid_height: continue
+			var tid = _get_cell(cx, dy)
 			if tid == 0 or tid == 9 or tid == 12: continue
-			_set_cell(cx, cy, 0)
+			_set_cell(cx, dy, 0)
 
 func _get_connected_door_cells(start_idx: int) -> Array:
 	if mechanisms_manager:
