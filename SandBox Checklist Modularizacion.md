@@ -240,7 +240,7 @@
 ---
 
 ### [x] Paso 11: `SandboxDisasterManager` (Módulo 8)
-* **Estado**: **COMPLETADO (A la espera de prueba en juego)**
+* **Estado**: **COMPLETADO Y VERIFICADO**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_disasters.gd`
 * **Tipo de Objeto**: `Node` (procesa eventos marco en `_process`).
 * **Qué hace**:
