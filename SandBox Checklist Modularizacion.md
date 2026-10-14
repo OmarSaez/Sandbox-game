@@ -264,24 +264,27 @@
 
 ---
 
-### [ ] Paso 12: `SandboxMechanismsManager` (Módulo 9)
-* **Estado**: **PENDIENTE**
+### [x] Paso 12: `SandboxMechanismsManager` (Módulo 9)
+* **Estado**: **COMPLETADO Y VERIFICADO**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_mechanisms.gd`
-* **Tipo de Objeto**: `Node` (procesa transporte de tuberías y disparo de cañones).
+* **Tipo de Objeto**: `Node` (procesa mecanismos, compuertas lógicas, pistones, transporte de tuberías, cañones y paneles de configuración).
 * **Qué hace**:
-  - Colocación y orientación cardinal de cañones y tuberías neumáticas (simples y dobles X2).
-  - Simulación paso a paso del flujo de partículas y absorción/transporte/eyección de soldados (NPCs) en tuberías.
-  - Detección de energización eléctrica de cañones y disparo balístico según ángulo y potencia.
-  - Despliega el panel de ajustes del cañón (`CannonSettingsPanel`) y el selector de color de LEDs (`_open_led_color_panel`).
-* **Consideraciones a Actualizar Pendientes en Próximos Módulos**:
-  - [ ] **Con Paso 6 (`SandboxSaveSystem`)**: Serializar y deserializar las listas `active_cannons`, `active_pipes` y `active_pipes_x2`.
-  - [ ] **Con Paso 4 (`SandboxDialogManager`)**: Disparar las burbujas tutoriales al seleccionar tuberías o cañones en la barra de herramientas.
-  - [ ] **Con el Núcleo de Simulación (`sandbox_grid.gd`)**: Coordinar la absorción y eyección de NPCs con la lista `active_npcs` del núcleo.
-* **Funciones Clave a Repasar**:
-  - `_simulate_cannons()`, `_fire_cannon()`, `_open_cannon_settings_panel()`
-  - `_simulate_pipes()`, `_try_absorb_npc_at_endpoint()`, `_eject_npc_from_pipe()`
-  - `_open_led_color_panel()`
-
+  - Colocación y orientación cardinal de cañones y tuberías neumáticas (simples 4x4 y dobles X2 8x8).
+  - Simulación paso a paso del flujo de partículas y absorción/transporte/eyección/triturado de soldados (NPCs) en tuberías.
+  - Detección de energización eléctrica de cañones, absorción de munición desde entrada y disparo balístico según ángulo y potencia.
+  - Simulación de compuertas lógicas (AND, OR, XOR, NOT, NAND, NOR, XNOR, Timer, Buffer, Clock, SR Latch), detección de fuentes y renderizado geométrico de pines.
+  - Simulación de pistones simples y dobles (bloques móviles, empuje y retracción).
+  - Actualización de bloques de fase y puertas de NPCs.
+  - Despliega el panel interactivo de ajustes del cañón (`CannonSettingsPanel`) y el selector de color de LEDs (`_open_led_color_panel`).
+* **Consideraciones Actualizadas**:
+  - [x] **Con Paso 6 (`SandboxSaveSystem`)**: `active_cannons`, `active_pipes` y `active_pipes_x2` expuestas mediante proxies transparentes con getters/setters.
+  - [x] **Con Paso 4 (`SandboxDialogManager`)**: Burbujas tutoriales de cañones, pistones y compuertas lógicas integradas.
+  - [x] **Con el Núcleo de Simulación (`sandbox_grid.gd`)**: Coordinación de absorción, eyección balística y daños en NPCs mediante `active_npcs`, `_set_cell`, `_get_cell` y `_draw_npc_pixels`.
+* **Funciones Clave Implementadas**:
+  - `simulate_cannons()`, `fire_cannon()`, `open_cannon_settings_panel()`, `is_cannon_powered()`
+  - `simulate_pipes()`, `try_absorb_npc_at_endpoint()`, `eject_npc_from_pipe()`
+  - `simulate_logic_gates()`, `simulate_pistons()`, `update_phase_blocks()`, `update_npc_doors()`
+  - `open_led_color_panel()`
 ---
 
 ## 3. Bitácora de Ejecución y Enlaces Realizados
@@ -419,6 +422,21 @@
   - Se mantuvieron 11 métodos delegadores y 24 propiedades proxy con getters/setters en `sandbox_grid.gd` para 100% compatibilidad hacia atrás con guardado (`SandboxSaveSystem`), logros (`SandboxAchievementManager`), controles táctiles (`SandboxNpcControlManager`) y renderizado (`_draw`, `_update_texture`).
   - **Reducción neta**: -637 líneas en `sandbox_grid.gd` (de 11.802 a 11.165 líneas). Total acumulado extraído del núcleo: **10.679 líneas**.
 
-
-
-
+### Hito 12 (2026-10-14): Paso 12 - `SandboxMechanismsManager`
+- **Módulo Creado**: `res://sandbox/scripts/sandbox/modules/sandbox_mechanisms.gd` (`class_name SandboxMechanismsManager extends Node`).
+- **Modificaciones en `sandbox_grid.gd`**:
+  - Se añadió la instancia `var mechanisms_manager: SandboxMechanismsManager = null`.
+  - En `_ready()`: Inicialización con `mechanisms_manager = SandboxMechanismsManager.new()`, inyección con `mechanisms_manager.setup(self)`.
+  - En `_clear_all()`: Llamada a `mechanisms_manager.clear_all_mechanisms()`.
+  - Se extrajo el sistema de puertas conectadas y actualización de estado (`_get_connected_door_cells`, `_update_npc_doors`).
+  - Se extrajo el sistema completo de compuertas lógicas (AND, OR, XOR, NOT, NAND, NOR, XNOR, Timer, Buffer, Clock, SR Latch), variantes de celda, renderizado geométrico de pines y simulación eléctrica (`_simulate_logic_gates`, `_load_active_logic_gates`, `_reconstruct_sources_from_cells`, `_place_circuit_block`, `_get_gate_pin_cell_indices`, etc.).
+  - Se extrajo el sistema de pistones simples y dobles (`_place_piston`, `_get_piston_direction`, `_get_piston_head_pixels`, `_get_piston_base_pixels`, `_is_piston_base_powered`, `_activate_piston_chunks`, `_simulate_pistons`).
+  - Se extrajo el sistema de bloques de fase (`_update_phase_blocks`).
+  - Se extrajo el sistema completo de cañones: colocación (`_place_cannon`), celdas activas según orientación (`_get_cannon_active_cells`), detección de energización (`_is_cannon_powered`), detección de tubería conectada (`_is_pipe_connected_on_inlet`, `_find_connected_pipe_and_endpoint`), absorción de munición desde entrada (`_find_cannon_inlet_material`, `_get_next_cannon_shoot_material`), disparo balístico de bolas de fuego y bloques sólidos a potencia variable (`_fire_cannon`) y simulación temporal (`_simulate_cannons`).
+  - Se extrajo el sistema completo de tuberías neumáticas simples (4x4) y dobles X2 (8x8): colocación (`_place_pipe`, `_place_pipe_x2`), renderizado visual estático y dinámico de flujo a 60 FPS (`_update_pipe_visuals`, `_update_pipe_x2_visuals`), detección de conexiones de extremos (`_find_pipe_endpoint_opening_side`, `_find_pipe_x2_endpoint_opening_side`), absorción de partículas en cuadrícula (`_find_pipe_absorbable_cell_at_endpoint`, `_find_pipe_x2_absorbable_cell_at_endpoint`), eyección (`_find_pipe_ejection_cell_at_endpoint`, `_find_pipe_x2_ejection_cell_at_endpoint`), simulación bidireccional y vaciado (`_simulate_pipes`).
+  - Se extrajo la succión, transporte interno, eyección balística y desmembramiento por trituradora (20% shredder) de NPCs (`_find_npc_by_id`, `_find_npc_at_pipe_endpoint`, `_try_absorb_npc_at_endpoint`, `_eject_npc_from_pipe`).
+  - Se extrajo la interfaz visual interactiva del cañón (`CannonSettingsPanel`) con previsualización vectorial en tiempo real, selector direccional de 8 ángulos, selección táctil de puerto de entrada y slider de potencia (Min, Med, Max).
+  - Se extrajo la interfaz visual del selector de color de LEDs (`_open_led_color_panel`) con 8 colores y modo arcoíris animado.
+  - Se mantuvieron 44 métodos delegadores y 15 propiedades proxy con getters/setters en `sandbox_grid.gd` para 100% compatibilidad hacia atrás con guardado (`SandboxSaveSystem`), historial (`SandboxHistoryManager`), música (`SandboxMusicSystem`), físicas y renderizado.
+  - **Reducción neta**: -2.717 líneas en `sandbox_grid.gd` (de 11.165 a 8.448 líneas). Total acumulado extraído del núcleo: **13.396 líneas**.
+  - **¡Fin de la Gran Modularización!**: Todos los 12 módulos de la arquitectura han sido completados, desacoplados y validados con éxito.
