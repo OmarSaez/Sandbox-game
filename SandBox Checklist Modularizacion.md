@@ -239,23 +239,28 @@
 
 ---
 
-### [ ] Paso 11: `SandboxDisasterManager` (Módulo 8)
-* **Estado**: **PENDIENTE**
+### [x] Paso 11: `SandboxDisasterManager` (Módulo 8)
+* **Estado**: **COMPLETADO (A la espera de prueba en juego)**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_disasters.gd`
 * **Tipo de Objeto**: `Node` (procesa eventos marco en `_process`).
 * **Qué hace**:
-  - Panel de activación de desastres 🌋 (Volcán, Tornado, Tsunami, Bombardero, Terremoto, Lluvia ácida y Tormenta eléctrica).
-  - Controla la cinemática de erupción volcánica y expulsión de bombas de lava.
-  - Controla el vórtice del tornado y su nodo shader de distorsión visual (`tornado_visual.gdshader`).
-  - Simula la ola expansiva del tsunami, el vuelo del avión bombardero y las sacudidas sísmicas.
-  - Ofrece el botón de parada de emergencia global (`_reset_all_disasters`).
+  - Panel de activación de desastres 🌪️ (Clima/Lluvia, Lluvia ácida, Terremoto, Tornado, Tsunami, Avión Bombardero y desastres futuros en preview).
+  - Controla el vórtice del tornado, física de succión/elevación, detección de suelo, absorción elemental (fuego, ácido, electricidad) y su shader de distorsión visual (`tornado_visual.gdshader`).
+  - Simula la ola expansiva gaussiana del tsunami sobre líquidos en la cuadrícula.
+  - Simula el sobrevuelo horizontal del avión bombardero, chequeos de probabilidad de suelta y proyectiles balísticos con temporizador y radio de explosión variable.
+  - Simula las sacudidas sísmicas del terremoto (`shake_force`), desplazamiento físico de partículas/licuefacción y pánico/dispersión de NPCs con emojis.
+  - Simula la lluvia normal, lluvia ácida, crecimiento espontáneo de césped sobre tierra fértil húmeda y caída de rayos con chispas de electricidad y explosiones.
+  - Ofrece la parada de emergencia global y reseteo de estados (`reset_all_disasters`).
 * **Consideraciones a Actualizar Pendientes en Próximos Módulos**:
-  - [ ] **Con Paso 3 (`SandboxAchievementManager`)**: Notificar directamente los logros climáticos (`wind_master`, `tsunami_master`, `volcano_giant`, `great-bomber`, `dancing-rain`).
-  - [ ] **Con el Núcleo Físico (`sandbox_grid.gd`)**: Los proyectiles y celdas modificadas por desastres deben invocar `grid.set_cell(x, y, id)` y `grid.explode(x, y, radius)`.
-* **Funciones Clave a Repasar**:
-  - `_setup_disaster_ui()`, `_reset_all_disasters()`
-  - `_process_volcano()`, `_process_tornado()`, `_process_tsunami()`
-  - `_process_bombardero()`, `_process_earthquake()`, `_process_weather()`
+  - [x] **Con Paso 3 (`SandboxAchievementManager`)**: Notificar directamente los descubrimientos de tornados elementales para el logro `wind_master` y soportar inspección de intensidades para `tsunami_master`, `great-bomber` y `dancing-rain`.
+  - [x] **Con Paso 6 (`SandboxSaveSystem`)**: Todas las intensidades y temporizadores climáticos expuestos con propiedades proxy transparentes con getters/setters.
+  - [x] **Con Paso 10 (`SandboxNpcControlManager`)**: Consulta directa del desastre activo para colorear y mostrar la etiqueta arcade dinámica en el botón central.
+  - [x] **Con el Núcleo Físico (`sandbox_grid.gd`)**: `_set_cell`, `_swap_cells`, `_explode`, `_activate_chunk`, `_manage_looping_player` y `_play_action_sound` integrados limpiamente.
+* **Funciones Clave Implementadas**:
+  - `setup()`, `setup_disaster_ui()`, `clear_surface_cache()`, `reset_all_disasters()`
+  - `process_tsunami(delta)`, `process_tornado(delta)`, `process_earthquake(delta)`
+  - `start_bombardero()`, `stop_bombardero()`, `spawn_bomber_bomb(x, y)`, `process_bombardero(delta)`
+  - `process_weather()`, `strike_lightning()`, `strike_lightning_at(lx)`
 
 ---
 
@@ -398,6 +403,22 @@
   - Se extrajo la actualización dinámica del botón de menú en modo arcade (`update_arcade_dynamic_button`).
   - Se mantuvieron 8 métodos delegadores y 4 propiedades proxy con getters/setters en `sandbox_grid.gd` para 100% compatibilidad hacia atrás.
   - **Reducción neta**: -590 líneas en `sandbox_grid.gd` (de 12.392 a 11.802 líneas). Total acumulado extraído del núcleo: **10.042 líneas**.
+
+### Hito 11 (2026-10-14): Paso 11 - `SandboxDisasterManager`
+- **Módulo Creado**: `res://sandbox/scripts/sandbox/modules/sandbox_disasters.gd`.
+- **Modificaciones en `sandbox_grid.gd`**:
+  - Se añadió la instancia `var disaster_manager: SandboxDisasterManager = null`.
+  - En `_ready()`: Inicialización con `disaster_manager = SandboxDisasterManager.new()`, inyección con `disaster_manager.setup(self)` y creación delegada del nodo visual del shader de tornado (`tornado_visual`) y redimensionamiento de `surface_cache`.
+  - Se extrajo la interfaz `DisasterPanel` con selector de intensidades (Off, Light, Med, Heavy/Brutal/Storm) para Clima, Lluvia ácida, Terremoto, Tornado, Tsunami, Bombardero y desastres venideros.
+  - Se extrajo la simulación gaussiana del Tsunami (`process_tsunami`).
+  - Se extrajo el sistema completo de vuelo cinemático y bombardeo del avión Bombardero (`start_bombardero`, `stop_bombardero`, `spawn_bomber_bomb`, `process_bombardero`).
+  - Se extrajo la simulación física del Tornado (`process_tornado`) con detección de suelo, tracking de absorción elemental, daño de estado a NPCs y actualización de parámetros del shader `tornado_visual.gdshader`.
+  - Se extrajo la simulación sísmica del Terremoto (`process_earthquake`) con sacudida visual de pantalla en `texture_rect`, dispersión física de celdas y sacudidas/emojis de pánico en NPCs.
+  - Se extrajo la simulación climática (`process_weather`) con generación de nubes, gotas de lluvia y lluvia ácida, brote orgánico de hierba y descarga de relámpagos (`strike_lightning`, `strike_lightning_at`).
+  - Se extrajo la parada de emergencia global (`reset_all_disasters`).
+  - Se mantuvieron 11 métodos delegadores y 24 propiedades proxy con getters/setters en `sandbox_grid.gd` para 100% compatibilidad hacia atrás con guardado (`SandboxSaveSystem`), logros (`SandboxAchievementManager`), controles táctiles (`SandboxNpcControlManager`) y renderizado (`_draw`, `_update_texture`).
+  - **Reducción neta**: -637 líneas en `sandbox_grid.gd` (de 11.802 a 11.165 líneas). Total acumulado extraído del núcleo: **10.679 líneas**.
+
 
 
 
