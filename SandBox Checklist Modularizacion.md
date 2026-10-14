@@ -22,7 +22,7 @@
 | **7** | **`SandboxWorkshopUI`** | `modules/sandbox_workshop_ui.gd` | `[x] COMPLETADO Y VERIFICADO` | ~2.713 | 2026-10-09 |
 | **8** | **`SandboxLabUI`** | `modules/sandbox_lab.gd` | `[x] COMPLETADO Y VERIFICADO` | ~1.400 | 2026-10-09 |
 | **9** | **`SandboxMusicSystem`** | `modules/sandbox_music.gd` | `[x] COMPLETADO Y VERIFICADO` | ~1.200 | 2026-10-09 |
-| **10** | **`SandboxNpcControlManager`**| `modules/sandbox_npc_control.gd` | `[x] COMPLETADO (Listo para Verificación)` | ~640 | 2026-10-09 |
+| **10** | **`SandboxNpcControlManager`**| `modules/sandbox_npc_control.gd` | `[x] COMPLETADO Y VERIFICADO` | ~780 | 2026-10-14 |
 | **11** | **`SandboxDisasterManager`** | `modules/sandbox_disasters.gd` | `[ ] PENDIENTE (Siguiente a Ejecutar)` | ~850 | — |
 | **12** | **`SandboxMechanismsManager`** | `modules/sandbox_mechanisms.gd` | `[ ] PENDIENTE` | ~1.850 | — |
 
@@ -219,7 +219,7 @@
 ---
 
 ### [x] Paso 10: `SandboxNpcControlManager` (Módulo 10)
-* **Estado**: **COMPLETADO (Listo para Verificación)**
+* **Estado**: **COMPLETADO Y VERIFICADO**
 * **Ruta del Archivo**: `res://sandbox/scripts/sandbox/modules/sandbox_npc_control.gd`
 * **Tipo de Objeto**: `Node` (controla la capa visual `NPCControlGUI` y procesa inputs táctiles).
 * **Qué hace**:
