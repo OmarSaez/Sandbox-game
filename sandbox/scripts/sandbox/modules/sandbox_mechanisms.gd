@@ -253,13 +253,16 @@ func update_phase_blocks() -> void:
 			if curr_mat == 92:
 				grid.cells[idx] = 0
 				grid.tags_array[idx] = 0
-				grid._activate_chunk(cx / 4, cy / 4)
+				grid._activate_chunk(cx, cy)
 		else:
 			if curr_mat != 92:
 				# Re-solidify: overwrite whatever material is inside
 				grid.cells[idx] = 92
 				grid.tags_array[idx] = SandboxMaterial.Tags.SOLID | SandboxMaterial.Tags.GRAV_STATIC | SandboxMaterial.Tags.CONDUCTOR | SandboxMaterial.Tags.ELECTRIC_ACTIVATED
-				grid._activate_chunk(cx / 4, cy / 4)
+				if grid.cell_paint_colors[idx] != 0:
+					grid.cell_paint_colors[idx] = 0
+					grid.element_paint_dirty = true
+				grid._activate_chunk(cx, cy)
 				
 	for idx in invalid_indices:
 		phase_block_registry.erase(idx)
@@ -1010,13 +1013,15 @@ func is_piston_base_powered(p) -> bool:
 	return false
 
 func activate_piston_chunks(px: int, gy: int) -> void:
-	var start_cx = int(px / 4.0)
-	var end_cx = int((px + 4) / 4.0)
-	var start_cy = clamp(int((gy - 64) / 4.0), 0, int(grid.grid_height / 4.0))
-	var end_cy = clamp(int((gy + 16) / 4.0), 0, int(grid.grid_height / 4.0))
-	for cy in range(start_cy, end_cy + 1):
-		for cx in range(start_cx, end_cx + 1):
-			grid._activate_chunk(cx, cy)
+	var start_y = clampi(gy - 64, 0, grid.grid_height - 1)
+	var end_y = clampi(gy + 16, 0, grid.grid_height - 1)
+	var y_step = start_y
+	while y_step <= end_y:
+		grid._activate_chunk(px, y_step)
+		grid._activate_chunk(px + 4, y_step)
+		y_step += 16
+	grid._activate_chunk(px, end_y)
+	grid._activate_chunk(px + 4, end_y)
 
 func simulate_pistons() -> void:
 	if active_pistons.size() == 0: return
@@ -1027,6 +1032,13 @@ func simulate_pistons() -> void:
 	
 	# Piston processing in C++ (Extremely fast, handles all block pushes directly)
 	var state = grid._pack_state_for_cpp()
+	# Release GDScript references before C++ .ptrw() to prevent Copy-On-Write deep clones
+	grid.cells = PackedInt32Array()
+	grid.tags_array = PackedInt64Array()
+	grid.charge_array = PackedInt32Array()
+	grid.next_chunks_active = PackedByteArray()
+	grid.cell_paint_colors = PackedInt32Array()
+	
 	state = grid.process_pistons(active_pistons, state, grid.grid_width, grid.dynamic_grid_height, 0.0)
 	var new_pistons = state["new_pistons"]
 	
@@ -1035,6 +1047,8 @@ func simulate_pistons() -> void:
 	grid.charge_array = state["charge_array"]
 	grid.next_chunks_active = state["next_chunks_active"]
 	grid.cell_paint_colors = state["cell_paint_colors"]
+	if state.get("paint_changed", false):
+		grid.element_paint_dirty = true
 	
 	# NPC Push logic (Needs to be done in GDScript since NPCs are nodes/complex objects)
 	for i in range(active_pistons.size()):
@@ -2869,6 +2883,10 @@ func simulate_pipes(_delta: float) -> void:
 						var empty_pos = find_pipe_ejection_cell_at_endpoint(p, end_idx)
 						if empty_pos.x != -1:
 							grid._set_cell(empty_pos.x, empty_pos.y, elem.mat)
+							var p_col = elem.get("paint", 0)
+							if p_col != 0:
+								grid.cell_paint_colors[empty_pos.y * grid.grid_width + empty_pos.x] = p_col
+								grid.element_paint_dirty = true
 						else:
 							next_end_elems.append(elem)
 				p.elements[end_idx] = next_end_elems
@@ -2890,8 +2908,9 @@ func simulate_pipes(_delta: float) -> void:
 						var absorb_pos = find_pipe_absorbable_cell_at_endpoint(p, 0)
 						if absorb_pos.x != -1:
 							var mat = grid._get_cell(absorb_pos.x, absorb_pos.y)
+							var p_col = grid.cell_paint_colors[absorb_pos.y * grid.grid_width + absorb_pos.x]
 							grid._set_cell(absorb_pos.x, absorb_pos.y, 0)
-							p.elements[0].append({ "mat": mat, "dir": 1 })
+							p.elements[0].append({ "mat": mat, "dir": 1, "paint": p_col })
 						else:
 							break
 					else:
@@ -2917,6 +2936,10 @@ func simulate_pipes(_delta: float) -> void:
 						var empty_pos = find_pipe_ejection_cell_at_endpoint(p, 0)
 						if empty_pos.x != -1:
 							grid._set_cell(empty_pos.x, empty_pos.y, elem.mat)
+							var p_col = elem.get("paint", 0)
+							if p_col != 0:
+								grid.cell_paint_colors[empty_pos.y * grid.grid_width + empty_pos.x] = p_col
+								grid.element_paint_dirty = true
 						else:
 							next_start_elems.append(elem)
 				p.elements[0] = next_start_elems
@@ -2938,8 +2961,9 @@ func simulate_pipes(_delta: float) -> void:
 						var absorb_pos = find_pipe_absorbable_cell_at_endpoint(p, end_idx)
 						if absorb_pos.x != -1:
 							var mat = grid._get_cell(absorb_pos.x, absorb_pos.y)
+							var p_col = grid.cell_paint_colors[absorb_pos.y * grid.grid_width + absorb_pos.x]
 							grid._set_cell(absorb_pos.x, absorb_pos.y, 0)
-							p.elements[end_idx].append({ "mat": mat, "dir": -1 })
+							p.elements[end_idx].append({ "mat": mat, "dir": -1, "paint": p_col })
 						else:
 							break
 					else:
@@ -3000,6 +3024,10 @@ func simulate_pipes(_delta: float) -> void:
 						var empty_pos = find_pipe_x2_ejection_cell_at_endpoint(p, end_idx, preferred_lane)
 						if empty_pos.x != -1:
 							grid._set_cell(empty_pos.x, empty_pos.y, elem.mat)
+							var p_col = elem.get("paint", 0)
+							if p_col != 0:
+								grid.cell_paint_colors[empty_pos.y * grid.grid_width + empty_pos.x] = p_col
+								grid.element_paint_dirty = true
 						else:
 							next_end_elems.append(elem)
 				p.elements[end_idx] = next_end_elems
@@ -3022,11 +3050,12 @@ func simulate_pipes(_delta: float) -> void:
 					var absorb_pos = find_pipe_x2_absorbable_cell_at_endpoint(p, 0)
 					if absorb_pos.x != -1:
 						var mat = grid._get_cell(absorb_pos.x, absorb_pos.y)
+						var p_col = grid.cell_paint_colors[absorb_pos.y * grid.grid_width + absorb_pos.x]
 						grid._set_cell(absorb_pos.x, absorb_pos.y, 0)
 						var side = find_pipe_x2_endpoint_opening_side(p, 0)
 						var pt = path[0]
 						var lane = (absorb_pos.y - pt.y) if (side == "left" or side == "right") else (absorb_pos.x - pt.x)
-						p.elements[0].append({ "mat": mat, "dir": 1, "lane": lane })
+						p.elements[0].append({ "mat": mat, "dir": 1, "lane": lane, "paint": p_col })
 					else:
 						break
 			elif flow_dir == -1:
@@ -3042,6 +3071,10 @@ func simulate_pipes(_delta: float) -> void:
 						var empty_pos = find_pipe_x2_ejection_cell_at_endpoint(p, 0, preferred_lane)
 						if empty_pos.x != -1:
 							grid._set_cell(empty_pos.x, empty_pos.y, elem.mat)
+							var p_col = elem.get("paint", 0)
+							if p_col != 0:
+								grid.cell_paint_colors[empty_pos.y * grid.grid_width + empty_pos.x] = p_col
+								grid.element_paint_dirty = true
 						else:
 							next_start_elems.append(elem)
 				p.elements[0] = next_start_elems
@@ -3064,11 +3097,12 @@ func simulate_pipes(_delta: float) -> void:
 					var absorb_pos = find_pipe_x2_absorbable_cell_at_endpoint(p, end_idx)
 					if absorb_pos.x != -1:
 						var mat = grid._get_cell(absorb_pos.x, absorb_pos.y)
+						var p_col = grid.cell_paint_colors[absorb_pos.y * grid.grid_width + absorb_pos.x]
 						grid._set_cell(absorb_pos.x, absorb_pos.y, 0)
 						var side = find_pipe_x2_endpoint_opening_side(p, end_idx)
 						var pt = path[end_idx]
 						var lane = (absorb_pos.y - pt.y) if (side == "left" or side == "right") else (absorb_pos.x - pt.x)
-						p.elements[end_idx].append({ "mat": mat, "dir": -1, "lane": lane })
+						p.elements[end_idx].append({ "mat": mat, "dir": -1, "lane": lane, "paint": p_col })
 					else:
 						break
 

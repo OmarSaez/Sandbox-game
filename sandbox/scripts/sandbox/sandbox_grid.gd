@@ -1277,6 +1277,10 @@ var vs_vy := PackedFloat32Array()
 var vs_color := PackedColorArray()
 var vs_life := PackedFloat32Array()
 var vs_ptr := 0
+var active_visual_sparks_count: int = 0
+var _cached_rainbow_btn: Button = null
+var _cached_rainbow_style: StyleBoxFlat = null
+var _last_rainbow_color_idx: int = -1
 
 # Optimization #5: Random & Trig Look-Up Table (LUT)
 const LUT_SIZE = 4096 # Larger for better variety
@@ -1518,6 +1522,7 @@ func _ready():
 	grid_width = floor(viewport_size.x / grid_scale)
 	grid_height = floor(viewport_size.y / grid_scale)
 	dynamic_grid_height = grid_height # Full initial
+	_precalculate_optimization_tables() # Recalculate with final grid_width!
 	
 	charge_queued_frame.resize(grid_width * grid_height)
 	charge_queued_frame.fill(-1)
@@ -3286,26 +3291,32 @@ func _process(delta):
 
 	if not is_grid_ready: return
 	
-	# Animate Rainbow LED Button color in LED selection panel
-	if is_instance_valid(led_color_panel):
-		for child in led_color_panel.find_children("", "Button", true, false):
-			if child.has_meta("is_rainbow_btn"):
-				var colors = [
-					Color(1.0, 0.1, 0.1),
-					Color(0.15, 0.45, 1.0),
-					Color(0.15, 1.0, 0.15),
-					Color(1.0, 0.85, 0.05),
-					Color(1.0, 1.0, 1.0),
-					Color(1.0, 0.25, 0.75),
-					Color(0.2, 0.8, 1.0)
-				]
-				var c_idx = int(Engine.get_frames_drawn() / 15.0) % colors.size()
-				var b_style = child.get_theme_stylebox("normal").duplicate()
-				b_style.bg_color = colors[c_idx]
-				child.add_theme_stylebox_override("normal", b_style)
-				child.add_theme_stylebox_override("hover", b_style)
-				child.add_theme_stylebox_override("pressed", b_style)
-				break
+	# Animate Rainbow LED Button color in LED selection panel (Only when panel is visible, using cached node & StyleBox)
+	if is_instance_valid(led_color_panel) and led_color_panel.visible:
+		var c_idx = int(Engine.get_frames_drawn() / 15.0) % 7
+		if not is_instance_valid(_cached_rainbow_btn):
+			for child in led_color_panel.find_children("", "Button", true, false):
+				if child.has_meta("is_rainbow_btn"):
+					_cached_rainbow_btn = child
+					_cached_rainbow_style = child.get_theme_stylebox("normal").duplicate()
+					_cached_rainbow_btn.add_theme_stylebox_override("normal", _cached_rainbow_style)
+					_cached_rainbow_btn.add_theme_stylebox_override("hover", _cached_rainbow_style)
+					_cached_rainbow_btn.add_theme_stylebox_override("pressed", _cached_rainbow_style)
+					_last_rainbow_color_idx = -1
+					break
+		if is_instance_valid(_cached_rainbow_btn) and _cached_rainbow_style and c_idx != _last_rainbow_color_idx:
+			_last_rainbow_color_idx = c_idx
+			var colors = [
+				Color(1.0, 0.1, 0.1),
+				Color(0.15, 0.45, 1.0),
+				Color(0.15, 1.0, 0.15),
+				Color(1.0, 0.85, 0.05),
+				Color(1.0, 1.0, 1.0),
+				Color(1.0, 0.25, 0.75),
+				Color(0.2, 0.8, 1.0)
+			]
+			_cached_rainbow_style.bg_color = colors[c_idx]
+			_cached_rainbow_btn.queue_redraw()
 	
 	# Update cached zombie state once per frame for O(1) performance in nested loops
 	_cached_has_zombies = false
@@ -3694,12 +3705,13 @@ func _draw():
 		for y in range(0, grid_height + 8, 4):
 			draw_line(Vector2(0, y * g_scale), Vector2((grid_width + 8) * g_scale, y * g_scale), grid_col, thickness)
 			
-	# METRONOME VISUAL RHYTHM PULSE
-	if _frame_count % music_tempo_frames < 5:
-		for y in range(0, dynamic_grid_height, 4):
-			for x in range(0, grid_width, 4):
-				if _get_cell(x, y) == 600:
-					draw_rect(Rect2(Vector2(x, y) * g_scale, Vector2(g_scale * 2, g_scale * 2)), Color(1, 1, 1, 0.4), false, 1.5)
+	# METRONOME VISUAL RHYTHM PULSE (O(k) sparse iteration instead of O(W*H) full grid scan)
+	if active_metronome_indices.size() > 0 and _frame_count % music_tempo_frames < 5:
+		for idx in active_metronome_indices:
+			var mx = idx % grid_width
+			var my = int(idx / float(grid_width))
+			if (mx & 3) == 0 and (my & 3) == 0:
+				draw_rect(Rect2(Vector2(mx, my) * g_scale, Vector2(g_scale * 2, g_scale * 2)), Color(1, 1, 1, 0.4), false, 1.5)
 	
 	# NPC EMOJIS
 	for npc in active_npcs:
@@ -3916,7 +3928,9 @@ func _set_cell(x, y, mat_id):
 						var tidx = (by + oy) * grid_width + (bx + ox)
 						if tidx >= 0 and tidx < cells.size() and (cells[tidx] & 0xFFFF) == 96:
 							cells[tidx] = 0
-							cell_paint_colors[tidx] = 0
+							if cell_paint_colors[tidx] != 0:
+								cell_paint_colors[tidx] = 0
+								element_paint_dirty = true
 			elif _old_id_c == 97 and not is_hollowing_pipe:
 				is_pipe_dirty = true
 				var bx = int(floor(float(x) / 8.0)) * 8
@@ -3926,7 +3940,9 @@ func _set_cell(x, y, mat_id):
 						var tidx = (by + oy) * grid_width + (bx + ox)
 						if tidx >= 0 and tidx < cells.size() and (cells[tidx] & 0xFFFF) == 97:
 							cells[tidx] = 0
-							cell_paint_colors[tidx] = 0
+							if cell_paint_colors[tidx] != 0:
+								cell_paint_colors[tidx] = 0
+								element_paint_dirty = true
 			
 			cells[idx] = 0
 			if cell_paint_colors[idx] != 0:
@@ -4012,8 +4028,8 @@ func _activate_chunk(gx, gy):
 	var cy = int(gy) >> 4
 	if cx >= 0 and cx < chunks_x and cy >= 0 and cy < chunks_y:
 		var c_idx = cy * chunks_x + cx
-		if next_chunks_active[c_idx] >= 60: return
-		next_chunks_active[c_idx] = 60
+		if next_chunks_active[c_idx] == 61: return
+		next_chunks_active[c_idx] = 61
 		for oy in range(-1, 2):
 			var ncy = cy + oy
 			if ncy >= 0 and ncy < chunks_y:
@@ -4021,7 +4037,8 @@ func _activate_chunk(gx, gy):
 				for ox in range(-1, 2):
 					var ncx = cx + ox
 					if ncx >= 0 and ncx < chunks_x:
-						next_chunks_active[row_offset + ncx] = 60
+						if next_chunks_active[row_offset + ncx] < 60:
+							next_chunks_active[row_offset + ncx] = 60
 
 func _get_cell(x, y):
 	var ix = int(x)
@@ -4083,33 +4100,33 @@ func _step_simulation():
 	active_charge_indices.append_array(next_charge_indices)
 	next_charge_indices.clear()
 	
-	# Pass 2 & 3: Movement and Interactions (Calculated)
-	# ... after main loops conclude, manage the persistent sounds once ...
-	
-	var is_even_frame = (_frame_count % 2 == 0)
-	var pass_groups = ceil(float(chunks_x) / 2.0)
-	
-	# Pass 2: RISING and SPECIAL particles (Top-to-Bottom by Active Chunks)
-	# Executed synchronously on Main Thread to PREVENT Scudo Memory Corruption! (C++ handles 90% of the physics anyway)
-	for i in range(pass_groups): _thread_pass2(i, is_even_frame)
-	for i in range(pass_groups): _thread_pass2(i, not is_even_frame)
-
-	# Pass 3: FALLING/STATIC particles (Bottom-to-Top by Active Chunks)
-	
+	# Pass 2 & 3: Movement and Interactions (Chunk-Aware C++ Physics + Automatic Fallback)
 	var cpp_state = { 
 		"cells": cells, 
 		"tags_array": tags_array,
 		"charge_array": charge_array,
 		"material_tags_raw": material_tags_raw,
 		"charge_visual_buffer": charge_visual_buffer,
-		"cell_paint_colors": cell_paint_colors
+		"cell_paint_colors": cell_paint_colors,
+		"chunks_active": chunks_active,
+		"next_chunks_active": next_chunks_active,
+		"chunks_x": chunks_x,
+		"chunks_y": chunks_y,
+		"view_zoom": view_zoom,
+		"cam_min_x": cam_min_x,
+		"cam_max_x": cam_max_x,
+		"cam_min_y": cam_min_y,
+		"cam_max_y": cam_max_y,
+		"current_weather": current_weather,
+		"music_tempo_frames": music_tempo_frames
 	}
-	# CLEAR GDScript references before passing to C++ to PREVENT massive 10-second Copy-On-Write GC freezes!
+	# CLEAR GDScript references before passing to C++ to PREVENT massive Copy-On-Write GC freezes!
 	cells = PackedInt32Array()
 	tags_array = PackedInt64Array()
 	charge_array = PackedInt32Array()
 	charge_visual_buffer = PackedByteArray()
 	cell_paint_colors = PackedInt32Array()
+	next_chunks_active = PackedByteArray()
 	
 	cpp_state = process_physics(cpp_state, grid_width, dynamic_grid_height, _frame_count)
 	cells = cpp_state["cells"]
@@ -4117,8 +4134,18 @@ func _step_simulation():
 	charge_array = cpp_state["charge_array"]
 	charge_visual_buffer = cpp_state["charge_visual_buffer"]
 	cell_paint_colors = cpp_state["cell_paint_colors"]
+	next_chunks_active = cpp_state["next_chunks_active"]
+	
 	if cpp_state.get("paint_changed", false):
 		element_paint_dirty = true
+	if cpp_state.get("charge_changed", false):
+		charge_dirty = true
+	if cpp_state.get("is_fire_active", false):
+		is_fire_active = true
+	if cpp_state.get("is_volcano_active", false):
+		is_volcano_active = true
+	if cpp_state.get("fuse_burned", false):
+		_play_action_sound("fuse_burning", 0.1)
 		
 	if cpp_state.has("moved_charges"):
 		active_charge_indices.append_array(cpp_state["moved_charges"])
@@ -4134,10 +4161,64 @@ func _step_simulation():
 				_tnt_chain_count += 1
 				_tnt_chain_flags |= expl[4]
 				_tnt_chain_timer = 0.6
-	# ============================================
 
-	for i in range(pass_groups): _thread_pass3(i, is_even_frame)
-	for i in range(pass_groups): _thread_pass3(i, not is_even_frame)
+	var cpp_fireworks = cpp_state.get("launched_fireworks", [])
+	for fw_pos in cpp_fireworks:
+		_launch_firework(fw_pos.x, fw_pos.y)
+
+	var cpp_vortex_sparks = cpp_state.get("vortex_sparks", [])
+	for sp in cpp_vortex_sparks:
+		_add_spark(sp.x, sp.y, 0.0, 0.0, Color.BLACK, 0.4)
+
+	var cpp_repel_sparks = cpp_state.get("repel_sparks", [])
+	for sp in cpp_repel_sparks:
+		_add_spark(sp.x, sp.y, sp.z, sp.w, Color.WHITE, 0.4)
+
+	var cpp_vortex_pulls = cpp_state.get("vortex_npc_pulls", [])
+	if cpp_vortex_pulls.size() > 0 and active_npcs.size() > 0:
+		for vp in cpp_vortex_pulls:
+			var nearby_npcs = _get_nearby_npcs(vp.x, vp.y, 30.0)
+			for npc in nearby_npcs:
+				var dx_n = vp.x - npc.pos.x
+				var dy_n = vp.y - npc.pos.y
+				var d_sq = dx_n * dx_n + dy_n * dy_n
+				var d_inv = 1.0 / max(1.0, sqrt(d_sq))
+				npc.vx += dx_n * d_inv * 0.1
+				npc.vy += dy_n * d_inv * 0.1
+				if d_sq < 36.0:
+					npc.hp -= 10.0
+
+	var cpp_repel_pushes = cpp_state.get("repel_npc_pushes", [])
+	if cpp_repel_pushes.size() > 0 and active_npcs.size() > 0:
+		for rp in cpp_repel_pushes:
+			var nearby_npcs = _get_nearby_npcs(rp.x, rp.y, 5.0)
+			for npc in nearby_npcs:
+				var dx_n = npc.pos.x - rp.x
+				var dy_n = npc.pos.y - rp.y
+				var d_sq = max(9.0, dx_n * dx_n + dy_n * dy_n)
+				var d_inv = 1.0 / sqrt(d_sq)
+				var force = 35.0 * d_inv
+				npc.vx += dx_n * d_inv * force * 1.5
+				npc.vy += (dy_n * d_inv * force) - 3.5
+				if _get_lut_rand() < 0.05:
+					npc.hp -= 1.0
+
+	var cpp_heat_notes = cpp_state.get("heat_music_notes", [])
+	for pure_note_id in cpp_heat_notes:
+		if pure_note_id == 600:
+			_play_music_note(5, 0)
+		else:
+			var m_data = _get_music_data(pure_note_id)
+			_play_music_note(m_data.inst, m_data.note, false, m_data.octave)
+
+	# Automatic fallback: Only run GDScript passes if running against an uncompiled legacy C++ binary
+	if not cpp_state.has("charge_changed"):
+		var is_even_frame = (_frame_count % 2 == 0)
+		var pass_groups = ceil(float(chunks_x) / 2.0)
+		for i in range(pass_groups): _thread_pass2(i, is_even_frame)
+		for i in range(pass_groups): _thread_pass2(i, not is_even_frame)
+		for i in range(pass_groups): _thread_pass3(i, is_even_frame)
+		for i in range(pass_groups): _thread_pass3(i, not is_even_frame)
 
 	# === GESTIÓN GLOBAL DE SONIDOS AMBIENTALES ===
 	if is_volcano_active: 
@@ -4183,7 +4264,10 @@ func _thread_pass2(i: int, process_evens: bool):
 					continue
 
 				if (tags & SandboxMaterial.Tags.GRAV_UP):
-					if (tags & TAGS_INTERACTIVE) != 0 or pure_id >= 18:
+					if pure_id == 17 and y < 30 and _get_lut_rand() < 0.005:
+						_set_cell(x, y, 2)
+						continue
+					if (tags & (SandboxMaterial.Tags.VIRUS | SandboxMaterial.Tags.RADIOACTIVE | SandboxMaterial.Tags.VORTEX | SandboxMaterial.Tags.REPEL | SandboxMaterial.Tags.ELECTRICITY)) != 0:
 						_process_interactions(x, y, idx, raw_id, pure_id, tags)
 						
 					if cells[idx] == raw_id and pure_id != 28:
@@ -4214,21 +4298,23 @@ func _thread_pass3(i: int, process_evens: bool):
 				if idx >= cells.size() or idx >= tags_array.size(): continue
 				var raw_id = cells[idx]
 				var pure_id = raw_id & 0xFFFF
+				if pure_id <= 0 or pure_id >= 1000: continue
 				
-				if pure_id > 0:
-					var tags = tags_array[idx]
-					
-					if (not (tags & SandboxMaterial.Tags.GRAV_UP)): 
-						if (tags & TAGS_INTERACTIVE) != 0 or pure_id >= 18 or pure_id == 7 or pure_id == 9 or pure_id == 13: 
-							_process_interactions(x, y, idx, raw_id, pure_id, tags)
-							
-						if cells[idx] == raw_id and not (tags & SandboxMaterial.Tags.GRAV_STATIC):
-							var should_move = true
-							if (tags & SandboxMaterial.Tags.GRAV_SLOW) and _get_lut_rand() > 0.3:
-								should_move = false
-							
-							if should_move:
-								pass
+				var tags = tags_array[idx]
+				if not (tags & SandboxMaterial.Tags.GRAV_UP):
+					if pure_id == 3 or pure_id == 14:
+						is_fire_active = true
+						continue
+					if pure_id >= 27 and pure_id <= 29:
+						if pure_id != 27 or charge_array[idx] > 10:
+							is_volcano_active = true
+						continue
+					# Strict filter: skip Stone(30), Dry Cement(26), Metal(8), Wood(16), Water(2), Lava(11), Mechanisms(81..195), Flowers(31..34)
+					if pure_id == 18 or pure_id == 19 or pure_id == 24 or pure_id == 25 or pure_id == 60 or pure_id == 70 or pure_id == 9 or \
+					   ((pure_id == 1 or pure_id == 6 or (pure_id >= 21 and pure_id <= 23)) and _get_lut_rand() < 0.02) or \
+					   (tags & (SandboxMaterial.Tags.VIRUS | SandboxMaterial.Tags.RADIOACTIVE | SandboxMaterial.Tags.VORTEX | SandboxMaterial.Tags.REPEL | SandboxMaterial.Tags.ELECTRICITY | SandboxMaterial.Tags.EXPLOSIVE)) != 0 or \
+					   ((tags & SandboxMaterial.Tags.MUSIC) != 0 and (x & 1) == 0 and (y & 1) == 0):
+						_process_interactions(x, y, idx, raw_id, pure_id, tags)
 
 func _process_electricity():
 	var frame = _frame_count
@@ -4242,16 +4328,28 @@ func _process_electricity():
 		if _is_music_mat(mid):
 			prev_active_music_charges[idx] = true
 		
-	# 2. Collect constant sources this frame
+	# 2. Collect constant sources this frame (pruning stale destroyed sources)
 	var sources = []
 	
 	# Batteries (ID 88)
+	var stale_batteries = []
 	for idx in active_battery_indices:
-		sources.append(idx)
+		if idx >= 0 and idx < cells.size() and (cells[idx] & 0xFFFF) == 88:
+			sources.append(idx)
+		else:
+			stale_batteries.append(idx)
+	for idx in stale_batteries:
+		active_battery_indices.erase(idx)
 		
 	# Electricity (ID 9)
+	var stale_elec = []
 	for idx in active_electricity_source_indices:
-		sources.append(idx)
+		if idx >= 0 and idx < cells.size() and (cells[idx] & 0xFFFF) == 9:
+			sources.append(idx)
+		else:
+			stale_elec.append(idx)
+	for idx in stale_elec:
+		active_electricity_source_indices.erase(idx)
 		
 	# NPC Activators (ID 90) detection
 	for npc in active_npcs:
@@ -4276,7 +4374,11 @@ func _process_electricity():
 	# Metronomes (ID 600) on pulsing frames
 	var is_metronome_pulsing = (frame % music_tempo_frames == 0)
 	if is_metronome_pulsing:
+		var stale_metro = []
 		for idx in active_metronome_indices:
+			if idx < 0 or idx >= cells.size() or (cells[idx] & 0xFFFF) != 600:
+				stale_metro.append(idx)
+				continue
 			var gx = idx % grid_width
 			var gy = idx / grid_width
 			for dy in range(2):
@@ -4288,6 +4390,8 @@ func _process_electricity():
 					if nx >= grid_width: continue
 					var n_idx = row_offset + nx
 					sources.append(n_idx)
+		for idx in stale_metro:
+			active_metronome_indices.erase(idx)
 					
 	# Logic gate outputs
 	for gate in active_logic_gates:
@@ -4295,6 +4399,12 @@ func _process_electricity():
 			var pins = _get_logic_gate_output_pins(gate)
 			for p_idx in pins:
 				sources.append(p_idx)
+				
+	# Early exit if no electrical activity at all this frame
+	if active_charge_indices.size() == 0 and prev_charges.size() == 0 and sources.size() == 0:
+		if active_logic_gates.size() > 0:
+			_simulate_logic_gates()
+		return
 				
 	# Initialize sources to 100 in charge_array
 	for idx in sources:
@@ -5348,6 +5458,7 @@ func _draw_npc_pixels(npc, override_mat = -1):
 				var c = p.get(mat_key, Color.WHITE)
 				if typeof(c) == TYPE_COLOR:
 					cell_paint_colors[py * grid_width + px] = c.to_abgr32()
+					element_paint_dirty = true
 
 func _update_npc_spatial_hash():
 	for cell in npc_spatial_grid:
@@ -7523,10 +7634,10 @@ func _explode(x, y, radius, sfx_action: String = "explosion", ignition_flags = 0
 	
 	# Wake up chunks around explosion for C++ particles (Sparks, Drops, etc)
 	var effect_radius = int(radius) + 15
-	var start_cy = max(0, (y - effect_radius) / 8)
-	var end_cy = min(chunks_y - 1, (y + effect_radius) / 8)
-	var start_cx = max(0, (x - effect_radius) / 8)
-	var end_cx = min(chunks_x - 1, (x + effect_radius) / 8)
+	var start_cy = max(0, (y - effect_radius) >> 4)
+	var end_cy = min(chunks_y - 1, (y + effect_radius) >> 4)
+	var start_cx = max(0, (x - effect_radius) >> 4)
+	var end_cx = min(chunks_x - 1, (x + effect_radius) >> 4)
 	for cy in range(start_cy, end_cy + 1):
 		for cx in range(start_cx, end_cx + 1):
 			var c_idx = cy * chunks_x + cx
@@ -7711,18 +7822,19 @@ func _update_texture():
 	
 	# 3. OPTIMIZED VISUAL OVERLAY (Write directly to raw_data buffer)
 	# This is MUCH faster than img.set_pixel()
-	if vs_ptr > 0 or active_fireworks.size() > 0:
+	if active_visual_sparks_count > 0 or active_fireworks.size() > 0:
 		# Visual sparks processing
-		for i in range(MAX_VISUAL_SPARKS):
-			var life = vs_life[i]
-			if life <= 0.2: continue
-			var sx = int(vs_x[i]); var sy = int(vs_y[i])
-			if sx >= 0 and sx < grid_width and sy >= 0 and sy < grid_height:
-				var sc = vs_color[i]
-				sc.a = life
-				sc.b = max(0.02, sc.b) # Hybrid shader marker
-				var color_u32 = sc.to_abgr32()
-				raw_data.encode_u32((sy * grid_width + sx) * 4, color_u32)
+		if active_visual_sparks_count > 0:
+			for i in range(MAX_VISUAL_SPARKS):
+				var life = vs_life[i]
+				if life <= 0.2: continue
+				var sx = int(vs_x[i]); var sy = int(vs_y[i])
+				if sx >= 0 and sx < grid_width and sy >= 0 and sy < grid_height:
+					var sc = vs_color[i]
+					sc.a = life
+					sc.b = max(0.02, sc.b) # Hybrid shader marker
+					var color_u32 = sc.to_abgr32()
+					raw_data.encode_u32((sy * grid_width + sx) * 4, color_u32)
 				
 		for fw in active_fireworks:
 			var fx = int(fw.x); var fy = int(fw.y)
@@ -7739,15 +7851,15 @@ func _update_texture():
 	
 	# 4. CONDITIONAL AUXILIARY UPDATES
 	# Only update charge texture if there are active charges OR if something changed (decay/movement)
-	if active_charge_indices.size() > 0 or charge_dirty or _frame_count % 60 == 0:
-		var new_charge_img = Image.create_from_data(grid_width, grid_height, false, Image.FORMAT_L8, charge_visual_buffer.duplicate())
+	if active_charge_indices.size() > 0 or charge_dirty:
+		var new_charge_img = Image.create_from_data(grid_width, grid_height, false, Image.FORMAT_L8, charge_visual_buffer)
 		_img_history.append(new_charge_img)
 		charge_tex.update(new_charge_img)
 		charge_img = new_charge_img
 		charge_dirty = false
 	
-	# Only update paint texture if dirty or actively painting
-	if is_paint_tool_active or element_paint_dirty:
+	# Only update paint texture when painted elements change or move
+	if element_paint_dirty:
 		var new_paint_img = Image.create_from_data(grid_width, grid_height, false, Image.FORMAT_RGBA8, cell_paint_colors.to_byte_array())
 		_img_history.append(new_paint_img)
 		element_paint_tex.update(new_paint_img)
@@ -7761,7 +7873,7 @@ func _update_texture():
 		background_img = new_bg_img
 		background_dirty = false
 		
-	while _img_history.size() > 16:
+	while _img_history.size() > 4:
 		_img_history.pop_front()
 
 func _launch_firework(x, y):
@@ -7815,16 +7927,20 @@ func _update_active_fireworks(delta):
 
 func _add_spark(px, py, p_vx, p_vy, p_color, p_life):
 	sim_mutex.lock()
+	if vs_life[vs_ptr] <= 0.0 and p_life > 0.0:
+		active_visual_sparks_count += 1
 	vs_x[vs_ptr] = px; vs_y[vs_ptr] = py; vs_vx[vs_ptr] = p_vx; vs_vy[vs_ptr] = p_vy
 	vs_color[vs_ptr] = p_color; vs_life[vs_ptr] = p_life
 	vs_ptr = (vs_ptr + 1) % MAX_VISUAL_SPARKS
 	sim_mutex.unlock()
 
 func _update_visual_sparks(delta):
-	# OPTIMIZATION: Process only active sparks with cached life
+	if active_visual_sparks_count <= 0:
+		return
+	var alive_count = 0
 	for i in range(MAX_VISUAL_SPARKS):
 		var l = vs_life[i]
-		if l <= 0: continue
+		if l <= 0.0: continue
 		
 		vs_x[i] += vs_vx[i] * delta
 		vs_y[i] += vs_vy[i] * delta
@@ -7832,6 +7948,9 @@ func _update_visual_sparks(delta):
 		
 		l -= 1.3 * delta
 		vs_life[i] = l
+		if l > 0.0:
+			alive_count += 1
+	active_visual_sparks_count = alive_count
 
 func _explode_firework(ex, ey, color):
 	_play_action_sound("firework_burst")
@@ -7879,6 +7998,7 @@ func _clear_all():
 	active_metronome_indices.clear()
 
 	vs_life.fill(0.0)
+	active_visual_sparks_count = 0
 	active_charge_indices.clear()
 	next_charge_indices.clear()
 	charge_queued_frame.fill(-1)

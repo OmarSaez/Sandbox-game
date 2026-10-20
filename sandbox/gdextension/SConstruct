@@ -11,19 +11,22 @@ env = SConscript(godot_cpp_dir + "/SConstruct")
 env.Append(CPPPATH=["src", godot_cpp_dir + "/gdextension", godot_cpp_dir + "/include", godot_cpp_dir + "/gen/include"])
 
 platform = ARGUMENTS.get("platform", "windows")
-
-if platform == "windows":
-    # Force MSVC flags since we are using vcvars64.bat
-    env.Append(CXXFLAGS=["/std:c++17", "/EHsc", "/wd4251", "/wd4275", "/vmg"])
-
-# Link with godot-cpp
-platform = ARGUMENTS.get("platform", "windows")
 target = ARGUMENTS.get("target", "template_debug")
 arch = ARGUMENTS.get("arch", "x86_64")
 
+if platform == "windows" and env.get("is_msvc", False):
+    # Force MSVC flags when using vcvars64.bat / MSVC
+    env.Append(CXXFLAGS=["/std:c++17", "/EHsc", "/wd4251", "/wd4275", "/vmg", "/O2", "/fp:fast"])
+else:
+    # Optimize native C++ loops for MinGW (Windows), Android (Snapdragon 835 / ARMv8 & ARMv7) and Linux/macOS
+    env.Append(CXXFLAGS=["-std=c++17", "-O3", "-ffast-math", "-fno-finite-math-only"])
+
 if platform == "windows":
     env.Append(LIBPATH=[godot_cpp_dir + "/bin"])
-    env.Append(LIBS=["libgodot-cpp.{}.{}.{}".format(platform, target, arch)])
+    if env.get("is_msvc", False):
+        env.Append(LIBS=["libgodot-cpp.{}.{}.{}".format(platform, target, arch)])
+    else:
+        env.Append(LIBS=["godot-cpp.{}.{}.{}".format(platform, target, arch)])
 else:
     env.Append(LIBPATH=[godot_cpp_dir + "/bin"])
     env.Append(LIBS=["godot-cpp.{}.{}.{}".format(platform, target, arch)])

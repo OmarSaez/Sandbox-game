@@ -52,6 +52,11 @@ private:
 		EXP_LAVA = 1ULL << 33,
 		EXP_NPC = 1ULL << 34,
 		EXP_LIFE = 1ULL << 35,
+		EXP_TEAM_RED = 1ULL << 36,
+		EXP_TEAM_BLUE = 1ULL << 37,
+		EXP_TEAM_GREEN = 1ULL << 38,
+		EXP_TEAM_YELLOW = 1ULL << 39,
+		EXP_TEAM_MIXED = 1ULL << 40,
 		VIRUS = 1ULL << 41,
 		RADIOACTIVE = 1ULL << 42,
 		INVINCIBLE = 1ULL << 43,
@@ -61,6 +66,10 @@ private:
 		EXP_PINATA = 1ULL << 47,
 		REPEL = 1ULL << 48
 	};
+
+	// Precomputed trig lookup table for fast radial rays (Vortex, Repel, Explosions)
+	float cos_lut_256[256];
+	float sin_lut_256[256];
 
 	// Electricity optimization (Pre-allocated buffers to prevent allocation per-frame)
 	std::vector<int> elec_queue_x;

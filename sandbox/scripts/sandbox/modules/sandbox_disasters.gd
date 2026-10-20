@@ -361,11 +361,11 @@ func process_tsunami(delta: float) -> void:
 			if target_y > 5 and source_y < g_height:
 				# Purely mathematical shift, no randf()
 				if grid._get_cell(rx, target_y) == 0:
-					grid._set_cell(rx, target_y, mid)
 					var check_id = grid._get_cell(rx, source_y) & 0xFFFF
-					if check_id > 0 and grid._get_tags_id(check_id) < mat_tags.size():
-						if (mat_tags[grid._get_tags_id(check_id)] & SandboxMaterial.Tags.LIQUID):
-							grid._set_cell(rx, source_y, 0)
+					if check_id > 0 and grid._get_tags_id(check_id) < mat_tags.size() and (mat_tags[grid._get_tags_id(check_id)] & SandboxMaterial.Tags.LIQUID):
+						grid._swap_cells(rx, source_y, rx, target_y)
+					else:
+						grid._set_cell(rx, target_y, mid)
 
 
 # ==============================================================================

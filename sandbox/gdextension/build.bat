@@ -1,3 +1,4 @@
 @echo off
-call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
-"C:\Users\omaez\AppData\Roaming\Python\Python314\Scripts\scons.exe" platform=windows target=template_debug
+set "PATH=C:\Users\omaez\AppData\Local\Programs\Python\Python312;C:\Users\omaez\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\omaez\AppData\Local\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin;%PATH%"
+"C:\Users\omaez\AppData\Local\Programs\Python\Python312\Scripts\scons.exe" platform=windows target=template_debug use_mingw=yes -j8
+
