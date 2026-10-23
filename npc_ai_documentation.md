@@ -197,10 +197,18 @@ Todos los NPCs comparten el motor físico base en [`_process_npcs`](file:///c:/U
 * **Facción**: Sin bando (`team = -1`, hostil contra **todos** los NPCs y facciones)
 * **Dimensiones**: `7 × 10` px (`standing`: `7 × 10`, `lying`: `10 × 5`, `action`: `9 × 10`)
 * **Vida Base**: `500.0 HP` (**exactamente `5×` la vida base de un Guerrero**)
-* **Ataque y Habilidades**:
-  * **Rayo Celestial (`_strike_lightning_at`)**: Invoca el elemento **Rayo** directamente desde el cielo sobre la coordenada X central de su objetivo, trazando una columna de electricidad (`ID 9`) que al impactar detona una explosión eléctrica de radio `5 px` (`EXP_VOLCANO | 128`, hasta `120.0 HP` de daño en el epicentro + empuje + chispas eléctricas `ID 43`).
+* **Ataque y Habilidades Divinas**:
+  * **1. Entrada del Olimpo (Al Spawnear)**: Al ser invocado en el mapa, un rayo cae directamente desde el cielo sobre su posición junto con un estallido de chispas doradas (`#f0fe15`) y cian (`#2fdaa1`), apareciendo en pose de poder (`action`).
+  * **2. Rayo Celestial (`_strike_lightning_at`)**: Invoca el elemento **Rayo** directamente desde el cielo sobre la coordenada X central de su objetivo, trazando una columna de electricidad (`ID 9`) que al impactar detona una explosión eléctrica de radio `5 px` (`EXP_VOLCANO | 128`, hasta `120.0 HP` de daño en el epicentro + empuje + chispas eléctricas `ID 43`).
+  * **3. Paso Electrificado**: Al caminar o posarse sobre materiales conductores (`CONDUCTOR`: cables, metal, agua, oro) o activables por electricidad (`ELECTRIC_ACTIVATED`: cañones, puertas, LEDs, fuegos artificiales, TNT eléctrico), inyecta carga eléctrica real (`charge_array = 101`) activando circuitos y mecanismos a su paso.
+  * **4. Fase "Ira del Olimpo" (`<= 20% HP` / `<= 100 HP`)**:
+    * **Onda de Choque de Trueno**: Al entrar en esta fase, descarga un rayo sobre sí mismo y libera una onda expansiva eléctrica de radio `60 px` que lanza por los aires a los enemigos cercanos (`vx = ±11.0`, `vy = -7.5`) e inflige `25.0 HP` de daño eléctrico.
+    * **Levitación Divina + Nube de Tormenta**: Ignora la gravedad normal, se eleva y flota suavemente entre `15` y `19 px` sobre el suelo (pudiendo desplazarse por el aire sobre abismos) mientras genera una estela de nubes/vapor (`ID 17`) bajo sus pies.
+    * **Pose de Poder e Iluminación de Chispas**: Permanece en su pose `action` (`9 × 10` con ojos brillantes `#9df9da` y rayos dorados alrededor del cuerpo) emitiendo chispas eléctricas constantemente.
+    * **Tormenta de Fondo y Ataque Acelerado**: Mientras está en Ira del Olimpo, caen rayos aleatorios de fondo por todo el mapa cada `0.65 – 1.35 s` y su enfriamiento de ataque principal se reduce de `1.8 s` a **`1.0 s`**.
+  * **5. Castigo Final (Al Morir)**: Al llegar a `0 HP`, antes de desaparecer desata **3 rayos simultáneos** alrededor de su posición (`x - 16`, `x + 3`, `x + 22`) y una explosión de chispas divinas.
   * **Alcance y Posicionamiento**: Camina normalmente hacia su objetivo si está a `> 95 px`, se detiene a distancia óptima (`25 – 95 px`), retrocede si el enemigo se acerca a `< 25 px`, y descarga rayos contra objetivos a `<= 140 px`.
-  * **Cooldown**: `1.8 s` en IA autónoma (`1.5 s` en Modo Controlado Arcade).
+  * **Cooldown**: `1.8 s` normal / `1.0 s` en Ira del Olimpo (`1.5 s` en Modo Controlado Arcade).
   * **Inmunidades Divinas**:
     * **100% Inmune a daño por corriente eléctrica** (`charge_array > 50`).
     * **100% Inmune a explosiones eléctricas** (`ignition_flags & 128`), por lo que sus propios rayos jamás lo dañan ni empujan.

@@ -5342,6 +5342,13 @@ func _place_npc(x, y):
 	_npc_id_counter += 1
 	
 	new_npc["max_hp"] = new_npc["hp"]
+	if n_type == "zeus":
+		_strike_lightning_at(clampi(start_x + 3, 0, grid_width - 1))
+		new_npc["action_timer"] = 0.7
+		_set_npc_emoji(new_npc, "⚡", 1.8)
+		for _i in range(18):
+			var s_col = Color("f0fe15") if _get_lut_rand() < 0.6 else Color("2fdaa1")
+			_add_spark(float(start_x + 3) + _get_lut_rand_range(-4.0, 4.0), float(start_y + 5) + _get_lut_rand_range(-5.0, 5.0), _get_lut_rand_range(-45.0, 45.0), _get_lut_rand_range(-70.0, -15.0), s_col, _get_lut_rand_range(0.4, 0.8))
 	active_npcs.append(new_npc)
 	_draw_npc_pixels(new_npc)
 	element_paint_dirty = true
@@ -6219,6 +6226,74 @@ func _process_npcs(delta):
 									_set_npc_emoji(npc, "🥩" if _get_lut_rand() > 0.5 else "🦖", 2.0)
 
 					elif npc.type == "zeus":
+						# --- PASO ELECTRIFICADO: Energiza cables, metales, agua y dispositivos bajo sus pies ---
+						for ey in range(np.y + 9, np.y + 11):
+							if ey < 0 or ey >= dynamic_grid_height: continue
+							var e_row = ey * grid_width
+							for ex in range(np.x - 1, np.x + 8):
+								if ex < 0 or ex >= grid_width: continue
+								var e_idx = e_row + ex
+								var e_id = cells[e_idx] & 0xFFFF
+								if e_id <= 0: continue
+								var e_tags = material_tags_raw[_get_tags_id(e_id)]
+								if (e_tags & SandboxMaterial.Tags.CONDUCTOR) and charge_array[e_idx] == 0:
+									charge_array[e_idx] = 101
+									charge_visual_buffer[e_idx] = 101
+									_register_charge(e_idx)
+									_activate_chunk(ex, ey)
+									charge_dirty = true
+								elif (e_tags & SandboxMaterial.Tags.ELECTRIC_ACTIVATED):
+									if e_id == 27: _set_cell(ex, ey, 29); charge_array[e_idx] = int(_get_lut_rand_range(80, 120))
+									elif e_id == 18: _set_cell(ex, ey, 19); charge_array[e_idx] = int(_get_lut_rand_range(20, 70))
+									else: _prime_explosive(ex, ey, e_id, 128)
+						
+						# --- FASE IRA DEL OLIMPO (< 20% HP) ---
+						var is_enraged = (npc.hp > 0.0 and npc.hp <= npc.max_hp * 0.2)
+						if is_enraged:
+							if not npc.get("zeus_enraged", false):
+								npc["zeus_enraged"] = true
+								npc["zeus_storm_timer"] = 0.4
+								_set_npc_emoji(npc, "⚡", 2.5)
+								_strike_lightning_at(clampi(np.x + 3, 0, grid_width - 1))
+								# Onda de Choque de Trueno: Empuja y electrocuta enemigos cercanos
+								var shock_targets = _get_nearby_npcs(np.x + 3, np.y + 5, 60.0)
+								for other in shock_targets:
+									if other != npc and other.hp > 0:
+										var push_dir = 1.0 if other.pos.x >= np.x else -1.0
+										other.vx = push_dir * 11.0
+										other.vy = -7.5
+										other.hp -= 25.0
+										other.hit_flash = 8
+										other.hit_type = "electric"
+										_set_npc_emoji(other, "😱", 1.5)
+								for _s in range(30):
+									var s_col = Color("f0fe15") if _get_lut_rand() < 0.6 else Color("2fdaa1")
+									_add_spark(float(np.x + 3), float(np.y + 5), _get_lut_rand_range(-80.0, 80.0), _get_lut_rand_range(-80.0, 20.0), s_col, _get_lut_rand_range(0.5, 0.9))
+							
+							# Mantener pose de poder e iluminación de chispas divinas
+							npc["action_timer"] = 0.5
+							if _get_lut_rand() < 0.75:
+								var aura_col = Color("f0fe15") if _get_lut_rand() < 0.55 else Color("2fdaa1")
+								_add_spark(float(np.x) + _get_lut_rand_range(-1.0, 8.0), float(np.y) + _get_lut_rand_range(0.0, 10.0), _get_lut_rand_range(-18.0, 18.0), _get_lut_rand_range(-35.0, -8.0), aura_col, _get_lut_rand_range(0.3, 0.6))
+							
+							# Nube de tormenta bajo sus pies al levitar
+							var cloud_y = np.y + 10
+							if cloud_y >= 0 and cloud_y < dynamic_grid_height and _get_lut_rand() < 0.45:
+								var cloud_x = clampi(np.x + int(_get_lut_rand_range(0.0, 7.0)), 0, grid_width - 1)
+								if _get_cell(cloud_x, cloud_y) == 0:
+									_set_cell(cloud_x, cloud_y, 17)
+							
+							# Tormenta de Fondo: Rayos aleatorios en el mapa
+							var storm_t = npc.get("zeus_storm_timer", 0.8) - 0.05
+							if storm_t <= 0.0:
+								storm_t = _get_lut_rand_range(0.65, 1.35)
+								var rand_lx = int(_get_lut_rand_range(8.0, float(grid_width - 8)))
+								if abs(rand_lx - (np.x + 3)) > 12:
+									_strike_lightning_at(rand_lx)
+							npc["zeus_storm_timer"] = storm_t
+						else:
+							npc["zeus_enraged"] = false
+
 						if target:
 							npc["recently_celebrated"] = false
 							npc["contagion_wait_timer"] = 0.0
@@ -6237,7 +6312,7 @@ func _process_npcs(delta):
 							elif dx_abs < 25:
 								npc.dir = -1 if dist_x > 0 else 1
 							else:
-								if target_below:
+								if target_below and not is_enraged:
 									if npc.dir == 0: npc.dir = 1 if _get_lut_rand() > 0.5 else -1
 								else:
 									npc.dir = 0
@@ -6247,7 +6322,7 @@ func _process_npcs(delta):
 								_set_npc_emoji(npc, "⚡", 0.8)
 								var strike_x = clampi(int(target.pos.x + t_w * 0.5), 0, grid_width - 1)
 								_strike_lightning_at(strike_x)
-								npc.attack_cooldown = 1.8
+								npc.attack_cooldown = 1.0 if is_enraged else 1.8
 						else:
 							npc["has_spotted_enemy"] = false
 							var rethink_chance = 0.045 if npc.dir == 0 else 0.012
@@ -6435,7 +6510,33 @@ func _process_npcs(delta):
 			var h = vis["height"]
 			var feet_y = np.y + h
 			var can_fall = true
-			if feet_y >= dynamic_grid_height: can_fall = false
+			if npc.type == "zeus" and npc.get("zeus_enraged", false):
+				can_fall = false
+				npc.fall_depth = 0
+				var ground_dist = 26
+				for gdy in range(26):
+					var check_y = feet_y + gdy
+					if check_y >= dynamic_grid_height:
+						ground_dist = gdy
+						break
+					var hit_ground = false
+					for ox in range(w):
+						var tid = _get_cell(np.x + ox, check_y)
+						if tid != 0 and tid != 15 and tid != 3 and tid != 17:
+							if !(material_tags_raw[_get_tags_id(tid)] & (SandboxMaterial.Tags.NPC | SandboxMaterial.Tags.PLANT)):
+								hit_ground = true; break
+					if hit_ground:
+						ground_dist = gdy
+						break
+				if ground_dist < 15 and np.y > 14 and _can_npc_fit(np.x, np.y - 1, npc):
+					np.y -= 1
+				elif ground_dist > 19 and _can_npc_fit(np.x, np.y + 1, npc):
+					np.y += 1
+				elif ((_ai_tick_count + npc.id) % 8 == 0):
+					var bob_dy = -1 if (int(_ai_tick_count / 8.0) % 2 == 0) else 1
+					if np.y + bob_dy > 12 and _can_npc_fit(np.x, np.y + bob_dy, npc):
+						np.y += bob_dy
+			elif feet_y >= dynamic_grid_height: can_fall = false
 			else:
 				for ox in range(w):
 					var tid = _get_cell(np.x + ox, feet_y)
@@ -6496,7 +6597,7 @@ func _process_npcs(delta):
 								else: hazard_stop = true # Detenerse ante el peligro si hay target
 					
 					# 2. ESCANEO DE ACANTILADOS (Si no hay enemigo, no suicidarse)
-					if not moved and not hazard_stop:
+					if not moved and not hazard_stop and not npc.get("zeus_enraged", false):
 						var edge_x = np.x + (npc.dir * 2); var drop_depth = 0
 						for dy in range(1, 15):
 							if not _can_npc_fit(edge_x, np.y + dy, npc): break
@@ -6577,7 +6678,15 @@ func _process_npcs(delta):
 			else:
 				_set_npc_emoji(npc, "💀", 2.0)
 				_draw_npc_pixels(npc, 0); _play_action_sound("npc_death")
-				if npc.type == "miner" and npc.has("mine_state") and npc.mine_state == "saboteur":
+				if npc.type == "zeus":
+					# Castigo Final: 3 rayos divinos alrededor de su posición al caer derrotado
+					_strike_lightning_at(clampi(np.x - 16, 0, grid_width - 1))
+					_strike_lightning_at(clampi(np.x + 3, 0, grid_width - 1))
+					_strike_lightning_at(clampi(np.x + 22, 0, grid_width - 1))
+					for _s in range(30):
+						var s_col = Color("f0fe15") if _get_lut_rand() < 0.6 else Color("2fdaa1")
+						_add_spark(float(np.x + 3), float(np.y + 5), _get_lut_rand_range(-90.0, 90.0), _get_lut_rand_range(-95.0, 10.0), s_col, _get_lut_rand_range(0.5, 1.0))
+				elif npc.type == "miner" and npc.has("mine_state") and npc.mine_state == "saboteur":
 					for fx in range(-2, 7):
 						var f_idx = np.x + fx
 						if f_idx >= 0 and f_idx < grid_width: _set_cell(f_idx, np.y + 8, 3); _set_cell(f_idx, np.y - 3, 3)
