@@ -480,8 +480,6 @@ func _build_ui():
 	grid_lie.add_theme_constant_override("v_separation", 2)
 	grid_lie.set_anchors_preset(PRESET_FULL_RECT)
 	canvas_bg_lie.add_child(grid_lie)
-	grid.add_theme_constant_override("v_separation", 1)
-	canvas_bg.add_child(grid)
 
 	var header_2 = HBoxContainer.new()
 	header_2.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -663,10 +661,12 @@ func _populate_load_dropdown():
 	var dropdown = find_child("LoadDropdown", true, false)
 	for key in SandboxGrid.NPC_VISUALS.keys():
 		dropdown.add_item(key)
+		dropdown.set_item_metadata(dropdown.item_count - 1, key)
 
 func _on_load_pressed():
 	var dropdown = find_child("LoadDropdown", true, false)
-	var npc_name = dropdown.get_item_text(dropdown.selected)
+	var meta_key = dropdown.get_item_metadata(dropdown.selected)
+	var npc_name = str(meta_key) if meta_key != null else dropdown.get_item_text(dropdown.selected)
 	var vis = SandboxGrid.NPC_VISUALS.get(npc_name)
 	if not vis: return
 	
@@ -834,7 +834,7 @@ func _on_export_pressed():
 			pal_str += "%d: %s, " % [i, arr_str]
 	pal_str += "}"
 	
-	var code = "\"custom_npc\": {\n"
+	var code = "\"%s\": {\n" % current_loaded_npc
 	code += "\t\"width\": %d, \"height\": %d,\n" % [out_w, out_h]
 	code += "\t\"palette\": %s,\n" % pal_str
 	code += "\t\"frames\": {\n"

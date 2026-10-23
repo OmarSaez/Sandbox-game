@@ -560,6 +560,23 @@ func trigger_controlled_npc_action() -> void:
 				if grid.has_method("_set_npc_emoji"):
 					grid._set_npc_emoji(controlled_npc, "🦖", 0.5)
 				controlled_npc.attack_cooldown = 0.6
+
+		"zeus":
+			var face_dir = controlled_npc.get("last_dir", 1)
+			var target = find_controlled_aim_target(controlled_npc, face_dir, 150.0)
+			var strike_x = controlled_npc.pos.x + face_dir * 35
+			if target:
+				var target_dir = 1 if (target.pos.x - controlled_npc.pos.x) > 0 else -1
+				controlled_npc["last_dir"] = target_dir
+				controlled_npc.dir = target_dir
+				var t_vis = grid.NPC_VISUALS.get(target.type, grid.NPC_VISUALS["warrior"]) if "NPC_VISUALS" in grid else {"width": 5}
+				strike_x = int(target.pos.x + float(t_vis.get("width", 5)) * 0.5)
+			strike_x = clampi(strike_x, 0, grid.grid_width - 1)
+			if grid.has_method("_strike_lightning_at"):
+				grid._strike_lightning_at(strike_x)
+			if grid.has_method("_set_npc_emoji"):
+				grid._set_npc_emoji(controlled_npc, "⚡", 0.6)
+			controlled_npc.attack_cooldown = 1.5
 				
 		"archer":
 			var face_dir = controlled_npc.get("last_dir", 1)
@@ -709,9 +726,15 @@ func update_arcade_dynamic_button() -> void:
 		elif selected_material == 1050 or selected_material == 1051: active_name = tr("zombie")
 		elif selected_material == 1060 or selected_material == 1061: active_name = tr("zombie_tank")
 		elif selected_material == 1090 or selected_material == 1091: active_name = tr("dinosaurio")
+		elif selected_material == 1100 or selected_material == 1101: active_name = tr("zeus")
 		
-		if selected_material == 1050 or selected_material == 1051 or selected_material == 1060 or selected_material == 1061 or selected_material == 1090 or selected_material == 1091:
-			active_color = Color("#4E822E") if (selected_material == 1060 or selected_material == 1061 or selected_material == 1090 or selected_material == 1091) else Color("#5D9C36")
+		if selected_material == 1050 or selected_material == 1051 or selected_material == 1060 or selected_material == 1061 or selected_material == 1090 or selected_material == 1091 or selected_material == 1100 or selected_material == 1101:
+			if selected_material == 1100 or selected_material == 1101:
+				active_color = Color("#FFD700")
+			elif selected_material == 1060 or selected_material == 1061 or selected_material == 1090 or selected_material == 1091:
+				active_color = Color("#4E822E")
+			else:
+				active_color = Color("#5D9C36")
 			active_val = tr("factionless")
 		else:
 			var t_colors = [Color.RED, Color.CORNFLOWER_BLUE, Color.GOLD, Color.GREEN]

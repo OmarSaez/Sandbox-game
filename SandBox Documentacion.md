@@ -14,23 +14,23 @@ Para conciliar la demanda computacional extrema de la simulación de partículas
 ```mermaid
 graph TD
     subgraph Capa 1: GPU Shaders
-        S1[sandbox_render.gdshader: Renderizado 60 FPS]
+        S1[sandbox_render.gdshader: Renderizado 60 FPS + Fast-Path Aire]
         S2[tornado_visual.gdshader: Distorsión cinemática]
     end
 
     subgraph Capa 2: Motor C++ GDExtension
-        CPP[SandboxGridNode: C++ Nativo]
-        CPP -->|process_physics: Gravedad, dispersión y colisiones| CPP
-        CPP -->|process_electricity: Propagación BFS acelerada| CPP
-        CPP -->|process_pistons: Cálculo de empuje masivo| CPP
-        CPP -->|map_grid_data: Mapeo binario de arrays| CPP
+        CPP[SandboxGridNode: C++ Nativo por Chunks 16x16]
+        CPP -->|process_physics: Pass 1 Gases + Pass 2 Interacciones y Gravedad| CPP
+        CPP -->|process_electricity: Propagación BFS y ELECTRIC_ACTIVATED| CPP
+        CPP -->|process_pistons: Empuje masivo sin CoW + arrastre de pintura| CPP
+        CPP -->|map_grid_data: Mapeo directo ptrw de arrays y chunks| CPP
     end
 
     subgraph Capa 3: Orquestador Central GDScript
-        Core[sandbox_grid.gd: SandboxGrid ~8.450 líneas]
-        Core <-->|Memoria compartida / Arrays de celdas| CPP
-        Core <-->|palette_tex, charge_tex, background_tex| S1
-        Core -->|Bucles calientes HOT: Step, interacciones, dibujo| Core
+        Core[sandbox_grid.gd: SandboxGrid ~8.580 líneas]
+        Core <-->|Punteros directos + Cola de Eventos| CPP
+        Core <-->|palette_tex, charge_tex, element_paint_tex, background_tex| S1
+        Core -->|Orquestación, eventos de explosión/SFX, NPCs y dibujo| Core
     end
 
     subgraph Capa 4: Subsistemas Modulares COLD
@@ -63,15 +63,17 @@ graph TD
 ```
 
 1. **Capa 1: GPU Shaders (`sandbox_render.gdshader`, `tornado_visual.gdshader`)**:
-   - Transforma los arreglos crudos de enteros (material IDs, carga eléctrica, variantes) en píxeles coloreados, iluminación dinámica de cables y texturas procedurales a 60 FPS sin cargar la CPU.
+   - Transforma los arreglos crudos de enteros (material IDs, carga eléctrica, variantes y pintura adherida `element_color_tex`) en píxeles coloreados, iluminación dinámica de cables y texturas procedurales a 60 FPS sin cargar la CPU.
+   - Incorpora un **Fast-Path para Aire (`id == 0`)** que retorna `texture(background_tex, UV)` inmediatamente (ahorrando >70% de lecturas de textura y ramas condicionales en GPUs móviles como Adreno 540) y agrupa los mecanismos detrás de `if (id >= 81)` y los efectos eléctricos detrás de `if (charge > 0.05)`.
 2. **Capa 2: C++ GDExtension (`SandboxGridNode`)**:
-   - Código fuente en `sandbox/gdextension/src/` (`sandbox_grid_node.cpp`, `sandbox_grid_node.h`).
-   - Ejecuta en memoria nativa la caída de partículas de alta frecuencia, la propagación BFS de corriente eléctrica y las operaciones masivas de memoria.
-3. **Capa 3: Orquestador Central GDScript (`sandbox_grid.gd` ~8.450 líneas)**:
+   - Código fuente en `sandbox/gdextension/src/` (`sandbox_grid_node.cpp`, `sandbox_grid_node.h`), compilado con `-O3 -ffast-math -fno-finite-math-only` (MinGW-w64 en Windows y Clang NDK `27.2.12479018` en Android `arm64`/`arm32`).
+   - Ejecuta en memoria nativa el 100% de la física celular e interacciones químicas/térmicas/eléctricas/biológicas en `process_physics` (Pass 1 para gases `GRAV_UP` y Pass 2 para reacciones y gravedad), saltando bloques de 16 píxeles en **chunks inactivos de $16 \times 16$ (`chunks_active`)**.
+   - Devuelve a GDScript una cola compacta de eventos (`explosions`, `fireworks`, `acid_smoke`, `sparks`) y banderas de estado (`charge_changed`, `paint_changed`).
+3. **Capa 3: Orquestador Central GDScript (`sandbox_grid.gd` ~8.580 líneas)**:
    - Hereda directamente de `SandboxGridNode`.
-   - Mantiene los bucles críticos por cuadro (*HOT loops*): interacción táctil continua, dibujo sobre el lienzo, actualización de texturas en GPU, ciclo de vida de la cámara y orquestación general.
+   - Orquesta la simulación por cuadro (`_step_simulation()` con detección automática de modo dual C++/GDScript), procesa los eventos de explosión/SFX devueltos por C++, gestiona la IA de NPCs, sube texturas a GPU bajo demanda (`_update_texture()`) y controla la cámara y el HUD.
 4. **Capa 4: Subsistemas Modulares Especializados (`res://sandbox/scripts/sandbox/modules/`)**:
-   - 12 clases autónomas que encapsulan la lógica de menús, persistencia, red, audio, desastres y mecanismos (*COLD / Event-Driven*), reduciendo el núcleo original de 21.844 a 8.450 líneas (13.394 líneas extraídas).
+   - 12 clases autónomas que encapsulan la lógica de menús, persistencia, red, audio, desastres y mecanismos (*COLD / Event-Driven*), reduciendo el núcleo original de 21.844 a ~8.580 líneas.
 
 ### 1.3 Estructura del Árbol de Directorios
 - `sandbox/`: Raíz del proyecto Godot.
@@ -345,24 +347,38 @@ Cada módulo se instancia e inyecta en `sandbox_grid.gd` durante `_ready()`, rec
 
 ---
 
-## 3. El Orquestador Central: `sandbox_grid.gd` (~8.450 líneas)
+## 3. El Orquestador Central (`sandbox_grid.gd`) y el Motor C++ (`SandboxGridNode`)
 
-Tras la modularización, `sandbox_grid.gd` dejó de ser un monolito inmanejable y pasó a cumplir su rol arquitectónico ideal: **el orquestador central de alta velocidad**.
+Tras la modularización y la optimización para dispositivos móviles de gama baja (como Snapdragon 835 / Adreno 540), `sandbox_grid.gd` y `SandboxGridNode` operan de forma estrechamente acoplada sobre buffers compartidos sin copias innecesarias.
 
-### 3.1 Responsabilidades Exclusivas del Núcleo
-1. **Bucles Críticos de Simulación (*HOT Loops*)**:
-   * `_step_simulation()`: Ejecución por cuadro de las reglas celulares de partículas.
-   * `_process_interactions()`: Reacciones químicas directas (combustión, corrosión, solidificación, evaporación).
-   * `_process_electricity()`: Conducción de chispas y pulsos en conductores.
-2. **Pipeline de Renderizado**:
-   * `_update_texture()`: Empaquetado RGBA8 hacia `cells` y texturas de la GPU (`palette_tex`, `charge_tex`).
-   * `_draw()`: Dibujado de emojis faciales de NPCs, trazado de bombas aéreas, indicadores de selección y geometrías en coordenadas de pantalla.
-3. **Gestión de la Cámara y Viewport**:
-   * Sistema de navegación táctil con zoom suave (*pinch-to-zoom*), límites de paneo y centrado en héroes.
-4. **Construcción y Coordinación del HUD Principal**:
-   * Inicialización de la barra horizontal inferior (`ActionButtons`), cuadrícula de materiales (`MaterialGrid`) y botones universales de acción rápida (`QuickActionsZone`).
-5. **Capa de Delegación Transparente**:
-   * Expone métodos puente y propiedades proxy con getters/setters hacia los 12 módulos para garantizar que cualquier llamada heredada o externa continúe funcionando sin interrupciones.
+### 3.1 Responsabilidades del Motor C++ (`SandboxGridNode`)
+1. **Simulación Física e Interacciones Unificadas (`process_physics`)**:
+   * **Pass 1 (Top-to-Bottom)**: Procesa todos los materiales con `GRAV_UP` (gases y vapores) y sus interacciones ascendentes.
+   * **Pass 2 (Bottom-to-Top)**: Ejecuta todas las reacciones químicas, térmicas, eléctricas (`ELECTRIC_ACTIVATED`), biológicas y de laboratorio (`900..902`), seguidas del movimiento por gravedad y dispersión de polvos y líquidos.
+   * **Salto por Chunks Activos ($16 \times 16$)**: Divide la grilla en bloques de $16 \times 16$ (`chunks_x = (width + 15) >> 4`). Si `chunks_active[c_idx] == 0`, el bucle salta 16 celdas de golpe (`x += 15`). Cuando una celda se modifica (`set_cell` / `swap_cells`), despierta el chunk central (`61`) y su vecindario $3 \times 3$ (`60`); las celdas con reacciones en curso mantienen su chunk despierto con `keep_chunk_awake` (`15`).
+   * **Tablas Precalculadas**: Usa tablas estáticas de óvalos (`oval_16x8`, `oval_20x10`) y tablas trigonométricas (`cos_lut_256`, `sin_lut_256`) para evitar llamadas costosas en tiempo de ejecución.
+2. **Propagación Eléctrica (`process_electricity`) y `ELECTRIC_ACTIVATED`**:
+   * Propaga pulsos eléctricos mediante BFS sobre celdas con tag `CONDUCTOR` y activa todos los elementos con tag `ELECTRIC_ACTIVATED` (TNT `5`, Fuegos Artificiales `18`, Pólvora `20`, Volcán `27`, Compuertas Lógicas `81..87`, LEDs `89`, Activador NPC `90`, Puerta NPC `91`, Bloque de Fase `92`, Pistones `93/193`, Cañones `95..795`, Bloques Musicales `500+/600` y Materiales de Laboratorio `900..902`).
+   * **Aislamiento de Temporizadores No Eléctricos**: Las celdas que utilizan `charge_array` como temporizador interno no eléctrico (cohetes `19`, mecha `24`, cemento `25`, volcán `27..29`, chispas `43`, ácido `44` y explosivos `VOLATILE | EXPLOSIVE`) se excluyen de `moved_charges` y del decaimiento eléctrico para no contaminar la cola eléctrica ni alterar sus cuentas regresivas.
+3. **Empuje Mecánico de Pistones (`process_pistons`)**:
+   * Desplaza cadenas de bloques y partículas empujadas por pistones estándar y aislados, arrastrando consigo la carga (`charge_array`), etiquetas (`tags_array`) y color de pintura (`cell_paint_colors`), y reportando `paint_changed = true` cuando se desplaza un píxel pintado.
+
+### 3.2 Responsabilidades Exclusivas del Núcleo GDScript (`sandbox_grid.gd`)
+1. **Orquestación de Simulación (`_step_simulation`) con Modo Dual**:
+   * Invoca `process_physics(...)` en C++ y procesa la cola compacta de eventos devuelta (`explosions`, `fireworks`, `acid_smoke`, `sparks`).
+   * Cuenta con **detección automática de versión** (`cpp_state.has("charge_changed")`): con el binario C++ actualizado omite `_thread_pass2` y `_thread_pass3` al 100%; si se ejecuta con un binario antiguo, activa automáticamente el fallback en GDScript con filtro estricto de materiales reactivos.
+   * En `_process_electricity()`, poda índices obsoletos de baterías, fuentes eléctricas y metrónomos, y omite la llamada a C++ cuando no hay cargas ni fuentes activas.
+2. **Pipeline de Renderizado y Subida Condicional a GPU (`_update_texture`)**:
+   * **Pintura Adherida a Elementos (`cell_paint_colors`)**: La pintura en modo "Pintar elementos" se almacena por celda en `cell_paint_colors` y acompaña al píxel cuando cae, se desliza, es empujado por pistones, viaja por tuberías (`simulate_pipes`) o se mueve con olas de tsunami (`process_tsunami`). `element_paint_tex.update(...)` sólo se invoca cuando `element_paint_dirty == true`.
+   * **Textura de Carga (`charge_tex`)**: Sólo se sube cuando hay cargas activas o `charge_dirty == true`, pasando `charge_visual_buffer` directamente sin `.duplicate()`.
+   * **Sparks Visuales (`active_visual_sparks_count`)**: `_update_visual_sparks()` y `_update_texture()` omiten el recorrido de `MAX_VISUAL_SPARKS` (`1500`) cuando `active_visual_sparks_count == 0`.
+   * **`_draw()` Optimizado**: El pulso visual del metrónomo itera únicamente sobre `active_metronome_indices` ($O(k)$) en lugar de escanear toda la grilla.
+3. **Gestión de la Cámara, HUD y Delegación Transparente**:
+   * Sistema de navegación táctil con zoom suave (*pinch-to-zoom*), inicialización del HUD inferior y propiedades proxy hacia los 12 módulos especializados.
+
+### 3.3 Compilación de la Extensión C++ (`sandbox/gdextension/`)
+* **Windows (Editor / PC)**: Ejecutar `sandbox/gdextension/build.bat` (usa Python 3.12 + SCons + WinLibs MinGW-w64 `g++` con `-O3 -ffast-math` y `-j8`, generando `sandbox/bin/sandbox_core.windows.template_debug.x86_64.dll`).
+* **Android (`arm64` y `arm32`, Release y Debug)**: Ejecutar `sandbox/gdextension/build_android.bat` (usa Android NDK `27.2.12479018` con `-O3 -ffast-math -fno-finite-math-only`, generando los 4 binarios `.so` en `sandbox/bin/`).
 
 ---
 
@@ -392,11 +408,13 @@ Cada celda en la simulación posee una combinación de propiedades físicas y re
 * `96 - 97`: **Tuberías Neumáticas** (Simple 4x4 y Doble X2 8x8).
 * `600+`: **Música** (Metrónomo 600 y escalas cromáticas de 5 instrumentos 601..680+).
 * `900 - 902`: **Materiales Alquímicos del Laboratorio** (Custom Elements 1, 2 y 3).
-* `1000 - 1090`: **Personajes (NPCs)** (Guerrero, Arquero, Minero, Médico, Zombie, Zombie Tanque, Mago, Dinosaurio).
+* `1000 - 1100`: **Personajes (NPCs)** (Guerrero, Arquero, Minero, Médico, Zombie, Zombie Tanque, Mago, Dinosaurio, Zeus).
 
 ---
 
 ## 5. Inteligencia Artificial de NPCs y Sistema Emocional
+
+> **Registro Completo de Estadísticas**: Ver `npc_ai_documentation.md` para la tabla comparativa maestra de vida, daño, alcance, cooldowns, saltos e inmunidades de cada NPC.
 
 ### 5.1 Perfiles de IA (`NPC_PROFILES`)
 Definidos en `sandbox_grid.gd`, establecen la personalidad de cada unidad:
@@ -406,13 +424,15 @@ Definidos en `sandbox_grid.gd`, establecen la personalidad de cada unidad:
 * `can_celebrate`: Saltar con festejo (`🎉`) al erradicar a las facciones adversarias.
 
 ### 5.2 Clases y Roles de Combate
-* **Guerrero (`warrior`)**: Combate cuerpo a cuerpo (alcance 6 celdas, cooldown 0.6s).
-* **Arquero (`archer`)**: Distancia táctica (50-120 celdas), disparo balístico de flechas con contador de fallos para simular precisión humana.
-* **Mago (`mage`)**: Bolas de fuego parabólicas y rescate mágico de aliados enterrados o en asfixia (`_process_mage_rescue`).
-* **Minero (`miner`)**: Tunelado activo de roca con pico y sabotaje táctico mediante dinamita.
-* **Médico (`medic`)**: Soporte pasivo; escaneo y curación en área de unidades heridas.
-* **Zombie (`zombie`)**: Horda infecciosa que transforma a las bajas humanas en nuevos no-muertos.
-* **Zombie Tanque (`zombie_tank`)**: Masa colosal que arranca bloques sólidos del escenario y los lanza como proyectiles.
+* **Guerrero (`warrior`, ID 1000)**: Combate cuerpo a cuerpo (alcance 6 celdas, cooldown 0.6s, 100 HP base).
+* **Arquero (`archer`, ID 1010)**: Distancia táctica (50-120 celdas), disparo balístico de flechas con contador de fallos para simular precisión humana.
+* **Mago (`mage`, ID 1070)**: Bolas de fuego parabólicas, 5% conversión mágica de enemigos y rescate mágico de aliados enterrados (`_process_mage_rescue`).
+* **Minero (`miner`, ID 1020)**: Tunelado activo de roca con pico y sabotaje táctico mediante dinamita.
+* **Médico (`medic`, ID 1040)**: Soporte pasivo; escaneo y curación en área de unidades heridas.
+* **Zombie (`zombie`, ID 1050)**: Horda infecciosa que transforma a las bajas humanas en nuevos no-muertos.
+* **Zombie Tanque (`zombie_tank`, ID 1060)**: Masa colosal (300 HP) que arranca bloques sólidos del escenario y los lanza como proyectiles.
+* **Dinosaurio (`dinosaurio`, ID 1090)**: Depredador neutral (500-600 HP) con mordisco masivo (`4x` daño melee).
+* **Zeus (`zeus`, ID 1100)**: Dios del rayo neutral (`500 HP`, `5x` vida de Guerrero), invoca rayos desde el cielo (`_strike_lightning_at`) sobre sus enemigos y es 100% inmune al daño y explosiones eléctricas.
 
 ### 5.3 Motor de Emojis (`EmojiLayer`)
 * Gestionado por `_set_npc_emoji(npc, emoji, duration)` y dibujado directamente en `_draw()` con escala y centrado vectorial.
@@ -434,6 +454,8 @@ Definidos en `sandbox_grid.gd`, establecen la personalidad de cada unidad:
 
 ### 6.3 Reglas de Oro para Desarrolladores y Modelos LLM
 * **NUNCA volver a centralizar lógica en `sandbox_grid.gd`**: Si una funcionalidad pertenece a desastres, mecanismos, audio, guardado o UI, debe programarse dentro de su respectivo módulo en `modules/`.
-* **Respetar la distinción HOT vs COLD**: La física por partícula y la escritura directa en arreglos de memoria van en el Core o en C++. La gestión de menús, botones, eventos y animaciones va en los submódulos.
+* **Respetar la distinción HOT vs COLD**: La física por partícula, las interacciones celulares y la escritura directa en arreglos de memoria van en C++ (`sandbox_grid_node.cpp`). La gestión de menús, botones, eventos y animaciones va en los submódulos GDScript.
+* **Evitar Copy-On-Write (CoW) al llamar a C++**: Nunca mantener variables locales en GDScript que referencien a `cells`, `charge_array`, `tags_array`, `cell_paint_colors` o `chunks_active` justo antes de invocar una función C++ que obtenga `.ptrw()` sobre esos mismos arreglos (como en `simulate_pistons()`), ya que Godot clonaría los arreglos completos en memoria.
+* **Preservar `ELECTRIC_ACTIVATED` y `cell_paint_colors`**: Todo nuevo material activable por electricidad debe usar la etiqueta `ELECTRIC_ACTIVATED`, y cualquier mecanismo que mueva o teletransporte píxeles (pistones, tuberías, olas) debe trasladar también su entrada en `cell_paint_colors` y marcar `element_paint_dirty = true`.
 * **Preservar los Puentes de Compatibilidad**: Si se refactoriza un método público, mantener el método delegador en `sandbox_grid.gd` para no romper llamadas externas preexistentes.
 * **Uso de Tipos Vectoriales en Godot 4**: Las posiciones de celdas y entidades en cuadrícula física son estrictamente enteros (`Vector2i`). No sumar `Vector2` (flotante) con `Vector2i` directamente; aplicar siempre `Vector2i(...)` para prevenir errores de tipo en tiempo de ejecución.
